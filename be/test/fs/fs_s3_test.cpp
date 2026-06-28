@@ -619,6 +619,27 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
 }
 
+TEST_F(S3FileSystemTest, test_s3_client_factory_close_idempotent_and_reusable) {
+    close_s3_clients();
+
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.endpointOverride = "s3-client-factory-close-test";
+    config.region = "us-east-1";
+    config.maxConnections = 1;
+
+    auto client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    close_s3_clients();
+    close_s3_clients();
+    ASSERT_FALSE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    auto recreated_client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, recreated_client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+}
+
 // Helper function to get object content type via HeadObject
 static std::string get_object_content_type(const std::string& uri) {
     S3URI s3_uri;

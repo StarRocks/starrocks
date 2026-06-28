@@ -18,10 +18,8 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/global_dict/config.h"
 #include "common/status.h"
-#include "exec/pipeline/fragment_context.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/config.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
@@ -39,15 +37,19 @@ LakeMetaReader::~LakeMetaReader() = default;
 Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     _params = read_params;
 
-    lake::TabletManager* tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    auto* tablet_manager = read_params.tablet_manager;
+    RETURN_IF(tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(read_params.tablet_id, read_params.version.second));
 
     TabletSchemaCSPtr base_schema;
     if (read_params.schema_key.has_value()) {
-        auto runtime_state = read_params.runtime_state;
-        ASSIGN_OR_RETURN(base_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
-                                              *read_params.schema_key, read_params.tablet_id, runtime_state->query_id(),
-                                              runtime_state->fragment_ctx()->fe_addr(), tablet.metadata()));
+        RETURN_IF(!read_params.schema_scan_context.has_value(),
+                  Status::InternalError("schema scan context is not initialized"));
+        const auto& schema_scan_context = *read_params.schema_scan_context;
+        ASSIGN_OR_RETURN(base_schema,
+                         tablet_manager->table_schema_service()->get_schema_for_scan(
+                                 *read_params.schema_key, read_params.tablet_id, schema_scan_context.query_id,
+                                 schema_scan_context.coordinator_fe, tablet.metadata()));
     } else {
         // no schema key indicates FE has not been upgraded to use fast schema evolution v2,
         // so fallback to the old way to get schema from tablet metadata

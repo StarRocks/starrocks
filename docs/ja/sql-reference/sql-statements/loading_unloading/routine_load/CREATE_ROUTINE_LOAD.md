@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Apache Kafka からメッセージを継続的に消費し StarRocks にロードします。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -113,7 +114,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必須**: いいえ\
 **説明**: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。実際のタスク並行性は、複数のパラメーターの最小値によって決定されます: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。 <ul><li>`alive_be_number`: 生存している BE ノードの数。</li><li>`partition_number`: 消費されるパーティションの数。</li><li>`desired_concurrent_number`: 単一の Routine Load ジョブの期待されるタスク並行性。デフォルト値: `3`。</li><li>`max_routine_load_task_concurrent_num`: Routine Load ジョブのデフォルトの最大タスク並行性で、`5` です。 [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。</li></ul>最大の実際のタスク並行性は、生存している BE ノードの数または消費されるパーティションの数によって決定されます。<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **必須**: いいえ\
 **説明**: タスクのスケジューリング間隔、つまりタスクが実行される頻度。単位: 秒。値の範囲: `5` ~ `60`。デフォルト値: `10`。10 秒以上の値を設定することをお勧めします。スケジューリングが 10 秒未満の場合、ロード頻度が高すぎるために多くのタブレットバージョンが生成されます。
@@ -166,7 +167,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必須**: いいえ\
-**説明**: データファイルが CSV 形式の場合、カラムセパレーターの前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に、カラムセパレーターにスペースが追加されます。これらのスペースは、その位置に応じて先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメーターを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。<br />StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しないことに注意してください。たとえば、次のフィールド値は、カラムセパレーターとしてパイプ (<code class="language-text">&#124;</code>) を使用し、`enclose` で指定された文字として二重引用符 (`"`) を使用しています: <code class="language-text">&#124; "Love StarRocks" &#124;</code>。`trim_space` を `true` に設定すると、StarRocks は前述のフィールド値を <code class="language-text">&#124;"Love StarRocks"&#124;</code> として処理します。
+**説明**: データファイルが CSV 形式の場合、カラムセパレーターの前後のスペースを削除するかどうかを指定します。タイプ: BOOLEAN。デフォルト値: `false`。<br />一部のデータベースでは、データを CSV 形式のデータファイルとしてエクスポートする際に、カラムセパレーターにスペースが追加されます。これらのスペースは、その位置に応じて先行スペースまたは後続スペースと呼ばれます。`trim_space` パラメーターを設定することで、StarRocks がデータロード中にこれらの不要なスペースを削除するようにできます。<br />StarRocks は、`enclose` で指定された文字で囲まれたフィールド内のスペース（先行スペースおよび後続スペースを含む）を削除しないことに注意してください。たとえば、次のフィールド値は、カラムセパレーターとしてパイプ (`|`) を使用し、`enclose` で指定された文字として二重引用符 (`"`) を使用しています: `| "Love StarRocks" |`。`trim_space` を `true` に設定すると、StarRocks は前述のフィールド値を `|"Love StarRocks"|` として処理します。
 
 #### `enclose`
 
@@ -192,6 +193,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 **必須**: いいえ\
 **説明**: ロードする JSON 形式のデータのルート要素。StarRocks は `json_root` を通じてルートノードの要素を抽出して解析します。デフォルトでは、このパラメーターの値は空であり、すべての JSON 形式のデータがロードされることを示します。詳細については、 [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) を参照してください。
+
+#### `envelope`
+
+**必須**: いいえ\
+**説明**: JSON 形式のデータの CDC エンベロープ形式を指定します。有効な値: `debezium`。デフォルト: 未設定（エンベロープなし）。`debezium` に設定すると、StarRocks は各 Kafka メッセージを Debezium CDC イベントとして解析します。メッセージには `op` フィールド（`c`=insert、`u`=update、`d`=delete、`r`=スナップショット読み取り）と、`after` フィールド（c/u/r）または `before` フィールド（d）が含まれている必要があります。`payload` が `null` の tombstone メッセージはスキップされます。`format` が `json` の場合にのみ指定でき、`json_root` または `strip_outer_array` と同時に使用することはできません。
 
 #### `task_consume_second`
 
@@ -248,7 +254,12 @@ FROM <data_source>
 #### `property.kafka_default_offsets`
 
 **必須**: いいえ\
-**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。
+**説明**: すべての消費者パーティションのデフォルトの開始オフセット。このプロパティのサポートされる値は `kafka_offsets` プロパティと同じです。ジョブが既に消費進捗を持った後に発見されたパーティション（たとえば、後から Kafka トピックに追加されたパーティション）は、このオフセットから消費を開始します。このプロパティが指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。
+
+#### `property.kafka_partition_discovery`
+
+**必須**: いいえ\
+**説明**: `kafka_partitions` が指定されている場合でも、Routine Load ジョブが新しい Kafka パーティションを自動的に発見し続けるかどうか。有効な値: `true` および `false`（デフォルト）。デフォルトでは、`kafka_partitions` を指定するとジョブはリストされたパーティションのみを消費し、後からトピックに追加されたパーティションは消費されません。このプロパティを `true` に設定すると、`kafka_partitions` と `kafka_offsets` はリストされたパーティションの開始オフセットの指定にのみ使用され、ジョブは後から追加されたパーティションを含むトピックのすべてのパーティションを消費します。`kafka_partitions` にリストされていないパーティションは、`property.kafka_default_offsets` で指定されたオフセットから消費を開始します。`property.kafka_default_offsets` が指定されていない場合は `OFFSET_BEGINNING` から消費を開始します。リストされていないパーティションを最新のオフセットから消費させたい場合は、`property.kafka_default_offsets` を `OFFSET_END` に明示的に設定してください。このプロパティは `kafka_partitions` と一緒にのみ使用できます。
 
 #### `confluent.schema.registry.url`
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "System view for querying the dependency relationships of asynchronous materialized views and their referenced objects."
 ---
 
 # object_dependencies

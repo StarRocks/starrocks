@@ -243,24 +243,34 @@ public class LakeTableHelper {
 
     static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource, boolean dropCache)
             throws StarClientException {
+        return removePartitionDirectory(partition, computeResource, dropCache, false);
+    }
+
+    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource, boolean dropCache,
+                                            boolean forceRemoveSharedDirectory) throws StarClientException {
         boolean ret = true;
 
         if (Config.lake_enable_drop_tablet_cache && dropCache) {
             dropPartitionCache(partition, computeResource);
         }
 
+        // Track removed paths to avoid double-removal when multiple sub-partitions share the same
+        // underlying directory (common when forceRemoveSharedDirectory=true for table deletion).
+        // Without deduplication, the second removal fails with a non-zero status code even though
+        // the directory is already gone, causing erasePartition() to retry indefinitely.
+        Set<String> removedPaths = new HashSet<>();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             ShardInfo shardInfo = getAssociatedShardInfo(subPartition, computeResource).orElse(null);
             if (shardInfo == null) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
             }
-            if (isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
-                LOG.info("Skipped remove possible directory shared by multiple partitions: {}",
-                        shardInfo.getFilePath().getFullPath());
+            String path = shardInfo.getFilePath().getFullPath();
+            if (!forceRemoveSharedDirectory && isSharedDirectory(path, subPartition.getId())) {
+                LOG.info("Skipped remove possible directory shared by multiple partitions: {}", path);
                 continue;
             }
-            if (!removeShardRootDirectory(shardInfo)) {
+            if (removedPaths.add(path) && !removeShardRootDirectory(shardInfo)) {
                 ret = false;
             }
         }
@@ -351,19 +361,12 @@ public class LakeTableHelper {
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
-    }
-
-    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
-        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
-                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && sourceType.isLoadingTransaction();
     }
 
     // for now, only loading txn and compaction txn support combined txn log
     public static boolean isTransactionSupportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return isLoadingTransaction(sourceType) || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
+        return sourceType.isLoadingTransaction() || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
     }
 
     // if one of the tables in tableIdList is LakeTable with file bundling, return true

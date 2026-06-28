@@ -127,6 +127,10 @@ public class StarMgrMetaSyncerTest {
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
     private StorageVolumeMgr storageVolumeMgr = new SharedDataStorageVolumeMgr();
 
+    // PACK shard group ids surfaced by ColocateRangeMgr. Tests mutate this to register
+    // live PACK groups that must not be reaped.
+    private Set<Long> packShardGroupIds = new HashSet<>();
+
     private StarMgrMetaSyncer starMgrMetaSyncer;
 
     long shardGroupId = 12L;
@@ -184,6 +188,21 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getStorageVolumeMgr();
                 minTimes = 0;
                 result = storageVolumeMgr;
+
+                globalStateMgr.getColocateTableIndex();
+                minTimes = 0;
+                result = colocateTableIndex;
+            }
+        };
+
+        // PACK shard groups live in ColocateRangeMgr, surfaced via getAllPackShardGroupIds().
+        // Default to an empty set so getAllPartitionShardGroupId() does not NPE on addAll(null);
+        // tests mutate packShardGroupIds to register live PACK groups.
+        new Expectations() {
+            {
+                colocateTableIndex.getAllPackShardGroupIds();
+                minTimes = 0;
+                result = packShardGroupIds;
             }
         };
 
@@ -468,7 +487,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
@@ -896,6 +915,59 @@ public class StarMgrMetaSyncerTest {
         Config.meta_sync_force_delete_shard_meta = oldValue;
     }
 
+    // A range-colocate PACK shard group lives in ColocateRangeMgr (surfaced via
+    // getAllPackShardGroupIds), not on any PhysicalPartition. It must be reported as FE-known
+    // and never reaped by deleteUnusedShardAndShardGroup, even when older than the threshold.
+    @Test
+    public void testPackShardGroupNotReapedWhenStillReferenced() {
+        boolean oldForceDelete = Config.meta_sync_force_delete_shard_meta;
+        long oldCleanThreshold = Config.shard_group_clean_threshold_sec;
+        Config.meta_sync_force_delete_shard_meta = false;
+        Config.shard_group_clean_threshold_sec = 0;
+
+        long packGroupId = 7777L;
+        packShardGroupIds.add(packGroupId);
+
+        // The PACK group id must be part of the FE-known shard group set.
+        Set<Long> feKnown = Deencapsulation.invoke(starMgrMetaSyncer, "getAllPartitionShardGroupId");
+        Assertions.assertTrue(feKnown.contains(packGroupId));
+
+        // An old PACK group present in StarOS must NOT be selected for deletion.
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                .setGroupId(packGroupId)
+                .putLabels("tableId", String.valueOf(6L))
+                .putLabels("dbId", String.valueOf(66L))
+                .putLabels("partitionId", String.valueOf(0L))
+                .putLabels("indexId", String.valueOf(0L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .build());
+        List<Long> deletedGroups = new ArrayList<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public StarOSAgent.ListShardGroupResult listShardGroup(long startGroupId) {
+                return new StarOSAgent.ListShardGroupResult(shardGroupInfos, 0L);
+            }
+
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return Lists.newArrayList();
+            }
+
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                deletedGroups.addAll(groupIds);
+            }
+        };
+
+        Deencapsulation.invoke(starMgrMetaSyncer, "deleteUnusedShardAndShardGroup");
+        Assertions.assertFalse(deletedGroups.contains(packGroupId));
+        Assertions.assertEquals(1, shardGroupInfos.size());
+
+        Config.meta_sync_force_delete_shard_meta = oldForceDelete;
+        Config.shard_group_clean_threshold_sec = oldCleanThreshold;
+    }
+
     @Test
     public void testDeleteShardAndShardGroupWithoutForce() {
         boolean oldValue = Config.meta_sync_force_delete_shard_meta;
@@ -1048,7 +1120,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
@@ -1077,7 +1149,8 @@ public class StarMgrMetaSyncerTest {
         // test aggregator
         new MockUp<LakeAggregator>() {
             @Mock
-            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                           java.util.Collection<ComputeNode> candidateNodes) {
                 return null;
             }
         };

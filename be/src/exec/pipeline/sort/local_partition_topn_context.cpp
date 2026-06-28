@@ -21,6 +21,7 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -197,11 +198,12 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                             &_pre_agg->_agg_fn_ctxs, agg_states, _pre_agg.get()));
                 }
             },
-            [this, state](size_t partition_idx, const ChunkPtr& chunk) {
-                (void)_chunks_sorters[partition_idx]->update(state, chunk);
+            [this, state](size_t partition_idx, const ChunkPtr& chunk) -> Status {
+                RETURN_IF_ERROR(_chunks_sorters[partition_idx]->update(state, chunk));
                 if (_enable_pre_agg) {
-                    (void)compute_agg_state(chunk.get(), partition_idx);
+                    RETURN_IF_ERROR(compute_agg_state(chunk.get(), partition_idx));
                 }
+                return Status::OK();
             }));
     if (_chunks_partitioner->is_passthrough()) {
         RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
@@ -223,12 +225,13 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     }
 
     _partition_num = _chunks_partitioner->num_partitions();
-    RETURN_IF_ERROR(
-            _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
-                (void)_chunks_sorters[partition_idx]->update(state, chunk);
+    RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
+            [this, state](int32_t partition_idx, const ChunkPtr& chunk) -> StatusOr<bool> {
+                RETURN_IF_ERROR(_chunks_sorters[partition_idx]->update(state, chunk));
                 if (_enable_pre_agg) {
-                    (void)compute_agg_state(chunk.get(), partition_idx);
+                    RETURN_IF_ERROR(compute_agg_state(chunk.get(), partition_idx));
                 }
+                // Keep consuming all partitions.
                 return true;
             }));
 

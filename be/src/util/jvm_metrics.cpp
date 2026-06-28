@@ -33,6 +33,13 @@
 
 namespace starrocks {
 
+JVMMetrics* JVMMetrics::instance() {
+    // Process-lifetime singleton: registered Metric objects keep back-pointers
+    // to MetricRegistry, so avoid exit-time destruction after registry teardown.
+    static auto* instance = new JVMMetrics();
+    return instance;
+}
+
 Status JVMMetrics::init() {
     RETURN_IF_ERROR(detect_java_runtime());
 
@@ -106,8 +113,9 @@ void JVMMetrics::install(MetricRegistry* registry) {
         return;
     }
 
-#define REGISTER_JVM_METRIC(name, type) \
-    registry->register_metric("jvm_" #name "_size_bytes{type=\"" #type "\"}", &jvm_##name##_##type##_bytes)
+#define REGISTER_JVM_METRIC(name, type)                                                      \
+    registry->register_metric("jvm_" #name "_size_bytes", MetricLabels().add("type", #type), \
+                              &jvm_##name##_##type##_bytes)
 
     REGISTER_JVM_METRIC(heap, used);
     REGISTER_JVM_METRIC(heap, committed);

@@ -39,43 +39,45 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <new>
 #include <queue>
 #include <random>
 #include <set>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_agent_fwd.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
+#include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "common/util/thrift_client_cache.h"
 #include "cumulative_compaction.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/client_cache.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
+#include "runtime/env/global_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/publish_version_manager.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowset_meta.h"
@@ -83,17 +85,26 @@
 #include "storage/rowset/unique_rowset_id_generator.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
+#include "storage/storage_cleanup_executor.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
-#include "util/global_metrics_registry.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
 StorageEngine* StorageEngine::_s_instance = nullptr;
 StorageEngine* StorageEngine::_p_instance = nullptr;
+
+static int calc_lake_schema_change_thread_pool_max_threads() {
+    return std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+}
+
+static int64_t calc_storage_cleanup_drain_timeout_ms() {
+    return config::loop_count_wait_fragments_finish > 0 ? config::loop_count_wait_fragments_finish * 10 * 1000 : 0;
+}
 
 static Status _validate_options(const EngineOptions& options) {
     if (options.store_paths.empty()) {
@@ -116,15 +127,14 @@ Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_
 StorageEngine::StorageEngine(const EngineOptions& options)
         : _options(options),
 
-          _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
+          _tablet_manager(new TabletManager(config::tablet_map_shard_size, options.table_metrics_mgr)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _replication_txn_manager(new ReplicationTxnManager()),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
+          _storage_cleanup_executor(new StorageCleanupExecutor()),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _compaction_manager(new CompactionManager()),
-          _publish_version_manager(new PublishVersionManager()),
-          _dictionary_cache_manager(new DictionaryCacheManager()) {
+          _compaction_manager(new CompactionManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -132,10 +142,10 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
-    REGISTER_GAUGE_STARROCKS_METRIC(unused_rowsets_count, [this]() {
+    StorageMetrics::instance()->register_unused_rowsets_count_hook([this]() {
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
-    })
+    });
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 #ifdef USE_STAROS
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
@@ -144,12 +154,16 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
     MetadataCache::create_cache(lru_cache_limit);
-    REGISTER_GAUGE_STARROCKS_METRIC(metadata_cache_bytes_total,
-                                    [&]() { return MetadataCache::instance()->get_memory_usage(); });
+    StorageMetrics::instance()->register_metadata_cache_bytes_total_hook(
+            [] { return MetadataCache::instance()->get_memory_usage(); });
 #endif
 }
 
 StorageEngine::~StorageEngine() {
+    if (_storage_cleanup_executor) {
+        _storage_cleanup_executor->shutdown(0);
+    }
+
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
     _tablet_manager.reset();
@@ -171,10 +185,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
-        threads.emplace_back([data_dir] { (void)data_dir->load(); });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "load_data_dir");
+            data_dir->load();
+        });
 
         threads.emplace_back([data_dir] {
+            Thread::set_thread_name(pthread_self(), "cmpt_data_dir");
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -195,7 +212,6 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                 }
             }
         });
-        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         DCHECK(thread.joinable());
@@ -217,8 +233,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
-    RETURN_IF_ERROR_WITH_WARN(_publish_version_manager->init(), "init publish_version_manager failed");
-
     auto dirs = get_stores<false>();
 
     // `load_data_dirs` depend on |_update_manager|.
@@ -234,30 +248,57 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    REGISTER_THREAD_POOL_METRICS(
-            async_delta_writer,
+    StorageMetrics::instance()->register_thread_pool_metrics(
+            "async_delta_writer",
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
     _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
     RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
-    REGISTER_THREAD_POOL_METRICS(load_spill_block_merge, _load_spill_block_merge_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("load_spill_block_merge",
+                                                             _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(memtable_flush, _memtable_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("memtable_flush",
+                                                             _memtable_flush_executor->get_thread_pool());
 
     _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
                               "init lake MemTableFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(lake_memtable_flush, _lake_memtable_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
+                                                             _lake_memtable_flush_executor->get_thread_pool());
+
+    RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
+    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
+                                                             _storage_cleanup_executor->thread_pool());
+
+    // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
+    // index building inside a single ADD INDEX job). Physically isolated
+    // from the alter_tablet outer pool to avoid the classic deadlock where
+    // outer tasks block holding their pool slot waiting for inner sub-tasks
+    // to drain. Capacity is auto-derived as
+    //     alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+    // because the worst case is every outer alter task fanning out
+    // lake_schema_change_per_tablet_parallelism inner tasks at once. The
+    // pool is DYNAMIC, so it does not hold idle threads when no schema
+    // change is running.
+    RETURN_IF_ERROR(ThreadPoolBuilder("lake_schema_change")
+                            .set_min_threads(0)
+                            .set_max_threads(calc_lake_schema_change_thread_pool_max_threads())
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_lake_schema_change_thread_pool));
+    StorageMetrics::instance()->register_thread_pool_metrics("lake_schema_change",
+                                                             _lake_schema_change_thread_pool.get());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(segment_flush, _segment_flush_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("segment_flush",
+                                                             _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    REGISTER_THREAD_POOL_METRICS(segment_replicate, _segment_replicate_executor->get_thread_pool());
+    StorageMetrics::instance()->register_thread_pool_metrics("segment_replicate",
+                                                             _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
@@ -525,7 +566,6 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     }
 
     // randomize the preferential paths to balance number of tablets each disk has
-    std::srand(std::random_device()());
     std::shuffle(stores.begin(), stores.begin() + last_candidate_idx, std::mt19937(std::random_device()()));
     return stores;
 }
@@ -635,9 +675,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
-    wake_finish_publish_vesion_thread();
     wake_schedule_apply_thread();
-    JOIN_THREAD(_finish_publish_version_thread)
     JOIN_THREAD(_schedule_apply_thread)
 
     JOIN_THREADS(_base_compaction_threads)
@@ -673,6 +711,15 @@ void StorageEngine::stop() {
         _compaction_checker_thread.join();
     }
 
+    // Drain lake ADD INDEX sub-tasks before shutting down storage managers they
+    // may read through. In normal BE/CN step-down, starrocks_be.cpp stops
+    // AgentServer's outer ALTER pool before StorageEngine::stop(), so this is
+    // usually already quiescent; keep the order defensive for direct StorageEngine
+    // shutdowns.
+    if (_lake_schema_change_thread_pool) {
+        _lake_schema_change_thread_pool->shutdown();
+    }
+
     if (_update_manager) {
         _update_manager->stop();
     }
@@ -686,6 +733,32 @@ void StorageEngine::stop() {
         _local_pk_index_manager->stop();
     }
 #endif
+
+    // Drain cleanup after all storage-side producers are quiesced.
+    if (_storage_cleanup_executor) {
+        _storage_cleanup_executor->shutdown(calc_storage_cleanup_drain_timeout_ms());
+    }
+}
+
+Status StorageEngine::update_lake_schema_change_thread_pool_max() {
+    if (_lake_schema_change_thread_pool == nullptr) {
+        return Status::OK();
+    }
+    int new_max = calc_lake_schema_change_thread_pool_max_threads();
+    return _lake_schema_change_thread_pool->update_max_threads(new_max);
+}
+
+Status StorageEngine::update_storage_cleanup_thread_pool_max() {
+    if (_storage_cleanup_executor == nullptr) {
+        return Status::OK();
+    }
+    return _storage_cleanup_executor->update_max_threads();
+}
+
+void StorageEngine::wait_storage_cleanup_tasks() {
+    if (_storage_cleanup_executor != nullptr) {
+        _storage_cleanup_executor->wait();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -728,6 +801,7 @@ void StorageEngine::_start_clean_fd_cache() {
 }
 
 void StorageEngine::compaction_check() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     int checker_one_round_sleep_time_s = 1800;
     while (!bg_worker_stopped()) {
         MonotonicStopWatch stop_watch;
@@ -831,14 +905,16 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
         LOG(ERROR) << "manual compaction failed, tablet not primary key tablet found: " << t.tablet_id;
         return;
     }
-    auto* mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
+    auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
+                                                    "Compaction-" + std::to_string(tablet->tablet_id()),
+                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
         LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
         return;
     }
-    st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
+    st = tablet->updates()->compaction(mem_tracker.get(), t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
         LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
@@ -875,6 +951,7 @@ void* StorageEngine::_manual_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         _check_and_run_manual_compaction_task();
@@ -906,8 +983,9 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+            MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+            _options.compaction_mem_tracker);
     CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
@@ -917,7 +995,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
             best_tablet->set_last_cumu_compaction_failure_status(res.code());
         }
         if (!res.is_not_found()) {
-            StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+            StorageMetrics::instance()->cumulative_compaction_request_failed.increment(1);
             LOG(WARNING) << "Fail to vectorized compact table=" << best_tablet->full_name()
                          << ", err=" << res.to_string();
         }
@@ -947,15 +1025,16 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     }
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
-    std::unique_ptr<MemTracker> mem_tracker =
-            std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+            MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+            _options.compaction_mem_tracker);
     BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
     if (!res.ok()) {
         best_tablet->set_last_base_compaction_failure_time(UnixMillis());
         if (!res.is_not_found()) {
-            StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+            StorageMetrics::instance()->base_compaction_request_failed.increment(1);
             LOG(WARNING) << "failed to init vectorized base compaction. res=" << res.to_string()
                          << ", table=" << best_tablet->full_name();
         }
@@ -1008,18 +1087,19 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     Status res;
     int64_t duration_ns = 0;
     {
-        StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
-        StarRocksMetrics::instance()->running_update_compaction_task_num.increment(1);
+        StorageMetrics::instance()->update_compaction_request_total.increment(1);
+        StorageMetrics::instance()->running_update_compaction_task_num.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
 
-        std::unique_ptr<MemTracker> mem_tracker =
-                std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, "", _options.compaction_mem_tracker);
+        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
+                MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(best_tablet->tablet_id()),
+                _options.compaction_mem_tracker);
         res = best_tablet->updates()->compaction(mem_tracker.get());
     }
-    StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
-    StarRocksMetrics::instance()->running_update_compaction_task_num.increment(-1);
+    StorageMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
+    StorageMetrics::instance()->running_update_compaction_task_num.increment(-1);
     if (!res.ok() && !res.is_already_exist()) {
-        StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
+        StorageMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
     }
@@ -1524,7 +1604,7 @@ void StorageEngine::search_delta_column_groups_by_version(const DeltaColumnGroup
 
 Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id,
                                              int64_t version, DeltaColumnGroupList* dcgs) {
-    StarRocksMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
+    StorageMetrics::instance()->delta_column_group_get_non_pk_total.increment(1);
     // Currently non-Primary Key tablet can generate cols file only through
     // schema change which will change tablet_id. Every time we do schema change
     // we will get cache miss and guarantee that we always can get the newest
@@ -1539,7 +1619,7 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         auto itr = _delta_column_group_cache.find(dcg_key);
         if (itr != _delta_column_group_cache.end()) {
             search_delta_column_groups_by_version(itr->second, version, dcgs);
-            StarRocksMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
+            StorageMetrics::instance()->delta_column_group_get_non_pk_hit_cache.increment(1);
             return Status::OK();
         }
     }

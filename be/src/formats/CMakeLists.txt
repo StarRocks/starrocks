@@ -14,11 +14,39 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatCore
+        column_evaluator.cpp
+        deletion_bitmap.cpp
+        disk_range.hpp
+        file_writer.cpp
+        io/async_flush_output_stream.cpp
+        io/formatted_output_stream_file.cpp
+        reserved_columns.h
+        scan_context.h
+        utils.h
+        )
+
+target_link_libraries(FormatCore PUBLIC
+        ComputeEnv
+        ExecPrimitive
+        ExprCore
+        RuntimeCore
+        FSCore
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
+ADD_BE_LIB(FormatCsv
         csv/array_converter.cpp
         csv/array_reader.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
+        csv/csv_defaults.h
         csv/csv_reader.cpp
         csv/csv_file_writer.cpp
         csv/date_converter.cpp
@@ -33,12 +61,22 @@ ADD_BE_LIB(Formats
         csv/default_value_converter.cpp
         csv/string_converter.cpp
         csv/varbinary_converter.cpp
+        )
+
+target_link_libraries(FormatCsv PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatJson
         json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
         json/struct_column.cpp
         json/map_column.cpp
+        )
+
+target_link_libraries(FormatJson PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatAvro
         avro/nullable_column.cpp
         avro/numeric_column.cpp
         avro/binary_column.cpp
@@ -48,9 +86,15 @@ ADD_BE_LIB(Formats
         avro/cpp/column_reader.cpp
         avro/cpp/complex_column_reader.cpp
         avro/cpp/date_column_reader.cpp
+        avro/cpp/direct_column_reader.cpp
         avro/cpp/nullable_column_reader.cpp
         avro/cpp/numeric_column_reader.cpp
         avro/cpp/utils.cpp
+        )
+
+target_link_libraries(FormatAvro PUBLIC FormatCore)
+
+ADD_BE_LIB(FormatOrc
         orc/orc_chunk_reader.cpp
         orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
@@ -58,17 +102,27 @@ ADD_BE_LIB(Formats
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/orc_schema_builder.cpp
+        orc/lzo_decompressor_registration.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc
         orc/memory_stream/MemoryOutputStream.cc
+        )
+
+target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
+
+ADD_BE_LIB(Formats
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
+        parquet/column_materializer.cpp
+        parquet/lazy_materialization_context.cpp
+        parquet/read_range_planner.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
         parquet/column_reader_factory.cpp
         parquet/scalar_column_reader.cpp
         parquet/complex_column_reader.cpp
+        parquet/variant_projection.cpp
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp
@@ -91,9 +145,9 @@ ADD_BE_LIB(Formats
         parquet/iceberg_row_id_reader.cpp
         parquet/row_source_reader.cpp
         parquet/parquet_pos_reader.cpp
-        column_evaluator.cpp
-        disk_range.hpp
-        file_writer.cpp
         )
 
+target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore StoragePrimitive Cache)
+
 add_subdirectory(orc/apache-orc)
+target_link_libraries(FormatOrc PUBLIC orc)

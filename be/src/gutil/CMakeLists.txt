@@ -30,9 +30,7 @@ SET(SOURCE_FILES
         hash/hash.cc
         hash/jenkins.cc
         int128.cc
-        once.cc
         ref_counted.cc
-        spinlock_internal.cc
         stringprintf.cc
         strings/ascii_ctype.cc
         strings/charset.cc

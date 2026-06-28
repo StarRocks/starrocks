@@ -871,6 +871,46 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
+    public void testAlterTableAddColumnDefaultCurrentTimestampPreservesGenerator() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_alter_add_now (\n" +
+                "id BIGINT NOT NULL\n" +
+                ") PRIMARY KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_alter_add_now");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_alter_add_now ADD COLUMN ts DATETIME DEFAULT current_timestamp";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+        jobSize++;
+
+        Column tsCol = table.getColumn("ts");
+        Assertions.assertNotNull(tsCol);
+        Assertions.assertNotNull(tsCol.getDefaultExpr());
+        // ALTER-time string is preserved on defaultValue so BE can backfill pre-existing rows.
+        Assertions.assertNotNull(tsCol.getDefaultValue(),
+                "ALTER-time materialization must be kept for BE backfill of pre-existing rows");
+        Assertions.assertEquals(Column.DefaultValueType.CONST, tsCol.getDefaultValueType());
+
+        // Metadata callers (DESCRIBE, information_schema.columns) must surface the generator, not the
+        // frozen literal stashed in defaultValue by the schema-change backfill path.
+        List<String> extras = Lists.newArrayList();
+        Assertions.assertEquals("CURRENT_TIMESTAMP", tsCol.getMetaDefaultValue(extras));
+        Assertions.assertTrue(extras.contains("DEFAULT_GENERATED"),
+                "current_timestamp default must be reported as DEFAULT_GENERATED");
+    }
+
+    @Test
     public void testSortKeyUpdatedAfterAddKeyColumnAgg() throws Exception {
         createTable("CREATE TABLE test.sc_agg_sort_key (\n"
                 + "k0 INT,\n"
@@ -906,6 +946,36 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         doTestSortKeyUpdatedAfterAddKeyColumn(tbl, "test.sc_uniq_sort_key");
     }
 
+    @Test
+    public void testSortKeyFallbackToIndexesWhenUniqueIdsMissing() throws Exception {
+        createTable("CREATE TABLE test.sc_agg_sort_key_fallback (\n"
+                + "k0 INT,\n"
+                + "k1 INT,\n"
+                + "k2 INT,\n"
+                + "k3 INT,\n"
+                + "v0 INT SUM DEFAULT '0'\n"
+                + ") AGGREGATE KEY(k0, k1, k2, k3)\n"
+                + "DISTRIBUTED BY HASH(k0) BUCKETS 1\n"
+                + "ORDER BY(k3, k2, k1, k0)\n"
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg_sort_key_fallback");
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), indexMeta.getSortKeyIdxes());
+        Assertions.assertNotNull(indexMeta.getSortKeyUniqueIds());
+
+        // Emulate legacy metadata: sort key indexes exist but unique ids are absent.
+        indexMeta.setSortKeyUniqueIds(null);
+        indexMeta.getSchema().get(1).setUniqueId(Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+
+        executeAlterAndWaitDone("alter table test.sc_agg_sort_key_fallback add column new_v1 int MAX default '0'");
+
+        MaterializedIndexMeta updatedIndexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
+        Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), updatedIndexMeta.getSortKeyIdxes());
+        Assertions.assertNull(updatedIndexMeta.getSortKeyUniqueIds());
+    }
+
     private void doTestSortKeyUpdatedAfterAddKeyColumn(OlapTable tbl, String qualifiedName) throws Exception {
         Assertions.assertEquals(Arrays.asList(3, 2, 1, 0), tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId()).getSortKeyIdxes());
 
@@ -929,6 +999,137 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         assertSortKey(tbl, Arrays.asList(4, 2, 1, 0, 3, 5));
     }
 
+
+    @Test
+    public void testModifyColumnCommentOnlyForDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup",
+                "ALTER TABLE test.cmt_dup MODIFY COLUMN v1 INT COMMENT 'dup comment';",
+                "v1", "dup comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForAggregateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_agg",
+                "ALTER TABLE test.cmt_agg MODIFY COLUMN v1 INT SUM COMMENT 'agg comment';",
+                "v1", "agg comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq",
+                "ALTER TABLE test.cmt_uniq MODIFY COLUMN v1 INT COMMENT 'uniq comment';",
+                "v1", "uniq comment");
+    }
+
+    // A comment-only MODIFY COLUMN takes the lightweight path even for a primary key table's key column,
+    // which the regular processModifyColumn path rejects ("Can not modify key column ... for primary key table").
+    @Test
+    public void testModifyColumnCommentOnlyForPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_pk (k1 INT, v1 INT) PRIMARY KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN k1 INT COMMENT 'pk key comment';",
+                "k1", "pk key comment");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN v1 INT COMMENT 'pk value comment';",
+                "v1", "pk value comment");
+    }
+
+    // The KEY designation is table-level and is not repeated in MODIFY COLUMN k1 INT COMMENT '...', so the
+    // rebuilt column comes back with isKey=false; isCommentOnlyModification must inherit the key flag from the
+    // stored column, otherwise a comment-only change on a key column would fall through and be rejected on a
+    // single-key table (leaving no key column) or create an unnecessary schema change job.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfDuplicateAndUniqueTables() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup_key (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup_key",
+                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT COMMENT 'dup key comment';",
+                "k1", "dup key comment");
+
+        createTable("CREATE TABLE test.cmt_uniq_key (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq_key",
+                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT COMMENT 'uniq key comment';",
+                "k1", "uniq key comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyCannotCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.cmt_combine (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        String alterSql = "ALTER TABLE test.cmt_combine MODIFY COLUMN v1 INT COMMENT 'x', ADD COLUMN v2 INT;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_combine");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        Assertions.assertTrue(exception.getMessage()
+                        .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                exception.getMessage());
+    }
+
+    @Test
+    public void testModifyColumnRepositionIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_reposition (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_reposition");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_reposition MODIFY COLUMN v2 INT AFTER k1;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    // Omitting an explicit aggregation type on an AGGREGATE table value column (v INT SUM -> v INT) is a real
+    // schema change, not a comment-only one: the stored SUM is explicit user schema, so isCommentOnlyModification
+    // must NOT inherit it. The clause has to fall through to processModifyColumn, which treats the missing
+    // aggregation as turning the value column into a key column and rejects it on this table.
+    @Test
+    public void testModifyColumnOmittingExplicitAggregationIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg_omit (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_agg_omit");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_agg_omit MODIFY COLUMN v1 INT COMMENT 'agg comment';");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        // It must not have been silently routed to the comment-only path: the comment stays unchanged.
+        Assertions.assertEquals("", table.getColumn("v1").getComment(), exception.getMessage());
+    }
+
+    private void assertCommentOnlyModify(String tableName, String alterSql, String columnName, String expectedComment)
+            throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assertions.assertNotNull(table);
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        // A comment-only MODIFY COLUMN must take the lightweight path: no schema change job is created and
+        // the table stays in NORMAL state, while the column comment is updated in place.
+        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(expectedComment, table.getColumn(columnName).getComment());
+    }
 
     private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
         List<Column> columns = tbl.getBaseSchema();

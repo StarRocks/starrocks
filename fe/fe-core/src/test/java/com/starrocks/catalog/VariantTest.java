@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.proto.PTypeNode;
@@ -28,19 +29,23 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 public class VariantTest {
 
@@ -393,6 +398,53 @@ public class VariantTest {
         DateVariant v2 = new DateVariant(DateType.DATETIME, instant2);
 
         Assertions.assertTrue(v1.compareTo(v2) < 0);
+    }
+
+    // The backend parses split-boundary values with datum_from_string, which only
+    // accepts the StarRocks canonical date/datetime text ("yyyy-MM-dd[ HH:mm:ss]").
+    // getStringValue() (and thus the proto/thrift value) must emit that form, not an
+    // ISO-8601 instant ("...T...Z"), or the storage engine rejects every date/datetime
+    // split boundary and silently skips the split.
+
+    @Test
+    public void testDateTimeStringValueIsBackendCanonical() {
+        Variant v = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
+        Assertions.assertEquals("2024-01-15 10:30:00", v.getStringValue());
+        Assertions.assertEquals("2024-01-15 10:30:00", v.toProto().value);
+        Assertions.assertEquals("2024-01-15 10:30:00", v.toThrift().getValue());
+    }
+
+    @Test
+    public void testDateStringValueIsBackendCanonical() {
+        Variant v = new DateVariant(DateType.DATE, "2024-01-15");
+        Assertions.assertEquals("2024-01-15", v.getStringValue());
+        Assertions.assertEquals("2024-01-15", v.toProto().value);
+        Assertions.assertEquals("2024-01-15", v.toThrift().getValue());
+    }
+
+    @Test
+    public void testDateTimeStringValueKeepsMicros() {
+        Variant v = new DateVariant(DateType.DATETIME, Instant.ofEpochSecond(0, 123456000));
+        Assertions.assertEquals("1970-01-01 00:00:00.123456", v.getStringValue());
+    }
+
+    @Test
+    public void testDateTimeStringValueIsLocaleIndependent() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-SA-u-nu-arab"));
+            Variant v = new DateVariant(DateType.DATETIME, Instant.ofEpochSecond(0, 123456000));
+            Assertions.assertEquals("1970-01-01 00:00:00.123456", v.getStringValue());
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    public void testDateTimeStringValueRoundTrips() {
+        DateVariant original = new DateVariant(DateType.DATETIME, "2024-01-15T10:30:00");
+        Variant reparsed = Variant.of(DateType.DATETIME, original.getStringValue());
+        Assertions.assertEquals(original, reparsed);
     }
 
     // ==================== Variant.of() Factory Method Tests ====================
@@ -1191,5 +1243,159 @@ public class VariantTest {
         // In-equality between Min and Max
         Assertions.assertNotEquals(min1, max1);
         Assertions.assertTrue(min1.compareTo(max1) < 0);
+    }
+
+    // ==================== DecimalVariant Tests ====================
+
+    @Test
+    public void testDecimalVariantBasics() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant v = Variant.of(type, "1234.56");
+        Assertions.assertTrue(v instanceof DecimalVariant);
+        Assertions.assertEquals("1234.56", v.getStringValue());
+        Assertions.assertEquals(type, v.getType());
+        Assertions.assertEquals(1234L, v.getLongValue());
+    }
+
+    @Test
+    public void testDecimalVariantToPlainStringNoScientificNotation() {
+        // new BigDecimal("0.0000001").toString() would render "1E-7"; toPlainString must not.
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10);
+        Variant v = Variant.of(type, "0.0000001");
+        Assertions.assertEquals("0.0000001", v.getStringValue());
+
+        Variant negative = Variant.of(type, "-12345.6789012345");
+        Assertions.assertEquals("-12345.6789012345", negative.getStringValue());
+    }
+
+    @Test
+    public void testDecimalVariantCompareToIsValueOrdered() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
+        Variant low = Variant.of(type, "1.0000");
+        Variant high = Variant.of(type, "2.5000");
+        Variant negative = Variant.of(type, "-3.0000");
+        Assertions.assertTrue(low.compareTo(high) < 0);
+        Assertions.assertTrue(high.compareTo(low) > 0);
+        Assertions.assertTrue(negative.compareTo(low) < 0);
+        // BigDecimal.compareTo is scale-independent: 2.5 == 2.50000.
+        Assertions.assertEquals(0, high.compareTo(Variant.of(type, "2.50000")));
+    }
+
+    @Test
+    public void testDecimalVariantInvalidStringThrows() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> Variant.of(type, "not-a-number"));
+    }
+
+    @Test
+    public void testDecimalV2VariantConstructs() {
+        ScalarType type = TypeFactory.createDecimalV2Type(27, 9);
+        Variant v = Variant.of(type, "123.456789");
+        Assertions.assertTrue(v instanceof DecimalVariant);
+        Assertions.assertEquals("123.456789", v.getStringValue());
+    }
+
+    @Test
+    public void testDecimalVariantRejectsNonDecimalType() {
+        // The (Type, BigDecimal) constructor is public; guard against a non-decimal type so a
+        // misuse fails loudly here instead of producing a Variant whose ScalarType cast in
+        // BoundaryPlanner.validateValueAgainstColumn would later throw a ClassCastException.
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new DecimalVariant(IntegerType.BIGINT, BigDecimal.ONE));
+    }
+
+    @Test
+    public void testDecimalVariantPreservesExactFractionalText() {
+        // FE does NOT pre-round or reject over-scale samples: it stores and sorts the exact
+        // value. The backend applies the single authoritative half-up rounding to the column
+        // scale when it parses the boundary (the same path it uses for the loaded data), so FE
+        // and BE stay consistent and an over-scale sample never yields a wrong boundary — at
+        // worst an over-precision integer part triggers the substrate's identical-fallback.
+        // Rejecting it in FE would regress a decimal load to SAMPLE_FAILED (no pre-split).
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant v = Variant.of(type, "1.239");
+        Assertions.assertEquals("1.239", v.getStringValue());
+        Assertions.assertTrue(v.compareTo(Variant.of(type, "1.24")) < 0);
+    }
+
+    @Test
+    public void testDecimalVariantEqualsAndHashCode() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant a = Variant.of(type, "12.34");
+        Variant b = Variant.of(type, "12.34");
+        Assertions.assertEquals(a, b);
+        Assertions.assertEquals(a.hashCode(), b.hashCode());
+        Assertions.assertNotEquals(a, null);
+        Assertions.assertNotEquals(a, Variant.of(IntegerType.BIGINT, "12"));
+        // equals is value-based and consistent with compareTo: the same value at a different
+        // scale is equal and hashes equally (so Tuple/Set dedup works for decimal boundaries).
+        Variant scaled = Variant.of(type, "12.3400");
+        Assertions.assertEquals(a, scaled);
+        Assertions.assertEquals(a.hashCode(), scaled.hashCode());
+        Assertions.assertEquals(0, a.compareTo(scaled));
+    }
+
+    @Test
+    public void testDecimalVariantGsonRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2);
+        Variant original = Variant.of(type, "1234.56");
+
+        String json = GsonUtils.GSON.toJson(original, Variant.class);
+        Variant restored = GsonUtils.GSON.fromJson(json, Variant.class);
+
+        Assertions.assertTrue(restored instanceof DecimalVariant);
+        Assertions.assertEquals("1234.56", restored.getStringValue());
+        ScalarType restoredType = (ScalarType) restored.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL64, restoredType.getPrimitiveType());
+        Assertions.assertEquals(18, restoredType.getScalarPrecision());
+        Assertions.assertEquals(2, restoredType.getScalarScale());
+        Assertions.assertEquals(0, original.compareTo(restored));
+    }
+
+    @Test
+    public void testDecimalVariantThriftRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
+        Variant v = Variant.of(type, "12345.6789");
+        TVariant t = v.toThrift();
+        Assertions.assertEquals("12345.6789", t.getValue());
+
+        Variant back = Variant.fromThrift(t);
+        Assertions.assertTrue(back instanceof DecimalVariant);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL64, backType.getPrimitiveType());
+        Assertions.assertEquals(18, backType.getScalarPrecision());
+        Assertions.assertEquals(4, backType.getScalarScale());
+        Assertions.assertEquals(0, v.compareTo(back));
+    }
+
+    @Test
+    public void testDecimalVariantProtoRoundTrip() {
+        ScalarType type = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10);
+        Variant v = Variant.of(type, "-0.0000000001");
+        VariantPB pb = v.toProto();
+        Assertions.assertEquals("-0.0000000001", pb.value);
+
+        Variant back = Variant.fromProto(pb);
+        Assertions.assertTrue(back instanceof DecimalVariant);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMAL128, backType.getPrimitiveType());
+        Assertions.assertEquals(38, backType.getScalarPrecision());
+        Assertions.assertEquals(10, backType.getScalarScale());
+        Assertions.assertEquals(0, v.compareTo(back));
+    }
+
+    @Test
+    public void testDecimalV2ProtoRoundTripPreservesScale() {
+        // Regression guard: TypeDeserializer.createType used precision as the DECIMALV2
+        // scale, so a round-trip silently widened scale to precision.
+        ScalarType type = TypeFactory.createDecimalV2Type(27, 9);
+        Variant v = Variant.of(type, "123.456");
+        VariantPB pb = v.toProto();
+
+        Variant back = Variant.fromProto(pb);
+        ScalarType backType = (ScalarType) back.getType();
+        Assertions.assertEquals(PrimitiveType.DECIMALV2, backType.getPrimitiveType());
+        Assertions.assertEquals(27, backType.getScalarPrecision());
+        Assertions.assertEquals(9, backType.getScalarScale());
     }
 }

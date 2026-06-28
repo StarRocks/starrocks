@@ -15,6 +15,7 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 
 #include <bthread/bthread.h>
+#include <fmt/std.h>
 
 #include <cstddef>
 #include <mutex>
@@ -23,11 +24,14 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
 
@@ -244,7 +248,7 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
@@ -399,10 +403,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                         std::string_view rpc_error_msg) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto query_ctx_weak = _fragment_ctx->runtime_state()->query_ctx()->weak_from_this();
+
+        auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                         std::string_view rpc_error_msg) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -418,14 +424,14 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
-            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
+            cancel_fragment_context(_fragment_ctx, Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         };
 
-        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                          const PTransmitChunkResult& result) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                          const PTransmitChunkResult& result) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -438,7 +444,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
             if (!status.ok()) {
                 _is_finishing = true;
-                _fragment_ctx->cancel(status);
+                cancel_fragment_context(_fragment_ctx, status);
 
                 const auto& dest_addr = context.dest_addrs;
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",

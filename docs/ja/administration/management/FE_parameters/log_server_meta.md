@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：ログ、サーバー設定、メタデータ管理に関連する設定項目。"
 sidebar_label: "ログ、サーバー、およびメタデータ"
 ---
 
@@ -238,12 +239,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、FE 監査サブシステムは、ConnectProcessor によって処理されたステートメントの SQL テキストを FE 監査ログ (`fe.audit.log`) に記録します。格納されたステートメントは、他の制御に従います。暗号化されたステートメントは編集され (`AuditEncryptionChecker`)、`enable_sql_desensitize_in_log` が設定されている場合、機密性の高い資格情報は編集または非機密化される可能性があり、ダイジェストレコーディングは `enable_sql_digest` によって制御されます。`false` に設定されている場合、ConnectProcessor は監査イベントのステートメントテキストを "?" に置き換えます。他の監査フィールド (ユーザー、ホスト、期間、ステータス、`qe_slow_log_ms` を介した低速クエリ検出、およびメトリック) は引き続き記録されます。SQL 監査を有効にすると、フォレンジックとトラブルシューティングの可視性が向上しますが、機密性の高い SQL コンテンツが公開され、ログのボリュームと I/O が増加する可能性があります。無効にすると、監査ログでの完全なステートメントの可視性を失う代わりにプライバシーが向上します。
 - 導入時期：-
 
+### `enable_print_load_profile_to_log`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` に設定すると、ロード profile（Stream Load、Routine Load、Broker Load、Merge Commit など）が `ProfileManager` にプッシュされる際に、INFO レベルで profile ログ (`fe.profile.log`) にも、query profile log と同じ単一行 JSON 形式で出力されます。これにより、`profile_info_reserved_num` の上限によってロード profile が `ProfileManager` から削除された後でも、ログから復元できます。`fe.log` ではなく profile ログを使うのは、その JSON レイアウトの文字列上限が `sys_log_json_max_string_length` よりもはるかに大きい `sys_log_json_profile_max_string_length` であり、大きなロード profile が切り詰められないためです。このファイルのローテーションと保持は `profile_log_*` パラメータで制御されます。クエリタイプが `Load` の profile のみが出力され、クエリ profile には影響しません。ロード profile は実際に収集された場合（例えば `enable_profile` が有効な場合、またはロードが大規模ロード profile のしきい値を超えた場合）にのみ出力されます。
+- 導入時期：-
+
 ### `enable_profile_log`
 
 - デフォルト：true
 - タイプ：Boolean
 - 単位：-
-- 変更可能：No
+- 変更可能：Yes
 - 説明：プロファイルロギングを有効にするかどうか。この機能が有効になっている場合、FE はクエリごとのプロファイルログ (ProfileManager によって生成されたシリアル化された `queryDetail` JSON) をプロファイルログシンクに書き込みます。このロギングは `enable_collect_query_detail_info` も有効になっている場合にのみ実行されます。`enable_profile_log_compress` が有効になっている場合、JSON はロギング前に gzipped されることがあります。プロファイルログファイルは `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` によって管理され、`profile_log_delete_age` ( `7d`、`10h`、`60m`、`120s` などの形式をサポート) に従ってローテーション/削除されます。この機能を無効にすると、プロファイルログの書き込みが停止します (ディスク I/O、圧縮 CPU、ストレージ使用量の削減)。
 - 導入時期：v3.2.5
 
@@ -262,7 +272,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：No
-- 説明：この項目が `true` に設定されている場合、システムはログとクエリ詳細レコードに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、および SimpleExecutor.formatSQL (内部エクゼキュータログ) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。これにより、監査/内部ログでの機密リテラルや資格情報の漏洩が減少しますが、ログとクエリ詳細に元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
+- 説明：この項目が `true` に設定されている場合、システムはログ、クエリ詳細レコード、およびクエリプロファイルに書き込まれる前に機密性の高い SQL コンテンツを置き換えるか隠します。この設定を尊重するコードパスには、ConnectProcessor.formatStmt (監査ログ)、StmtExecutor.addRunningQueryDetail (クエリ詳細)、SimpleExecutor.formatSQL (内部エクゼキュータログ)、および StmtExecutor.buildTopLevelProfile / processProfileAsync (プロファイルの `Summary` セクションに格納される `Sql Statement` および `ExplainPlan` info-string) が含まれます。この機能が有効になっている場合、無効な SQL は固定の非機密化メッセージに置き換えられる可能性があり、資格情報 (ユーザー/パスワード) は隠され、SQL フォーマッターはサニタイズされた表現を生成する必要があります (ダイジェスト形式の出力を有効にすることもできます)。セッション変数 `enable_explain_in_profile` によって追加される `ExplainPlan` フィールドについても、本設定により埋め込まれる `EXPLAIN COSTS` テキストのリテラルが強制的にダイジェスト化されるため、プロファイル内で `Sql Statement` が非機密化されているにもかかわらず `ExplainPlan` が元のリテラルを露出してしまうことを防ぎます。これにより、監査/内部ログおよびプロファイルでの機密リテラルや資格情報の漏洩が減少しますが、ログ、クエリ詳細、およびプロファイルに元の完全な SQL テキストが含まれなくなることになります (これは再生やデバッグに影響する可能性があります)。
 - 導入時期：-
 
 ### `internal_log_delete_age`
@@ -473,14 +483,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クエリが遅いクエリかどうかを判断するために使用されるしきい値。クエリの応答時間がこのしきい値を超えると、**fe.audit.log** に遅いクエリとして記録されます。
 - 導入時期：-
 
-### `slow_lock_log_every_ms`
+### `slow_lock_log_l2_info_interval_ms`
 
 - デフォルト：3000L
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：同じ SlowLockLogStats インスタンスに対して別の「低速ロック」警告を発行するまでに待機する最小間隔 (ミリ秒)。LockUtils は、ロック待機が `slow_lock_threshold_ms` を超えた後にこの値をチェックし、最後のログに記録された低速ロックイベントから `slow_lock_log_every_ms` ミリ秒が経過するまで追加の警告を抑制します。長期的な競合中にログのボリュームを減らすには値を大きくし、より頻繁な診断を得るには値を小さくします。変更は、その後のチェックに対して実行時に有効になります。
-- 導入時期：v3.2.0
+- エイリアス：`slow_lock_log_every_ms`（元の名前。後方互換性のため保持されており、両方の名前は同じパラメータを指します）。
+- 説明：**L2** 低速ロックログ層（スタックを含まない完全なロック情報 JSON 行）の最小間隔。低速ロックログは 3 つの層に段階的に低下し、コストの高い順に厳しく絞られます：**L1** = 完全情報 + スタック（`slow_lock_log_l1_stack_interval_ms`）、**L2** = 完全情報、スタックなし（本パラメータ）、**L3** = プレーンテキストの簡易情報（`slow_lock_log_l3_brief_interval_ms`）。1 回の低速ロックイベントでは、現在スロットルが許可する最も詳細な層が出力されます。上位層を選ぶと下位層のウィンドウも消費されるため、総ログ量が最も緩い許可層のレートを超えることはありません。スコープは発信層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock` では**per-instance**（各ロックオブジェクト——例えば各 `RoutineLoadJob`——が独自のゲートを持つ）、レガシー `LockUtils` 経路では**per-Database**。`0`（または負の値）に設定すると L2 ゲートが無効になります（常に許可）。長期的な競合中にログ量を減らすには値を大きく、完全情報の診断頻度を上げるには小さく設定します。
+- 導入時期：v3.2.0（`slow_lock_log_every_ms` として）。v4.1 で `slow_lock_log_l2_info_interval_ms` に改名。
 
 ### `slow_lock_print_stack`
 
@@ -488,8 +499,35 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：LockManager が `logSlowLockTrace` によって出力される低速ロック警告の JSON ペイロードに、所有スレッドの完全なスタックトレースを含めることを許可するかどうか ("stack" 配列は `LogUtil.getStackTraceToJsonArray` を使用して `start=0` および `max=Short.MAX_VALUE` で設定されます)。この設定は、ロック取得が `slow_lock_threshold_ms` で設定されたしきい値を超えたときに表示されるロック所有者に関する追加のスタック情報のみを制御します。この機能を有効にすると、ロックを保持している正確なスレッドスタックを提供することでデバッグに役立ちます。無効にすると、高並行環境でスタックトレースをキャプチャしてシリアル化することによるログのボリュームと CPU/メモリのオーバーヘッドが減少します。
+- 説明：低速ロック警告で所有スレッド／現在スレッドのスタックトレースをキャプチャするかどうかのマスタースイッチ。`LockManager.logSlowLockTrace`（所有者ごとの `"stack"` フィールド）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる、所有者／最古 reader／現在スレッドの `"stack"` フィールド）の両方に適用されます。有効にするとロックを保持する正確なスレッドスタックを提供してデバッグに役立ち、無効にすると高並列環境におけるスタックトレースのキャプチャとシリアライズによるログ量・CPU／メモリオーバーヘッドを削減できます。有効時、キャプチャ頻度はさらに `slow_lock_log_l1_stack_interval_ms` によってレート制限されます。
 - 導入時期：v3.3.16, v3.4.5, v3.5.1
+
+### `slow_lock_log_l1_stack_interval_ms`
+
+- デフォルト：30000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：低速ロックログイベント間でのスタックトレースキャプチャの最小間隔。`slow_lock_print_stack` が `true` の場合のみ適用されます。スコープは層によって異なります：`LockManager.logSlowLockTrace` では**グローバル**（すべての rid に対する一つの静的ゲート）、`QueryableReentrantReadWriteLock.getLockInfoToJson` では**per-instance**（各ロックオブジェクトが独自のゲートを持つ）。スイッチはオンだが前回のキャプチャからこの間隔が経過していない場合、`"stack"` フィールドは LockManager 経路では `"throttled"` マーカーに置き換えられ、QueryableReentrantReadWriteLock 経路では省略されます。warn ログの残り（rid、owners、waiters、queryId、タイミング情報など）は外側のイベントゲート（`slow_lock_log_l2_info_interval_ms`）が許可する限り通常どおり出力されます。`0`（または負の値）に設定するとレート制限が無効になり、すべての低速ロックイベントでスタックをキャプチャする以前の動作に戻ります。`Thread.getStackTrace` は JVM safepoint を発動し、低速ロックイベントが頻発する大規模クラスタではコストが大きくなります — このゲートは診断ログ自体を抑制せずにそのコストを抑えます。
+- 導入時期：v4.1
+
+### `slow_lock_max_waiter_count_to_log`
+
+- デフォルト：30
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：単一の低速ロックログイベントでシリアライズされる waiter エントリの最大数。`LockManager.logSlowLockTrace`（`"waiter"` 配列）と `QueryableReentrantReadWriteLock.getLockInfoToJson`（レガシー db ロック経路および `RoutineLoadJob` の per-job ロックで使われる `"queuedReaders"` / `"queuedWriters"` 配列）の両方に適用されます。実際の waiter 数がこの上限を超えると、最初の N 個の waiter のみが個別に列挙され、残りは配列の末尾に追加される単一のトレーラ `{"omitted": "remain M waiters omitted"}` で集約されます。極度の競合シナリオで Gson シリアライゼーションコストとログ行サイズを抑制しつつ、waiter 総数の診断情報を保持します。`0`（または負の値）に設定すると上限を無効化し、すべての waiter をシリアライズします。
+- 導入時期：v4.1
+
+### `slow_lock_log_l3_brief_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：**L3** 低速ロックログ層（より詳細な層 — L1 の `slow_lock_log_l1_stack_interval_ms`、L2 の `slow_lock_log_l2_info_interval_ms` — がスロットルされたときに出力される、単一のプレーンテキスト warn 行。JSON もスタックもなし）の最小間隔。3 層の中で最も緩い層です。簡易情報は**この間隔ごとに最大 1 回**出力されます：L3 ゲートがまだ閉じているウィンドウ内に到着した低速ロックイベントは抑制されます（行なし）。イベントごとに 1 行を保証するものではなく、持続的な競合下での最大の無音時間を 1 簡易情報間隔以内に抑えるだけです。他の 2 つより小さく設定してください：`slow_lock_log_l3_brief_interval_ms < slow_lock_log_l2_info_interval_ms < slow_lock_log_l1_stack_interval_ms`。`0`（または負の値）に設定すると簡易情報は無制限になり、スロットルされたすべてのイベントが行を残します（オーバーヘッドは予測可能ですが、ストーム時には毎秒多数になる可能性があります）。スコープ規則は他の低速ロックスロットルと同じです（`LockManager` はグローバル、`QueryableReentrantReadWriteLock` は per-instance）。
+- 導入時期：v4.1
 
 ### `slow_lock_threshold_ms`
 
@@ -497,7 +535,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：ロック操作または保持されているロックを「遅い」と分類するために使用されるしきい値 (ミリ秒)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (低速ロックロギング)、QueryableReentrantReadWriteLock (低速リーダーのフィルタリング)、LockManager (デッドロック検出遅延と低速ロックトレース)、LockChecker (定期的な低速ロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断のオーバーヘッドが増加します。0 または負の数に設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_every_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と一緒に調整します。
+- 説明：ロック操作または保持されているロックを「遅い」と分類するために使用されるしきい値 (ミリ秒)。ロックの経過待機時間または保持時間がこの値を超えると、StarRocks は (コンテキストに応じて) 診断ログを出力し、スタックトレースまたは待機者/所有者情報を含め、LockManager ではこの遅延後にデッドロック検出を開始します。これは LockUtils (低速ロックロギング)、QueryableReentrantReadWriteLock (低速リーダーのフィルタリング)、LockManager (デッドロック検出遅延と低速ロックトレース)、LockChecker (定期的な低速ロック検出)、およびその他の呼び出し元 (例: DiskAndTabletLoadReBalancer ロギング) によって使用されます。値を下げると感度とロギング/診断のオーバーヘッドが増加します。0 または負の数に設定すると、初期の待機ベースのデッドロック検出遅延動作が無効になります。`slow_lock_log_l2_info_interval_ms`、`slow_lock_print_stack`、および `slow_lock_stack_trace_reserve_levels` と一緒に調整します。
 - 導入時期：3.2.0
 
 ### `sys_log_delete_age`
@@ -758,6 +796,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの HTTP サーバーがリッスンするポート。
 - 導入時期：-
 
+### `enable_http_auth`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 導入時期：v4.2.0
+- 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
+  - 公開プローブ / 可観測性：`/api/health`、`/api/bootstrap`、`/api/idle_status`、`/api/v2/feature`、`/metrics`、`/api/oauth2`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+
+  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
 ### `http_web_page_display_hardware`
 
 - デフォルト：true
@@ -829,6 +880,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：FE ノードの MySQL サーバーが保持するバックログキューの長さ。
 - 導入時期：-
+
+### `mysql_send_packet_timeout_ms`
+
+- デフォルト：60000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：MySQL プロトコルチャネルにおけるパケット単位の書き込みタイムアウト。結果行を送信する際、低速クライアントの TCP 受信バッファが空くまで FE ワーカーが待つ時間を制限します。これを設けないと、ワーカーが `Selector.select()` で無期限にブロックし、クエリが `KILL QUERY` で終了できなくなります。`0` に設定するとタイムアウトを無効化します（従来の無期限待機の動作）。
+- 導入時期：v4.1
 
 ### `mysql_server_version`
 
@@ -929,7 +989,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：StarRocks が遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームをキャプチャして出力するかを制御します。この値は、排他ロック所有者、現在のスレッド、および最古/共有リーダーの JSON を生成する際に `QueryableReentrantReadWriteLock` によって `LogUtil.getStackTraceToJsonArray` に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題の診断に役立つより多くのコンテキストが得られますが、JSON ペイロードが大きくなり、スタックキャプチャの CPU/メモリがわずかに増加します。減らすとオーバーヘッドが減少します。注: リーダーエントリは、低速ロックのみをログに記録する場合、`slow_lock_threshold_ms` によってフィルタリングできます。
+- 説明：StarRocks が遅いロックまたは保持されているロックのロックデバッグ情報をダンプする際に、いくつのスタックトレースフレームをキャプチャして出力するかを制御します。この値は、排他ロック所有者、現在のスレッド、および最古/共有リーダーの JSON を生成する際に `QueryableReentrantReadWriteLock` によって `LogUtil.getStackTraceToJsonArray` に渡されます。この値を増やすと、遅いロックまたはデッドロックの問題の診断に役立つより多くのコンテキストが得られますが、JSON ペイロードが大きくなり、スタックキャプチャの CPU/メモリがわずかに増加します。減らすとオーバーヘッドが減少します。注: この上限は `QueryableReentrantReadWriteLock` のスタックダンプ経路にのみ適用されます。`LockManager` の低速ロック経路は完全なスタック深度をキャプチャし、この値による制限を受けません。リーダーエントリは、低速ロックのみをログに記録する場合、`slow_lock_threshold_ms` によってフィルタリングできます。
 - 導入時期：v3.4.0, v3.5.0
 
 ### `ssl_cipher_blacklist`
@@ -1239,6 +1299,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：定期的な Hive メタデータキャッシュ更新を有効にするかどうか。有効にすると、StarRocks は Hive クラスターのメタストア (Hive Metastore または AWS Glue) をポーリングし、頻繁にアクセスされる Hive カタログのキャッシュされたメタデータを更新してデータ変更を認識します。`true` は Hive メタデータキャッシュ更新を有効にすることを示し、`false` は無効にすることを示します。
 - 導入時期：v2.5.5
+
+### `refresh_other_fe_dispatch_executor_thread_num`
+
+- デフォルト：4
+- タイプ：Integer
+- 単位：-
+- 変更可能：Yes
+- 説明：Connector の書き込みパスから実行される非同期の "refresh other FE" バックグラウンドジョブをスケジュールする、FE グローバルのディスパッチ実行プール内のスレッド数です。これらのスレッドはバックグラウンド更新タスクを起動するだけで、他の FE に対して更新 RPC を直接送信しません。変更は再起動なしで実行中の FE に反映されます。
+- 導入時期：-
+
+### `refresh_other_fe_rpc_executor_thread_num`
+
+- デフォルト：4
+- タイプ：Integer
+- 単位：-
+- 変更可能：Yes
+- 説明： "refresh other FE" の fan-out に使用される、FE グローバルの RPC 実行プール内のスレッド数です。この実行プールにより、同期および非同期の外部テーブル更新フローで他の FE に同時送信される更新 RPC の数が制限されます。変更は再起動なしで実行中の FE に反映されます。
+- 導入時期：-
 
 ### `enable_collect_query_detail_info`
 

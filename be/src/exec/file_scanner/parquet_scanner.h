@@ -23,10 +23,10 @@
 #include <vector>
 
 #include "base/string/slice.h"
+#include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/parquet_reader.h"
 #include "runtime/mem_pool.h"
@@ -49,16 +49,8 @@ public:
 
     void close() override;
 
-    static Status convert_array_to_column(ConvertFuncTree* func, size_t num_elements, const arrow::Array* array,
-                                          Column* column, size_t batch_start_idx, size_t column_start_idx,
-                                          Filter* chunk_filter, ArrowConvertContext* conv_ctx);
-
     static Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
                              MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
-                             bool strict_mode);
-
-    static Status build_dest(const arrow::DataType* arrow_type, const TypeDescriptor* type_desc, bool is_nullable,
-                             TypeDescriptor* raw_type_desc, ConvertFuncTree* conv_func, bool& need_cast,
                              bool strict_mode);
 
 private:

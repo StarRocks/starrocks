@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 存算分离集群中配置和使用 Data Cache，将远程存储的数据块缓存到本地磁盘以加速查询。"
 sidebar_position: 20
 toc_max_heading_level: 2
 keywords: ['huan cun']
@@ -51,6 +52,15 @@ import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
   SHOW BACKENDS;
   SHOW COMPUTE NODES;
   ```
+
+## 检查查询是否命中 Data Cache
+
+您可以通过分析 Query Profile 中的以下指标来检查查询是否命中 Data Cache：
+
+- `CompressedBytesReadRemote`：系统从远程存储系统读取的数据大小。
+- `IOTimeRemote`：系统从远程存储系统读取数据所花费的 I/O 时间。
+
+如果这些值不为零，则表明该查询未命中 Data Cache，系统必须从远程存储系统读取数据。
 
 ## 监控 Data Cache
 

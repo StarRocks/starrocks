@@ -20,16 +20,20 @@
 #include "base/statusor.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/scan_task.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/operator.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/workgroup/scan_executor.h"
-#include "exec/workgroup/scan_task_queue.h"
+#include "exec/pipeline/query_context.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "storage/chunk_helper.h"
@@ -217,6 +221,7 @@ StatusOr<ChunkPtr> LookUpOperator::pull_chunk(RuntimeState* state) {
 Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
     for (int32_t i = 0; i < _max_io_tasks; i++) {
         auto processor = _processors[i];
+        int32_t driver_id = CurrentThread::current().get_driver_id();
 
         auto lookup_task_ctx = std::make_shared<LookUpTaskContext>();
         bool is_running = processor->is_running();
@@ -232,12 +237,15 @@ Status LookUpOperator::_try_to_trigger_io_task(RuntimeState* state) {
             processor->set_ctx(lookup_task_ctx);
             COUNTER_UPDATE(_submit_io_task_counter, 1);
             workgroup::ScanTask task;
-            task.workgroup = state->fragment_ctx()->workgroup();
+            task.workgroup = state->fragment_runtime_state()->workgroup();
             task.priority = OlapScanNode::compute_priority(_submit_io_task_counter->double_value());
             task.task_group = down_cast<const LookUpOperatorFactory*>(_factory)->io_task_group();
             task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
-            task.work_function = [wp = _query_ctx, this, state, idx = i, create_ts = MonotonicNanos()](auto& ctx) {
+            task.work_function = [wp = _query_ctx, this, state, idx = i, driver_id = driver_id,
+                                  create_ts = MonotonicNanos()](auto& ctx) {
                 if (auto sp = wp.lock()) {
+                    SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     auto& processor = _processors[idx];
                     [[maybe_unused]] int64_t start_time = MonotonicNanos();
                     DeferOp defer([&] {

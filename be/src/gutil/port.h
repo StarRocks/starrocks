@@ -315,7 +315,7 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 //
 // Prevent the compiler from padding a structure to natural alignment
 //
-#define PACKED __attribute__((packed))
+#define SR_PACKED __attribute__((packed))
 
 // Cache line alignment
 #if defined(__i386__) || defined(__x86_64__)
@@ -643,7 +643,7 @@ inline void* aligned_malloc(size_t size, int minimum_alignment) {
 
 #define PRINTF_ATTRIBUTE(string_index, first_to_check)
 #define SCANF_ATTRIBUTE(string_index, first_to_check)
-#define PACKED
+#define SR_PACKED
 #define CACHELINE_ALIGNED
 #define ATTRIBUTE_UNUSED
 #define ATTRIBUTE_ALWAYS_INLINE

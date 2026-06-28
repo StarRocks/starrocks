@@ -16,20 +16,58 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <functional>
 #include <thread>
 
 #include "base/testutil/parallel_test.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/pipeline_metrics.h"
-#include "exec/workgroup/work_group.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
-class MockEmptyOperator final : public SourceOperator {
+namespace {
+
+class FakeWorkGroupSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
+public:
+    std::function<bool(const workgroup::WorkGroup*)> should_yield_func = [](const workgroup::WorkGroup*) {
+        return false;
+    };
+    size_t num_workgroups_value = 2;
+
+    bool should_yield(const workgroup::WorkGroup* wg) const override { return should_yield_func(wg); }
+    size_t num_workgroups() const override { return num_workgroups_value; }
+};
+
+} // namespace
+
+class EmptyOperatorRuntimeAccess final : public OperatorRuntimeAccess {
+public:
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {}
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override { return nullptr; }
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override { return nullptr; }
+    const std::vector<SlotId>& get_filter_null_value_columns() const override { return _filter_null_value_columns; }
+
+private:
+    std::vector<SlotId> _filter_null_value_columns;
+};
+
+EmptyOperatorRuntimeAccess* empty_operator_runtime_access() {
+    static EmptyOperatorRuntimeAccess runtime_access;
+    return &runtime_access;
+}
+
+class MockEmptyOperator final : public Operator {
 public:
     MockEmptyOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
-            : SourceOperator(factory, id, "mock_empty_operator", plan_node_id, false, driver_sequence) {}
+            : Operator(factory, id, "mock_empty_operator", plan_node_id, false, driver_sequence,
+                       empty_operator_runtime_access()) {}
 
     ~MockEmptyOperator() override = default;
 
@@ -51,25 +89,33 @@ void _set_driver_level(DriverRawPtr driver, int level) {
     driver->set_driver_queue_level(level % QuerySharedDriverQueue::QUEUE_SIZE);
 }
 
+QueryRuntimeState* _query_runtime_state(QueryContext* query_ctx) {
+    return query_ctx == nullptr ? nullptr : &query_ctx->query_runtime_state();
+}
+
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
     PipelineExecutorMetrics metrics;
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
     QueryContext query_context;
-    auto driver71 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
+    auto driver71 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                     nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver71.get(), 7);
     driver71->driver_acct().update_last_time_spent(5'000'000L * 1);
 
-    auto driver72 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
+    auto driver72 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                     nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver72.get(), 7 + QuerySharedDriverQueue::QUEUE_SIZE);
     driver72->driver_acct().update_last_time_spent(5'000'000L * 1);
 
-    auto driver61 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
+    auto driver61 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                     nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver61.get(), 6);
     driver61->driver_acct().update_last_time_spent(30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue());
 
-    auto driver51 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
+    auto driver51 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                     nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver51.get(), 5);
     driver51->driver_acct().update_last_time_spent(20'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue() *
                                                    QuerySharedDriverQueue::ratio_of_adjacent_queue());
@@ -96,13 +142,13 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // prepare drivers
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
+    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver1.get(), 1);
-    auto driver2 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
+    auto driver2 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver2.get(), 1);
-    auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
+    auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver3.get(), 1);
-    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
+    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver4.get(), 1);
 
     auto cancel_operation = [&queue](DriverRawPtr driver) {
@@ -140,7 +186,8 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
 
     // Prepare drivers.
     QueryContext query_context;
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
+    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                    nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver1.get(), 1);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
@@ -197,34 +244,39 @@ protected:
     workgroup::WorkGroupPtr _wg2 = nullptr;
     workgroup::WorkGroupPtr _wg3 = nullptr;
     workgroup::WorkGroupPtr _wg4 = nullptr;
+    FakeWorkGroupSchedulePolicy _schedule_policy;
 };
 
 TEST_F(WorkGroupDriverQueueTest, test_basic) {
     QueryContext query_ctx;
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     // Prepare drivers for _wg2.
     int64_t sum_wg2_time_spent = 0;
-    auto driver271 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver271 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                      nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver271.get(), 7);
     driver271->driver_acct().update_last_time_spent(5'000'000L * 1);
     driver271->set_workgroup(_wg2);
     sum_wg2_time_spent += 5'000'000L * 1;
 
-    auto driver272 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver272 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                      nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver272.get(), 7 + QuerySharedDriverQueue::QUEUE_SIZE);
     driver272->driver_acct().update_last_time_spent(5'000'000L * 1);
     driver272->set_workgroup(_wg2);
     sum_wg2_time_spent += 5'000'000L * 1;
 
-    auto driver261 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver261 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                      nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver261.get(), 6);
     driver261->driver_acct().update_last_time_spent(30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue());
     driver261->set_workgroup(_wg2);
     sum_wg2_time_spent += 30'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue();
 
-    auto driver251 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver251 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                      nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver251.get(), 5);
     driver251->driver_acct().update_last_time_spent(20'000'000L * QuerySharedDriverQueue::ratio_of_adjacent_queue() *
                                                     QuerySharedDriverQueue::ratio_of_adjacent_queue());
@@ -233,19 +285,22 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
                           QuerySharedDriverQueue::ratio_of_adjacent_queue();
 
     // Prepare drivers for _wg1.
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                    nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver1.get(), 1);
     driver1->driver_acct().update_last_time_spent(sum_wg2_time_spent / 2 - 10'000'000L);
     driver1->set_workgroup(_wg1);
 
     // Prepare drivers for _wg3.
-    auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver3 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                    nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver3.get(), 2);
     driver3->driver_acct().update_last_time_spent(sum_wg2_time_spent * 2 + 1);
     driver3->set_workgroup(_wg3);
 
     // Prepare drivers for _wg4.
-    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver4 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                    nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver4.get(), 2);
     driver4->driver_acct().update_last_time_spent(sum_wg2_time_spent * 2 + 1);
     driver4->set_workgroup(_wg4);
@@ -283,10 +338,11 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
 TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     QueryContext query_ctx;
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     // Prepare drivers.
-    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
+    auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr,
+                                                    nullptr, nullptr, nullptr, -1);
     _set_driver_level(driver1.get(), 1);
     driver1->set_workgroup(_wg1);
 
@@ -303,9 +359,55 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     consumer_thread->join();
 }
 
+TEST_F(WorkGroupDriverQueueTest, test_take_uses_injected_policy) {
+    QueryContext query_ctx;
+    PipelineExecutorMetrics metrics;
+    std::atomic<bool> block_wg2{true};
+    _schedule_policy.should_yield_func = [&](const workgroup::WorkGroup* wg) {
+        return wg == _wg2.get() && block_wg2.load(std::memory_order_acquire);
+    };
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
+
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr, nullptr,
+                                                   nullptr, nullptr, -1);
+    _set_driver_level(driver.get(), 1);
+    driver->set_workgroup(_wg2);
+
+    queue.update_statistics(driver.get());
+    queue.put_back(driver.get());
+
+    auto blocked = queue.take(false);
+    ASSERT_TRUE(blocked.ok());
+    ASSERT_EQ(nullptr, blocked.value());
+
+    block_wg2.store(false, std::memory_order_release);
+
+    auto unblocked = queue.take(false);
+    ASSERT_TRUE(unblocked.ok());
+    ASSERT_EQ(driver.get(), unblocked.value());
+}
+
+TEST_F(WorkGroupDriverQueueTest, test_update_statistics_uses_injected_workgroup_count_policy) {
+    QueryContext query_ctx;
+    PipelineExecutorMetrics metrics;
+    _schedule_policy.num_workgroups_value = 1;
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
+
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_ctx), nullptr, nullptr,
+                                                   nullptr, nullptr, -1);
+    _set_driver_level(driver.get(), 1);
+    driver->driver_acct().update_last_time_spent(100'000'000L);
+    driver->set_workgroup(_wg1);
+
+    const int64_t before = _wg1->driver_sched_entity()->vruntime_ns();
+    queue.update_statistics(driver.get());
+
+    ASSERT_EQ(before, _wg1->driver_sched_entity()->vruntime_ns());
+}
+
 TEST_F(WorkGroupDriverQueueTest, test_take_close) {
     PipelineExecutorMetrics metrics;
-    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics(), _schedule_policy);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
         auto maybe_driver = queue.take(true);

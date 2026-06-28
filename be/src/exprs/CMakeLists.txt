@@ -18,13 +18,28 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_CORE_FILES
+  agg/data_sketch/ds_hll.cpp
+  agg/data_sketch/ds_theta.cpp
+  agg/factory/aggregate_factory.cpp
+  agg/factory/aggregate_resolver_approx.cpp
+  agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_boolean.cpp
+  agg/factory/aggregate_resolver_hypothesis_testing.cpp
+  agg/factory/aggregate_resolver_minmaxany.cpp
+  agg/factory/aggregate_resolver_others.cpp
+  agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_distinct.cpp
+  agg/factory/aggregate_resolver_stream.cpp
+  agg/factory/aggregate_resolver_utility.cpp
+  agg/factory/aggregate_resolver_variance.cpp
+  agg/factory/aggregate_resolver_window.cpp
   arithmetic_expr.cpp
   function_context.cpp
   expr_context.cpp
   expr.cpp
+  sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
-  base64.cpp
   bit_functions.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
@@ -37,6 +52,7 @@ set(EXPR_CORE_FILES
   cast_expr_map.cpp
   chunk_predicate_evaluator.cpp
   column_ref.cpp
+  column_access_path_resolver.cpp
   compound_predicate.cpp
   condition_expr.cpp
   encryption_functions.cpp
@@ -52,6 +68,8 @@ set(EXPR_CORE_FILES
   in_const_predicate.cpp
   in_predicate.cpp
   is_null_predicate.cpp
+  hyper_json_transformer.cpp
+  json_functions.cpp
   jsonpath.cpp
   lambda_function.cpp
   like_predicate.cpp
@@ -78,24 +96,11 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore)
+target_link_libraries(ExprCore PUBLIC RuntimeCore ColumnSortCore)
 
 set(EXPR_FILES
-  agg/data_sketch/ds_theta.cpp
-  agg/factory/aggregate_factory.cpp
-  agg/factory/aggregate_resolver_approx.cpp
-  agg/factory/aggregate_resolver_avg.cpp
-  agg/factory/aggregate_resolver_boolean.cpp
-  agg/factory/aggregate_resolver_hypothesis_testing.cpp
-  agg/factory/aggregate_resolver_minmaxany.cpp
-  agg/factory/aggregate_resolver_others.cpp
-  agg/factory/aggregate_resolver_sumcount.cpp
-  agg/factory/aggregate_resolver_distinct.cpp
-  agg/factory/aggregate_resolver_stream.cpp
-  agg/factory/aggregate_resolver_utility.cpp
-  agg/factory/aggregate_resolver_variance.cpp
-  agg/factory/aggregate_resolver_window.cpp
   agg/combinator/agg_state_utils.cpp
+  agg/aggregate_factory_exprs_extension.cpp
   binary_functions.cpp
   expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
@@ -107,7 +112,6 @@ set(EXPR_FILES
   function_call_expr.cpp
   geo_functions.cpp
   inet_aton.cpp
-  json_functions.cpp
   locate.cpp
   percentile_functions.cpp
   split.cpp
@@ -127,6 +131,7 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   ai_functions.cpp
+  http_request_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
@@ -139,4 +144,5 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore)
+target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv RuntimeEnv)
+target_link_libraries(Exprs PRIVATE Platform StoragePrimitive)

@@ -189,6 +189,7 @@ vectorized_functions = [
     [10323, "hex", True, False, "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10318, "blake3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::blake3"],
     [10316, "hex_decode_binary", True, False, "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
     [10317, "hex_decode_string", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
@@ -212,6 +213,8 @@ vectorized_functions = [
     [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
     [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
     [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10359, '__iceberg_transform_timestamptz_bucket', True, False, 'INT', ['DATETIME', 'INT'],
+     'MathFunctions::iceberg_bucket_timestamptz_datetime'],
     [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
@@ -338,6 +341,14 @@ vectorized_functions = [
     [30191, 'rtrim', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
 
+    # MySQL TRIM(... FROM ...) substring semantics: remstr removed as a whole unit, repeatedly.
+    [30172, 'trim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30182, 'ltrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30192, 'rtrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+
     [30200, 'ascii', True, False, 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', True, False, 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -446,6 +457,25 @@ vectorized_functions = [
     # BOOLEAN is used as a placeholder return type (consistent with Trino); the function
     # returns NULL for NULL input and never produces a non-null BOOLEAN value.
     [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
+
+    # HTTP Request function - HTTP/HTTPS request scalar function with Named Parameters
+    # http_request(url, method, body, headers, timeout_ms, ssl_verify, username, password)
+    [30470, 'http_request', True, False, 'VARCHAR',
+     ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'INT', 'BOOLEAN', 'VARCHAR', 'VARCHAR'],
+     'HttpRequestFunctions::http_request',
+     'HttpRequestFunctions::http_request_prepare', 'HttpRequestFunctions::http_request_close',
+     {
+         'named_args': [
+             {'name': 'url'},
+             {'name': 'method', 'default': 'GET'},
+             {'name': 'body', 'default': ''},
+             {'name': 'headers', 'default': '{}'},
+             {'name': 'timeout_ms', 'default': 30000},
+             {'name': 'ssl_verify', 'default': True},
+             {'name': 'username', 'default': ''},
+             {'name': 'password', 'default': ''}
+         ]
+     }],
 
     # Binary Functions
     # to_binary
@@ -659,11 +689,19 @@ vectorized_functions = [
 
     [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
     [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50622, '__iceberg_transform_timestamptz_year', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime'],
     [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
     [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50632, '__iceberg_transform_timestamptz_month', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime'],
     [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
     [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50642, '__iceberg_transform_timestamptz_day', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime'],
     [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
+    [50651, '__iceberg_transform_timestamptz_hour', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -810,7 +848,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', False, False, 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array'],
     [90600, 'bitmap_max', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max'],
     [90700, 'bitmap_min', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min'],
-    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap'],
+    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap',
+     'BitmapFunctions::base64_to_bitmap_prepare', 'BitmapFunctions::base64_to_bitmap_close'],
     [90801, 'bitmap_to_base64', False, True, 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64'],
     [90900, 'array_to_bitmap', False, False, 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap'],
     [91000, 'sub_bitmap', False, False, 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap'],
@@ -823,6 +862,8 @@ vectorized_functions = [
 
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100028, 'xx_hash32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash32'],
+    [100029, 'xx_hash64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash64'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
     [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
@@ -842,6 +883,29 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
+
+    # materialize: identity function that acts as an optimization barrier.
+    # Returns the input unchanged but is opaque to the FE optimizer,
+    # preventing constant folding, partition pruning, and other rewrites.
+    [100030, 'materialize', True, False, 'BOOLEAN', ['BOOLEAN'], "UtilityFunctions::materialize"],
+    [100031, 'materialize', True, False, 'TINYINT', ['TINYINT'], "UtilityFunctions::materialize"],
+    [100032, 'materialize', True, False, 'SMALLINT', ['SMALLINT'], "UtilityFunctions::materialize"],
+    [100033, 'materialize', True, False, 'INT', ['INT'], "UtilityFunctions::materialize"],
+    [100034, 'materialize', True, False, 'BIGINT', ['BIGINT'], "UtilityFunctions::materialize"],
+    [100035, 'materialize', True, False, 'LARGEINT', ['LARGEINT'], "UtilityFunctions::materialize"],
+    [100036, 'materialize', True, False, 'FLOAT', ['FLOAT'], "UtilityFunctions::materialize"],
+    [100037, 'materialize', True, False, 'DOUBLE', ['DOUBLE'], "UtilityFunctions::materialize"],
+    [100038, 'materialize', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::materialize"],
+    [100039, 'materialize', True, False, 'DATE', ['DATE'], "UtilityFunctions::materialize"],
+    [100040, 'materialize', True, False, 'DATETIME', ['DATETIME'], "UtilityFunctions::materialize"],
+    [100041, 'materialize', True, False, 'DECIMALV2', ['DECIMALV2'], "UtilityFunctions::materialize"],
+    [100042, 'materialize', True, False, 'DECIMAL32', ['DECIMAL32'], "UtilityFunctions::materialize"],
+    [100043, 'materialize', True, False, 'DECIMAL64', ['DECIMAL64'], "UtilityFunctions::materialize"],
+    [100044, 'materialize', True, False, 'DECIMAL128', ['DECIMAL128'], "UtilityFunctions::materialize"],
+    [100045, 'materialize', True, False, 'DECIMAL256', ['DECIMAL256'], "UtilityFunctions::materialize"],
+    [100046, 'materialize', True, False, 'JSON', ['JSON'], "UtilityFunctions::materialize"],
+    [100047, 'materialize', True, False, 'VARBINARY', ['VARBINARY'], "UtilityFunctions::materialize"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",

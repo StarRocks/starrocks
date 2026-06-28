@@ -29,13 +29,18 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -44,6 +49,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -106,9 +112,21 @@ public class MergeTabletJob extends TabletReshardJob {
         return parallelTablets;
     }
 
+    @Override
+    public void init() throws StarRocksException {
+        try {
+            setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
+        } catch (TabletReshardException e) {
+            // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
+            // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
+            throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
     /*
-     * 1. Set table state to TABLET_RESHARD
-     * 2. Begin transaction (allocate transaction id)
+     * The table was already moved to TABLET_RESHARD by init() at admission time.
+     * 1. Begin transaction (allocate transaction id)
+     * 2. Create new shards on StarOS
      * 3. Commit transaction (update next version)
      * 4. Add new tablets to inverted index
      * 5. Register resharding tablets
@@ -117,13 +135,18 @@ public class MergeTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runPendingJob() {
-        // 1. Set table state to TABLET_RESHARD
-        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
-
-        // 2. Begin transaction (allocate transaction id)
+        // 1. Begin transaction (allocate transaction id)
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
+
+        // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
+        //    boundary below. No table lock needed: init() already moved the
+        //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
+        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
+        //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
+        //    by StarMgrMetaSyncer's diff-and-purge cycle.
+        createShardsOnStarOS();
 
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
@@ -146,7 +169,6 @@ public class MergeTabletJob extends TabletReshardJob {
      */
     @Override
     protected void runPreparingJob() {
-        // 1. Wait for previous versions published
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
@@ -155,8 +177,6 @@ public class MergeTabletJob extends TabletReshardJob {
                 if (physicalPartition == null) {
                     continue;
                 }
-
-                // Wait for previous versions published
                 long commitVersion = reshardingPhysicalPartition.getCommitVersion();
                 long visibleVersion = physicalPartition.getVisibleVersion();
                 if (commitVersion != visibleVersion + 1) {
@@ -168,7 +188,6 @@ public class MergeTabletJob extends TabletReshardJob {
             }
         }
 
-        // 2. Set job state to RUNNING
         setJobState(JobState.RUNNING);
     }
 
@@ -321,6 +340,8 @@ public class MergeTabletJob extends TabletReshardJob {
             removeTabletsFromInvertedIndex();
 
             // 3. Set table state to NORMAL
+            //    Any orphan staros shards from a partial createShardsOnStarOS in
+            //    runPendingJob are reaped by StarMgrMetaSyncer's diff-and-purge cycle.
             setTableState(null, OlapTable.OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("Ignore exception when aborting tablet reshard job. {}. ", this, e);
@@ -346,16 +367,16 @@ public class MergeTabletJob extends TabletReshardJob {
         return jobState == JobState.PENDING;
     }
 
-    // Correspond to job added
+    // Correspond to init() at admission time
     @Override
     protected void replayPendingJob() {
+        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
         LOG.info("Merge tablet job replayed pending job. {}", this);
     }
 
     // Correspond to runPendingJob()
     @Override
     protected void replayPreparingJob() {
-        setTableState(OlapTable.OlapTableState.NORMAL, OlapTable.OlapTableState.TABLET_RESHARD);
         updateNextVersions();
         addTabletsToInvertedIndex();
         registerReshardingTablets();
@@ -515,8 +536,10 @@ public class MergeTabletJob extends TabletReshardJob {
             txnInfo.gtid = gtid;
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
+            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    computeResource, null, useAggregatePublish);
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
+            VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
 
             return tabletRange;
         } catch (Exception e) {
@@ -610,16 +633,25 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     private LockedObject<OlapTable> getLockedTable(LockType lockType) {
+        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable());
+    }
+
+    private OlapTable getOlapTable() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) { // Table is dropped
-            errorMessage = "Table not found";
-            setJobState(JobState.ABORTING);
+            // Only force ABORTING when the job is past the abortable PENDING window. At admission
+            // (PENDING, not yet queued) and during runPendingJob (still PENDING), the run()
+            // wrapper's abort() can handle the transition cleanly — avoiding a journal entry for
+            // a job that may never be queued (admission-time table-dropped race). The errorMessage
+            // assignment is paired with setJobState here so it only fires when it is actually
+            // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
+            if (!canAbort()) {
+                errorMessage = "Table not found";
+                setJobState(JobState.ABORTING);
+            }
             throw new TabletReshardException("Table not found. " + this);
         }
-
-        OlapTable olapTable = (OlapTable) table;
-
-        return new LockedObject<>(dbId, List.of(tableId), lockType, olapTable);
+        return (OlapTable) table;
     }
 
     private void registerReshardingTablets() {
@@ -649,6 +681,54 @@ public class MergeTabletJob extends TabletReshardJob {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Create StarOS shards for this merge job.
+     *
+     * <p>Called from {@link #runPendingJob} as the last "abortable" step, immediately
+     * before {@code updateNextVersions} (the no-abort boundary). A failure surfaces as
+     * a {@link TabletReshardException} that {@code run()} catches and abort()s on;
+     * {@link #runAbortingJob} unwinds the FE-side mutations and any orphan staros
+     * shards from a partial RPC are reaped by {@code StarMgrMetaSyncer}'s
+     * diff-and-purge cycle.
+     */
+    void createShardsOnStarOS() {
+        OlapTable table = getOlapTable();
+        try {
+            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+                long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
+                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                        .getReshardingIndexes().values()) {
+                    MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    // LinkedHashMap so the CreateShardInfo list within each (partition, index)
+                    // RPC payload follows the ReshardingTablet iteration order; the same batch
+                    // produced by a leader-switch re-run emits a byte-equivalent payload.
+                    Map<Long, List<Long>> newToOldTabletIds = new LinkedHashMap<>();
+                    for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                        List<Long> oldTabletIds = reshardingTablet.getOldTabletIds();
+                        for (long newTabletId : reshardingTablet.getNewTabletIds()) {
+                            newToOldTabletIds.put(newTabletId, oldTabletIds);
+                        }
+                    }
+
+                    Map<String, String> properties = new HashMap<>();
+                    properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+                    properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
+                    properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
+
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
+                            newToOldTabletIds,
+                            table.getPartitionFilePathInfo(physicalPartitionId),
+                            table.getPartitionFileCacheInfo(physicalPartitionId),
+                            newIndex.getShardGroupId(),
+                            properties, WarehouseManager.DEFAULT_RESOURCE);
+                }
+            }
+        } catch (StarRocksException e) {
+            throw new TabletReshardException(
+                    "Failed to create new shards on StarOS: " + e.getMessage(), e);
         }
     }
 }

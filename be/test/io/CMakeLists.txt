@@ -15,12 +15,15 @@
 set(IO_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     array_input_stream_test.cpp
+    fd_input_stream_test.cpp
+    fd_output_stream_test.cpp
+    io_profiler_test.cpp
     seekable_input_stream_test.cpp
     io_error_test.cpp
 )
 
 set(IO_TEST_LINK_LIBS
-    IOCore
+    IO
     Common
     Base
     Gutil

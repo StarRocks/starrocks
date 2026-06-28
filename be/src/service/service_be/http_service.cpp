@@ -34,52 +34,72 @@
 
 #include "http_service.h"
 
+#include <fmt/format.h>
+
+#include <optional>
+
 #include "cache/datacache.h"
+#include "common/config_http_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/config_update_registry.h"
+#include "common/utils.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
-#include "http/action/checksum_action.h"
-#include "http/action/compact_rocksdb_meta_action.h"
-#include "http/action/compaction_action.h"
-#include "http/action/datacache_action.h"
-#include "http/action/greplog_action.h"
-#include "http/action/health_action.h"
+#include "http/service/action/checksum_action.h"
+#include "http/service/action/compact_rocksdb_meta_action.h"
+#include "http/service/action/compaction_action.h"
+#include "http/service/action/datacache_action.h"
+#include "http/service/action/greplog_action.h"
+#include "http/service/action/health_action.h"
 #ifdef STARROCKS_JIT_ENABLE
-#include "http/action/jit_cache_action.h"
+#include "http/service/action/jit_cache_action.h"
 #endif
-#include "http/action/lake/dump_tablet_metadata_action.h"
-#include "http/action/memory_metrics_action.h"
-#include "http/action/meta_action.h"
-#include "http/action/metrics_action.h"
-#include "http/action/pipeline_blocking_drivers_action.h"
-#include "http/action/pprof_actions.h"
-#include "http/action/proc_profile_action.h"
-#include "http/action/proc_profile_file_action.h"
-#include "http/action/query_cache_action.h"
-#include "http/action/reload_tablet_action.h"
-#include "http/action/restore_tablet_action.h"
-#include "http/action/runtime_filter_cache_action.h"
-#include "http/action/snapshot_action.h"
-#include "http/action/stop_be_action.h"
-#include "http/action/stream_load.h"
-#include "http/action/transaction_stream_load.h"
-#include "http/action/update_config_action.h"
-#include "http/default_path_handlers.h"
-#include "http/download_action.h"
-#include "http/ev_http_server.h"
-#include "http/http_method.h"
-#include "http/web_page_handler.h"
-#include "runtime/base_load_path_mgr.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_method.h"
+#include "http/service/action/lake/dump_tablet_metadata_action.h"
+#include "http/service/action/memory_metrics_action.h"
+#include "http/service/action/meta_action.h"
+#include "http/service/action/metrics_action.h"
+#include "http/service/action/pipeline_blocking_drivers_action.h"
+#include "http/service/action/pprof_actions.h"
+#include "http/service/action/proc_profile_action.h"
+#include "http/service/action/proc_profile_file_action.h"
+#include "http/service/action/query_cache_action.h"
+#include "http/service/action/reload_tablet_action.h"
+#include "http/service/action/restore_tablet_action.h"
+#include "http/service/action/runtime_filter_cache_action.h"
+#include "http/service/action/snapshot_action.h"
+#include "http/service/action/stop_be_action.h"
+#include "http/service/action/stream_load.h"
+#include "http/service/action/transaction_stream_load.h"
+#include "http/service/action/update_config_action.h"
+#include "http/service/default_path_handlers.h"
+#include "http/service/download_action.h"
+#include "http/service/utils.h"
+#include "http/service/web_page_handler.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/store_path.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "service/service_be/config_update_hooks.h"
+#include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
+                             const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
+                             LoadChannelMgr* load_channel_mgr, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
+          _orchestration_env(orchestration_env),
+          _global_env(global_env),
+          _process_metrics_registry(process_metrics_registry),
+          _load_channel_mgr(load_channel_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -99,10 +119,19 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
-    add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
+    DCHECK(_orchestration_env != nullptr);
+    auto* stream_load_orchestrator = _orchestration_env->stream_load_orchestrator();
+    DCHECK(stream_load_orchestrator != nullptr);
+
+    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
+    ConfigUpdateRegistry::instance()->set_ready();
+
+    add_default_path_handlers(_web_page_handler.get(), _global_env);
+
+    _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
+    auto* stream_load_action = new StreamLoadAction(_env, stream_load_orchestrator, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -122,26 +151,28 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(transaction_manager_action);
 
     // LoadData:            PUT /api/transaction/load
-    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
+    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env, stream_load_orchestrator);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
     _http_handlers.emplace_back(transaction_stream_load_action);
 
     // register download action
     std::vector<std::string> allow_paths;
-    for (auto& path : _env->store_paths()) {
-        allow_paths.emplace_back(path.path);
+    const auto* store_path_registry = _env->platform_services().store_path_registry;
+    if (store_path_registry != nullptr) {
+        const auto& store_path_roots = store_path_registry->store_path_roots();
+        allow_paths.assign(store_path_roots.begin(), store_path_roots.end());
     }
-    auto* download_action = new DownloadAction(_env, allow_paths);
+    auto* download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_download_load", download_action);
     _http_handlers.emplace_back(download_action);
 
-    auto* tablet_download_action = new DownloadAction(_env, allow_paths);
+    auto* tablet_download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_tablet/_download", tablet_download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_tablet/_download", tablet_download_action);
     _http_handlers.emplace_back(tablet_download_action);
 
-    auto* error_log_download_action = new DownloadAction(_env, _env->load_path_mgr()->get_load_error_file_dir());
+    auto* error_log_download_action = new DownloadAction(_env->load_path_mgr()->get_load_error_file_dir());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_load_error_log", error_log_download_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_load_error_log", error_log_download_action);
     _http_handlers.emplace_back(error_log_download_action);
@@ -154,6 +185,7 @@ Status HttpServiceBE::start() {
     // Register Stop Be action
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
 
     // register pprof actions
@@ -197,11 +229,11 @@ Status HttpServiceBE::start() {
 
     // register metrics
     {
-        auto action = new MetricsAction(GlobalMetricsRegistry::instance()->metrics());
+        auto action = new MetricsAction(_process_metrics_registry);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
-        auto memory_metric_action = new MemoryMetricsAction();
+        auto memory_metric_action = new MemoryMetricsAction(_global_env);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
         _http_handlers.emplace_back(memory_metric_action);
     }
@@ -212,7 +244,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction();
+    auto* checksum_action = new ChecksumAction(_global_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 
@@ -252,7 +284,7 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
-    auto* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction();
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 

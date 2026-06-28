@@ -46,6 +46,10 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+if [[ -n "${STARROCKS_THIRDPARTY_ARCHIVES:-}" ]]; then
+    TP_ARCHIVES="${STARROCKS_THIRDPARTY_ARCHIVES}"
+fi
+
 mkdir -p ${TP_DIR}/src
 
 md5sum_bin=md5sum
@@ -126,10 +130,188 @@ download_func() {
     return $SUCCESS
 }
 
+preseeded_archive_exists() {
+    local TP_ARCH=$1
+    local NAME=$TP_ARCH"_NAME"
+    local SOURCE=$TP_ARCH"_SOURCE"
+    local MD5SUM=$TP_ARCH"_MD5SUM"
+
+    if [ -r "$TP_SOURCE_DIR/${!NAME}" ]; then
+        md5sum_func "${!NAME}" "$TP_SOURCE_DIR" "${!MD5SUM}"
+        return $?
+    fi
+
+    if [ -n "${!SOURCE}" ] && [ -d "$TP_SOURCE_DIR/${!SOURCE}" ]; then
+        if [[ "${STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES:-0}" != "1" ]]; then
+            echo "Found extracted source directory $TP_SOURCE_DIR/${!SOURCE}, but ${!NAME} is missing." >&2
+            echo "Provide the md5-checked archive or set STARROCKS_TRUST_EXTRACTED_THIRDPARTY_SOURCES=1 to trust extracted sources." >&2
+            return 1
+        fi
+        echo "Source ${!SOURCE} already exists."
+        return 0
+    fi
+
+    echo "Missing preseeded thirdparty input for ${TP_ARCH}: expected $TP_SOURCE_DIR/${!NAME}" >&2
+    if [ -n "${!SOURCE}" ]; then
+        echo "or extracted source directory $TP_SOURCE_DIR/${!SOURCE}" >&2
+    fi
+    return 1
+}
+
+zip_entry_paths_are_safe() {
+    local archive=$1
+    local entries
+    local entry
+
+    if ! entries=$(unzip -Z1 "${archive}"); then
+        echo "Failed to list zip entries: ${archive}" >&2
+        return 1
+    fi
+
+    while IFS= read -r entry; do
+        [[ -n "${entry}" ]] || continue
+        case "${entry}" in
+            /*|../*|*/../*|*/..|..|[A-Za-z]:*|*\\*)
+                echo "Unsafe zip entry path in ${archive}: ${entry}" >&2
+                return 1
+                ;;
+        esac
+    done <<< "${entries}"
+}
+
+safe_unzip() {
+    local archive=$1
+    shift
+
+    zip_entry_paths_are_safe "${archive}" || return 1
+    unzip -q "${archive}" "$@"
+}
+
+preseed_aws_crt_dependency() {
+    local archive_dir=$1
+    local dep
+    local extracted
+    local extracted_name
+    local aws_sdk_dir
+    local crt_dir
+    local target_name
+    local tmp_dir
+
+    if [ ! -r "${archive_dir}/aws-crt-cpp.zip" ]; then
+        echo "Missing preseeded AWS CRT archive: ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+
+    if [ -z "${TP_SOURCE_DIR:-}" ] || [ -z "${AWS_SDK_CPP_SOURCE:-}" ]; then
+        echo "Missing AWS SDK source configuration for CRT preseed" >&2
+        return 1
+    fi
+
+    case "${AWS_SDK_CPP_SOURCE}" in
+        /*|*/*|*..*)
+            echo "Invalid AWS SDK source name for CRT preseed: ${AWS_SDK_CPP_SOURCE}" >&2
+            return 1
+            ;;
+    esac
+
+    aws_sdk_dir="${TP_SOURCE_DIR%/}/${AWS_SDK_CPP_SOURCE}"
+    crt_dir="${aws_sdk_dir}/crt"
+    tmp_dir="${crt_dir}/tmp"
+
+    if [ ! -d "${aws_sdk_dir}" ]; then
+        echo "Invalid AWS SDK source directory for CRT preseed: ${aws_sdk_dir}" >&2
+        return 1
+    fi
+
+    case "${crt_dir}" in
+        "${TP_SOURCE_DIR%/}"/*/crt) ;;
+        *)
+            echo "Refusing to remove unexpected CRT directory: ${crt_dir}" >&2
+            return 1
+            ;;
+    esac
+
+    if ! rm -rf "${crt_dir}" || ! mkdir -p "${tmp_dir}"; then
+        echo "Failed to prepare CRT preseed directory: ${crt_dir}" >&2
+        return 1
+    fi
+
+    if ! safe_unzip "${archive_dir}/aws-crt-cpp.zip" -d "${crt_dir}" -x '*/tests/*'; then
+        echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+    extracted=$(find "${crt_dir}" -maxdepth 1 -type d -name 'aws-crt-cpp-*' -print -quit)
+    if [ -z "${extracted}" ]; then
+        echo "Failed to unpack aws-crt-cpp from ${archive_dir}/aws-crt-cpp.zip" >&2
+        return 1
+    fi
+    if ! mv "${extracted}" "${crt_dir}/aws-crt-cpp"; then
+        echo "Failed to move aws-crt-cpp into ${crt_dir}" >&2
+        return 1
+    fi
+    if ! mkdir -p "${crt_dir}/aws-crt-cpp/crt"; then
+        echo "Failed to prepare aws-crt-cpp/crt under ${crt_dir}" >&2
+        return 1
+    fi
+
+    for dep in \
+        aws-c-auth \
+        aws-c-cal \
+        aws-c-common \
+        aws-c-compression \
+        aws-c-event-stream \
+        aws-c-http \
+        aws-c-io \
+        aws-c-mqtt \
+        aws-c-s3 \
+        aws-c-sdkutils \
+        aws-checksums \
+        aws-lc \
+        s2n
+    do
+        if [ ! -r "${archive_dir}/${dep}.zip" ]; then
+            echo "Missing preseeded AWS CRT archive: ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+
+        rm -rf "${tmp_dir:?}/${dep}"
+        mkdir -p "${tmp_dir}/${dep}"
+        if ! safe_unzip "${archive_dir}/${dep}.zip" -d "${tmp_dir}/${dep}" -x '*/tests/*'; then
+            echo "Failed to unzip preseeded AWS CRT archive: ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+        extracted=$(find "${tmp_dir}/${dep}" -mindepth 1 -maxdepth 1 -type d -print -quit)
+        if [ -z "${extracted}" ]; then
+            echo "Failed to unpack ${dep} from ${archive_dir}/${dep}.zip" >&2
+            return 1
+        fi
+
+        extracted_name=$(basename "${extracted}")
+        target_name=$(printf '%s' "${extracted_name}" | sed 's/-[0-9a-f]\{40\}$//')
+        if [ "${target_name}" = "s2n-tls" ]; then
+            target_name="s2n"
+        fi
+        rm -rf "${crt_dir}/aws-crt-cpp/crt/${target_name}"
+        if ! mv "${extracted}" "${crt_dir}/aws-crt-cpp/crt/${target_name}"; then
+            echo "Failed to move ${dep} into aws-crt-cpp/crt/${target_name}" >&2
+            return 1
+        fi
+    done
+
+    rm -rf "${tmp_dir}"
+}
+
 # download thirdparty archives
 echo "===== Downloading thirdparty archives..."
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
+    if [[ "${STARROCKS_SKIP_THIRDPARTY_DOWNLOAD:-0}" == "1" ]]; then
+        if ! preseeded_archive_exists "$TP_ARCH"; then
+            exit 1
+        fi
+        continue
+    fi
+
     NAME=$TP_ARCH"_NAME"
     MD5SUM=$TP_ARCH"_MD5SUM"
     if test "x$REPOSITORY_URL" = x; then
@@ -160,7 +342,8 @@ echo "===== Checking all thirdpart archives..."
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
     NAME=$TP_ARCH"_NAME"
-    if [ ! -r $TP_SOURCE_DIR/${!NAME} ]; then
+    SOURCE=$TP_ARCH"_SOURCE"
+    if [[ ! -r "${TP_SOURCE_DIR}/${!NAME}" && ( -z "${!SOURCE}" || ! -d "${TP_SOURCE_DIR}/${!SOURCE}" ) ]]; then
         echo "Failed to fetch ${!NAME}"
         exit 1
     fi
@@ -261,6 +444,15 @@ fi
 cd -
 echo "Finished patching $GLOG_SOURCE"
 
+# googletest patch
+cd $TP_SOURCE_DIR/$GTEST_SOURCE
+if [ ! -f $PATCHED_MARK ]; then
+    patch -p1 < $TP_PATCH_DIR/googletest-1.10.0-gcc15.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $GTEST_SOURCE"
+
 # re2 patch
 cd $TP_SOURCE_DIR/$RE2_SOURCE
 if [ ! -f $PATCHED_MARK ]; then
@@ -292,6 +484,7 @@ cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-metadata-header.patch
     patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14.patch
+    patch -p1 < $TP_PATCH_DIR/rocksdb-6.22.1-gcc14-extra.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -327,6 +520,7 @@ if [ ! -f $PATCHED_MARK ]; then
     # replace uint64 with uint64_t to make compiler happy
     patch -p0 < $TP_PATCH_DIR/s2geometry-0.9.0-uint64.patch
     patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-cxx17.patch
+    patch -p1 < $TP_PATCH_DIR/s2geometry-0.9.0-no-install-testing.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -415,7 +609,11 @@ if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
         # make prefetch_crt_dependency.sh less chatty
         patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
-        bash ./prefetch_crt_dependency.sh
+        if [[ -n "${STARROCKS_AWS_CRT_ARCHIVES_DIR:-}" ]]; then
+            preseed_aws_crt_dependency "${STARROCKS_AWS_CRT_ARCHIVES_DIR}"
+        else
+            bash ./prefetch_crt_dependency.sh
+        fi
         touch prefetch_crt_dep_ok
     fi
     if [ ! -f $PATCHED_MARK ]; then
@@ -450,6 +648,9 @@ echo "Finished patching $STREAMVBYTE_SOURCE"
 cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
+    touch $PATCHED_MARK
+elif [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.3.0.aarch64" ]; then
+    patch -p1 < $TP_PATCH_DIR/hyperscan-5.3.0.aarch64.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -493,6 +694,8 @@ cd $TP_SOURCE_DIR/$SASL_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SASL_SOURCE = "cyrus-sasl-2.1.28" ]; then
     patch -p1 < $TP_PATCH_DIR/sasl2-add-k5support-link.patch
     patch -p1 < $TP_PATCH_DIR/sasl2-gcc14.patch
+    # Keep md5.h ANSI prototypes enabled for the compilers StarRocks uses.
+    patch -p1 < $TP_PATCH_DIR/sasl2-makemd5-prototypes.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SASL_SOURCE"
@@ -513,6 +716,8 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-libtool-version-check.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-thrift.patch
         touch $PATCHED_MARK
     fi
     cd -

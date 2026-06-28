@@ -17,17 +17,15 @@
 #include <memory>
 #include <unordered_map>
 
-#include "exec/pipeline/operator.h"
-#include "exec/query_cache/cache_manager.h"
-#include "exec/query_cache/cache_param.h"
-#include "exec/query_cache/lane_arbiter.h"
-#include "exec/query_cache/multilane_operator.h"
+#include "compute_env/query_cache/cache_manager.h"
+#include "compute_env/query_cache/cache_param.h"
+#include "compute_env/query_cache/pipeline_cache_context.h"
+#include "exec/pipeline/operator_factory.h"
 #include "storage/rowset/rowset.h"
 namespace starrocks {
-namespace pipeline {
-class PipelineDriver;
-using DriverRawPtr = PipelineDriver*;
-} // namespace pipeline
+namespace lake {
+class TabletManager;
+} // namespace lake
 
 namespace query_cache {
 class PerLaneBuffer;
@@ -39,7 +37,7 @@ class CacheOperator;
 using CacheOperatorRawPtr = CacheOperator*;
 using CacheOperatorPtr = std::shared_ptr<CacheOperator>;
 
-class CacheOperator final : public pipeline::Operator {
+class CacheOperator final : public pipeline::Operator, public DriverCacheContext {
 public:
     CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                   const CacheParam& cache_param);
@@ -47,11 +45,14 @@ public:
     ~CacheOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    bool probe_cache(int64_t tablet_id, int64_t version);
-    Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
+    AcquireResult try_acquire_lane(LaneOwnerType lane_owner) override {
+        return _lane_arbiter->try_acquire_lane(lane_owner);
+    }
+    bool probe_cache(int64_t tablet_id, int64_t version) override;
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner) override;
     void populate_cache(int64_t tablet_id);
     int64_t cached_version(int64_t tablet_id);
-    std::tuple<int64_t, std::vector<BaseRowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id);
+    std::tuple<int64_t, std::vector<BaseRowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;
@@ -59,11 +60,11 @@ public:
     bool is_finished() const override;
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override;
-    LaneArbiterPtr lane_arbiter() { return _lane_arbiter; }
-    void set_multilane_operators(MultilaneOperators&& multilane_operators) {
+    LaneArbiterPtr lane_arbiter() override { return _lane_arbiter; }
+    void set_multilane_operators(CacheMultilaneOperators&& multilane_operators) override {
         _multilane_operators = std::move(multilane_operators);
     }
-    void set_scan_operator(pipeline::OperatorRawPtr scan_operator) { _scan_operator = scan_operator; }
+    void set_scan_operator(pipeline::OperatorRawPtr scan_operator) override { _scan_operator = scan_operator; }
     bool ignore_empty_eos() const override { return false; }
 
 private:
@@ -76,13 +77,14 @@ private:
                                           int64_t version);
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
+    lake::TabletManager* _lake_tablet_manager = nullptr;
     CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
     LaneArbiterPtr _lane_arbiter;
     std::unordered_map<int64_t, size_t> _owner_to_lanes;
     PerLaneBuffers _per_lane_buffers;
     ChunkPtr _passthrough_chunk;
-    MultilaneOperators _multilane_operators;
+    CacheMultilaneOperators _multilane_operators;
     pipeline::OperatorRawPtr _scan_operator;
     bool _is_input_finished{false};
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load ジョブを停止します。"
 ---
 
 # STOP ROUTINE LOAD

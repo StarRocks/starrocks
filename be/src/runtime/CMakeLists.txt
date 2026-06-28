@@ -18,8 +18,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
+    byte_buffer.cpp
+    message_body_sink.cpp
     current_thread.cpp
+    chunk_helper.cpp
     descriptors.cpp
+    descriptors_ext.cpp
     runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
@@ -29,22 +33,49 @@ set(RUNTIME_CORE_FILES
     runtime_filter_factory.cpp
     runtime_filter_cache.cpp
     bucket_aware_partition.cpp
-    starrocks_metrics.cpp
+    query_statistics.cpp
+    runtime_metrics.cpp
+    time_guard.cpp
+    type_pack.cpp
+    load_fail_point.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
+    exception_stack.cpp
+    prof/heap_prof.cpp
 )
 
 ADD_BE_LIB(RuntimeCore
     ${RUNTIME_CORE_FILES}
 )
 
-target_link_libraries(RuntimeCore PUBLIC
+target_link_libraries(RuntimeCore PRIVATE
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+)
+
+set(RUNTIME_ENV_FILES
+    env/diagnose_daemon.cpp
+    env/global_env.cpp
+    env/global_thread_pools.cpp
+    env/java/java_env.cpp
+)
+
+ADD_BE_LIB(RuntimeEnv
+    ${RUNTIME_ENV_FILES}
+)
+
+target_link_libraries(RuntimeEnv PUBLIC
+    Platform
+    RuntimeCore
+    Types
     Common
     Base
     Gutil
@@ -52,41 +83,13 @@ target_link_libraries(RuntimeCore PUBLIC
 )
 
 set(RUNTIME_FILES
-    broker_mgr.cpp
-    buffer_control_block.cpp
-    buffer_control_result_writer.cpp
-    client_cache.cpp
-    local_pass_through_buffer.cpp
     lookup_stream_mgr.cpp
-    data_stream_mgr.cpp
-    sender_queue.cpp
-    data_stream_sender.cpp
-    multi_cast_data_stream_sink.cpp
-    descriptors_ext.cpp
     exec_env.cpp
-    user_function_cache.cpp
     jdbc_driver_manager.cpp
-    plan_fragment_executor.cpp
-    result_sink.cpp
-    result_buffer_mgr.cpp
+    pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    fragment_mgr.cpp
-    load_path_mgr.cpp
-    dummy_load_path_mgr.cpp
-    agg_state_desc.cpp
-    data_stream_recvr.cpp
-    export_sink.cpp
-    load_channel_mgr.cpp
-    load_channel.cpp
-    local_tablets_channel.cpp
-    snapshot_loader.cpp
-    query_statistics.cpp
-    message_body_sink.cpp
     stream_load/transaction_mgr.cpp
-    stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
-    stream_load/stream_load_pipe.cpp
-    stream_load/time_bounded_stream_load_pipe.cpp
     batch_write/isomorphic_batch_write.cpp
     batch_write/batch_write_mgr.cpp
     batch_write/batch_write_util.cpp
@@ -94,54 +97,18 @@ set(RUNTIME_FILES
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
-    routine_load/routine_load_task_executor.cpp
-    small_file_mgr.cpp
-    record_batch_queue.cpp
-    result_queue_mgr.cpp
-    memory_scratch_sink.cpp
-    external_scan_context_mgr.cpp
-    mysql_result_writer.cpp
-    http_result_writer.cpp
-    file_result_writer.cpp
-    statistic_result_writer.cpp
-    metadata_result_writer.cpp
-    variable_result_writer.cpp
-    arrow_result_writer.cpp
-    chunk_cursor.cpp
-    sorted_chunks_merger.cpp
-    tablets_channel.cpp
-    runtime_filter_worker.cpp
+    runtime_filter_merger.cpp
+    runtime_filter_port.cpp
+    runtime_filter_rpc.cpp
+    runtime_filter_worker_context.cpp
     runtime_filter_serde.cpp
-    global_dict/decoder.cpp
-    global_dict/fragment_dict_state.cpp
-    global_dict/parser.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
-    lake_tablets_channel.cpp
-    lake_snapshot_loader.cpp
-    profile_report_worker.cpp
-    schema_table_sink.cpp
     command_executor.cpp
-    iceberg_table_sink.cpp
-    hive_table_sink.cpp
-    table_function_table_sink.cpp
-    blackhole_table_sink.cpp
-    dictionary_cache_sink.cpp
-    type_pack.cpp
-    customized_result_writer.cpp
-    diagnose_daemon.cpp
-    load_fail_point.cpp
-    logconfig.cpp
-    prof/heap_prof.cpp
-)
-
-set(RUNTIME_FILES ${RUNTIME_FILES}
-    mysql_table_writer.cpp
-    mysql_table_sink.cpp
 )
 
 ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeCore ExecCore)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform Cache)
+target_link_libraries(Runtime PRIVATE ExecRuntime)
+target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

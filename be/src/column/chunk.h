@@ -49,6 +49,20 @@ public:
     virtual ChunkExtraDataPtr clone() const = 0;
 };
 
+// Interface for on-demand column materialization.  Attach to a Chunk before
+// expression evaluation so that ColumnRef can request lazy columns without
+// knowing the source (e.g. Parquet LazyMaterializationContext).
+// The provider must be detached (set to nullptr) before the Chunk is emitted
+// downstream.  Ownership stays with the caller; the Chunk holds only a raw pointer.
+class MissingColumnProvider {
+public:
+    virtual ~MissingColumnProvider() = default;
+    virtual bool can_provide(SlotId slot_id) const = 0;
+    // Materialize and return the column for slot_id.  May be called multiple
+    // times for the same slot; implementations must be idempotent.
+    virtual StatusOr<ColumnPtr> provide(SlotId slot_id) = 0;
+};
+
 class Chunk {
 public:
     enum RESERVED_COLUMN_SLOT_ID {
@@ -320,15 +334,8 @@ public:
     void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
     bool has_extra_data() const { return this->_extra_data != nullptr; }
 
-    // Deprecated, use raw pointers instead
-    MutableColumns mutable_columns() const {
-        size_t num_columns = _columns.size();
-        MutableColumns mutable_columns(num_columns);
-        for (size_t i = 0; i < num_columns; ++i) {
-            mutable_columns[i] = std::move(*(_columns[i])).mutate();
-        }
-        return mutable_columns;
-    }
+    void set_missing_column_provider(MissingColumnProvider* p) { _missing_column_provider = p; }
+    MissingColumnProvider* missing_column_provider() const { return _missing_column_provider; }
 
 private:
     void rebuild_cid_index();
@@ -347,6 +354,7 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
+    MissingColumnProvider* _missing_column_provider = nullptr;
     // Chunk's columns should be unique, so we need to track the column ptrs to avoid duplicates.
     // key      : column address
     // value    : index in _columns
@@ -366,7 +374,13 @@ inline ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) {
 inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
-        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        std::string known_slots;
+        for (const auto& [id, idx] : _slot_id_to_index) {
+            if (!known_slots.empty()) known_slots += ",";
+            known_slots += std::to_string(id);
+        }
+        throw std::runtime_error(fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id,
+                                             known_slots, _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns.at(idx);
@@ -375,7 +389,13 @@ inline const ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) const {
 inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
-        throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        std::string known_slots;
+        for (const auto& [id, idx] : _slot_id_to_index) {
+            if (!known_slots.empty()) known_slots += ",";
+            known_slots += std::to_string(id);
+        }
+        throw std::runtime_error(fmt::format("slot_id {} not found (known slots: [{}], num_columns: {})", slot_id,
+                                             known_slots, _columns.size()));
     }
     size_t idx = _slot_id_to_index.at(slot_id);
     return _columns[idx];

@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 public class ColocateRangeMgrTest {
 
@@ -226,6 +227,58 @@ public class ColocateRangeMgrTest {
         Assertions.assertEquals(1990L, found99999.getShardGroupId());
     }
 
+    // ---- getColocateRangeIndex ----
+
+    @Test
+    public void testGetColocateRangeIndexNonExistentGroup() {
+        Assertions.assertEquals(-1, colocateRangeMgr.getColocateRangeIndex(999L, makeTuple(100)));
+    }
+
+    @Test
+    public void testGetColocateRangeIndexAllRange() {
+        colocateRangeMgr.initColocateGroup(COLOCATE_GROUP_ID, 1001L);
+        // Any value falls in the single (-inf, +inf) range at index 0.
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(-9999)));
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(0)));
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(9999)));
+        // Null value (tablet lower bound is -inf) maps to the first range.
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, null));
+    }
+
+    @Test
+    public void testGetColocateRangeIndexThreeRanges() {
+        // (-inf, 100), [100, 200), [200, +inf)
+        List<ColocateRange> ranges = Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 1001L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 1002L),
+                new ColocateRange(Range.ge(makeTuple(200)), 1003L));
+        colocateRangeMgr.setColocateRanges(COLOCATE_GROUP_ID, ranges);
+
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, null));
+        Assertions.assertEquals(0, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(50)));
+        Assertions.assertEquals(1, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(100)));
+        Assertions.assertEquals(1, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(150)));
+        Assertions.assertEquals(2, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(200)));
+        Assertions.assertEquals(2, colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(99999)));
+    }
+
+    @Test
+    public void testGetColocateRangeIndexMatchesLookup() {
+        // The index must point to the same ColocateRange that getColocateRange returns.
+        List<ColocateRange> ranges = Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(50)), 1001L),
+                new ColocateRange(Range.gelt(makeTuple(50), makeTuple(150)), 1002L),
+                new ColocateRange(Range.gelt(makeTuple(150), makeTuple(250)), 1003L),
+                new ColocateRange(Range.ge(makeTuple(250)), 1004L));
+        colocateRangeMgr.setColocateRanges(COLOCATE_GROUP_ID, ranges);
+
+        for (int probe : new int[] {-1, 49, 50, 100, 149, 150, 249, 250, 9999}) {
+            ColocateRange found = colocateRangeMgr.getColocateRange(COLOCATE_GROUP_ID, makeTuple(probe));
+            int index = colocateRangeMgr.getColocateRangeIndex(COLOCATE_GROUP_ID, makeTuple(probe));
+            Assertions.assertEquals(ranges.indexOf(found), index, "probe=" + probe);
+        }
+    }
+
     // ---- Multiple colocate groups ----
 
     @Test
@@ -248,5 +301,41 @@ public class ColocateRangeMgrTest {
         // Find in group 2
         ColocateRange found2 = colocateRangeMgr.getColocateRange(groupId2, makeTuple(100));
         Assertions.assertEquals(2001L, found2.getShardGroupId());
+    }
+
+    // ---- getAllPackShardGroupIds ----
+
+    @Test
+    public void testGetAllPackShardGroupIdsEmpty() {
+        Assertions.assertTrue(colocateRangeMgr.getAllPackShardGroupIds().isEmpty());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsSingleGroup() {
+        colocateRangeMgr.initColocateGroup(COLOCATE_GROUP_ID, 1001L);
+        Assertions.assertEquals(Set.of(1001L), colocateRangeMgr.getAllPackShardGroupIds());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsMultiRange() {
+        List<ColocateRange> ranges = Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 1001L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 1002L),
+                new ColocateRange(Range.ge(makeTuple(200)), 1003L));
+        colocateRangeMgr.setColocateRanges(COLOCATE_GROUP_ID, ranges);
+        Assertions.assertEquals(Set.of(1001L, 1002L, 1003L), colocateRangeMgr.getAllPackShardGroupIds());
+    }
+
+    @Test
+    public void testGetAllPackShardGroupIdsMultiGroup() {
+        colocateRangeMgr.initColocateGroup(100L, 1001L);
+        colocateRangeMgr.setColocateRanges(200L, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(50)), 2001L),
+                new ColocateRange(Range.ge(makeTuple(50)), 2002L)));
+        Assertions.assertEquals(Set.of(1001L, 2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
+
+        // After removing one group, only the other group's PACK ids remain.
+        colocateRangeMgr.removeColocateGroup(100L);
+        Assertions.assertEquals(Set.of(2001L, 2002L), colocateRangeMgr.getAllPackShardGroupIds());
     }
 }

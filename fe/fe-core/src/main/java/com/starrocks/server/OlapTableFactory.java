@@ -404,6 +404,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             if (table.isCloudNativeTable()) {
+                boolean lightWeightTabletCreation = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION,
+                        Config.lake_enable_light_weight_tablet_creation);
+                table.setLightWeightTabletCreation(lightWeightTabletCreation);
+            }
+
+            if (table.isCloudNativeTable()) {
                 TCompactionStrategy compactionStrategy;
                 try {
                     compactionStrategy = PropertyAnalyzer.analyzecompactionStrategy(properties);
@@ -492,11 +499,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
-            if (PropertyAnalyzer.analyzeBooleanProp(properties,
-                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
-                table.setEnableStatisticCollectOnFirstLoad(true);
-            } else {
-                table.setEnableStatisticCollectOnFirstLoad(false);
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                table.setEnableStatisticCollectOnFirstLoad(PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
             try {
@@ -655,16 +661,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
             }
 
-            // check colocation properties
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (StringUtils.isNotEmpty(colocateGroup)) {
-                if (!distributionInfo.supportColocate()) {
-                    throw new DdlException("random distribution does not support 'colocate_with'");
-                }
-
-                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
-            }
-
             // get base index storage type. default is COLUMN
             TStorageType baseIndexStorageType;
             try {
@@ -690,6 +686,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
+            }
+
+            // check colocation properties and set up colocate group before tablet creation.
+            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns.
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                if (!distributionInfo.supportColocate()) {
+                    throw new DdlException("random distribution does not support 'colocate_with'");
+                }
+
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
             }
 
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
@@ -752,6 +759,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
+            // load initial open partition number
+            if (properties != null
+                    && properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
+                int loadInitialOpenPartitionNumber =
+                        PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, true);
+                table.setLoadInitialOpenPartitionNumber(loadInitialOpenPartitionNumber);
+            }
+
             // analyze partition ttl duration
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                 Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
@@ -808,7 +823,17 @@ public class OlapTableFactory implements AbstractTableFactory {
             ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
             if (ConnectContext.get() != null) {
                 ConnectContext connectContext = ConnectContext.get();
-                computeResource = connectContext.getCurrentComputeResource();
+                if (table.isLightWeightTabletCreation()) {
+                    // Light-weight tablet creation tolerates a missing CN, so we cannot go
+                    // through getCurrentComputeResource() (which throws when no compute
+                    // resource is available).
+                    computeResource = connectContext.getCurrentComputeResourceNoAcquire();
+                    if (computeResource == null) {
+                        computeResource = WarehouseManager.DEFAULT_RESOURCE;
+                    }
+                } else {
+                    computeResource = connectContext.getCurrentComputeResource();
+                }
             }
 
             // do not create partition for external table
@@ -883,7 +908,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // process lake table colocation properties, after partition and tablet creation
-            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
+            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* afterTabletCreation */);
         } catch (DdlException e) {
             GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(tableId);
             throw e;

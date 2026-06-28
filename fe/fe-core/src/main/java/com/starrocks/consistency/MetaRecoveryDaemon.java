@@ -26,8 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
@@ -46,7 +45,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class MetaRecoveryDaemon extends FrontendDaemon {
+public class MetaRecoveryDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(MetaRecoveryDaemon.class);
 
     private final Set<UnRecoveredPartition> unRecoveredPartitions = new HashSet<>();
@@ -57,8 +56,20 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         recover();
+    }
+
+    @Override
+    protected void onStopped() {
+        // unRecoveredPartitions is leader-session diagnostic state surfaced via the proc node;
+        // it should not survive demotion since the next leader rebuilds it from scratch.
+        lock.writeLock().lock();
+        try {
+            unRecoveredPartitions.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public void recover() {
@@ -76,6 +87,13 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 continue;
             }
 
+            // Deliberate full-DB READ (not the table-scoped intensive path): this walk iterates
+            // every table and reads per-table internal state (partitions -> indices -> tablets ->
+            // replica versions) over the unbounded table set, which is the case the lock rubric
+            // assigns to plain lockDatabase(READ). It also only runs under
+            // Config.metadata_enable_recovery_mode, where a coherent DB-wide view of partition
+            // versions is wanted and concurrent DDL should not race the repair; the IX-blocking
+            // that READ imposes is acceptable (and desirable) in that mode.
             Locker locker = new Locker();
             locker.lockDatabase(database.getId(), LockType.READ);
             try {
@@ -288,10 +306,11 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     protected boolean checkTabletReportCacheUp(long timeMs) {
         for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
-            if (TimeUtils.timeStringToLong(backend.getBackendStatus().lastSuccessReportTabletsTime)
-                    < timeMs) {
+            Backend.BackendStatus status = backend.getBackendStatus();
+            if (status.lastSuccessReportTabletsTimeMs < timeMs) {
                 LOG.warn("last tablet report time of backend {}:{} is {}, should wait it to report tablets",
-                        backend.getHost(), backend.getHeartbeatPort(), backend.getBackendStatus().lastSuccessReportTabletsTime);
+                        backend.getHost(), backend.getHeartbeatPort(),
+                        status.getLastSuccessReportTabletsTimeStr());
                 return false;
             }
         }

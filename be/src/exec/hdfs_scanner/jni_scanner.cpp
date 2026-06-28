@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/jni_scanner.h"
 
+#include <type_traits>
 #include <utility>
 
 #include "base/utility/defer_op.h"
@@ -40,7 +41,7 @@ Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message)
     return Status::OK();
 }
 
-Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     RETURN_IF_ERROR(detect_java_runtime());
     return Status::OK();
 }
@@ -177,9 +178,17 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     int total_length = offset_ptr[args.num_rows];
     bytes.resize(total_length);
-    offsets.resize(args.num_rows + 1);
-
-    memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+    offsets.resize_uninitialized(args.num_rows + 1, total_length);
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+            memcpy(offsets_buf.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+        } else {
+            for (size_t i = 0; i <= args.num_rows; ++i) {
+                offsets_buf[i] = static_cast<uint64_t>(offset_ptr[i]);
+            }
+        }
+    });
     memcpy(bytes.data(), column_ptr, total_length);
     return Status::OK();
 }
@@ -357,9 +366,9 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
     }
     _app_stats.raw_rows_read += num_rows;
 
-    for (size_t col_idx = 0; col_idx < _scanner_ctx.materialized_columns.size(); col_idx++) {
-        SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
-        const std::string& slot_name = slot_desc->col_name();
+    for (size_t col_idx = 0; col_idx < _scanner_ctx->materialized_columns.size(); col_idx++) {
+        SlotDescriptor* slot_desc = _scanner_ctx->materialized_columns[col_idx].slot_desc;
+        const auto slot_name = std::string(slot_desc->col_name());
         const TypeDescriptor& slot_type = slot_desc->type();
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
@@ -386,12 +395,10 @@ Status JniScanner::_release_off_heap_table(JNIEnv* env) {
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column.
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
-    // ====== conjunct evaluation ======
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    // Partition and not-existed columns must be appended before predicate evaluation
+    // because ctxs_by_slot may reference non-file or partition slots.
+    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, chunk_size));
+    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
     return Status::OK();
 }
 
@@ -406,11 +413,16 @@ StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
     return status;
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+static void build_nested_fields(const TypeDescriptor& type, std::string_view parent, std::string* sb) {
     for (int i = 0; i < type.children.size(); i++) {
         const auto& t = type.children[i];
         if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        std::string p;
+        if (type.is_struct_type()) {
+            p = fmt::format("{}.{}", parent, type.field_names[i]);
+        } else {
+            p = fmt::format("{}.${}", parent, i);
+        }
         if (t.is_complex_type()) {
             build_nested_fields(t, p, sb);
         } else {
@@ -445,16 +457,16 @@ Status JniScanner::update_jni_scanner_params() {
     // update materialized columns.
     {
         std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx.materialized_columns) {
+        for (const auto& column : _scanner_ctx->materialized_columns) {
             if (column.name() == "___count___") continue;
-            auto col_name = column.formatted_name(_scanner_ctx.case_sensitive);
+            auto col_name = column.formatted_name(_scanner_ctx->format_scan_context.options.case_sensitive);
             names.insert(col_name);
         }
-        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
     }
 
     std::string required_fields;
-    for (const auto& column : _scanner_ctx.materialized_columns) {
+    for (const auto& column : _scanner_ctx->materialized_columns) {
         required_fields.append(column.name());
         required_fields.append(",");
     }
@@ -463,7 +475,7 @@ Status JniScanner::update_jni_scanner_params() {
     }
 
     std::string nested_fields;
-    for (const auto& column : _scanner_ctx.materialized_columns) {
+    for (const auto& column : _scanner_ctx->materialized_columns) {
         const TypeDescriptor& type = column.slot_type();
         if (type.is_complex_type()) {
             build_nested_fields(type, column.name(), &nested_fields);
@@ -484,18 +496,7 @@ class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : JniScanner(std::move(factory_class), std::move(params)) {}
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
-
-Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    // fill chunk with all wanted column exclude partition columns
-    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
-    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
-    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
-    return Status::OK();
-}
 
 std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);
@@ -523,7 +524,7 @@ std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOpti
     } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
         const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
         auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
+        std::string partition_full_path(partition_desc->location());
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
 
         hive_column_names = hdfs_table->get_hive_column_names();
@@ -578,7 +579,7 @@ std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOpti
     const auto& scan_range = *(options.scan_range);
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
+    std::string partition_full_path(partition_desc->location());
 
     std::string delta_file_paths;
     if (!scan_range.hudi_logs.empty()) {

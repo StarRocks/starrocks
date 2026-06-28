@@ -34,21 +34,36 @@
 
 #include "storage/rowset/scalar_column_iterator.h"
 
+#include <algorithm>
+
 #include "base/bit/bitmap.h"
+#include "base/hash/hash.h"
+#include "base/phmap/phmap.h"
+#include "cache/mem_cache/page_handle_fwd.h"
+#include "column/column_hash.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
-#include "storage/column_predicate.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
+#include "storage/olap_common.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
-#include "storage/rowset/page_handle_fwd.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+namespace {
+
+constexpr size_t kDictLookupHashThreshold = 100;
+
+} // namespace
 
 ScalarColumnIterator::ScalarColumnIterator(ColumnReader* reader) : _reader(reader) {}
 
@@ -65,6 +80,35 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
+
+    // One-shot IDG probe (lake only). If the fast path has published a
+    // sidecar .idx file covering this (segment, col_unique_id, <BF flavor>),
+    // remember it so that has_{original,ngram}_bloom_filter_index() and
+    // get_row_ranges_by_bloom_filter() surface it to the pruning gates
+    // above. Without this bit both would short-circuit on the footer-only
+    // `_reader->has_bloom_filter_index()` and the .idx file would never
+    // participate in read-side filtering until compaction materialized the
+    // payload back into the segment footer. At most one flavor per column.
+    if (_opts.idg_loader != nullptr && _opts.col_unique_id >= 0) {
+        TabletSegmentId tsid(_opts.tablet_id, _opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status st = _opts.idg_loader->load(tsid, _opts.query_version, &list);
+        if (st.ok()) {
+            for (const auto& e : list) {
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id != _opts.col_unique_id) continue;
+                    if (k.index_type == IndexType::NGRAMBF) {
+                        _has_idg_ngram_bf = true;
+                    } else if (k.index_type == IndexType::BLOOM_FILTER) {
+                        _has_idg_original_bf = true;
+                    }
+                }
+                if (_has_idg_ngram_bf || _has_idg_original_bf) {
+                    break;
+                }
+            }
+        }
+    }
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
@@ -225,7 +269,7 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             if (eos) {
                 // release shareBufferStream
                 if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
-                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    auto shared_buffer_stream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
                     if (shared_buffer_stream != nullptr) {
                         shared_buffer_stream->release();
                     }
@@ -259,7 +303,7 @@ Status ScalarColumnIterator::null_count(size_t* count) {
         if (eos) {
             // release shareBufferStream
             if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
-                auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                auto shared_buffer_stream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
                 if (shared_buffer_stream != nullptr) {
                     shared_buffer_stream->release();
                 }
@@ -301,7 +345,7 @@ Status ScalarColumnIterator::_next_batch_template(const SparseRange<>& range, Co
             if (eos) {
                 // release shareBufferStream
                 if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
-                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    auto shared_buffer_stream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
                     if (shared_buffer_stream != nullptr) {
                         shared_buffer_stream->release();
                     }
@@ -466,24 +510,38 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 }
 
 bool ScalarColumnIterator::has_original_bloom_filter_index() const {
-    return _reader->has_original_bloom_filter_index();
+    // Footer-embedded original BF (legacy segment rewrite or inline build
+    // during ingest) OR IDG-backed original BF (lake ADD INDEX fast path
+    // applied to `bloom_filter_columns` property). Without the
+    // `_has_idg_original_bf` branch the fast-path sidecar is invisible to
+    // the read-side pruning gate above.
+    return _reader->has_original_bloom_filter_index() || _has_idg_original_bf;
 }
 
 bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
-    return _reader->has_ngram_bloom_filter_index();
+    // Footer-embedded NGRAMBF (legacy segment rewrite) OR IDG-backed
+    // NGRAMBF (lake ADD INDEX fast path). Without the `_has_idg_ngram_bf`
+    // branch, upper read-side pruning would skip fast-path-built NGRAMBF
+    // entirely until a compaction merges the sidecar back into the footer.
+    return _reader->has_ngram_bloom_filter_index() || _has_idg_ngram_bf;
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange<>* row_ranges) {
-    RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
+    // The gate must include IDG-backed bloom filters (original or NGRAMBF),
+    // otherwise the standalone .idx file published by the lake fast path
+    // never reaches the bloom filter evaluation. `_reader->has_bloom_filter_index()`
+    // only reports the footer pointer, which is always null for IDG-only
+    // indexes.
+    RETURN_IF(!_reader->has_bloom_filter_index() && !_has_idg_ngram_bf && !_has_idg_original_bf, Status::OK());
 
     bool support_original_bloom_filter = false;
     bool support_ngram_bloom_filter = false;
     // bloom filter index can only be either original bloom filter or ngram bloom filter
-    if (_reader->has_original_bloom_filter_index()) {
+    if (_reader->has_original_bloom_filter_index() || _has_idg_original_bf) {
         support_original_bloom_filter =
                 std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
-    } else if (_reader->has_ngram_bloom_filter_index()) {
+    } else if (_reader->has_ngram_bloom_filter_index() || _has_idg_ngram_bf) {
         support_ngram_bloom_filter =
                 std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_ngram_bloom_filter(); });
     }
@@ -497,6 +555,15 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
+    // Thread IDG context into IndexReadOptions so ColumnReader::ngram_bloom_filter
+    // can pick up the sidecar .idx file when the footer does not carry the
+    // NGRAMBF payload. Leaving these at their defaults (nullptr loader) keeps
+    // the legacy footer path.
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.segment_id;
+    opts.query_version = _opts.query_version;
+    opts.col_unique_id = _opts.col_unique_id;
     // filter data using bloom filter or ngram bloom filter
     if (support_original_bloom_filter) {
         RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
@@ -509,6 +576,42 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
 int ScalarColumnIterator::dict_lookup(const Slice& word) {
     DCHECK(all_page_dict_encoded());
     return (this->*_dict_lookup_func)(word);
+}
+
+void ScalarColumnIterator::dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {
+    DCHECK(all_page_dict_encoded());
+    if (words.empty()) {
+        return;
+    }
+
+    const size_t dict_sz = static_cast<size_t>(dict_size());
+    if (std::max(dict_sz, words.size()) < kDictLookupHashThreshold) {
+        for (const auto& word : words) {
+            if (int code = dict_lookup(word.get_slice()); code >= 0) {
+                codes->emplace_back(code);
+            }
+        }
+        return;
+    }
+
+    switch (delegate_type(_reader->column_type())) {
+    case TYPE_CHAR:
+        _do_dict_lookup_batch<TYPE_CHAR>(words, codes);
+        break;
+    case TYPE_VARCHAR:
+        _do_dict_lookup_batch<TYPE_VARCHAR>(words, codes);
+        break;
+    case TYPE_JSON:
+        _do_dict_lookup_batch<TYPE_JSON>(words, codes);
+        break;
+    default:
+        for (const auto& word : words) {
+            if (int code = dict_lookup(word.get_slice()); code >= 0) {
+                codes->emplace_back(code);
+            }
+        }
+        break;
+    }
 }
 
 Status ScalarColumnIterator::next_dict_codes(size_t* n, Column* dst) {
@@ -552,6 +655,43 @@ template <LogicalType Type>
 int ScalarColumnIterator::_do_dict_lookup(const Slice& word) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     return dict->find(word);
+}
+
+template <LogicalType Type>
+void ScalarColumnIterator::_do_dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {
+    auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
+    const size_t dict_sz = static_cast<size_t>(dict->dict_size());
+
+    if (words.size() <= dict_sz) {
+        phmap::flat_hash_set<Slice, SliceHash, SliceEqual> values;
+        values.reserve(words.size());
+        for (const auto& word : words) {
+            values.emplace(word.get_slice());
+        }
+
+        codes->reserve(codes->size() + std::min(values.size(), dict_sz));
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            if (values.find(dict->string_at_index(i)) != values.end()) {
+                codes->emplace_back(i);
+            }
+        }
+    } else {
+        phmap::flat_hash_map<Slice, int, SliceHash, SliceEqual> dict_map;
+        dict_map.reserve(dict_sz);
+        for (uint32_t i = 0; i < dict_sz; i++) {
+            dict_map.emplace(dict->string_at_index(i), i);
+        }
+
+        phmap::flat_hash_set<int> code_set;
+        code_set.reserve(dict_sz);
+        codes->reserve(codes->size() + dict_sz);
+        for (const auto& word : words) {
+            auto iter = dict_map.find(word.get_slice());
+            if (iter != dict_map.end() && code_set.emplace(iter->second).second) {
+                codes->emplace_back(iter->second);
+            }
+        }
+    }
 }
 
 template <LogicalType Type>
@@ -713,18 +853,23 @@ Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, si
 }
 
 int ScalarColumnIterator::dict_size() {
-    if (_reader->column_type() == TYPE_CHAR) {
+    switch (delegate_type(_reader->column_type())) {
+    case TYPE_CHAR: {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_CHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
-    } else if (_reader->column_type() == TYPE_JSON) {
-        auto dict = down_cast<BinaryPlainPageDecoder<TYPE_JSON>*>(_dict_decoder.get());
-        return static_cast<int>(dict->dict_size());
-    } else if (_reader->column_type() == TYPE_VARCHAR) {
+    }
+    case TYPE_VARCHAR: {
         auto dict = down_cast<BinaryPlainPageDecoder<TYPE_VARCHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
     }
-    __builtin_unreachable();
-    return 0;
+    case TYPE_JSON: {
+        auto dict = down_cast<BinaryPlainPageDecoder<TYPE_JSON>*>(_dict_decoder.get());
+        return static_cast<int>(dict->dict_size());
+    }
+    default:
+        __builtin_unreachable();
+        return 0;
+    }
 }
 
 bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {

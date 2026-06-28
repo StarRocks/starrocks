@@ -106,6 +106,7 @@ set(SRC_FILES
 ADD_BE_LIB(StarRocksGen ${SRC_FILES})
 add_dependencies(StarRocksGen be_proto_codegen be_thrift_codegen)
 set_target_properties(StarRocksGen PROPERTIES CXX_CLANG_TIDY "")
+target_link_libraries(Common PRIVATE StarRocksGen)
 
 # Setting these files as code-generated lets make clean and incremental builds work
 # correctly

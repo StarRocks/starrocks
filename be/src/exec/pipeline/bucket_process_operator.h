@@ -18,9 +18,9 @@
 #include <unordered_map>
 
 #include "base/concurrency/race_detect.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "runtime/runtime_state_fwd.h"

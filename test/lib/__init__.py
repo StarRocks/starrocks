@@ -48,6 +48,10 @@ END_CONCURRENCY_FLAG = "END CONCURRENCY"
 CLEANUP_FLAG = "CLEANUP"
 END_CLEANUP_FLAG = "END CLEANUP"
 
+# set_var -- end set_var
+SET_VAR_FLAG = "SET_VAR"
+END_SET_VAR_FLAG = "END SET_VAR"
+
 
 def close_conn(conn, conn_type):
     log.info(f"Try to close {conn_type} connection...")

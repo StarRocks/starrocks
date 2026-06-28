@@ -24,10 +24,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_union.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
@@ -261,7 +261,7 @@ public:
     AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_unoin)
             : _agg_func(agg_state_unoin.get()) {
         _agg_state_unoin = std::move(agg_state_unoin);
-        _runtime_state = std::make_unique<RuntimeState>(ExecEnv::GetInstance());
+        _runtime_state = std::make_unique<RuntimeState>(TQueryGlobals());
         _mem_pool = std::make_unique<MemPool>();
         _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
                                                     agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
@@ -461,7 +461,7 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
         auto* agg_state_desc = field->get_agg_state_desc();
         auto func_name = agg_state_desc->get_func_name();
         DCHECK_EQ(field->is_nullable(), agg_state_desc->is_result_nullable());
-        auto* agg_func = AggStateDesc::get_agg_state_func(agg_state_desc);
+        auto* agg_func = get_aggregate_function(*agg_state_desc);
         if (agg_func == nullptr) {
             return Status::InternalError(
                     fmt::format("Unknown aggregate function, name={}, type={}, "

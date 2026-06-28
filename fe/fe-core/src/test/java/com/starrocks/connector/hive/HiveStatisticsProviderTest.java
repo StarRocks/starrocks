@@ -195,7 +195,7 @@ public class HiveStatisticsProviderTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         long res = statisticsProvider.getEstimatedRowCount(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assertions.assertEquals(10, res);
+        Assertions.assertEquals(4, res);
     }
 
     @Test

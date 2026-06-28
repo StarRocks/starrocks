@@ -20,6 +20,14 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
+// Row interval between consecutive sort-key samples recorded by the segment
+// writer. Samples are consumed by tablet split and range-split parallel
+// compaction to accurately estimate row distribution for overlapping segments.
+// Setting to 0 disables sampling. The per-segment value is persisted in
+// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
+// does not break cross-version readers.
+CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
+
 CONF_Bool(enable_transparent_data_encryption, "false");
 
 // CONF_Int32(default_num_rows_per_data_block, "1024");
@@ -27,6 +35,16 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
+
+// When true, high-cardinality string columns that fall back to plain encoding are written with
+// the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
+// deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
+// strings and compress far better than monotonically increasing absolute offsets, while the
+// uncompressed trailer keeps the same size. The format is identified by the column encoding
+// recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
+// encoding fails to open the segment instead of misreading it. Only the write side is gated by
+// this config; default false.
+CONF_mBool(enable_binary_plain_delta_offset, "false");
 
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "true");

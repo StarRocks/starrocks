@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -287,10 +288,13 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (info == null) {
             info = DecodeInfo.empty();
         }
+        ColumnRefSet encodedUnionColumns = new ColumnRefSet();
         final DecodeInfo finalInfo = info;
+        encodedUnionColumns.union(unionOp.getOutputColumnRefOp().stream().filter(
+                c -> finalInfo.outputStringColumns.contains(c) || finalInfo.usedStringColumns.contains(c)).toList());
         List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
                 context.unionDictionaryManager.generateConstantEncodingMap(
-                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
+                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), encodedUnionColumns);
         List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
         for (int i = 0; i < optExpression.arity(); ++i) {
             Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
@@ -318,15 +322,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             optExpression.setChild(i, newChild);
         }
         List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
-                c -> context.allStringColumns.contains(c.getId())
-                        ? context.stringRefToDictRefMap.get(c) : c).toList();
+                c -> encodedUnionColumns.contains(c) ? context.stringRefToDictRefMap.get(c) : c).toList();
 
-        ColumnRefSet inputColumns = new ColumnRefSet();
-        inputColumns.union(finalInfo.inputStringColumns);
-        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
-                .forEach(inputColumns::union);
-        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
-        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
 
         PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
                 unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
@@ -704,6 +703,28 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
         builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
         return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        Map<ColumnRefOperator, ColumnRefOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
+                        (e) -> new Pair<>(
+                                context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue())))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
+                .filter(k -> info.inputStringColumns.contains(k.getValue())).map(Map.Entry::getKey).toList());
+        PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
+                consume.getCteId(),
+                newMap,
+                consume.getLimit(),
+                rewritePredicate(consume.getPredicate(), supportColumns),
+                rewriteProjection(consume.getProjection(), supportColumns),
+                computeDictExpr(fragmentUseDictExprs)
+        );
+        return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
     }
 
     @NotNull

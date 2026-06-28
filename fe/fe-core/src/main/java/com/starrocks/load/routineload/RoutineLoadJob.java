@@ -51,13 +51,16 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
@@ -123,6 +126,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
@@ -315,6 +319,19 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     protected QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock(true);
+
+    // Monotonically increased whenever `applyModifyJob` is called with a non-null
+    // RoutineLoadDataSourceProperties (i.e. any ALTER ROUTINE LOAD that carries a data-source
+    // clause), regardless of whether `modifyDataSourceProperties` actually mutated a field or
+    // threw. The conservative bump is intentional: a spurious bump only costs one extra
+    // scheduler refetch, while missing a bump could send stale-config fetch results into apply.
+    // Used by refreshPartitionsIfNeeded() to detect mid-flight ALTER and discard a stale fetch.
+    // Reads happen under read or write lock; writes happen under writeLock. Not persisted in the
+    // checkpoint image - reinitialized to 0 on image load, then re-incremented for each
+    // ALTER ROUTINE LOAD edit log entry replayed afterwards (so the post-restart value depends
+    // on replay). The absolute value carries no meaning across restarts; only monotonic
+    // comparison between a snapshot and its corresponding apply matters.
+    protected long dataSourceConfigVersion = 0;
     // TODO(ml): error sample
 
     // save the latest 3 error log urls
@@ -420,6 +437,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             } else {
                 jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
             }
+            if (!Strings.isNullOrEmpty(stmt.getEnvelope())) {
+                jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, stmt.getEnvelope());
+            }
         } else if (stmt.getFormat().equals("avro")) {
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
@@ -431,6 +451,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } else {
             throw new StarRocksException("Invalid format type.");
         }
+
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
 
@@ -725,6 +746,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return value;
     }
 
+    public String getEnvelope() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.ENVELOPE);
+        if (value == null) {
+            return "";
+        }
+        return value;
+    }
+
     public int getSizeOfRoutineLoadTaskInfoList() {
         readLock();
         try {
@@ -894,12 +923,31 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     abstract RoutineLoadTaskInfo unprotectRenewTask(long timeToExecuteMs, RoutineLoadTaskInfo routineLoadTaskInfo);
 
-    // call before first scheduling
+    // called by the scheduler every time this job is scheduled, i.e. whenever it is in
+    // NEED_SCHEDULE: the initial scheduling, after each resume, and on reschedules
+    // (e.g. after a Kafka partition-count change).
     // derived class can override this.
     public void prepare() throws StarRocksException {
+        this.computeResource = acquireComputeResource();
+    }
+
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. Only the scheduling path (prepare()) writes the field, so
+    // validation-only callers (partition checks at CREATE/ALTER) acquire a local resource to
+    // route their broker RPC to the right warehouse without racing the scheduler/refresh paths
+    // that read computeResource under the job lock. An unavailable warehouse is rethrown as a
+    // checked LoadException so that every caller handles it as a regular job/DDL failure: the
+    // scheduler in particular only catches StarRocksException per job, and an escaping
+    // RuntimeException would abort the whole scheduler round and stall all other routine load
+    // jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
-        this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+        try {
+            return warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
@@ -1539,6 +1587,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // check if partition has been changed
+        refreshPartitionsIfNeeded();
+    }
+
+    /**
+     * Refresh the per-job view of external partitions and trigger a reschedule if it changed.
+     *
+     * The default implementation runs the legacy `unprotectNeedReschedule` decision under the
+     * per-job writeLock. Subclasses whose decision requires a slow external call (e.g. a BE
+     * brpc to fetch broker metadata) should override this method and split the work into a
+     * snapshot phase under readLock, a fetch phase under no per-job lock, and an apply phase
+     * under writeLock that checks `dataSourceConfigVersion` to discard a stale result.
+     *
+     * Called by the single-threaded routine-load scheduler on each scheduler tick.
+     */
+    protected void refreshPartitionsIfNeeded() throws StarRocksException {
         writeLock();
         try {
             if (unprotectNeedReschedule()) {
@@ -1698,9 +1761,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     private String jobPropertiesToJsonString() {
         Map<String, String> jobProperties = Maps.newHashMap();
-        jobProperties.put("partitions",
-                partitions == null ? STAR_STRING : Joiner.on(",").join(partitions.getPartitionNames()));
-        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : Joiner.on(",").join(columnDescs));
+        jobProperties.put("partitions", partitions == null ? STAR_STRING
+                : partitions.getPartitionNames().stream().map(ParseUtil::backquote).collect(Collectors.joining(",")));
+        jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : columnDescsToSql(columnDescs));
         jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
@@ -1719,6 +1782,21 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
+    }
+
+    private static String columnDescsToSql(List<ImportColumnDesc> columnDescs) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columnDescs.size(); i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            ImportColumnDesc desc = columnDescs.get(i);
+            sb.append(ParseUtil.backquote(desc.getColumnName()));
+            if (desc.getExpr() != null) {
+                sb.append("=").append(ExprToSql.toSql(desc.getExpr()));
+            }
+        }
+        return sb.toString();
     }
 
     public String jobPropertiesToSql() {
@@ -1756,6 +1834,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
+
+        if (!Strings.isNullOrEmpty(getEnvelope())) {
+            sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
+            sb.append(getEnvelope()).append("\",\n");
+        }
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");
@@ -1862,6 +1945,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             } catch (DdlException e) {
                 LOG.error("modify data source properties failed", e);
             }
+            // Invalidate any in-flight partition-fetch snapshot.
+            ++dataSourceConfigVersion;
         }
     }
 
@@ -1910,10 +1995,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
+        // Backquote the job name and table name so that reserved-keyword or special-character
+        // identifiers (e.g. `order`) can be re-parsed when the statement is deserialized on FE
+        // restart; otherwise getLoadDesc() fails to parse and routineLoadDesc is lost. ParseUtil
+        // .backquote also escapes embedded backticks (a -> `a`, a`b -> `a``b`), which naive
+        // string concatenation does not.
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
                         " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
-                name, tableName, originLoadDesc.toSql());
+                ParseUtil.backquote(name), ParseUtil.backquote(tableName), originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatementInfo(sql, 0);
     }

@@ -18,12 +18,15 @@
 #include "base/string/string_util.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
+
+PersistentIndexMemtable::PersistentIndexMemtable(TabletManager* tablet_mgr, int64_t tablet_id, uint64_t max_rss_rowid)
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _max_rss_rowid(max_rss_rowid) {}
 
 PersistentIndexMemtable::~PersistentIndexMemtable() = default;
 

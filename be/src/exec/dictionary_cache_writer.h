@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "base/brpc/reusable_closure.h"
+#include "base/brpc/ref_count_closure.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/fragment_context.h"
@@ -45,18 +45,6 @@ public:
     void close();
 
     void sync_dictionary_cache(const Chunk* chunk);
-
-    class ChunkUtil {
-    public:
-        ChunkUtil() = default;
-        ~ChunkUtil() = default;
-
-        static Status compress_and_serialize_chunk(const Chunk* src, ChunkPB* dst);
-        static Status uncompress_and_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk,
-                                                       faststring* uncompressed_buffer,
-                                                       const OlapTableSchemaParam* schema);
-        static Status check_chunk_has_null(const Chunk& chunk);
-    };
 
 private:
     Status _send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,

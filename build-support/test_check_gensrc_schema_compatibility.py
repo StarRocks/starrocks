@@ -1079,6 +1079,108 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("SampleService.ping(throws)", issues[0].container)
             self.assertEqual(1, issues[0].field_number)
 
+    def test_changed_mode_allows_thrift_required_to_optional(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: required string name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional string name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
+    def test_changed_mode_rejects_thrift_optional_to_required(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            thrift_path = repo / "gensrc" / "thrift" / "sample.thrift"
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: optional string name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            thrift_path.write_text(
+                textwrap.dedent(
+                    """\
+                    struct TSample {
+                      1: required string name
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual(["field_cardinality_changed"], [issue.rule for issue in issues])
+            self.assertEqual("TSample", issues[0].container)
+            self.assertEqual(1, issues[0].field_number)
+
+    def test_changed_mode_allows_proto_required_to_optional(self) -> None:
+        module = _load_module()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._init_repo(repo)
+            proto_path = repo / "gensrc" / "proto" / "sample.proto"
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      required string name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "base")
+
+            proto_path.write_text(
+                textwrap.dedent(
+                    """\
+                    syntax = "proto2";
+
+                    message SamplePB {
+                      optional string name = 1;
+                    }
+                    """
+                )
+            )
+            self._commit_all(repo, "head")
+
+            issues = module.check_repo(repo, mode="changed", base="HEAD~1")
+
+            self.assertEqual([], issues)
+
     def test_changed_mode_parses_thrift_field_annotations(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:

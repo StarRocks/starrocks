@@ -21,14 +21,17 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "common/thread/cpu_util.h"
 #include "common/thread/thread.h"
-#include "pipeline_driver.h"
-#include "pipeline_driver_queue.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "gutil/macros.h"
 
 namespace starrocks::pipeline {
 
+class DriverQueue;
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
 class PollerMetrics;
@@ -57,10 +60,6 @@ public:
     void add_blocked_driver(const DriverRawPtr driver);
     void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
 
-    void park_driver(const DriverRawPtr driver);
-    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func);
-    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const;
-
     void for_each_driver(const ConstDriverConsumer& call) const;
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids);
@@ -84,11 +83,6 @@ private:
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
-
-    // NOTE: The `driver` can be stored in the parked drivers when it will never not be called to run.
-    // The parked driver needs to be actived when it needs to be triggered again.
-    mutable std::mutex _global_parked_mutex;
-    DriverList _parked_drivers;
 
     PollerMetrics* _metrics;
 };

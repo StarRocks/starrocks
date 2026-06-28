@@ -21,8 +21,9 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
+#include "exec/jdbc/type_checker_manager.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"
@@ -30,7 +31,6 @@
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "types/type_checker_manager.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 
@@ -204,7 +204,7 @@ Status JDBCScanner::_init_jdbc_scanner() {
 
     auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
     _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
-    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+    LOCAL_REF_GUARD_ENV(env, jdbc_scanner_cls);
 
     DCHECK(_jdbc_scanner_cls != nullptr);
     // init jmethod

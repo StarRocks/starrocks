@@ -21,7 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -43,7 +43,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class ReplicationMgr extends FrontendDaemon {
+public class ReplicationMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ReplicationMgr.class);
 
     @SerializedName(value = "runningJobs")
@@ -60,10 +60,14 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         runRunningJobs();
         clearExpiredJobs();
     }
+
+    // runningJobs / committedJobs / abortedJobs are persistent state (saved/loaded via image,
+    // updated on followers via editlog replay). They must NOT be cleared on demotion - the
+    // next leader resumes those jobs from the same maps. So no onStopped() override is needed.
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
         LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",

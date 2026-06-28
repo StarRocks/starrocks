@@ -1,6 +1,7 @@
 ---
 keywords: ['xiugai'] 
 displayed_sidebar: docs
+description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker 节点。"
 ---
 
 # ALTER SYSTEM

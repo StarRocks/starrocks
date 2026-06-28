@@ -14,8 +14,12 @@
 
 #include "column/column_helper.h"
 
+#include "base/testutil/assert.h"
 #include "column/column_builder.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "gtest/gtest.h"
+#include "gutil/casts.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -189,6 +193,166 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
+}
+
+// ColumnHelper::build_slices
+TEST_F(ColumnHelperTest, build_slices_binary_column) {
+    auto col = ColumnTestHelper::build_column<Slice>({"foo", "bar", "baz"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 3);
+    EXPECT_EQ(slices[0].to_string(), "foo");
+    EXPECT_EQ(slices[1].to_string(), "bar");
+    EXPECT_EQ(slices[2].to_string(), "baz");
+}
+
+TEST_F(ColumnHelperTest, build_slices_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("hello");
+    col->append_string("world");
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "hello");
+    EXPECT_EQ(slices[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, build_slices_nullable_column) {
+    auto nullable = ColumnTestHelper::build_nullable_column<Slice>({"a", "bb"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(nullable.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "a");
+    EXPECT_EQ(slices[1].to_string(), "bb");
+}
+
+TEST_F(ColumnHelperTest, build_slices_const_column) {
+    auto inner = BinaryColumn::create();
+    inner->append(Slice("const"));
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(const_col.get(), slices);
+    ASSERT_EQ(slices.size(), 1);
+    EXPECT_EQ(slices[0].to_string(), "const");
+}
+
+// GetStorageContainer::get_data
+TEST_F(ColumnHelperTest, get_storage_container_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
+    auto data = GetStorageContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 1);
+    EXPECT_EQ(data[1], 2);
+    EXPECT_EQ(data[2], 3);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_nullable) {
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    auto data = GetStorageContainer<TYPE_INT>::get_data(col.get());
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 10);
+    EXPECT_EQ(data[1], 20);
+    EXPECT_EQ(data[2], 30);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_const_column) {
+    auto inner = ColumnTestHelper::build_column<int32_t>({42});
+    auto const_col = ConstColumn::create(std::move(inner), 3);
+    auto data = GetStorageContainer<TYPE_INT>::get_data(const_col.get());
+    ASSERT_EQ(data.size(), 1);
+    EXPECT_EQ(data[0], 42);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_varchar) {
+    auto col = ColumnTestHelper::build_column<Slice>({"hello", "world"});
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "hello");
+    EXPECT_EQ(data[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_large_binary) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("abc");
+    col->append_string("def");
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "abc");
+    EXPECT_EQ(data[1].to_string(), "def");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_nullable_varchar) {
+    auto col = ColumnTestHelper::build_nullable_column<Slice>({"foo", "bar"});
+    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
+    ASSERT_EQ(data.size(), 2);
+    EXPECT_EQ(data[0].to_string(), "foo");
+    EXPECT_EQ(data[1].to_string(), "bar");
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_mutable_column_ptr) {
+    auto col = ColumnTestHelper::build_column<int32_t>({5, 6, 7});
+    MutableColumnPtr mutable_col = std::move(col);
+    auto data = GetStorageContainer<TYPE_INT>::get_data(mutable_col);
+    ASSERT_EQ(data.size(), 3);
+    EXPECT_EQ(data[0], 5);
+    EXPECT_EQ(data[1], 6);
+    EXPECT_EQ(data[2], 7);
+}
+
+// GetStorageContainer::get_data(column, row)
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_fixed_length) {
+    auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_const_column) {
+    auto inner = ColumnTestHelper::build_column<int32_t>({99});
+    auto const_col = ConstColumn::create(std::move(inner), 5);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(const_col.get(), 0), 99);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(const_col.get(), 4), 99);
+}
+
+TEST_F(ColumnHelperTest, get_storage_container_get_data_with_row_nullable) {
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({10, 20, 30});
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 0), 10);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 1), 20);
+    EXPECT_EQ(GetStorageContainer<TYPE_INT>::get_data(col.get(), 2), 30);
+}
+
+// Verify update_nested_has_null recurses into STRUCT subfield columns.
+// Mirrors the post-write step a STRUCT-returning Java UDF goes through:
+// the Java side memcpys raw null bytes into subfield bitmaps without touching
+// each NullableColumn's `_has_null` cache, and update_nested_has_null is
+// expected to refresh the cache field-by-field.
+TEST_F(ColumnHelperTest, update_nested_has_null_struct) {
+    TypeDescriptor td(TYPE_STRUCT);
+    td.children.emplace_back(TYPE_INT);
+    td.children.emplace_back(TYPE_VARCHAR);
+    td.field_names = {"a", "b"};
+    auto col = ColumnHelper::create_column(td, true);
+    auto* outer = down_cast<NullableColumn*>(col.get());
+    outer->resize(3);
+
+    auto* sc = down_cast<StructColumn*>(outer->data_column_raw_ptr());
+    ASSERT_EQ(sc->fields_size(), 2);
+    auto* a_col = down_cast<NullableColumn*>(sc->field_column_raw_ptr(0));
+    auto* b_col = down_cast<NullableColumn*>(sc->field_column_raw_ptr(1));
+
+    // Drop a null straight into subfield a's bitmap, bypassing the bookkeeping
+    // that maintains _has_null. Pre-condition is the stale `false`.
+    a_col->null_column_data()[1] = 1;
+    ASSERT_FALSE(a_col->has_null());
+
+    ASSERT_OK(ColumnHelper::update_nested_has_null(col.get()));
+
+    EXPECT_TRUE(a_col->has_null());
+    EXPECT_FALSE(b_col->has_null());
 }
 
 } // namespace starrocks

@@ -177,11 +177,13 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isTopNSortAsc() {
-        return sortInfo != null && sortInfo.getIsAscOrder().get(exprOrder);
+        // Always use index 0: we only support the first ordering column for TopN RF,
+        // and exprOrder refers to the group-by position, not the sort column position.
+        return sortInfo != null && sortInfo.getIsAscOrder().get(0);
     }
 
     public boolean isTopNullsFirst() {
-        return sortInfo != null && sortInfo.getNullsFirst().get(exprOrder);
+        return sortInfo != null && sortInfo.getNullsFirst().get(0);
     }
 
     public PlanNode getBuildPlanNode() {

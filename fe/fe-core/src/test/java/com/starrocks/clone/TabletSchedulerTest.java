@@ -43,6 +43,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.YieldableLock;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.VariableMgr;
@@ -82,6 +83,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.sql.ast.KeysType.DUP_KEYS;
 
@@ -300,13 +305,9 @@ public class TabletSchedulerTest {
 
         new Thread(() -> {
             for (int i = 0; i < 10; i++) {
-                Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
-                try {
-                    locker.lockDatabase(goodDB.getId(), LockType.READ);
-                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
-                } finally {
-                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
+                try (YieldableLock lock = YieldableLock.lockDatabase(goodDB.getId(), LockType.READ)) {
+                    tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
                 }
             }
         }, "testAddCtx").start();
@@ -314,6 +315,72 @@ public class TabletSchedulerTest {
         Thread.sleep(2000);
         tabletScheduler.removeOneFromPendingQ();
         Thread.sleep(1000);
+        Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
+
+        Config.tablet_sched_max_scheduling_tablets = oldVal;
+    }
+
+    @Test
+    public void testPendingAddTabletCtxWithIntensiveTableLock() throws InterruptedException {
+        int oldVal = Config.tablet_sched_max_scheduling_tablets;
+        Config.tablet_sched_max_scheduling_tablets = 8;
+
+        TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
+        Database db = new Database(20, "db20");
+        Table table = new Table(40, "tbl40", Table.TableType.OLAP, new ArrayList<>());
+        Partition partition = new Partition(60, 66, "p60", new MaterializedIndex(), null);
+
+        List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            TabletSchedCtx ctx = new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    db.getId(),
+                    table.getId(),
+                    partition.getId(),
+                    1,
+                    i,
+                    System.currentTimeMillis(),
+                    systemInfoService);
+            ctx.setOrigPriority(TabletSchedCtx.Priority.NORMAL);
+            tabletSchedCtxList.add(ctx);
+        }
+
+        // Mimic TabletChecker.checkOneTable(): add tablet ctxs while holding an intensive
+        // table READ lock scope (INTENTION_SHARED on the db + READ on the table). The blocking
+        // add must yield exactly this scope while waiting; releasing any other lock shape would
+        // die with IllegalMonitorStateException once the queue is full.
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        Thread addThread = new Thread(() -> {
+            try {
+                for (int i = 0; i < 10; i++) {
+                    try (YieldableLock lock = YieldableLock.lockTableWithIntensiveDbLock(
+                            db.getId(), table.getId(), LockType.READ)) {
+                        tabletScheduler.blockingAddTabletCtxToScheduler(tabletSchedCtxList.get(i), false, lock);
+                    }
+                }
+            } catch (Throwable t) {
+                error.set(t);
+            }
+        }, "testAddCtxWithTableLock");
+        addThread.start();
+
+        Thread.sleep(2000);
+        // The adding thread is now blocked on the last tablet ctx and must have released both
+        // of its locks during the wait: a db WRITE lock (conflicts with INTENTION_SHARED) and
+        // an intensive table WRITE lock (conflicts with table READ) must be acquirable.
+        Locker probeLocker = new Locker();
+        Assertions.assertTrue(
+                probeLocker.tryLockDatabase(db.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockDatabase(db.getId(), LockType.WRITE);
+        Assertions.assertTrue(probeLocker.tryLockTableWithIntensiveDbLock(
+                db.getId(), table.getId(), LockType.WRITE, 2000, TimeUnit.MILLISECONDS));
+        probeLocker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+
+        // Free one slot so the blocked add can complete and the thread can exit.
+        tabletScheduler.removeOneFromPendingQ();
+        addThread.join(10000);
+        Assertions.assertFalse(addThread.isAlive());
+        Assertions.assertNull(error.get(), "blocking add must not throw: " + error.get());
         Assertions.assertEquals(9, tabletScheduler.getPendingTabletsInfo(100).size());
 
         Config.tablet_sched_max_scheduling_tablets = oldVal;
@@ -713,6 +780,56 @@ public class TabletSchedulerTest {
 
         // This should not throw NullPointerException even though ctx.getTablet() returns null
         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+    }
+
+    @Test
+    public void testOnStoppedClearsInternalState() {
+        TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        TabletSchedCtx pending = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                1L, 2L, 3L, 4L, 100L, System.currentTimeMillis(), systemInfoService);
+        pending.setOrigPriority(TabletSchedCtx.Priority.LOW);
+        Deencapsulation.invoke(scheduler, "addToPendingTablets", pending);
+
+        // Populate remaining collections that onStopped() must reset.
+        java.util.Set<Long> allIds = Deencapsulation.getField(scheduler, "allTabletIds");
+        allIds.add(100L);
+        Map<Long, TabletSchedCtx> running = Deencapsulation.getField(scheduler, "runningTablets");
+        running.put(200L, pending);
+        Queue<TabletSchedCtx> history = Deencapsulation.getField(scheduler, "schedHistory");
+        history.add(pending);
+        Map<Long, TabletScheduler.PathSlot> slots = Deencapsulation.getField(scheduler, "backendsWorkingSlots");
+        slots.put(10L, new TabletScheduler.PathSlot(Lists.newArrayList(0L), 1));
+        scheduler.setClusterLoadStatistic(new ClusterLoadStatistic(systemInfoService, tabletInvertedIndex));
+        Deencapsulation.setField(scheduler, "lastStatUpdateTime", 123L);
+        Deencapsulation.setField(scheduler, "lastClusterLoadLoggingTime", 456L);
+        Deencapsulation.setField(scheduler, "lastSlotAdjustTime", 789L);
+        Deencapsulation.setField(scheduler, "currentSlotPerPathConfig", 7);
+        ((java.util.concurrent.atomic.AtomicBoolean) Deencapsulation.getField(scheduler, "forceCleanSchedQ")).set(true);
+
+        Assertions.assertEquals(1, scheduler.getTotalNum());
+        Assertions.assertEquals(1, scheduler.getRunningNum());
+        Assertions.assertEquals(1, scheduler.getHistoryNum());
+        Assertions.assertNotNull(scheduler.getClusterLoadStatistic());
+
+        Deencapsulation.invoke(scheduler, "onStopped");
+
+        Assertions.assertEquals(0, scheduler.getTotalNum());
+        Assertions.assertEquals(0, scheduler.getRunningNum());
+        Assertions.assertEquals(0, scheduler.getHistoryNum());
+        Assertions.assertNull(scheduler.getClusterLoadStatistic());
+        Map<Long, TabletScheduler.PathSlot> afterSlots = Deencapsulation.getField(scheduler, "backendsWorkingSlots");
+        Assertions.assertTrue(afterSlots.isEmpty(), "backendsWorkingSlots must be cleared");
+        PriorityQueue<TabletSchedCtx> afterPending = Deencapsulation.getField(scheduler, "pendingTablets");
+        Assertions.assertTrue(afterPending.isEmpty(), "pendingTablets must be cleared");
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastStatUpdateTime"));
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastClusterLoadLoggingTime"));
+        Assertions.assertEquals(0L, (long) Deencapsulation.getField(scheduler, "lastSlotAdjustTime"));
+        Assertions.assertEquals(0, (int) Deencapsulation.getField(scheduler, "currentSlotPerPathConfig"));
+        Assertions.assertFalse(
+                ((java.util.concurrent.atomic.AtomicBoolean) Deencapsulation.getField(scheduler, "forceCleanSchedQ"))
+                        .get(),
+                "forceCleanSchedQ must reset to false");
     }
 
     @Test

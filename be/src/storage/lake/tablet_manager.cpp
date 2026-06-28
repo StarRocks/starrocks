@@ -20,7 +20,6 @@
 #include <atomic>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/container/raw_container.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -28,18 +27,20 @@
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
 #include "common/config_lake_fwd.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
+#include "common/system/master_info.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
+#include "runtime/time_guard.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -54,13 +55,16 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
+#include "storage/utils.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
-#include "service/staros_worker.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #endif
 
 namespace starrocks::lake {
@@ -73,6 +77,25 @@ static bvar::Adder<int64_t> g_read_bundle_tablet_meta_cnt("lake", "lake_read_bun
 static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
 static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
+
+// Save a lake metadata/txn-log protobuf, using the checksummed header format when
+// lake_enable_protobuf_file_checksum is on and the legacy headerless format otherwise.
+static Status save_lake_protobuf(const std::string& path, const ::google::protobuf::Message& message) {
+    if (config::lake_enable_protobuf_file_checksum) {
+        ProtobufFileWithHeader file(path, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
+        return file.save(message);
+    }
+    ProtobufFile file(path);
+    return file.save(message);
+}
+
+// Load a lake metadata/txn-log protobuf. Auto-detects the checksummed header format and
+// falls back to legacy headerless protobuf, regardless of lake_enable_protobuf_file_checksum.
+static Status load_lake_protobuf(const std::string& path, ::google::protobuf::Message* message, bool fill_cache,
+                                 const std::shared_ptr<FileSystem>& fs = nullptr) {
+    ProtobufFileWithHeader file(path, fs, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
+    return file.load(message, fill_cache);
+}
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet::ShardInfo& shard_info) {
@@ -95,8 +118,9 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 #endif
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
-                             int64_t cache_capacity)
+                             int64_t cache_capacity, const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
+          _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr),
@@ -104,8 +128,10 @@ TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider
     _update_mgr->set_tablet_mgr(this);
 }
 
-TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
+TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+                             const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
+          _store_path_registry(store_path_registry),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {}
 
@@ -207,6 +233,8 @@ UpdateManager* TabletManager::update_mgr() {
     return _update_mgr;
 }
 
+// NOTE: if you add a new field here, also update construct_initial_metadata() and
+// TCloudTabletMeta in FrontendService.thrift to keep them in sync.
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
     auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
@@ -275,6 +303,146 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
+// Parse (table_id, partition_id, index_id) from StarOS shard properties.
+Status TabletManager::parse_shard_properties(int64_t tablet_id,
+                                             const std::unordered_map<std::string, std::string>& properties,
+                                             int64_t* table_id, int64_t* partition_id, int64_t* index_id) {
+    *table_id = -1;
+    *partition_id = -1;
+    *index_id = -1;
+    auto table_id_iter = properties.find("tableId");
+    if (table_id_iter != properties.end()) {
+        *table_id = std::atol(table_id_iter->second.data());
+    }
+    auto partition_id_iter = properties.find("partitionId");
+    if (partition_id_iter != properties.end()) {
+        *partition_id = std::atol(partition_id_iter->second.data());
+    }
+    auto index_id_iter = properties.find("indexId");
+    if (index_id_iter != properties.end()) {
+        *index_id = std::atol(index_id_iter->second.data());
+    }
+    if (*table_id <= 0 || *partition_id <= 0 || *index_id <= 0) {
+        return Status::InternalError(
+                fmt::format("incomplete shard properties, tablet_id: {}, table_id: {}, partition_id: {}, index_id: {}",
+                            tablet_id, *table_id, *partition_id, *index_id));
+    }
+    return Status::OK();
+}
+
+StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t tablet_id) {
+    TEST_ERROR_POINT("TabletManager::construct_initial_metadata");
+#ifdef BE_TEST
+    // In unit test environment, starlet worker is not available. Return NOT_FOUND so
+    // that callers treat cn-free fallback as a normal "tablet not found" case.
+    return Status::NotFound(fmt::format("cn-free tablet creation disabled in unit test, tablet_id: {}", tablet_id));
+#endif
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Get (table_id, partition_id, index_id) from shard info.
+    // These are used for the FE RPC request and for SingleFlight grouping by (table_id, index_id),
+    // so concurrent requests for different tablets under the same index share one RPC.
+    int64_t table_id = -1;
+    int64_t partition_id = -1;
+    int64_t index_id = -1;
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Fallback prerequisite not available; degrade to NOT_FOUND so the caller
+        // surfaces "v1 metadata missing" instead of escalating to INTERNAL_ERROR.
+        return Status::NotFound(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
+        return Status::InternalError(fmt::format("fail to get shard info, tablet_id: {}, error: {}", tablet_id,
+                                                 shard_info_or.status().message()));
+    }
+    RETURN_IF_ERROR(
+            parse_shard_properties(tablet_id, shard_info_or.value().properties, &table_id, &partition_id, &index_id));
+
+    ASSIGN_OR_RETURN(auto resp,
+                     _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));
+    return build_initial_metadata(tablet_id, resp);
+#else
+    // Build doesn't include StarOS support, so the fallback prerequisites are
+    // permanently unavailable; degrade to NOT_FOUND to preserve the pre-cn-free
+    // behavior of get_tablet_metadata for missing v1 files.
+    return Status::NotFound(fmt::format("cn-free tablet creation requires USE_STAROS, tablet_id: {}", tablet_id));
+#endif
+}
+
+// NOTE: if you add a new field to create_tablet(), also update this method and
+// TCloudTabletMeta in FrontendService.thrift to keep them in sync.
+StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(int64_t tablet_id,
+                                                                  const TGetTabletMetadataResponse& resp) {
+    if (!resp.__isset.meta) {
+        return Status::InternalError(strings::Substitute("missing tablet meta in response, tabletId:$0", tablet_id));
+    }
+    const auto& meta = resp.meta;
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(kInitialVersion);
+    metadata->set_next_rowset_id(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_gtid(meta.gtid);
+
+    // schema
+    auto compress_type = meta.__isset.compression_type ? meta.compression_type : TCompressionType::LZ4_FRAME;
+    RETURN_IF_ERROR(convert_t_schema_to_pb_schema(meta.schema, compress_type, metadata->mutable_schema()));
+    auto compression_level = meta.__isset.compression_level ? meta.compression_level : -1;
+    metadata->mutable_schema()->set_compression_level(compression_level);
+
+    // range: look up this tablet's range from the tablet_ranges map
+    if (meta.__isset.tablet_ranges) {
+        auto it = meta.tablet_ranges.find(tablet_id);
+        if (it != meta.tablet_ranges.end()) {
+            ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(it->second));
+            *metadata->mutable_range() = range_pb;
+        }
+    }
+
+    // persistent index
+    if (meta.__isset.enable_persistent_index) {
+        metadata->set_enable_persistent_index(meta.enable_persistent_index);
+        if (meta.__isset.persistent_index_type) {
+            switch (meta.persistent_index_type) {
+            case TPersistentIndexType::LOCAL:
+                metadata->set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+                break;
+            case TPersistentIndexType::CLOUD_NATIVE:
+                metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+                break;
+            default:
+                return Status::InternalError(
+                        strings::Substitute("Unknown persistent index type, tabletId:$0", tablet_id));
+            }
+        }
+    }
+
+    // flat json config
+    if (meta.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(meta.flat_json_config);
+        flat_json_config.to_pb(metadata->mutable_flat_json_config());
+    }
+
+    // compaction strategy
+    if (meta.__isset.compaction_strategy) {
+        switch (meta.compaction_strategy) {
+        case TCompactionStrategy::DEFAULT:
+            metadata->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+            break;
+        case TCompactionStrategy::REAL_TIME:
+            metadata->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
+            break;
+        default:
+            return Status::InternalError(strings::Substitute("Unknown compaction strategy, tabletId:$0", tablet_id));
+        }
+    } else {
+        metadata->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+    }
+
+    return metadata;
+}
+
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     Tablet tablet(this, tablet_id);
     if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
@@ -310,8 +478,13 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
     // write metadata file
     auto t0 = butil::gettimeofday_us();
 
-    ProtobufFile file(metadata_location);
-    RETURN_IF_ERROR(file.save(*metadata));
+    // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from
+    // segment_metas (so a BE rolled back to a pre-feature version can still read this metadata),
+    // without mutating the shared, immutable metadata object.
+    auto serializable_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+    RETURN_IF_ERROR(normalize_tablet_metadata_before_save(serializable_metadata.get()));
+
+    RETURN_IF_ERROR(save_lake_protobuf(metadata_location, *serializable_metadata));
 
     _metacache->cache_tablet_metadata(metadata_location, metadata);
     bool skip_cache_latest_metadata = false;
@@ -348,6 +521,28 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 
 DEFINE_FAIL_POINT(get_real_location_failed);
 DEFINE_FAIL_POINT(tablet_meta_not_found);
+
+// Pick an anchor tablet id that this worker already owns, if possible. The bundled
+// metadata / combined txn log path is derived from a single tablet id even though it
+// logically represents the whole batch; all tablets in the batch belong to the same
+// partition and resolve to the same root location. But downstream path/filesystem
+// construction eventually consults the staros worker cache via get_shard_info. When
+// the anchor is local we avoid a cross-node get-shard-info RPC; when it is not (e.g.
+// FE picked an aggregator that does not own any tablet in the batch), the worker has
+// to fall back to remote fetch. See the FE-side LakeAggregator.chooseAggregatorNode
+// for the companion optimization.
+int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates) {
+    DCHECK(!candidates.empty());
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    for (int64_t tablet_id : candidates) {
+        if (is_tablet_in_worker(tablet_id)) {
+            return tablet_id;
+        }
+    }
+#endif
+    return candidates.front();
+}
+
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
@@ -356,9 +551,17 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         return Status::InternalError("tablet_metas cannot be empty");
     }
 
+    std::vector<int64_t> candidate_tablet_ids;
+    candidate_tablet_ids.reserve(tablet_metas.size());
+    for (const auto& [tid, _meta] : tablet_metas) {
+        candidate_tablet_ids.push_back(tid);
+    }
+    const int64_t anchor_tablet_id = pick_local_anchor_tablet_id(candidate_tablet_ids);
+    const int64_t anchor_version = tablet_metas.at(anchor_tablet_id).version();
+
     BundleTabletMetadataPB bundle_meta;
     ASSIGN_OR_RETURN(auto partition_location,
-                     _location_provider->real_location(tablet_metadata_root_location(tablet_metas.begin()->first)));
+                     _location_provider->real_location(tablet_metadata_root_location(anchor_tablet_id)));
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     for (auto& [tablet_id, meta] : tablet_metas) {
         (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
@@ -379,15 +582,24 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
         return pointer;
     };
 
-    const std::string meta_location =
-            bundle_tablet_metadata_location(tablet_metas.begin()->first, tablet_metas.begin()->second.version());
+    const std::string meta_location = bundle_tablet_metadata_location(anchor_tablet_id, anchor_version);
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
     int64_t current_offset = 0;
+    // Snapshot the mutable config once so a single bundle file is internally consistent: every
+    // tablet page and the footer use the same decision, even if the flag is flipped concurrently.
+    const bool enable_checksum = config::lake_enable_protobuf_file_checksum;
     for (auto& [tablet_id, meta] : tablet_metas) {
+        // Normalize RPC-received metadata on entry exactly like S3-loaded metadata: after-load
+        // (extend + back-fill segment_metas from the legacy arrays) BEFORE before-save rebuilds those
+        // arrays. During a mixed-version upgrade an old worker can send legacy-shaped metadata whose
+        // segment names live only in deprecated_segments; without this after-load the no-extend
+        // before-save would drop them. Idempotent for already-normalized (new-worker) metadata.
+        normalize_tablet_metadata_after_load(&meta);
+        RETURN_IF_ERROR(normalize_tablet_metadata_before_save(&meta));
         meta.clear_schema();
         meta.mutable_historical_schemas()->clear();
         serialized_buf.clear();
@@ -397,6 +609,13 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
 
         (*bundle_meta.mutable_tablet_meta_pages())[tablet_id] =
                 make_page_pointer(current_offset, serialized_buf.size());
+        if (enable_checksum) {
+            // Protects each tablet's metadata page. The shared BundleTabletMetadataPB header
+            // (schemas, tablet_to_schema, page pointers, and this checksum map itself) is protected
+            // separately by the footer crc32 written below.
+            (*bundle_meta.mutable_tablet_meta_page_checksum())[tablet_id] =
+                    olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size());
+        }
         RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
         current_offset += serialized_buf.size();
     }
@@ -407,7 +626,16 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     }
     RETURN_IF_ERROR(meta_file->append(Slice(serialized_buf)));
     std::string fixed_buf;
-    put_fixed64_le(&fixed_buf, serialized_buf.size());
+    uint64_t size_field_value = serialized_buf.size();
+    if (enable_checksum) {
+        // Footer layout: [bundle_meta][crc32(bundle_meta)][size | flag]. The crc protects the shared
+        // bundle header (schemas, mappings, page pointers, per-page checksums); the high-bit flag in
+        // the size lets readers tell this layout apart from the legacy [bundle_meta][size] with no
+        // collision risk (a legacy size is always far below 2^63).
+        put_fixed32_le(&fixed_buf, olap_adler32(ADLER32_INIT, serialized_buf.data(), serialized_buf.size()));
+        size_field_value |= LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    }
+    put_fixed64_le(&fixed_buf, size_field_value);
     RETURN_IF_ERROR(meta_file->append(Slice(fixed_buf)));
     RETURN_IF_ERROR(meta_file->close());
     _metacache->cache_aggregation_partition(partition_location, true);
@@ -436,15 +664,18 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
-    ProtobufFile file(metadata_location, fs);
-    auto s = file.load(metadata.get(), fill_data_cache);
+    auto s = load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs);
     if (!s.ok()) {
         RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
         // reset metadata
         metadata = std::make_shared<TabletMetadataPB>();
         // read again
-        RETURN_IF_ERROR(file.load(metadata.get(), fill_data_cache));
+        RETURN_IF_ERROR(load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs));
     }
+
+    // Back-fill segment_metas from the deprecated legacy arrays for rowsets written by a
+    // pre-feature BE, so the migrated readers (which only consume segment_metas) work.
+    normalize_tablet_metadata_after_load(metadata.get());
 
     if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
         auto drop_status = drop_local_cache(metadata_location);
@@ -500,6 +731,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         return tablet_metadata_or.status();
     }
 
+    // Skip the deep copy when the cached PB already has the right id; set_id below would be a no-op.
+    if (tablet_metadata_or.value()->id() == tablet_id) {
+        return std::move(tablet_metadata_or).value();
+    }
     auto tablet_metadata = std::make_shared<TabletMetadata>(*tablet_metadata_or.value());
     tablet_metadata->set_id(tablet_id);
     return tablet_metadata;
@@ -548,6 +783,20 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         }
     }
 
+    // CN-Free Tablet Creation fallback: when cn_free_tablet_creation is enabled, DDL skips
+    // writing version 1 metadata to object storage. When a consumer first needs version 1
+    // metadata, we fetch the tablet's initial configuration from FE and construct the
+    // TabletMetadataPB on demand.
+    //
+    // The fs == nullptr check excludes cross-cluster replication reads, where |fs| points to
+    // the source cluster's object storage. Without this check, a source tablet_id that
+    // coincidentally matches a local tablet_id would cause us to fetch the wrong metadata
+    // from the local FE. Other local callers that pass non-null fs (e.g. LakeDelvecLoader)
+    // do not request version 1 in practice, since version 1 has no rowsets or delvecs.
+    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion && fs == nullptr) {
+        metadata_or = construct_initial_metadata(tablet_id);
+    }
+
     if (!metadata_or.ok()) {
         return metadata_or.status();
     }
@@ -561,18 +810,53 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 
 StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(const std::string& path,
                                                                               const std::string& serialized_string) {
+    const auto* data = serialized_string.data();
     auto file_size = serialized_string.size();
-    auto footer_size = sizeof(uint64_t);
-    auto bundle_metadata_size = decode_fixed64_le((uint8_t*)(serialized_string.data() + file_size - footer_size));
-    RETURN_IF(file_size < footer_size + bundle_metadata_size || bundle_metadata_size == 0,
-              Status::Corruption(strings::Substitute(
-                      "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
-                      file_size, bundle_metadata_size)));
+    const auto size_field = sizeof(uint64_t); // trailing 8-byte bundle metadata size, present in both layouts
+    RETURN_IF(file_size < size_field,
+              Status::Corruption(strings::Substitute("deserialized shared metadata($0) failed, file_size($1) too small",
+                                                     path, file_size)));
+    auto raw_size_field = decode_fixed64_le((uint8_t*)(data + file_size - size_field));
+
+    // The high bit of the size field marks the checksummed footer layout written when
+    // lake_enable_protobuf_file_checksum is on:
+    //   [bundle_meta][crc32(bundle_meta)][size | flag]
+    // versus the legacy footer [bundle_meta][size]. This is collision-free: a legacy size is bounded
+    // by protobuf's 2GB message limit and so never has this bit set. Mask it off to get the real size.
+    const bool checksummed = (raw_size_field & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    const uint64_t bundle_metadata_size = raw_size_field & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+    uint32_t stored_checksum = 0;
+    size_t bundle_metadata_offset = 0;
+    if (checksummed) {
+        const size_t crc_field = sizeof(uint32_t);
+        RETURN_IF(file_size < size_field + crc_field + bundle_metadata_size,
+                  Status::Corruption(strings::Substitute(
+                          "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
+                          file_size, bundle_metadata_size)));
+        stored_checksum = decode_fixed32_le((uint8_t*)(data + file_size - size_field - crc_field));
+        bundle_metadata_offset = file_size - size_field - crc_field - bundle_metadata_size;
+    } else {
+        RETURN_IF(file_size < size_field + bundle_metadata_size,
+                  Status::Corruption(strings::Substitute(
+                          "deserialized shared metadata($0) failed, file_size($1), bundle_metadata_size($2)", path,
+                          file_size, bundle_metadata_size)));
+        bundle_metadata_offset = file_size - size_field - bundle_metadata_size;
+    }
+    RETURN_IF(bundle_metadata_size == 0,
+              Status::Corruption(
+                      strings::Substitute("deserialized shared metadata($0) failed, bundle_metadata_size(0)", path)));
+
+    const char* bundle_metadata_str = data + bundle_metadata_offset;
+    if (checksummed) {
+        uint32_t computed = olap_adler32(ADLER32_INIT, bundle_metadata_str, bundle_metadata_size);
+        RETURN_IF(computed != stored_checksum,
+                  Status::Corruption(
+                          strings::Substitute("mismatched checksum of bundle tablet metadata($0), expect($1) real($2)",
+                                              path, stored_checksum, computed)));
+    }
 
     auto bundle_metadata = std::make_shared<BundleTabletMetadataPB>();
-    std::string_view bundle_metadata_str =
-            std::string_view(serialized_string.data() + file_size - footer_size - bundle_metadata_size);
-    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str.data(), bundle_metadata_size),
+    RETURN_IF(!bundle_metadata->ParseFromArray(bundle_metadata_str, bundle_metadata_size),
               Status::Corruption(strings::Substitute("deserialized shared metadata failed")));
 #ifdef BE_TEST
     bool inject_error = false;
@@ -611,6 +895,11 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
 
         auto metadata = std::make_shared<starrocks::TabletMetadataPB>();
         std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+        auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_page.first);
+        RETURN_IF(crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
+                          olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second,
+                  Status::Corruption(fmt::format("mismatched checksum of tablet {} metadata in bundle metadata",
+                                                 tablet_page.first)));
         RETURN_IF(
                 !metadata->ParseFromArray(metadata_str.data(), size),
                 Status::InternalError(fmt::format("Failed to parse tablet metadata for tablet {}, offset: {}, size: {}",
@@ -618,6 +907,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
         RETURN_IF(metadata->id() != tablet_page.first,
                   Status::InternalError(fmt::format("Tablet ID mismatch in bundle metadata, expected: {}, found: {}",
                                                     tablet_page.first, metadata->id())));
+        normalize_tablet_metadata_after_load(metadata.get());
         metadatas.push_back(std::move(metadata));
     }
     return metadatas;
@@ -699,12 +989,21 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
 
     auto metadata = std::make_shared<TabletMetadataPB>();
     std::string_view metadata_str = std::string_view(serialized_string.data() + offset);
+    auto crc_it = bundle_metadata->tablet_meta_page_checksum().find(tablet_id);
+    if (crc_it != bundle_metadata->tablet_meta_page_checksum().end() &&
+        olap_adler32(ADLER32_INIT, metadata_str.data(), size) != crc_it->second) {
+        auto corrupted_status = Status::Corruption(
+                strings::Substitute("mismatched checksum of tablet $0 metadata in shared metadata", tablet_id));
+        (void)corrupted_tablet_meta_handler(corrupted_status, path);
+        return corrupted_status;
+    }
     if (!metadata->ParseFromArray(metadata_str.data(), size)) {
         auto corrupted_status =
                 Status::Corruption(strings::Substitute("deserialized tablet $0 metadata failed", tablet_id));
         (void)corrupted_tablet_meta_handler(corrupted_status, path);
         return corrupted_status;
     }
+    normalize_tablet_metadata_after_load(metadata.get());
 
     FAIL_POINT_TRIGGER_EXECUTE(tablet_schema_not_found_in_bundle_metadata, { tablet_id = 10003; });
     auto schema_id = bundle_metadata->tablet_to_schema().find(tablet_id);
@@ -788,8 +1087,9 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
-    ProtobufFile file(txn_log_path);
-    RETURN_IF_ERROR(file.load(meta.get(), fill_cache));
+    RETURN_IF_ERROR(load_lake_protobuf(txn_log_path, meta.get(), fill_cache));
+    // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
+    normalize_txn_log_after_load(meta.get());
     auto t1 = butil::gettimeofday_us();
     g_get_txn_log_latency << (t1 - t0);
     return std::move(meta);
@@ -821,8 +1121,11 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
 StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::string& path, bool fill_cache) {
     TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
     auto log = std::make_shared<CombinedTxnLogPB>();
-    ProtobufFile file(path);
-    RETURN_IF_ERROR(file.load(log.get(), fill_cache));
+    RETURN_IF_ERROR(load_lake_protobuf(path, log.get(), fill_cache));
+    // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
+    for (auto& txn_log : *log->mutable_txn_logs()) {
+        normalize_txn_log_after_load(&txn_log);
+    }
     if (fill_cache) {
         _metacache->cache_combined_txn_log(path, log);
     }
@@ -861,10 +1164,15 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
     if (UNLIKELY(!log->has_txn_id())) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
+    DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
     auto t0 = butil::gettimeofday_us();
 
-    ProtobufFile file(path);
-    RETURN_IF_ERROR(file.save(*log));
+    // Serialize a normalized copy that dual-writes the deprecated legacy parallel arrays from the
+    // structured fields (for rollback compat) without mutating the shared, immutable log object.
+    auto serializable_log = std::make_shared<TxnLog>(*log);
+    RETURN_IF_ERROR(normalize_txn_log_before_save(serializable_log.get()));
+
+    RETURN_IF_ERROR(save_lake_protobuf(path, *serializable_log));
 
     _metacache->cache_txn_log(path, log);
 
@@ -907,7 +1215,13 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     if (UNLIKELY(logs.txn_logs_size() == 0)) {
         return Status::InvalidArgument("empty CombinedTxnLogPB");
     }
-    auto tablet_id = logs.txn_logs(0).tablet_id();
+    DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
+    std::vector<int64_t> candidate_tablet_ids;
+    candidate_tablet_ids.reserve(logs.txn_logs_size());
+    for (const auto& log : logs.txn_logs()) {
+        candidate_tablet_ids.push_back(log.tablet_id());
+    }
+    auto tablet_id = pick_local_anchor_tablet_id(candidate_tablet_ids);
     auto txn_id = logs.txn_logs(0).txn_id();
 #ifndef NDEBUG
     // Ensure that all tablets belongs to the same partition.
@@ -921,8 +1235,18 @@ Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& lo
     }
 #endif
     auto path = _location_provider->combined_txn_log_location(tablet_id, txn_id);
-    ProtobufFile file(path);
-    return file.save(logs);
+    // put_combined_txn_log persists txn logs COLLECTED FROM OTHER NODES over RPC (aggregate compaction
+    // and the normal combined-txn write path), so a log can be legacy-shaped if produced by a pre-feature
+    // BE during a mixed-version upgrade. Normalize each received log on entry exactly like a disk-loaded
+    // one (after-load extends + back-fills segment_metas from the legacy arrays), which also makes the
+    // subsequent no-extend before-save safe; before-save then dual-writes the legacy arrays back from the
+    // structured fields for version-rollback compat.
+    CombinedTxnLogPB normalized_logs = logs;
+    for (auto& log : *normalized_logs.mutable_txn_logs()) {
+        normalize_txn_log_after_load(&log);
+        RETURN_IF_ERROR(normalize_txn_log_before_save(&log));
+    }
+    return save_lake_protobuf(path, normalized_logs);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
@@ -971,13 +1295,20 @@ StatusOr<int64_t> TabletManager::get_tablet_num_rows(int64_t tablet_id, int64_t 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
     bool in_worker = true;
-    if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->get_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr) {
+        auto shard_info_or = worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
             in_worker = false;
         }
     }
     TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:1", &in_worker);
+    // A second sync point that also carries the tablet_id, for tests that need to
+    // return different locality results for different tablet ids (e.g. exercising
+    // pick_local_anchor_tablet_id). The callback receives a std::pair<int64_t, bool*>
+    // so it can read the tablet_id and mutate `in_worker` in place.
+    std::pair<int64_t, bool*> cb_arg{tablet_id, &in_worker};
+    TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:2", &cb_arg);
     // think the tablet is assigned to this worker by default,
     // for we may take action if tablet is not in the worker
     return in_worker;
@@ -994,8 +1325,9 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     // TODO: Eliminate the explicit dependency on staros worker
     // 2. leverage `indexId` to lookup the global_schema from cache and if missing from file.
-    if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr) {
+        auto shard_info_or = worker->retrieve_shard_info(tablet_id);
         if (shard_info_or.ok()) {
             const auto& shard_info = shard_info_or.value();
             const auto& properties = shard_info.properties;
@@ -1130,8 +1462,9 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
-        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = worker->retrieve_shard_info(context->tablet_id);
         if (shard_info_or.ok()) {
             auto id_pair = get_table_partition_id(shard_info_or.value());
             if (context->table_id == 0) {
@@ -1157,8 +1490,9 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     // Retrieve table_id and partition_id from shard info if not already set.
     // This is needed for parallel compaction which may call this overload directly.
-    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
-        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+    auto worker = get_staros_worker();
+    if (worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = worker->retrieve_shard_info(context->tablet_id);
         if (shard_info_or.ok()) {
             auto id_pair = get_table_partition_id(shard_info_or.value());
             if (context->table_id == 0) {
@@ -1308,7 +1642,15 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
     //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
     //       but in meta cache, segment `a` still has segment id 10, it is not changed.
-    auto segment = metacache()->lookup_segment(segment_info.path);
+    //
+    // A bundled data file can be referenced by multiple rowsets at different byte ranges
+    // (distinct bundle_file_offsets). The ranges contain different rows, so each must produce
+    // its own Segment bound to its own slice. Keying the cache on path alone would let the
+    // first-loaded slice be returned for every other offset, silently replacing later slices'
+    // data with the first one. FileInfo::cache_key() folds bundle_file_offset into the key
+    // for bundled slices and falls back to path for non-bundled segments.
+    const std::string cache_key = segment_info.cache_key();
+    auto segment = metacache()->lookup_segment(cache_key);
     if (segment == nullptr) {
         std::shared_ptr<FileSystem> fs;
         if (segment_info.fs) {
@@ -1320,7 +1662,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(cache_key, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
@@ -1345,7 +1687,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
-    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    auto shard_info_or = get_staros_worker()->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
         return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
                                                  shard_info_or.status().message()));
@@ -1388,7 +1730,8 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
                                            const std::unordered_map<int64_t, int64_t>& partition_versions,
                                            std::vector<TabletBasicInfo>& tablet_infos) {
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (g_worker == nullptr) {
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
         return;
     }
 
@@ -1404,7 +1747,7 @@ void TabletManager::get_tablets_basic_info(int64_t table_id, int64_t partition_i
         }
     } else {
         // iterate all shards and get the tablets belong to the given table_id and partition_id
-        auto shard_ids = g_worker->shard_ids();
+        auto shard_ids = worker->shard_ids();
         for (const auto& shard_id : shard_ids) {
             auto tablet_info_or =
                     get_tablet_basic_info(shard_id, table_id, partition_id, authorized_table_ids, partition_versions);

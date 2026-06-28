@@ -26,8 +26,8 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -36,8 +36,12 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
@@ -45,7 +49,6 @@
 #include "exprs/expr_factory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/RuntimeFilter_types.h"
-#include "runtime/runtime_filter_worker.h"
 
 namespace starrocks {
 
@@ -199,7 +202,8 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
-        rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
+        rhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), rhs_operators);
     } else {
         // Both HashJoin{Build, Probe}Operator are parallelized
         // There are two ways of shuffle
@@ -208,8 +212,8 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
         // there is no need to perform local shuffle again at receiver side
         // 2. Otherwise, add LocalExchangeOperator
         // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-        rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
-                                                                          _build_equivalence_partition_expr_ctxs);
+        rhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), rhs_operators, _build_equivalence_partition_expr_ctxs);
     }
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
@@ -219,7 +223,8 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
-        context->interpolate_spill_process(id(), build_side_spill_channel_factory, num_right_partitions);
+        ::starrocks::pipeline::builder::interpolate_spill_process(context, id(), build_side_spill_channel_factory,
+                                                                  num_right_partitions);
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
@@ -258,10 +263,10 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
                                                              std::move(partial_rf_merger), _distribution_mode,
                                                              build_side_spill_channel_factory);
-    this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, build_op.get(), context, rc_rf_probe_collector);
 
     auto probe_op = std::make_shared<HashJoinProbeFactory>(context->next_operator_id(), id(), hash_joiner_factory);
-    this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, probe_op.get(), context, rc_rf_probe_collector);
 
     rhs_operators.emplace_back(std::move(build_op));
     context->add_pipeline(rhs_operators);
@@ -277,18 +282,18 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     } else {
         // left child is colocate group, but current join is not colocate group
         if (context->current_execution_group()->is_colocate_exec_group()) {
-            lhs_operators = context->interpolate_grouped_exchange(_id, lhs_operators);
+            lhs_operators = ::starrocks::pipeline::builder::interpolate_grouped_exchange(context, _id, lhs_operators);
         }
 
         if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
-                                                                                  context->degree_of_parallelism());
+            lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), lhs_operators, context->degree_of_parallelism());
         } else {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
             DCHECK_EQ(rhs_source_op->partition_type(), lhs_source_op->partition_type());
-            lhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), lhs_operators,
-                                                                              _probe_equivalence_partition_expr_ctxs);
+            lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                    context, runtime_state(), id(), lhs_operators, _probe_equivalence_partition_expr_ctxs);
         }
     }
 
@@ -314,8 +319,8 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
 
     if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough &&
         !context->is_colocate_group()) {
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
-                                                                              context->degree_of_parallelism(), true);
+        lhs_operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, runtime_state(), id(), lhs_operators, context->degree_of_parallelism(), true);
     }
 
     // Use ChunkAccumulateOperator, when any following condition occurs:
@@ -326,7 +331,7 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
             !_conjunct_ctxs.empty() || !_other_join_conjunct_ctxs.empty() ||
             lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
-        may_add_chunk_accumulate_operator(lhs_operators, context, id());
+        pipeline::may_add_chunk_accumulate_operator(lhs_operators, context, id());
     }
 
     return lhs_operators;

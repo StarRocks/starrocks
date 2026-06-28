@@ -169,7 +169,7 @@ jobs:
           ./scripts/check-approve.sh
       
       - name: Check Test Case Info
-        if: always() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''
+        if: "!cancelled() && steps.check_test_case.outcome == 'success' && steps.check_test_case.outputs.TEST_PR != ''"
         id: check_test_case_info
         run: |
           echo "TEST_PR=${{ steps.check_test_case.outputs.TEST_PR }}" >> ./test-pr-info.txt
@@ -249,10 +249,18 @@ jobs:
               - 'be/test/**'
               - 'build-support/README.md'
               - 'build-support/check_be_module_boundaries.py'
+              - 'build-support/check_common_config_header_includes.sh'
+              - 'build-support/config_header_include_allowlist.txt'
+              - 'build-support/gen_config_fwd_headers.py'
               - 'build-support/render_be_agents.py'
               - 'build-support/test_check_be_module_boundaries.py'
+              - 'build-support/test_gen_config_fwd_headers.py'
               - 'build-support/test_render_be_agents.py'
               - 'build-support/be_module_boundary_baseline.json'
+              - 'build-support/exec_env_header_include_allowlist.txt'
+              - 'build-support/exec_env_singleton_allowlist.txt'
+              - 'build-support/runtime_state_header_include_allowlist.txt'
+              - 'be/src/common/config_fwd_headers_manifest.json'
 
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -293,7 +301,6 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [be-checker]
     name: Thirdparty Update
-    continue-on-error: true
     if: needs.be-checker.outputs.thirdparty_filter == 'true'
     strategy:
       fail-fast: false
@@ -358,7 +365,7 @@ jobs:
       - name: Compute Merge Base
         id: merge_base
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin ${{ github.base_ref }}
           base="$(git merge-base FETCH_HEAD HEAD)"
           [[ -n "${base}" ]]
           echo "base=${base}" >> "$GITHUB_OUTPUT"
@@ -376,7 +383,13 @@ jobs:
         run: |
           python3 -m unittest \
             build-support/test_check_be_module_boundaries.py \
+            build-support/test_gen_config_fwd_headers.py \
             build-support/test_render_be_agents.py
+
+      - name: Config Forward Header Check
+        run: |
+          python3 build-support/gen_config_fwd_headers.py --check
+          bash build-support/check_common_config_header_includes.sh
 
       - name: AGENTS Drift Check
         run: |
@@ -414,7 +427,9 @@ jobs:
               - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
               - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
 
       - uses: actions/checkout@v6
@@ -424,6 +439,7 @@ jobs:
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
@@ -476,19 +492,12 @@ jobs:
     needs:
       - be-checker
       - thirdparty-update
-    if: always() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')
+    if: "!cancelled() && (needs.be-checker.outputs.src_filter == 'true' || needs.be-checker.outputs.test_filter == 'true')"
     name: Thirdparty Info
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
     steps:
-      - name: Check Result
-        run: |
-          if [[ "${{ needs.thirdparty-update.result }}" == 'failure' ]]; then
-            echo "::error::Thirdparty Update Error!"
-            exit 1
-          fi
-
       - name: Download Thirdparty Artifact
         if: needs.thirdparty-update.result == 'success'
         uses: actions/download-artifact@v6
@@ -496,13 +505,41 @@ jobs:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
 
+      - name: Check Result
+        run: |
+          update_result='${{ needs.thirdparty-update.result }}'
+          if [[ "$update_result" == 'failure' || "$update_result" == 'cancelled' ]]; then
+            echo "::error::thirdparty-update did not complete (result=$update_result)"
+            exit 1
+          fi
+          # 'skipped' means this PR didn't touch thirdparty - nothing to verify,
+          # downstream BUILD reuses the default cached image.
+          if [[ "$update_result" != 'success' ]]; then
+            exit 0
+          fi
+          # Defensive (only when update reported success): verify both platforms
+          # produced their artifact. Catches accidental re-introduction of
+          # `continue-on-error: true`, silent upload-artifact failures, and
+          # empty image_cache.info files.
+          missing=()
+          for platform in centos7 ubuntu; do
+            f="./outputs/THIRDPARTY-RESULT-${platform}/image_cache.info"
+            if [[ ! -s "$f" ]]; then
+              missing+=("${platform}")
+            fi
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::Thirdparty Update succeeded but missing artifact for: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Read Info
         id: info
         run: |
           if [[ "${{ needs.thirdparty-update.result }}" == 'success' ]]; then
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info" || echo "")
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-centos7/image_cache.info")
             echo "centos7_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
-            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info" || echo "")
+            image_cache_id=$(cat "./outputs/THIRDPARTY-RESULT-ubuntu/image_cache.info")
             echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           else
             echo "centos7_image_cache_id=" >> $GITHUB_OUTPUT
@@ -517,7 +554,7 @@ jobs:
     timeout-minutes: 150
     name: BE UT
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -547,7 +584,7 @@ jobs:
 
       - name: Upload Log
         uses: actions/upload-artifact@v6
-        if: always() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''
+        if: "!cancelled() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''"
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -566,7 +603,7 @@ jobs:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
     if: >
-      always() &&
+      !cancelled() &&
       needs.be-checker.result == 'success' &&
       needs.thirdparty-info.result != 'failure' &&
       needs.thirdparty-info.result != 'cancelled' &&
@@ -748,6 +785,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+          reviewdog_flags: "-tee"
 
   fe-ut:
     runs-on: [self-hosted, normal]
@@ -799,16 +837,16 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: Clean ECI
-        if: always() && steps.run_ut.outputs.ECI_ID != ''
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo "::group::>>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           echo "::endgroup::"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always() && steps.run_ut.outputs.RES_LOG != ''
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
@@ -877,9 +915,9 @@ jobs:
       sys_test_need: ${{ steps.run_build.outputs.sys_test_need }}
       pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     if: >
-      always() && 
-      needs.thirdparty-info.result != 'failure' && 
-      needs.fe-codestyle-check.result != 'failure' && 
+      !cancelled() &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.fe-codestyle-check.result != 'failure' &&
       (needs.thirdparty-info.result == 'success' || needs.fe-codestyle-check.result == 'success' || needs.test-checker.outputs.test_change == 'true') &&
       (needs.thirdparty-info.result != 'cancelled' && needs.fe-codestyle-check.result != 'cancelled' && needs.test-checker.outputs.test_change != 'cancelled')
     steps:
@@ -996,7 +1034,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, normal]
     needs: build
-    if: always() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'
+    if: "!cancelled() && needs.build.result == 'success' && needs.build.outputs.sys_test_need == 'true'"
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1145,7 +1183,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
     needs: [build, deploy]
-    if: always() && needs.deploy.result == 'success'
+    if: "!cancelled() && needs.deploy.result == 'success'"
     timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1225,7 +1263,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     env:
       PR_NUMBER: ${{ github.event.number }}
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
@@ -1251,7 +1289,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE
     needs: [deploy, SQL-Tester]
-    if: always() && needs.SQL-Tester.result == 'success'
+    if: "!cancelled() && needs.SQL-Tester.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1284,7 +1322,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: [deploy, restart-fe, restart-be]
-    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
+    if: "!cancelled() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'"
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1352,7 +1390,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart FE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -1385,7 +1423,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: Restart BE(Admit)
     needs: [deploy, admit]
-    if: always() && needs.admit.result == 'success'
+    if: "!cancelled() && needs.admit.result == 'success'"
     timeout-minutes: 20
     env:
       PR_NUMBER: ${{ github.event.number }}

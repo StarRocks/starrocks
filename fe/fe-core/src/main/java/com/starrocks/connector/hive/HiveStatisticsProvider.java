@@ -23,6 +23,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -38,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -69,7 +71,7 @@ public class HiveStatisticsProvider {
             Table table,
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         if (table.isUnPartitioned()) {
             HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
@@ -143,22 +145,23 @@ public class HiveStatisticsProvider {
 
         List<RemoteFileInfo> remoteFileInfos =
                 fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
-        long totalBytes = 0;
-        for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
-            for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
-                totalBytes += fileDesc.getLength();
-            }
+        if (remoteFileInfos.isEmpty()) {
+            return 1;
         }
 
         List<Column> dataColumns = table.getColumns().stream()
                 .filter(column -> table.getDataColumnNames().contains(column.getName()))
                 .collect(Collectors.toList());
 
-        if (totalBytes <= 0) {
-            return 1;
+        Map<RemoteFileInputFormat, Long> bytesByFormat = new LinkedHashMap<>();
+        for (RemoteFileInfo info : remoteFileInfos) {
+            long bytes = info.getFiles().stream().mapToLong(RemoteFileDesc::getLength).sum();
+            bytesByFormat.merge(info.getFormat(), bytes, Long::sum);
         }
-
-        long presentRowNums = totalBytes / dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        long presentRowNums = 0;
+        for (Map.Entry<RemoteFileInputFormat, Long> entry : bytesByFormat.entrySet()) {
+            presentRowNums += RowCountEstimator.estimate(entry.getValue(), dataColumns, entry.getKey());
+        }
         long presentPartitionSize = remoteFileInfos.size();
         return presentRowNums / presentPartitionSize * partitionKeys.size();
     }
@@ -168,7 +171,8 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys,
             double presentRowNums) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }

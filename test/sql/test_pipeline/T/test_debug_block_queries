@@ -1,0 +1,224 @@
+-- name: test_debug_block_source_groupby
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series % 5, generate_series FROM TABLE(generate_series(1,  10000));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+
+-- name: test_debug_block_sink_groupby
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series % 5, generate_series FROM TABLE(generate_series(1,  10000));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c1, count(*) from t0 group by c1 order by c1;
+
+-- name: test_debug_block_source_join
+
+CREATE TABLE `t1` (
+  `k` int DEFAULT NULL,
+  `v` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `t2` (
+  `k` int DEFAULT NULL,
+  `v` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 1000));
+insert into t2 SELECT generate_series * 2, generate_series FROM TABLE(generate_series(1, 500));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":4, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+
+-- name: test_debug_block_sink_join
+
+CREATE TABLE `t1` (
+  `k` int DEFAULT NULL,
+  `v` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `t2` (
+  `k` int DEFAULT NULL,
+  `v` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 1000));
+insert into t2 SELECT generate_series * 2, generate_series FROM TABLE(generate_series(1, 500));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":4, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t1 inner join t2 on t1.k = t2.k;
+
+-- name: test_debug_block_topn
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, 10000 - generate_series, generate_series FROM TABLE(generate_series(1, 10000));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c0 from t0 order by c0 desc limit 5;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c0 from t0 order by c0 desc limit 5;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select c0 from t0 order by c0 asc limit 5;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select c0 from t0 order by c0 asc limit 5;
+
+-- name: test_debug_block_union
+
+CREATE TABLE `t1` (
+  `k` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+CREATE TABLE `t2` (
+  `k` int DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t1 SELECT generate_series FROM TABLE(generate_series(1, 100));
+insert into t2 SELECT generate_series FROM TABLE(generate_series(1, 200));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from (select k from t1 union all select k from t2) u;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":1, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from (select k from t1 union all select k from t2) u;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":2, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from (select k from t1 union all select k from t2) u;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":3, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from (select k from t1 union all select k from t2) u;
+
+-- name: test_debug_block_multiple_actions
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1, 10000));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}, {"plan_node_id":2, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t0;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}, {"plan_node_id":1, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}, {"plan_node_id":2, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}, {"plan_node_id":3, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t0;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}, {"plan_node_id":0, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t0;
+
+-- name: test_debug_block_reset
+
+CREATE TABLE `t0` (
+  `c0` bigint DEFAULT NULL,
+  `c1` bigint DEFAULT NULL,
+  `c2` bigint DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, 4096 - generate_series, generate_series FROM TABLE(generate_series(1, 1000));
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SOURCE_OPERATOR", "value":100}]}';
+select count(*) from t0;
+set query_debug_options = '';
+select count(*) from t0;
+set query_debug_options = '{"execDebugOptions":[{"plan_node_id":0, "debug_action":"BLOCK_SINK_OPERATOR", "value":100}]}';
+select count(*) from t0;
+set query_debug_options = '';
+select count(*) from t0;

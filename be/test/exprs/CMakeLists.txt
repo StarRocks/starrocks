@@ -12,8 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set(BE_TEST_MACOS_LINK_STUBS)
+if (APPLE)
+    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
+endif()
+
 set(EXPR_CORE_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
+    ${BE_TEST_MACOS_LINK_STUBS}
+    agg/aggregate_factory_core_test.cpp
     arithmetic_expr_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
@@ -32,6 +38,7 @@ set(EXPR_CORE_TEST_FILES
     es_functions_test.cpp
     function_helper_test.cpp
     gin_functions_test.cpp
+    json_functions_test.cpp
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
@@ -46,9 +53,10 @@ set(EXPR_CORE_TEST_FILES
 set(EXPR_CORE_TEST_LINK_LIBS
     ExprCore
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
-    TypesCore
+    Types
     Common
     Base
     Gutil

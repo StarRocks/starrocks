@@ -37,7 +37,7 @@ Filter& ColumnHelper::merge_nullable_filter(Column* column) {
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         auto selected = sel_vec.data();
         size_t num_rows = sel_vec.size();
-        // we treat null(1) as false(0)
+        // we treat null(1) as false(0); compiler auto-vectorises this loop.
         for (size_t i = 0; i < num_rows; ++i) {
             selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
         }
@@ -83,15 +83,13 @@ void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& nul
     if (column->is_nullable()) {
         const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
         const auto nulls = nullable_column->null_column_data().data();
-        for (size_t i = 0; i < num_rows; ++i) {
-            null_data[i] |= nulls[i];
-        }
+        // Use SIMD OR for null data merge
+        or_two_filters(num_rows, null_data.data(), nulls);
     }
 
     const auto* datas = get_cpp_data<TYPE_BOOLEAN>(data_column);
-    for (size_t j = 0; j < num_rows; ++j) {
-        (*filter)[j] &= datas[j];
-    }
+    // Use SIMD AND for filter merge
+    merge_two_filters(filter, datas, nullptr);
 }
 
 void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filter) {
@@ -107,9 +105,50 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
     }
 }
 
+void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type) {
+    const Column* data_column = get_data_column(column);
+
+    switch (type.type) {
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
+        if (data_column->is_binary()) {
+            auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
+            binary_column->set_is_binary_type(true);
+        } else {
+            DCHECK(data_column->is_large_binary());
+            auto* large_binary_column =
+                    const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
+            large_binary_column->set_is_binary_type(true);
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        for (size_t i = 0; i < type.children.size(); ++i) {
+            mark_binary_columns(struct_column->get_column_by_idx(i), type.children[i]);
+        }
+        break;
+    }
+    case TYPE_ARRAY: {
+        const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+        mark_binary_columns(array_column->elements_column(), type.children[0]);
+        break;
+    }
+    case TYPE_MAP: {
+        const auto* map_column = down_cast<const MapColumn*>(data_column);
+        mark_binary_columns(map_column->keys_column(), type.children[0]);
+        mark_binary_columns(map_column->values_column(), type.children[1]);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
+    // Compiler auto-vectorises this bytewise AND.
     for (size_t i = 0; i < num_rows; i++) {
         data[i] = data[i] & selected[i];
     }
@@ -123,6 +162,7 @@ void ColumnHelper::or_two_filters(Filter* __restrict filter, const uint8_t* __re
 }
 
 void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
+    // Compiler auto-vectorises this bytewise OR.
     for (size_t i = 0; i < count; i++) {
         data[i] |= selected[i];
     }
@@ -251,7 +291,13 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        // Each subfield is independently a NullableColumn (see ColumnHelper::create_column
+        // STRUCT branch), so we just recurse into each field and let the NullableColumn
+        // arm refresh its `_has_null` like for ARRAY/MAP element columns.
+        for (size_t i = 0; i < column->fields_size(); ++i) {
+            RETURN_IF_ERROR(column->field_column_raw_ptr(i)->accept_mutable(this));
+        }
+        return Status::OK();
     }
 
     template <typename T>

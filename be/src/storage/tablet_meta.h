@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -46,9 +48,9 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
-#include "storage/flat_json_config.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/flat_json_config.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_schema.h"
@@ -424,3 +426,8 @@ bool operator==(const TabletMeta& a, const TabletMeta& b);
 bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletState> : formatter<std::underlying_type_t<starrocks::TabletState>> {
+    auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
+};

@@ -32,6 +32,7 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.JournalObservable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,6 +51,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     private JournalWriter journalWriter;
     private EditLog editLog;
     private AtomicLong replayedJournalId;
+    private JournalObservable journalObservable;
     private Daemon replayer; // TODO: maybe it's better to move this to StarMgr
 
     public StarOSBDBJEJournalSystem(BDBEnvironment environment) {
@@ -87,6 +89,10 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
     public void setReplayId(long replayId) {
         replayedJournalId.set(replayId);
+    }
+
+    public void setJournalObservable(JournalObservable journalObservable) {
+        this.journalObservable = journalObservable;
     }
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
@@ -219,10 +225,13 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             }
 
             editLog.loadJournal(null /* GlobalStateMgr */, entity);
-            replayedJournalId.incrementAndGet();
+            long newReplayId = replayedJournalId.incrementAndGet();
+            if (journalObservable != null) {
+                journalObservable.notifyObservers(newReplayId);
+            }
             long innerEndTime = System.currentTimeMillis();
 
-            LOG.debug("star mgr journal {} replayed.", replayedJournalId);
+            LOG.debug("star mgr journal {} replayed.", newReplayId);
             if (innerEndTime - innerStartTime > 3000) {
                 LOG.info("star mgr journal replay id:{} op:{} cost {}ms.", replayedJournalId, entity.opCode(),
                         innerEndTime - innerStartTime);

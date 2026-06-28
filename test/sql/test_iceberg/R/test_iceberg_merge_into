@@ -1,0 +1,388 @@
+-- name: test_iceberg_merge_into_unpartitioned
+create external catalog iceberg_merge_unp_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_merge_into/${uuid0}/iceberg_merge_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge (
+    id INT,
+    name STRING,
+    age INT,
+    salary BIGINT
+) PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+INSERT INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge VALUES
+    (1, 'Alice', 25, 50000),
+    (2, 'Bob', 30, 60000),
+    (3, 'Charlie', 35, 70000),
+    (4, 'David', 28, 55000),
+    (5, 'Eve', 32, 65000);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	Charlie	35	70000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 3 AS id, 'UPDATED' AS name, 35 AS age, 75000 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, salary = s.salary;
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 2 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 10 AS id, 'Frank' AS name, 40 AS age, 80000 AS salary) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+10	Frank	40	80000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 999 AS id, 'Ghost' AS name, 99 AS age, 99999 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+10	Frank	40	80000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id, 'X' AS name, 0 AS age, 0 AS salary WHERE 1 = 0) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice	25	50000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+10	Frank	40	80000
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 1 AS id, 'Alice_v2' AS name, 26 AS age, 55000 AS salary
+    UNION ALL
+    SELECT 20 AS id, 'Grace' AS name, 29 AS age, 58000 AS salary
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge ORDER BY id;
+-- result:
+1	Alice_v2	26	55000
+3	UPDATED	35	75000
+4	David	28	55000
+5	Eve	32	65000
+10	Frank	40	80000
+20	Grace	29	58000
+-- !result
+INSERT INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge VALUES
+    (30, 'Heidi', 50, 100000),
+    (31, 'Ivan', 45, 90000);
+-- result:
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 30 AS id, 'D' AS op
+    UNION ALL
+    SELECT 31 AS id, 'U' AS op
+) AS s
+ON t.id = s.id
+WHEN MATCHED AND s.op = 'D' THEN DELETE
+WHEN MATCHED AND s.op = 'U' THEN UPDATE SET salary = 95000;
+-- result:
+-- !result
+SELECT id, name, salary FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge WHERE id IN (30, 31) ORDER BY id;
+-- result:
+31	Ivan	95000
+-- !result
+SELECT count(*) > 1 FROM iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge$snapshots;
+-- result:
+1
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+set pipeline_sink_dop = 4;
+-- result:
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (
+    SELECT 1 AS id, 'dup1' AS name, 26 AS age, 55000 AS salary
+    UNION ALL
+    SELECT 1 AS id, 'dup2' AS name, 27 AS age, 56000 AS salary
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+-- result:
+[REGEX]E: \(5609.*matched by more than one source row.*
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+set pipeline_sink_dop = 0;
+-- result:
+-- !result
+create table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 (
+    id INT, name STRING
+) PROPERTIES ("format-version" = "1");
+-- result:
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 AS t
+USING (SELECT 1 AS id, 'X' AS name) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+-- result:
+[REGEX]E: \(1064.*MERGE INTO is only supported for Iceberg V2 tables.*
+-- !result
+drop table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_v1 force;
+-- result:
+-- !result
+create database default_catalog.olap_merge_db_${uuid0};
+-- result:
+-- !result
+create table default_catalog.olap_merge_db_${uuid0}.t_olap (
+    id INT, name STRING
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+MERGE INTO default_catalog.olap_merge_db_${uuid0}.t_olap AS t
+USING (SELECT 1 AS id, 'X' AS name) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name;
+-- result:
+[REGEX]E: \(1064.*MERGE INTO is only supported for Iceberg tables.*
+-- !result
+drop table default_catalog.olap_merge_db_${uuid0}.t_olap force;
+-- result:
+-- !result
+drop database default_catalog.olap_merge_db_${uuid0};
+-- result:
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET nonexistent_col = 1;
+-- result:
+[REGEX]E: \(1064.*does not have column.*
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 1 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET _file = 'fake.parquet';
+-- result:
+[REGEX]E: \(1064.*Updating metadata column.*
+-- !result
+MERGE INTO iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge AS t
+USING (SELECT 99 AS id, 'New' AS name) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name) VALUES (s.id, s.name, 0);
+-- result:
+[REGEX]E: \(1064.*column count.*does not match value count.*
+-- !result
+drop table iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0}.t_merge force;
+-- result:
+-- !result
+drop database iceberg_merge_unp_${uuid0}.iceberg_merge_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_merge_unp_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_merge_into/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+-- name: test_iceberg_merge_into_partitioned
+create external catalog iceberg_merge_part_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_merge_into_partitioned/${uuid0}/iceberg_merge_part_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders (
+    id INT,
+    product STRING,
+    amount DECIMAL(10,2),
+    status STRING,
+    order_date DATE
+) PARTITION BY (order_date) PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+INSERT INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders VALUES
+    (1, 'Widget', 100.00, 'PENDING', '2024-01-01'),
+    (2, 'Gadget', 200.00, 'PENDING', '2024-01-01'),
+    (3, 'Widget', 150.00, 'SHIPPED', '2024-01-02'),
+    (4, 'Gadget', 300.00, 'PENDING', '2024-01-02'),
+    (5, 'Widget', 250.00, 'PENDING', '2024-01-03');
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	PENDING	2024-01-01
+2	Gadget	200.00	PENDING	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+-- !result
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 1 AS id, 'Widget' AS product, 100.00 AS amount, 'CANCELLED' AS status, DATE '2024-01-01' AS order_date
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET status = s.status;
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	CANCELLED	2024-01-01
+2	Gadget	200.00	PENDING	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+-- !result
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 6 AS id, 'Gizmo' AS product, 500.00 AS amount, 'PENDING' AS status, DATE '2024-01-04' AS order_date
+) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, product, amount, status, order_date)
+    VALUES (s.id, s.product, s.amount, s.status, s.order_date);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	CANCELLED	2024-01-01
+2	Gadget	200.00	PENDING	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+6	Gizmo	500.00	PENDING	2024-01-04
+-- !result
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 2 AS id
+    UNION ALL
+    SELECT 4 AS id
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	CANCELLED	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+6	Gizmo	500.00	PENDING	2024-01-04
+-- !result
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (
+    SELECT 3 AS id, 'Widget' AS product, 165.00 AS amount, 'DELIVERED' AS status, DATE '2024-01-02' AS order_date
+    UNION ALL
+    SELECT 7 AS id, 'Sprocket' AS product, 75.00 AS amount, 'PENDING' AS status, DATE '2024-01-05' AS order_date
+) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET status = s.status, amount = s.amount
+WHEN NOT MATCHED THEN INSERT (id, product, amount, status, order_date)
+    VALUES (s.id, s.product, s.amount, s.status, s.order_date);
+-- result:
+-- !result
+SELECT * FROM iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	CANCELLED	2024-01-01
+3	Widget	165.00	DELIVERED	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+6	Gizmo	500.00	PENDING	2024-01-04
+7	Sprocket	75.00	PENDING	2024-01-05
+-- !result
+MERGE INTO iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders AS t
+USING (SELECT 1 AS id, DATE '2099-01-01' AS order_date) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET order_date = s.order_date;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: MERGE INTO does not support updating partition column: order_date.')
+-- !result
+drop table iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0}.orders force;
+-- result:
+-- !result
+drop database iceberg_merge_part_${uuid0}.iceberg_merge_part_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_merge_part_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_merge_into_partitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

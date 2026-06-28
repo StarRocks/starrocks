@@ -16,21 +16,126 @@
 
 #include <fmt/format.h>
 
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+#include <unordered_map>
+
 #include "column/chunk.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/vector_index_utils.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
+
+// async/sync is a table-level setting (every vector index on a given schema shares the
+// same index_build_mode). Returning bool from "any vector index has async mode" is
+// equivalent to "the table is in async mode" for this purpose.
+bool has_async_vector_index(const TabletSchemaCSPtr& schema) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        const auto& props = it->second.common_properties();
+        auto mode_it = props.find("index_build_mode");
+        if (mode_it != props.end() && mode_it->second == "async") {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
+            continue;
+        }
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            continue;
+        }
+        const auto& props = it->second.common_properties();
+        auto threshold_it = props.find("index_build_threshold");
+        if (threshold_it != props.end()) {
+            // Use a checked parse: atoi() silently treats malformed strings as 0 and would
+            // wrap a negative int into a huge uint32_t after the cast, neither of which is
+            // a sensible build threshold. Fall back to the config default on parse failure
+            // or out-of-range values.
+            char* end = nullptr;
+            errno = 0;
+            unsigned long parsed = std::strtoul(threshold_it->second.c_str(), &end, 10);
+            if (errno == 0 && end != threshold_it->second.c_str() && *end == '\0' &&
+                parsed <= std::numeric_limits<uint32_t>::max()) {
+                return static_cast<uint32_t>(parsed);
+            }
+            LOG(WARNING) << "ignoring invalid index_build_threshold='" << threshold_it->second
+                         << "', falling back to config_vector_index_default_build_threshold";
+        }
+    }
+    return config::config_vector_index_default_build_threshold;
+}
+
+// For each column with a vector index, resolve a full segment-level path for the
+// upcoming .vi file and stash it in |opts.vector_index_file_paths|. The SegmentWriter
+// picks these up to direct tenann's writer at object storage.
+//
+// Errors from schema lookups are surfaced; silently skipping them would leave the
+// map empty and make SegmentWriter fall back to the IndexDescriptor-based path,
+// which in shared-data mode is not reachable via the location provider.
+Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
+                                    TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
+                                    SegmentWriterOptions& opts) {
+    for (uint32_t i = 0; i < schema->num_columns(); ++i) {
+        const auto& column = schema->column(i);
+        if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
+            continue;
+        }
+        std::unordered_map<IndexType, TabletIndex> tablet_index;
+        RETURN_IF_ERROR(schema->get_indexes_for_column(column.unique_id(), &tablet_index));
+        auto it = tablet_index.find(IndexType::VECTOR);
+        if (it == tablet_index.end()) {
+            return Status::InternalError(
+                    fmt::format("schema reports VECTOR index on column uid={} but get_indexes_for_column returned none",
+                                column.unique_id()));
+        }
+        int64_t index_id = it->second.index_id();
+        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
+        std::string full_path;
+        if (location_provider && fs) {
+            full_path = location_provider->segment_location(tablet_id, vi_name);
+        } else {
+            full_path = tablet_mgr->segment_location(tablet_id, vi_name);
+        }
+        opts.vector_index_file_paths[index_id] = std::move(full_path);
+    }
+    return Status::OK();
+}
 
 void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
     if (segment_writer == nullptr) {
@@ -137,6 +242,13 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
+    // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
+    // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
+    // existing rows would publish without inline-built vector files and never get rescheduled.
+    if (_force_build_vector_index_inline) {
+        writer->force_set_build_vector_index_inline();
+    }
     return writer;
 }
 
@@ -145,6 +257,7 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
@@ -153,6 +266,10 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     }
 
     opts.global_dicts = _global_dicts;
+
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
 
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
@@ -168,18 +285,48 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_bundle_file_context != nullptr && _segments.empty() && eos) {
+    bool is_bundle = _bundle_file_context != nullptr && _segments.empty() && eos;
+    if (is_bundle) {
         // If this is the first data file writer and it is the end of stream,
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
         of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
+        // Bundle segments skip vector index: the segment filename in metadata is the
+        // shared bundle filename, which differs from the independent segment name used
+        // to generate .vi file paths. Vector indexes will be built after compaction.
+        opts.skip_vector_index = true;
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
+        RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                     _fs.get(), opts));
     }
+
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
     return Status::OK();
+}
+
+void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileInfo& segment_file_info,
+                                                                    SegmentWriter* seg_writer) const {
+    // Record which vector indexes need a .vi file for this segment. Shared by the duplicate-key
+    // flush path and the primary-key override (HorizontalPkTabletWriter) so the two cannot
+    // silently diverge: the PK override previously omitted this, dropping vector index builds
+    // for shared-data primary-key tables.
+    if (seg_writer->defer_vector_index_build()) {
+        // Async: skip bundle-file segments (.vi doesn't support the bundle format yet, so the
+        // index is rebuilt after compaction) and segments below the deferred-build threshold.
+        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
+        if (is_bundled || segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
+            return;
+        }
+    } else if (!seg_writer->has_vector_index_written()) {
+        // Sync: record only when .vi files were actually produced inline.
+        return;
+    }
+    for (const auto& [index_id, _] : seg_writer->vector_index_file_paths()) {
+        segment_file_info.vector_index_ids.push_back(index_id);
+    }
 }
 
 Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
@@ -197,9 +344,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
             // This is a bundle data file.
             segment_file_info.bundle_file_offset = _seg_writer->bundle_file_offset();
         }
-        segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
-        segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
+        _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
+        record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
@@ -338,9 +485,24 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.path = std::string(basename(segment_path));
         segment_file_info.size = segment_size;
         segment_file_info.encryption_meta = segment_writer->encryption_meta();
-        segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
-        segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
+        segment_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = segment_writer->num_rows();
+        // Record which vector indexes need .vi files
+        if (segment_writer->defer_vector_index_build()) {
+            // async mode: only record when segment has enough rows to meet threshold
+            if (segment_file_info.num_rows >= segment_writer->vector_index_build_threshold()) {
+                for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
+            }
+        } else {
+            // Sync mode: record vector index IDs only when .vi files were actually produced.
+            if (segment_writer->has_vector_index_written()) {
+                for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                    segment_file_info.vector_index_ids.push_back(index_id);
+                }
+            }
+        }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
@@ -398,6 +560,7 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     auto name = gen_segment_filename(_txn_id);
     SegmentWriterOptions opts;
     opts.is_compaction = _is_compaction;
+    opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
     if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
         metadata && metadata->has_flat_json_config()) {
@@ -417,6 +580,13 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     } else {
         ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     }
+
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
+    // Shadow-tablet schema-change conversion forces inline .vi (so async-mode ADD indexes
+    // existing data during the rewrite); other write paths honor index_build_mode.
+    opts.defer_vector_index_build = has_async_vector_index(_schema) && !_force_build_vector_index_inline;
+
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

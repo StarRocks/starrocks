@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "展示所有或指定异步物化视图的信息。"
 ---
 
 # SHOW MATERIALIZED VIEWS
@@ -46,24 +47,39 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | id                         | 物化视图 ID。                                               |
 | database_name              | 物化视图所属的数据库名称。                                     |
 | name                       | 物化视图名称。                                               |
-| refresh_type               | 物化视图的更新方式，包括 ROLLUP、MANUAL、ASYNC、INCREMENTAL。   |
+| refresh_type               | 物化视图的更新方式，有效值：`SYNC`（同步物化视图）和 `ASYNC`（异步物化视图，无论以何种方式触发刷新）。   |
 | is_active                  | 物化视图状态是否为 active。有效值：`true` 和 `false`。          |
+| inactive_reason            | 物化视图失效的原因。                                          |
 | partition_type             | 物化视图的分区类型，包括 RANGE 和 UNPARTITIONED。|
 | task_id                    | 物化视图的刷新任务 ID。                                       |
 | task_name                  | 物化视图的刷新任务名称。                                       |
 | last_refresh_start_time    | 物化视图上一次刷新开始时间。                                    |
 | last_refresh_finished_time | 物化视图上一次刷新结束时间。                                    |
 | last_refresh_duration      | 物化视图上一次刷新耗时（单位秒）。                               |
-| last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS。 |
-| last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      ｜
-| last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                ｜
-| last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  ｜
-| last_refresh_base_refresh_partitions | 上一次刷新基表更新的分区。                            ｜
-| last_refresh_mv_refresh_partitions | 上一次刷新物化视图刷新的分区。                          ｜
+| last_refresh_state         | 物化视图上一次刷新的状态，包括 PENDING、RUNNING、FAILED、SUCCESS、SKIPPED。如果未检测到基表分区上的数据发生变化，则会跳过对应物化视图分区的刷新操作。 |
+| last_refresh_force_refresh | 物化视图上一次刷新是否为强制（FORCE）刷新。                      |
+| last_refresh_start_partition | 上一次刷新开始的物化视图分区。                                |
+| last_refresh_end_partition | 上一次刷新结束的物化视图分区。                                  |
+| last_refresh_base_refresh_partitions | 上一次刷新基表更新的分区。                            |
+| last_refresh_mv_refresh_partitions | 上一次刷新物化视图刷新的分区。                          |
 | last_refresh_error_code    | 物化视图上一次刷新失败的 ErrorCode（如果物化视图状态不为 active）。 |
 | last_refresh_error_message | 物化视图上一次刷新失败的 ErrorMessage（如果物化视图状态不为 active）。 |
 | rows                       | 物化视图中数据行数。                                           |
 | text                       | 创建物化视图的查询语句。                                        |
+| extra_message              | 最近一次刷新任务的额外信息。                                    |
+| query_rewrite_status       | 物化视图的查询改写状态。                                        |
+| creator                    | 最近一次刷新任务的创建者。                                      |
+| last_refresh_process_time  | 最近一次刷新任务的处理开始时间。                                |
+| last_refresh_job_id        | 最近一次刷新任务的作业 ID。                                     |
+| last_refresh_time          | 物化视图已反映基表更新的最新时间。                              |
+| warehouse                  | 异步物化视图执行刷新任务所使用的 warehouse 名称。在存算一体模式下，或对于同步（rollup）物化视图，该值为空。 |
+| refresh_mode               | 异步物化视图配置的刷新模式。有效值：`PCT`（分区变更跟踪，仅刷新发生变更的分区）、`INCREMENTAL`（增量视图维护）和 `AUTO`。对于同步物化视图为空。 |
+| refresh_trigger            | 刷新的触发方式。有效值：`NONE`（同步物化视图）、`MANUAL`（仅通过 REFRESH MATERIALIZED VIEW 触发）、`SCHEDULED`（周期性触发，通过 EVERY 间隔）和 `ON_BASE_TABLE_CHANGE`（基表导入或变更时自动触发）。 |
+| refresh_policy             | 可读的刷新策略。有效值：`NONE`、`MANUAL`、`ON_BASE_TABLE_CHANGE`，或形如 `START("yyyy-MM-dd HH:mm:ss") EVERY(INTERVAL n unit)` 的调度（仅当定义了起始时间时才包含 `START` 子句）。 |
+| resource_group             | 物化视图刷新任务所使用的资源组（来自物化视图的 `resource_group` 属性）。未设置时默认为 `default_mv_wg`。 |
+| query_rewrite_status_reason | `query_rewrite_status` 的原因。有效值：`OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION` 和 `UNKNOWN`。 |
+| last_freshness_confirmed_at | 最近一次成功刷新的开始时间，在整次刷新（其全部 task run）完成后才记录；确认基表无变化、无需刷新的刷新同样会确认新鲜度。物化视图反映该时刻的基表数据。区别于 `last_refresh_time`（基表数据版本时间），这是墙钟时间。首次成功刷新前、以及同步物化视图，为空。按分区范围的 REFRESH（部分刷新）不推进该值。 |
+| base_table_refresh_version_times | 各基表的数据版本时间，以 JSON 对象给出：键为基表的 `catalog.database.table` 名称，值为观测到的最新数据版本时间。这是 `last_refresh_time`（所有基表的单一最大值）背后的按表明细：外部/数据湖基表上报分区源修改时间，OLAP（内部）基表上报可见版本提交时间。无任何基表有可记录时间时为 `{}`。 |
 
 ## 示例
 
@@ -114,7 +130,7 @@ mysql> show materialized views  where name='customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -134,6 +150,11 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.11 sec)
 ```
 
@@ -145,7 +166,7 @@ mysql> show materialized views  where name like 'customer_mv'\G
                         id: 10142
                       name: customer_mv
              database_name: test
-              refresh_type: MANUAL
+              refresh_type: ASYNC
                  is_active: true
    last_refresh_start_time: 2023-02-17 10:27:33
 last_refresh_finished_time: 2023-02-17 10:27:33
@@ -165,6 +186,11 @@ AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, 
 FROM `test`.`customer`
 GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
                       rows: 0
+                 warehouse:
+              refresh_mode: PCT
+           refresh_trigger: MANUAL
+            refresh_policy: MANUAL
+            resource_group: default_mv_wg
 1 row in set (0.12 sec)
 
 ```

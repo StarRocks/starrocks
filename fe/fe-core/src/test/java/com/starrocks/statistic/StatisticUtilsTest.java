@@ -18,6 +18,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.BooleanType;
@@ -271,5 +273,36 @@ class StatisticUtilsTest extends PlanTestBase {
 
         Assertions.assertThrows(SemanticException.class,
                 () -> StatisticUtils.getQueryStatisticsColumnType(table, "nonexistent"));
+    void buildConnectContextHonorsOverridesUnderGlobalEnableProfile() throws Exception {
+        // Reproduces the bug where SET GLOBAL enable_profile=true leaked into background
+        // syncer queries because StatisticUtils.buildConnectContext applied overrides BEFORE
+        // setCurrentWarehouse() replaced the entire sessionVariable with a fresh clone of
+        // defaultSessionVariable.
+        SessionVariable globalDefault = com.starrocks.server.GlobalStateMgr.getCurrentState()
+                .getVariableMgr().getDefaultSessionVariable();
+        boolean savedEnableProfile = globalDefault.isEnableProfile();
+        long savedBigQueryThresholdMs = globalDefault.getBigQueryProfileMilliSecondThreshold();
+        try {
+            globalDefault.setEnableProfile(true);
+            globalDefault.setBigQueryProfileThreshold("30s");
+
+            ConnectContext ctx = StatisticUtils.buildConnectContext();
+            Assertions.assertFalse(ctx.getSessionVariable().isEnableProfile(),
+                    "enable_profile must remain disabled for statistics-infrastructure context");
+            Assertions.assertFalse(ctx.getSessionVariable().isEnableLoadProfile());
+            Assertions.assertFalse(ctx.getSessionVariable().isEnableBigQueryProfile(),
+                    "big_query_profile_threshold must be 0s for statistics-infrastructure context");
+            // Other StatisticUtils overrides should also survive the warehouse switch.
+            Assertions.assertEquals(1, ctx.getSessionVariable().getParallelExecInstanceNum());
+            // isStatisticsContext is reflected through isStatisticsJob().
+            Assertions.assertTrue(ctx.isStatisticsJob(),
+                    "buildConnectContext must mark the context as statistics infrastructure");
+            // MV rewrite is intentionally disabled for inner queries; this must survive
+            // the warehouse switch that setCurrentWarehouse performs internally.
+            Assertions.assertFalse(ctx.getSessionVariable().isEnableMaterializedViewRewrite());
+        } finally {
+            globalDefault.setEnableProfile(savedEnableProfile);
+            globalDefault.setBigQueryProfileThreshold(savedBigQueryThresholdMs + "ms");
+        }
     }
 }

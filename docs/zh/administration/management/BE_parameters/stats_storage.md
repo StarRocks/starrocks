@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for statistics collection and storage engine settings."
 sidebar_label: "统计报告和存储"
 keywords: ['Canshu']
 ---
@@ -32,7 +33,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [统计报告](#统计报告)
 - [存储](#存储)
 
@@ -122,6 +123,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
+
+### lake_schema_change_per_tablet_parallelism
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离表单个 schema change 任务（按 tablet 粒度）内部最大并行 segment 子任务数。当前仅对 ADD INDEX 快速路径生效，其它 schema change 路径（Linked / Direct / Sorted）以及 DROP INDEX 快速路径保持单线程，不受该参数影响。专用线程池容量自动推导为 `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`，外层 alter 池与内层 segment 池物理隔离，不会相互死锁。
+- 引入版本：v4.0
 
 ### automatic_partition_thread_pool_thread_num
 
@@ -284,6 +294,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：否
 - 描述：构建列数据与索引页时使用的目标未压缩 Page 大小（以字节为单位）。该值会被 Page Builder 用来决定何时完成一个 Page 以及预留多少内存。值为 0 会在构建器中禁用 Page 大小限制。更改此值会影响 Page 数量、元数据开销、内存预留以及 I/O/压缩的权衡（Page 越小 → Page 数和元数据越多；Page 越大 → Page 更少，压缩比更大，但内存峰值可能更大）。
 - 引入版本：v3.2.4
+
+### enable_binary_plain_delta_offset
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
+- 引入版本：v4.2.0
 
 ### default_num_rows_per_column_file_block
 
@@ -899,6 +918,33 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：存算分离集群中，主键索引并行执行的线程池最大线程数。0 表示自动设置为 CPU 核数的一半。
 - 引入版本：-
 
+### pk_index_parallel_rebuild_mem_ratio
+
+- 默认值：50
+- 类型：Int
+- 单位：百分比（0-100）
+- 是否动态：是
+- 描述：存算分离集群中，主键索引重建时并行预取路径的内存压力门控。当 update mem tracker 已超过其上限的此百分比时，重建将退回到单遍循环路径，一次只持有一个解码后的列，在该内存压力下放弃冷启延迟收益以换取受控的峰值内存。它门控重建过程中 del、segment 等文件的并行读取。值越大表示在更大的内存压力下仍允许该优化；设为 `100` 时禁用内存门控（只要 `enable_pk_index_parallel_execution=true` 即并行）。
+- 引入版本：-
+
+### lake_partial_update_thread_pool_max_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，部分列更新 segment 级并行执行的线程池最大线程数。该线程池同时用于行模式（并行 load_segment + rewrite_segment）和列模式（并行 DCG 生成）的部分列更新。0 表示自动设置为 CPU 核数的一半。运行时开关由 `enable_pk_index_parallel_execution` 控制。
+- 引入版本：v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- 默认值：2048
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：部分列更新线程池的任务队列大小。
+- 引入版本：v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - 默认值：10
@@ -1078,6 +1124,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：当内存接近限制时，超过该时间未被更新的 MemTable 会被提前 Flush 以缓解内存压力；0 表示禁用按“陈旧时间”触发的刷盘（仍可能因高内存或不可变分区触发）。
 - 引入版本：v3.2.0
+
+### storage_cleanup_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：清理存储文件的线程数。`0` 表示当前节点的 CPU 核数的一半。
+- 引入版本：-
 
 ### storage_flood_stage_left_capacity_bytes
 

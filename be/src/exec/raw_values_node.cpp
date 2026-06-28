@@ -14,6 +14,7 @@
 
 #include "exec/raw_values_node.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"

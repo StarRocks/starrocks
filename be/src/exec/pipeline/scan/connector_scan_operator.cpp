@@ -15,35 +15,25 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/lake_connector.h"
+#include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/primitives/driver_state.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
+#include "exec/pipeline/scan/scan_morsel.h"
 #include "exprs/expr_executor.h"
+#include "gutil/casts.h"
+#include "gutil/walltime.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
-ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
-                                                                                 int connector_scan_node_number)
-        : query_mem_limit(query_mem_limit),
-          scan_mem_limit(query_mem_limit),
-          total_chunk_source_mem_bytes(connector_scan_node_number *
-                                       connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES) {}
-
-int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
-    int64_t diff = new_value - old_value;
-    int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
-    if (new_value == 0) return 0;
-    if (total <= 0) return scan_mem_limit;
-    return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
-}
-
 class ConnectorScanOperatorIOTasksMemLimiter {
 private:
     mutable std::mutex lock;
@@ -358,23 +348,14 @@ void ConnectorScanOperator::begin_driver_process() {
     }
 }
 
-void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
+void ConnectorScanOperator::end_driver_process(DriverState driver_state) {
     _adaptive_processor->check_all_io_tasks_last_timestamp = 0;
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
 
-    [[maybe_unused]] auto build_debug_string = [&]() {
-        std::stringstream ss;
-        ss << "end_driver_process. query_id = " << print_id(driver->query_ctx()->query_id())
-           << ", op_id = " << _plan_node_id << "/" << _driver_sequence << ", rows = " << _op_pull_rows;
-        return ss.str();
-    };
-
-    // VLOG_OPERATOR << build_debug_string();
-
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
-    if (driver->driver_state() == DriverState::OUTPUT_FULL) {
+    if (driver_state == DriverState::OUTPUT_FULL) {
         int64_t now = GetCurrentTimeMicros();
         _adaptive_processor->last_driver_output_full_timestamp = now;
     }
@@ -574,7 +555,7 @@ bool ConnectorScanOperator::need_notify_all() {
 }
 
 Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
-    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+    SplitMorselTicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
         for (const MorselPtr& morsel : morsels) {
@@ -622,7 +603,7 @@ int64_t ConnectorScanOperator::get_scan_table_id() const {
     }
 
     TupleId tuple_id = tuple_ids[0];
-    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    const TupleDescriptor* tuple_desc = get_factory()->runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
     if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
         return tuple_desc->table_desc()->table_id();
     }
@@ -638,7 +619,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_bloom_filters(op->get_factory()->get_runtime_bloom_filters()),
           _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
@@ -709,7 +690,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
                                          << ", error=" << report_status.to_string();
 
     if (_enable_adaptive_io_tasks) {
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        MemTracker* mem_tracker = state->query_runtime_state()->connector_scan_mem_tracker();
         mem_tracker->release(_request_mem_tracker_bytes);
 
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
@@ -765,7 +746,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        MemTracker* mem_tracker = state->query_runtime_state()->connector_scan_mem_tracker();
 
         [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;
@@ -934,7 +915,7 @@ uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
 }
 
 void ConnectorChunkSource::_update_catalog_metrics() {
-    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    auto* catalog_metrics = CatalogScanMetrics::instance();
     if (catalog_metrics == nullptr || _scan_node == nullptr) {
         return;
     }

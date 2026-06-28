@@ -32,6 +32,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -49,8 +50,8 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -549,6 +550,12 @@ public class MetadataMgr {
                 .orElse(TvrTableSnapshot.empty());
     }
 
+    public TvrTableSnapshot acquireTvrSnapshot(String dbName, Table table, MvId mvId) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.acquireTvrSnapshot(dbName, table, mvId))
+                .orElse(TvrTableSnapshot.empty());
+    }
+
     public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
                                                          TvrTableSnapshot fromSnapshotExclusive,
                                                          TvrTableSnapshot toSnapshotInclusive) {
@@ -564,6 +571,11 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
                 .orElse(TvrTableSnapshot.empty());
+    }
+
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.flatMap(metadata -> metadata.getVersionCommitTimeMillis(dbName, table, version));
     }
 
     public Optional<Database> getDatabase(ConnectContext context, BaseTableInfo baseTableInfo) {
@@ -658,7 +670,7 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                           ConnectorMetadatRequestContext requestContext) {
+                                           ConnectorMetadataRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -739,7 +751,7 @@ public class MetadataMgr {
                 }
             }
         }
-        return statistics.build();
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -784,7 +796,8 @@ public class MetadataMgr {
                     });
 
                     return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount())
+                            .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     return connectorBasicStats;
                 }
@@ -849,6 +862,23 @@ public class MetadataMgr {
         if (connectorMetadata.isPresent()) {
             try {
                 return connectorMetadata.get().getPartitions(table, partitionNames);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     */
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPartitions(table, partitionNames, requestContext);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;

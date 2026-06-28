@@ -1,0 +1,236 @@
+name: CI Doc Needs Update
+
+# When a PR merges to main and declares a behavior change but documentation
+# was not added, opens a GitHub issue labeled 'docs-maintainer' so the
+# tech writer's weekly workflow picks it up automatically.
+#
+# The issue body includes:
+#   - PR metadata (title, number, URL, author)
+#   - The behavior-change type checkboxes that were checked
+#   - A table of any new config parameters / session variables detected in the
+#     diff that have no corresponding documentation entry
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  doc-needed-check:
+    runs-on: ubuntu-latest
+    name: Open doc-needed issue
+    # Fire only on merged PRs that declared a behavior change but did not check
+    # the "I have added documentation" box. Doc PRs themselves are excluded.
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks' &&
+      !startsWith(github.event.pull_request.title, '[Doc]') &&
+      contains(toJson(github.event.pull_request.body), '[x] Yes, this PR will result in a change in behavior.') &&
+      contains(toJson(github.event.pull_request.body), '[ ] I have added documentation for my new feature or new function')
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Checkout the merged commit so we can run the diff script
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Ensure the docs-maintainer label exists (idempotent)
+      - name: Ensure labels exist
+        run: |
+          gh label create "docs-maintainer" \
+            --description "Picked up by the weekly docs triage workflow" \
+            --color "0075ca" --force || true
+          gh label create "documentation" \
+            --description "Documentation changes" \
+            --color "0075ca" --force || true
+
+      # Extract which behavior-change type boxes were checked
+      - name: Extract change types
+        id: changetype
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          change_types=""
+          while IFS= read -r phrase; do
+            if echo "$PR_BODY" | grep -qF "[x] ${phrase}"; then
+              change_types="${change_types}- ${phrase}\n"
+            fi
+          done << 'EOF'
+          Interface/UI changes: syntax, type conversion, expression evaluation, display information
+          Parameter changes: default values, similar parameters but with different default values
+          Policy changes: use new policy to replace old one, functionality automatically enabled
+          Feature removed
+          Miscellaneous: upgrade & downgrade compatibility, etc.
+          EOF
+          if [ -z "$change_types" ]; then
+            change_types="- (no specific type checked)\n"
+          fi
+          # Store as a file to preserve newlines
+          printf "%b" "$change_types" > /tmp/change_types.txt
+          echo "saved to /tmp/change_types.txt"
+
+      # Run the extraction script against the merged commit to find new undocumented params.
+      # The merge commit is already checked out; diff against its first parent (HEAD^1).
+      # set +e so the step continues even when the script exits 1 (gaps found).
+      - name: Detect new undocumented parameters
+        id: params
+        run: |
+          set +e
+          python3 build-support/extract_and_diff_params.py \
+            --new-params-only \
+            --diff-base HEAD^1 \
+            --output json \
+            > /tmp/param_drift.json
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      # When new undocumented params were found, re-run with AI descriptions so the
+      # issue table includes a useful description draft rather than a blank cell.
+      # Skipped silently if DOCS_ANTHROPIC_API_KEY is not configured in repo secrets.
+      #
+      # Security: uses origin/main version of the script rather than the merged
+      # commit so a PR that also modifies extract_and_diff_params.py cannot
+      # exfiltrate the API key via pull_request_target.
+      - name: Enrich parameters with AI descriptions
+        if: steps.params.outputs.exitcode == '1'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.DOCS_ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "DOCS_ANTHROPIC_API_KEY not configured — skipping AI enrichment"
+            exit 0
+          fi
+          # Install only when actually needed; use python3 -m pip to target the
+          # same interpreter that will run the script; failure here is non-fatal
+          python3 -m pip install anthropic || { echo "pip install failed — skipping AI enrichment"; exit 0; }
+          # Extract the trusted base-branch copy of the script.
+          # origin/main should be present (fetch-depth: 0), but guard just in case.
+          if ! git show origin/main:build-support/extract_and_diff_params.py > /tmp/param_extractor_base.py 2>/dev/null; then
+            echo "Could not extract script from origin/main — skipping AI enrichment"
+            exit 0
+          fi
+          set +e
+          python3 /tmp/param_extractor_base.py \
+            --new-params-only \
+            --diff-base HEAD^1 \
+            --output json \
+            --with-ai-descriptions \
+            > /tmp/param_drift_ai.json
+          ec=$?
+          set -e
+          # Replace only if the output is non-empty valid JSON
+          if [ "$ec" -le 1 ] \
+              && [ -s /tmp/param_drift_ai.json ] \
+              && python3 -c "import json; json.load(open('/tmp/param_drift_ai.json'))" 2>/dev/null; then
+            mv /tmp/param_drift_ai.json /tmp/param_drift.json
+            echo "AI descriptions written to param_drift.json"
+          else
+            echo "AI enrichment did not produce valid JSON (exit $ec) — keeping original"
+          fi
+
+      # Build the issue body from the collected data
+      - name: Build issue body
+        id: issuebody
+        run: |
+          python3 - << 'PYEOF'
+          import json, os, sys
+
+          pr_number = os.environ["PR_NUMBER"]
+          pr_title = os.environ["PR_TITLE"]
+          pr_url = os.environ["PR_URL"]
+          pr_author = os.environ["PR_AUTHOR"]
+
+          with open("/tmp/change_types.txt") as f:
+              change_types = f.read().strip()
+
+          # Load param drift data (may be empty or have gaps)
+          try:
+              with open("/tmp/param_drift.json") as f:
+                  drift = json.load(f)
+          except Exception:
+              drift = {}
+
+          lines = [
+              "## Documentation needed for merged PR",
+              "",
+              f"PR #{pr_number} was merged and declared a behavior change, "
+              "but documentation was not added. Please review and update the docs.",
+              "",
+              f"**PR:** [{pr_title}]({pr_url})",
+              f"**Author:** @{pr_author}",
+              f"**Behavior change types declared:**",
+              change_types,
+          ]
+
+          # Emit per-param tables if any gaps were detected
+          sections = [
+              ("FE Configuration", drift.get("fe_config", {}).get("missing_from_docs", []),
+               "docs/en/administration/management/FE_parameters/"),
+              ("BE Configuration", drift.get("be_config", {}).get("missing_from_docs", []),
+               "docs/en/administration/management/BE_parameters/"),
+              ("Session / Global Variables", drift.get("session_var", {}).get("missing_from_docs", []),
+               "docs/en/sql-reference/System_variable.md"),
+          ]
+
+          any_params = any(rows for _, rows, _ in sections)
+          if any_params:
+              lines.append("## New parameters detected with no documentation entry")
+              lines.append("")
+              for title, rows, doc_path in sections:
+                  if not rows:
+                      continue
+                  lines.append(f"### {title}")
+                  lines.append("")
+                  lines.append("| Parameter | Type | Default | Mutable | Description | Suggested doc |")
+                  lines.append("|-----------|------|---------|---------|-------------|---------------|")
+                  for p in sorted(rows, key=lambda x: x["name"]):
+                      desc = p.get("description") or "—"
+                      mut = "Yes" if p.get("mutable") else "No"
+                      lines.append(
+                          f"| `{p['name']}` | {p.get('code_type','')} | "
+                          f"`{p.get('default','')}` | {mut} | {desc} | {doc_path} |"
+                      )
+                  lines.append("")
+
+          lines += [
+              "## Action required",
+              "",
+              "- [ ] Review the PR diff and update the relevant documentation",
+              "- [ ] Close this issue when documentation is published",
+              "",
+              "_Auto-generated by `ci-doc-needs-update.yml`_",
+          ]
+
+          body = "\n".join(lines)
+          # Write to file so gh can read it (avoids shell quoting issues)
+          with open("/tmp/issue_body.md", "w") as f:
+              f.write(body)
+
+          print("Issue body written to /tmp/issue_body.md")
+          PYEOF
+
+      - name: Create doc-needed issue
+        run: |
+          gh issue create \
+            --title "Docs needed: ${PR_TITLE}" \
+            --label "documentation,docs-maintainer" \
+            --body-file /tmp/issue_body.md \
+            --repo ${{ github.repository }}

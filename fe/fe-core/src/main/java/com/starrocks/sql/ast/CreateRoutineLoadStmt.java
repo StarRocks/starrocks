@@ -114,6 +114,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
     public static final String JSONPATHS = "jsonpaths";
     public static final String JSONROOT = "json_root";
+    public static final String ENVELOPE = "envelope";
+    public static final String ENVELOPE_DEBEZIUM = "debezium";
 
     // csv properties
     public static final String TRIMSPACE = "trim_space";
@@ -129,6 +131,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_PARTITIONS_PROPERTY = "kafka_partitions";
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
+    // when "true", kafka_partitions/kafka_offsets only seed the starting offsets and the job
+    // keeps discovering new partitions from the broker instead of pinning the partition list
+    public static final String KAFKA_PARTITION_DISCOVERY = "kafka_partition_discovery";
     // optional
     public static final String CONFLUENT_SCHEMA_REGISTRY_URL = "confluent.schema.registry.url";
 
@@ -157,6 +162,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
             .add(JSONROOT)
+            .add(ENVELOPE)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
@@ -223,6 +229,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private String jsonPaths = "";
     private String jsonRoot = ""; // MUST be a jsonpath string
     private boolean stripOuterArray = false;
+    private String envelope = "";
 
     // for csv
     private boolean trimspace = false;
@@ -237,6 +244,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     // custom kafka property map<key, value>
     private Map<String, String> customKafkaProperties = Maps.newHashMap();
+
+    // analyzed from property.kafka_partition_discovery; when true the kafka_partitions list
+    // only seeds the starting offsets instead of pinning the consumed partitions
+    private boolean kafkaPartitionDiscovery = false;
 
     // pulsar related properties
     private String pulsarServiceUrl;
@@ -407,6 +418,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return jsonRoot;
     }
 
+    public String getEnvelope() {
+        return envelope;
+    }
+
     public String getKafkaBrokerList() {
         return kafkaBrokerList;
     }
@@ -421,6 +436,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public Map<String, String> getCustomKafkaProperties() {
         return customKafkaProperties;
+    }
+
+    public boolean isKafkaPartitionDiscovery() {
+        return kafkaPartitionDiscovery;
     }
 
     public String getPulsarServiceUrl() {
@@ -619,6 +638,24 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         } else {
             format = "csv"; // default csv
         }
+
+        // Parse envelope property (e.g. "debezium")
+        if (jobProperties.containsKey(ENVELOPE)) {
+            envelope = jobProperties.get(ENVELOPE);
+            if (!envelope.equalsIgnoreCase(ENVELOPE_DEBEZIUM)) {
+                throw new StarRocksException("Unknown envelope type: " + envelope);
+            }
+            if (!format.equalsIgnoreCase("json")) {
+                throw new StarRocksException(ENVELOPE + " can only be specified when format is json");
+            }
+            if (!Strings.isNullOrEmpty(jsonRoot)) {
+                throw new StarRocksException(JSONROOT + " cannot be specified when envelope is set");
+            }
+            if (stripOuterArray) {
+                throw new StarRocksException(STRIP_OUTER_ARRAY + " cannot be specified when envelope is set");
+            }
+        }
+
         if (format.equalsIgnoreCase("csv") || format.isEmpty()) {
             trimspace = Boolean.valueOf(jobProperties.getOrDefault(TRIMSPACE, "false"));
             if (jobProperties.containsKey(ENCLOSE)) {
@@ -729,6 +766,16 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         if (kafkaOffsetsString != null) {
             analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
         }
+
+        // kafka_partition_discovery decides whether the kafka_partitions list pins the consumed
+        // partitions or only seeds their starting offsets, so it requires the list to be present
+        if (customKafkaProperties.containsKey(KAFKA_PARTITION_DISCOVERY) && kafkaPartitionOffsets.isEmpty()) {
+            throw new AnalysisException("property." + KAFKA_PARTITION_DISCOVERY + " is only meaningful when "
+                    + KAFKA_PARTITIONS_PROPERTY + " is specified");
+        }
+        // value format already validated in analyzeKafkaCustomProperties
+        kafkaPartitionDiscovery = Boolean.parseBoolean(customKafkaProperties.get(KAFKA_PARTITION_DISCOVERY));
+
         String confluentSchemaRegistryUrlString = dataSourceProperties.get(CONFLUENT_SCHEMA_REGISTRY_URL);
         if (confluentSchemaRegistryUrlString == null) {
             if (format == null) {
@@ -829,6 +876,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         // check kafka_default_offsets
         if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+
+        // check kafka_partition_discovery
+        if (customKafkaProperties.containsKey(KAFKA_PARTITION_DISCOVERY)) {
+            String value = customKafkaProperties.get(KAFKA_PARTITION_DISCOVERY);
+            if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+                throw new AnalysisException("Invalid value " + value + " of property."
+                        + KAFKA_PARTITION_DISCOVERY + ", it must be true or false");
+            }
         }
     }
 

@@ -10,6 +10,15 @@ Use this directory for repo-local execution plans that agents can read, update, 
 
 - [Execution Plan Template](templates/execution-plan.md)
 
+## Local Plans
+
+Use `python3 build-support/handbook_plan.py create --local --title "<title>" --owner "<owner>"` to create a gitignored local plan under `handbook/plans/local/active/`.
+Directory-root local rollout trees at `handbook/plans/local/active/<slug>/README.md` are also valid local plans and should appear in `handbook/plans/local/index.md`.
+
+If `handbook/plans/local/index.md` exists, agents should read it after this page. Local plans may add `- Overrides: handbook/plans/active/<plan>.md` to replace a tracked plan for the current checkout only.
+
+Use `python3 build-support/handbook_plan.py list` to print the effective active plan set and `python3 build-support/handbook_plan.py complete --local --plan <path-or-slug>` to delete a finished local plan.
+
 ## Completed Plans
 
 - [Completed Plans README](completed/README.md)

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks のデータロードおよびアンロード方法における機能サポートとファイル形式の互換性リファレンス。"
 sidebar_label: 機能サポート
 ---
 
@@ -308,13 +309,28 @@ sidebar_label: 機能サポート
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 

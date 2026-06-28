@@ -43,13 +43,28 @@
 
 namespace starrocks {
 
+class FileSystem;
+
 class VectorIndexReader {
 public:
     VectorIndexReader() = default;
     virtual ~VectorIndexReader() = default;
 
+    // Whether the reader can restrict the ANN search to a candidate id set efficiently (filtered
+    // search), which enables true pre-filtering. Readers that cannot should be queried via
+    // post-filtering (oversample + filter the result). Conservative default: false.
+    virtual bool supports_efficient_filtered_search() const { return false; }
+
 #ifdef WITH_TENANN
-    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) = 0;
+    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path,
+                                 FileSystem* fs = nullptr) = 0;
+
+    // Per-segment context for apply_adaptive_ef_search(). Default forwards
+    // to the row-count-unaware form for readers without adaptive scaling.
+    virtual Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
+                                 size_t segment_num_rows, int query_k, bool user_set_ef) {
+        return init_searcher(meta, index_path, fs);
+    }
 
     virtual Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                           tenann::IdFilter* id_filter = nullptr) = 0;

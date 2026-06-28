@@ -22,7 +22,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +58,12 @@ public class IcebergPartitionTraits extends DefaultTraits {
     @Override
     public List<PartitionInfo> getPartitions(List<String> partitionNames) {
         IcebergTable icebergTable = (IcebergTable) table;
+        if (pinnedVersionRange != null) {
+            ConnectorMetadataRequestContext ctx = new ConnectorMetadataRequestContext();
+            ctx.setTableVersionRange(pinnedVersionRange);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(icebergTable.getCatalogName(), table, partitionNames, ctx);
+        }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
     }
@@ -75,11 +81,15 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
 
         IcebergTable icebergTable = (IcebergTable) table;
-        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                .map(Snapshot::snapshotId);
-        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
-        requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+        if (pinnedVersionRange != null) {
+            requestContext.setTableVersionRange(pinnedVersionRange);
+        } else {
+            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                    .map(Snapshot::snapshotId);
+            requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+        }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }

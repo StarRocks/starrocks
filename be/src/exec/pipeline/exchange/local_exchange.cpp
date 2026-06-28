@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -24,7 +25,6 @@
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "gutil/hash/hash.h"
 
 namespace starrocks::pipeline {
 Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
@@ -37,10 +37,8 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
     // step2: shuffle chunk into dest partitions.
     {
         _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-        _partition_memory_usage.assign(num_partitions, 0);
         for (size_t i = 0; i < num_rows; ++i) {
             _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-            _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
         }
         // We make the last item equal with number of rows of this chunk.
         for (int32_t i = 1; i <= num_partitions; ++i) {
@@ -58,6 +56,17 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
 Status Partitioner::send_chunk(const ChunkPtr& chunk,
                                const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
+    // Unpack const columns now (instead of inside each per-source add_chunk) so the
+    // accounted memory reflects the materialized post-unpack footprint. For const
+    // columns the pre-unpack memory is O(1) while the buffered, unpacked memory is
+    // O(num_rows); accounting before the unpack would let the manager undercount by
+    // orders of magnitude and weaken is_full() back-pressure.
+    chunk->unpack_and_duplicate_const_columns();
+    // Account this chunk against the shared memory manager exactly once. The entry is
+    // shared by every partition shard via shared_ptr, so the record is only released
+    // when the last shard is consumed across all source operators.
+    auto memory_entry = std::make_shared<ChunkBufferMemoryEntry>(_source->memory_manager(), chunk->memory_usage(),
+                                                                 chunk->num_rows());
     for (size_t i = 0; i < num_partitions; ++i) {
         size_t from = partition_begin_offset(i);
         size_t size = partition_end_offset(i) - from;
@@ -66,8 +75,7 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk,
             continue;
         }
 
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
-                                                             partition_memory_usage(i)));
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size, memory_entry));
     }
     return Status::OK();
 }
@@ -220,6 +228,14 @@ void OrderedPartitionExchanger::close(RuntimeState* state) {
 Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
     DCHECK_EQ(sink_driver_sequence, 0);
 
+    const size_t cur_num_rows = chunk->num_rows();
+    // Drop empty chunks: they carry no rows to route and no partition boundary. This also guards the
+    // `cur_num_rows - 1` boundary-row indexing below from wrapping. Matches the other row-partition
+    // exchangers, which all early-return on empty input.
+    if (cur_num_rows == 0) {
+        return Status::OK();
+    }
+
     Columns partition_columns(_partition_exprs.size());
     for (size_t i = 0; i < partition_columns.size(); ++i) {
         ASSIGN_OR_RETURN(partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
@@ -234,7 +250,7 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
     std::vector<std::pair<size_t, ChunkPtr>> chunks;
 
     size_t min_channel_id = _find_min_channel_id();
-    if (_previous_chunk == nullptr || _previous_channel_id == min_channel_id) {
+    if (!_has_previous || _previous_channel_id == min_channel_id) {
         chunks.emplace_back(min_channel_id, chunk);
     } else {
         auto is_equal = [](const Columns& columns1, size_t offset1, const Columns& columns2, size_t offset2) {
@@ -246,17 +262,18 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
             }
             return true;
         };
-        // Check if the joint of two consecutive chunks are the same
-        bool is_joint_equal =
-                is_equal(_previous_partition_columns, _previous_chunk->num_rows() - 1, partition_columns, 0);
+        // Check if the joint of two consecutive chunks are the same.
+        // _previous_partition_columns is an owned single-row copy of the previous chunk's last row (at
+        // offset 0), so it stays valid even after the previous chunk has been handed to and mutated by
+        // downstream operators.
+        bool is_joint_equal = is_equal(_previous_partition_columns, 0, partition_columns, 0);
 
         if (!is_joint_equal) {
             // The first row of current chunk is the start of a new partition, so
             // send the chunk to the channel with the minimum number of rows.
             chunks.emplace_back(min_channel_id, chunk);
         } else {
-            bool is_current_of_same_partition =
-                    is_equal(partition_columns, 0, partition_columns, chunk->num_rows() - 1);
+            bool is_current_of_same_partition = is_equal(partition_columns, 0, partition_columns, cur_num_rows - 1);
             if (is_current_of_same_partition) {
                 chunks.emplace_back(_previous_channel_id, chunk);
             } else {
@@ -264,7 +281,7 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                 // 1. The first part is the rows of the same partition as the last row of previous chunk, and send it to previous channel
                 // 2. The second part is the rows of the different partition, and send it to the channel with the minimum number of rows.
 
-                int64_t end = chunk->num_rows();
+                int64_t end = cur_num_rows;
                 for (auto& column : partition_columns) {
                     end = ColumnHelper::find_first_not_equal(column.get(), 0, 0, end);
                 }
@@ -273,13 +290,20 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                 first_part->append(*chunk, 0, end);
                 chunks.emplace_back(_previous_channel_id, first_part);
 
-                // Second part: [end, chunk->num_rows())
+                // Second part: [end, cur_num_rows)
                 ChunkPtr second_part = chunk->clone_empty();
-                second_part->append(*chunk, end, chunk->num_rows() - end);
+                second_part->append(*chunk, end, cur_num_rows - end);
                 chunks.emplace_back(min_channel_id, second_part);
             }
         }
     }
+
+    // Clone the boundary (last) row of the partition key BEFORE publishing the chunk downstream. At this
+    // point the chunk is still owned solely by this driver thread, so reading partition_columns is safe.
+    // After add_chunk() the chunk may be mutated concurrently by downstream operators (AnalyticSinkOperator
+    // appends window result columns and, on the LIMIT path, set_num_rows() resizes columns in place), so we
+    // must not retain any reference that aliases it.
+    Columns boundary_partition_columns = _clone_partition_key_row(partition_columns, cur_num_rows - 1);
 
     for (auto& kv : chunks) {
         _channel_row_nums[kv.first] += kv.second->num_rows();
@@ -287,10 +311,20 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
     }
 
     _previous_channel_id = chunks.back().first;
-    _previous_chunk = chunk;
-    _previous_partition_columns = std::move(partition_columns);
+    _previous_partition_columns = std::move(boundary_partition_columns);
+    _has_previous = true;
 
     return Status::OK();
+}
+
+Columns OrderedPartitionExchanger::_clone_partition_key_row(const Columns& partition_columns, size_t row) {
+    Columns result(partition_columns.size());
+    for (size_t i = 0; i < partition_columns.size(); ++i) {
+        auto cloned = partition_columns[i]->clone_empty();
+        cloned->append(*partition_columns[i], row, 1);
+        result[i] = std::move(cloned);
+    }
+    return result;
 }
 
 size_t OrderedPartitionExchanger::_find_min_channel_id() {
@@ -432,12 +466,11 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        // set to default value in case of _source vector out of bound in multi thread
-        if (_writer_count > sources_num) {
-            _writer_count = sources_num;
-        }
-        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
-        if (_writer_count < sources_num) {
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
             _data_processed += chunk->bytes_usage();
         }
     }

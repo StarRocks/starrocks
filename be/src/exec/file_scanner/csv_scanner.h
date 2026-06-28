@@ -19,10 +19,10 @@
 #include <vector>
 
 #include "base/container/raw_container.h"
+#include "base/logging.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
-#include "util/logging.h"
 
 namespace starrocks {
 class SequentialFile;

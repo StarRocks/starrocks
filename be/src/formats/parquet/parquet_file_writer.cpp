@@ -33,6 +33,7 @@
 #include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/debug_util.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
@@ -42,7 +43,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 class Chunk;
@@ -375,7 +375,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
     auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
-            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                       std::move(column_evaluators), _compression_type, _parsed_options,

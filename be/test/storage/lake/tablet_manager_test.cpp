@@ -30,6 +30,7 @@
 #include "common/config_storage_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "platform/store_path.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -37,15 +38,17 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/options.h"
+#include "storage/primitive/storage_define.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
 // NOLINTNEXTLINE
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "script/script.h"
-#include "service/staros_worker.h"
 
 namespace starrocks {
 
@@ -124,15 +127,20 @@ TEST_F(LakeTabletManagerTest, tablet_meta_read_corrupted_and_recover) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
         SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
         SyncPoint::GetInstance()->DisableProcessing();
     });
-    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", [&](void* arg) {
+    // The metadata may be read with the legacy headerless format or the checksummed header format
+    // depending on lake_enable_protobuf_file_checksum, so inject the first-read corruption on both.
+    auto inject_first_read_corruption = [&](void* arg) {
         if (is_first_time) {
             *(Status*)arg = Status::Corruption("injected error");
             is_first_time = false;
         }
-    });
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
     SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler",
                                           [](void* arg) { *(Status*)arg = Status::OK(); });
     res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
@@ -152,6 +160,65 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     EXPECT_TRUE(res.ok());
     EXPECT_EQ(res.value()->tablet_id(), tablet_id);
     EXPECT_EQ(res.value()->txn_id(), 2);
+}
+
+// Compatibility: tablet metadata / txn logs written by an older BE without the checksum
+// header (legacy plain protobuf) must still be read correctly through the new load path.
+// This verifies the LAKE_META_HEADER_MAGIC_NUMBER detection: a legacy file does not carry
+// the magic, so the reader must fall back to plain protobuf instead of failing; a file
+// written with the checksum on does carry the magic and is read + verified.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, read_legacy_format_written_without_checksum) {
+    auto old_flag = config::lake_enable_protobuf_file_checksum;
+    DeferOp guard([old_flag]() { config::lake_enable_protobuf_file_checksum = old_flag; });
+
+    // ---- tablet metadata: write legacy (no header), read with checksum enabled ----
+    auto tablet_id = next_id();
+    config::lake_enable_protobuf_file_checksum = false;
+    starrocks::TabletMetadata metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(false);
+    rowset->set_data_size(1024);
+    rowset->set_num_rows(5);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    config::lake_enable_protobuf_file_checksum = true;
+    _tablet_manager->metacache()->prune(); // drop cached PB so the read hits the file
+    auto meta_res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_OK(meta_res.status());
+    EXPECT_EQ(meta_res.value()->id(), tablet_id);
+    EXPECT_EQ(meta_res.value()->version(), 2);
+    ASSERT_EQ(meta_res.value()->rowsets_size(), 1);
+    EXPECT_EQ(meta_res.value()->rowsets(0).num_rows(), 5);
+
+    // ---- txn log: write legacy (no header), read with checksum enabled ----
+    config::lake_enable_protobuf_file_checksum = false;
+    starrocks::TxnLog legacy_log;
+    legacy_log.set_tablet_id(tablet_id);
+    legacy_log.set_txn_id(99);
+    EXPECT_OK(_tablet_manager->put_txn_log(legacy_log));
+
+    config::lake_enable_protobuf_file_checksum = true;
+    _tablet_manager->metacache()->prune();
+    auto log_res = _tablet_manager->get_txn_log(tablet_id, 99);
+    ASSERT_OK(log_res.status());
+    EXPECT_EQ(log_res.value()->tablet_id(), tablet_id);
+    EXPECT_EQ(log_res.value()->txn_id(), 99);
+
+    // ---- sanity: a checksummed txn log (magic present) is also read back correctly ----
+    auto tablet_id2 = next_id();
+    starrocks::TxnLog checksummed_log;
+    checksummed_log.set_tablet_id(tablet_id2);
+    checksummed_log.set_txn_id(100);
+    EXPECT_OK(_tablet_manager->put_txn_log(checksummed_log)); // checksum on
+    _tablet_manager->metacache()->prune();
+    auto log_res2 = _tablet_manager->get_txn_log(tablet_id2, 100);
+    ASSERT_OK(log_res2.status());
+    EXPECT_EQ(log_res2.value()->tablet_id(), tablet_id2);
+    EXPECT_EQ(log_res2.value()->txn_id(), 100);
 }
 
 // NOLINTNEXTLINE
@@ -445,7 +512,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     null_val.__set_type(type_desc);
-    null_val.__set_value("");
     null_val.__set_variant_type(TVariantType::NULL_VALUE);
     lower_bound.values.push_back(null_val);
     range.__set_lower_bound(lower_bound);
@@ -463,7 +529,8 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
 }
 
-TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
+// MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_rejects_min_max) {
     auto tablet_id = next_id();
     auto schema_id = next_id();
 
@@ -476,7 +543,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     req.tablet_schema.__set_short_key_column_count(2);
     req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
-    // Set tablet range with MIN and MAX values
     TTabletRange range;
     TTuple lower_bound;
     TVariant min_val;
@@ -487,35 +553,14 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     min_val.__set_type(type_desc);
-    min_val.__set_value("");
     min_val.__set_variant_type(TVariantType::MINIMUM);
     lower_bound.values.push_back(min_val);
-
-    TTuple upper_bound;
-    TVariant max_val;
-    max_val.__set_type(type_desc);
-    max_val.__set_value("");
-    max_val.__set_variant_type(TVariantType::MAXIMUM);
-    upper_bound.values.push_back(max_val);
-
     range.__set_lower_bound(lower_bound);
-    range.__set_upper_bound(upper_bound);
     req.__set_range(range);
 
-    EXPECT_OK(_tablet_manager->create_tablet(req));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-
-    // Verify range with MIN/MAX values
-    EXPECT_TRUE(metadata->has_range());
-    const auto& pb_range = metadata->range();
-    EXPECT_TRUE(pb_range.has_lower_bound());
-    EXPECT_EQ(1, pb_range.lower_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MINIMUM, pb_range.lower_bound().values(0).variant_type());
-
-    EXPECT_TRUE(pb_range.has_upper_bound());
-    EXPECT_EQ(1, pb_range.upper_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MAXIMUM, pb_range.upper_bound().values(0).variant_type());
+    auto status = _tablet_manager->create_tablet(req);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
@@ -1103,6 +1148,90 @@ TEST_F(LakeTabletManagerTest, parse_bundle_tablet_metadata_with_zero_size) {
     EXPECT_TRUE(res.status().is_corruption());
 }
 
+// Regression for the aggregate-publish data-loss bug: an old worker sends a rowset whose segment_metas
+// lack filename, with the real names only in deprecated_segments. put_bundle_tablet_metadata must
+// persist metadata whose segment filename survives (reproduces old-worker -> new-aggregator).
+TEST_F(LakeTabletManagerTest, put_bundle_preserves_legacy_segment_filenames) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    // Legacy-shaped rowset: segment_metas carries only sort-key fields (no filename); the real name
+    // lives only in deprecated_segments.
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(5);
+    rs->add_segment_metas()->set_num_rows(5);
+    rs->add_deprecated_segments("real_seg.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(1, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("real_seg.dat", got->rowsets(0).segment_metas(0).filename());
+}
+
+// Layer C (after_load extend) on the aggregate receive path: a sparse legacy rowset
+// (segment_metas_size() < deprecated_segments_size()) must keep ALL segment names. Without the
+// after_load in put_bundle_tablet_metadata, the no-extend before_save would truncate the tail.
+TEST_F(LakeTabletManagerTest, put_bundle_extends_then_preserves_mismatched_legacy_counts) {
+    auto tablet_id = next_id();
+    std::map<int64_t, TabletMetadataPB> metadatas;
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(2);
+    {
+        auto* schema = metadata.mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto* rs = metadata.add_rowsets();
+    rs->set_id(2);
+    rs->set_overlapped(false);
+    rs->set_num_rows(10);
+    rs->add_segment_metas()->set_num_rows(10); // only 1 segment_metas...
+    rs->add_deprecated_segments("s0.dat");     // ...but 2 real segment names
+    rs->add_deprecated_segments("s1.dat");
+    metadatas.emplace(tablet_id, metadata);
+
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+
+    auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status().to_string();
+    auto got = std::move(res).value();
+    ASSERT_EQ(1, got->rowsets_size());
+    ASSERT_EQ(2, got->rowsets(0).segment_metas_size());
+    EXPECT_EQ("s0.dat", got->rowsets(0).segment_metas(0).filename());
+    EXPECT_EQ("s1.dat", got->rowsets(0).segment_metas(1).filename());
+}
+
 TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
     // First, create a valid bundle metadata to get the file path
     auto tablet_id = next_id();
@@ -1176,6 +1305,158 @@ TEST_F(LakeTabletManagerTest, get_single_tablet_metadata_parse_failure) {
     EXPECT_FALSE(res.ok());
     EXPECT_TRUE(res.status().is_corruption());
     EXPECT_TRUE(handler_called) << "corrupted_tablet_meta_handler should have been called";
+}
+
+// Bundle tablet metadata checksum: the footer carries a crc32 over the bundle header plus a
+// magic so the read path can tell the new checksummed layout from the legacy one. Verifies:
+//   - new format (flag on): footer magic present, header crc + per-page checksums populated, reads OK;
+//   - old format (flag off): no footer magic, read path detects legacy layout and reads OK with flag on;
+//   - corrupting the bundle header is caught by the footer crc;
+//   - corrupting a tablet page is caught by the per-page checksum.
+TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_checksum) {
+    auto old_flag = config::lake_enable_protobuf_file_checksum;
+    DeferOp guard([old_flag]() { config::lake_enable_protobuf_file_checksum = old_flag; });
+
+    auto build_meta = [](int64_t tid) {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_id(10);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto* c0 = schema_pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        TabletMetadataPB m;
+        m.set_id(tid);
+        m.set_version(2);
+        m.mutable_schema()->CopyFrom(schema_pb);
+        (*m.mutable_historical_schemas())[10].CopyFrom(schema_pb);
+        return m;
+    };
+
+    auto fs = FileSystem::Default();
+    auto write_bundle = [&](int64_t tid) {
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(tid, build_meta(tid));
+        return _tablet_manager->put_bundle_tablet_metadata(metadatas);
+    };
+    // The checksummed layout is marked by the high bit of the trailing 8-byte size field.
+    auto footer_has_checksum = [&](const std::string& p) -> bool {
+        auto rf = *fs->new_random_access_file(p);
+        auto content = *rf->read_all();
+        uint64_t raw = decode_fixed64_le((const uint8_t*)(content.data() + content.size() - sizeof(uint64_t)));
+        return (raw & LAKE_BUNDLE_META_CHECKSUM_FLAG) != 0;
+    };
+    auto overwrite = [&](const std::string& p, const std::string& content) {
+        ASSERT_OK(fs->delete_file(p));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(p));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+
+    // ---- NEW format (flag on): footer magic present, header crc + per-page checksums written ----
+    config::lake_enable_protobuf_file_checksum = true;
+    auto new_id = next_id();
+    ASSERT_OK(write_bundle(new_id));
+    auto new_path = _tablet_manager->bundle_tablet_metadata_location(new_id, 2);
+    EXPECT_TRUE(footer_has_checksum(new_path));
+    {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(new_path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        ASSIGN_OR_ABORT(auto bundle, starrocks::lake::TabletManager::parse_bundle_tablet_metadata(new_path, content));
+        EXPECT_EQ(bundle->tablet_meta_page_checksum_size(), 1);
+        EXPECT_EQ(bundle->tablet_meta_page_checksum().count(new_id), 1);
+    }
+    _tablet_manager->metacache()->prune();
+    {
+        auto res = _tablet_manager->get_tablet_metadata(new_id, 2);
+        ASSERT_OK(res.status());
+        EXPECT_EQ(res.value()->id(), new_id);
+        EXPECT_EQ(res.value()->schema().id(), 10);
+    }
+
+    // ---- OLD format (flag off): no footer magic; the read path detects the legacy layout ----
+    config::lake_enable_protobuf_file_checksum = false;
+    auto old_id = next_id();
+    ASSERT_OK(write_bundle(old_id));
+    auto old_path = _tablet_manager->bundle_tablet_metadata_location(old_id, 2);
+    EXPECT_FALSE(footer_has_checksum(old_path));
+    {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(old_path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        ASSIGN_OR_ABORT(auto bundle, starrocks::lake::TabletManager::parse_bundle_tablet_metadata(old_path, content));
+        EXPECT_EQ(bundle->tablet_meta_page_checksum_size(), 0);
+    }
+    // Read the legacy-format bundle with the flag ON: magic absent -> legacy layout -> read OK.
+    config::lake_enable_protobuf_file_checksum = true;
+    _tablet_manager->metacache()->prune();
+    {
+        auto res = _tablet_manager->get_tablet_metadata(old_id, 2);
+        ASSERT_OK(res.status());
+        EXPECT_EQ(res.value()->id(), old_id);
+        EXPECT_EQ(res.value()->schema().id(), 10);
+    }
+
+    // ---- corrupting the checksummed bundle is caught by the footer crc ----
+    {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(new_path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        ASSERT_GT(content.size(), sizeof(uint64_t) + sizeof(uint32_t));
+        // Footer is [bundle_meta][crc32][size64|flag]. Flip a byte in the stored crc32 field (the
+        // 4 bytes immediately before the trailing 8-byte size) so it no longer matches the bundle
+        // metadata. This is a fixed position independent of the bundle metadata size.
+        size_t crc_off = content.size() - sizeof(uint64_t) - sizeof(uint32_t);
+        content[crc_off] ^= 0xFF;
+        // Direct parse must reject the tampered bundle. The reported error may be the checksum
+        // mismatch or a downstream parse failure depending on where the corruption lands relative
+        // to the (small) bundle metadata; the contract verified here is that it is rejected.
+        auto parsed = starrocks::lake::TabletManager::parse_bundle_tablet_metadata(new_path, content);
+        EXPECT_TRUE(parsed.status().is_corruption()) << parsed.status();
+        overwrite(new_path, content);
+    }
+    _tablet_manager->metacache()->prune();
+    {
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp d([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler",
+                                              [](void* arg) { *(Status*)arg = Status::OK(); });
+        auto res = _tablet_manager->get_tablet_metadata(new_id, 2);
+        EXPECT_FALSE(res.ok());
+        EXPECT_TRUE(res.status().is_corruption()) << res.status();
+    }
+
+    // ---- corrupting a tablet page (new format) is caught by the per-page checksum ----
+    config::lake_enable_protobuf_file_checksum = true;
+    auto page_id = next_id();
+    ASSERT_OK(write_bundle(page_id));
+    auto page_path = _tablet_manager->bundle_tablet_metadata_location(page_id, 2);
+    {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(page_path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        content[0] ^= 0xFF; // flip a byte in the first tablet page (footer/header intact)
+        overwrite(page_path, content);
+    }
+    _tablet_manager->metacache()->prune();
+    {
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp d([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler",
+                                              [](void* arg) { *(Status*)arg = Status::OK(); });
+        auto res = _tablet_manager->get_tablet_metadata(page_id, 2);
+        EXPECT_FALSE(res.ok());
+        EXPECT_TRUE(res.status().is_corruption()) << res.status();
+        EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr("checksum"));
+    }
 }
 
 namespace {
@@ -1272,6 +1553,73 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     }
 }
 
+// Bundle-format segments let multiple rowsets point at the same physical file at disjoint
+// byte ranges. Keying the segment cache on path alone would return the first-loaded slice to
+// every later caller, silently replacing their data. The key must include the bundle offset.
+TEST_F(LakeTabletManagerTest, segment_cache_key_distinguishes_bundle_slices) {
+    FileInfo plain{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice0{.path = "oss://bucket/data/abc.dat"};
+    FileInfo slice1{.path = "oss://bucket/data/abc.dat"};
+    slice0.bundle_file_offset = 0;
+    slice1.bundle_file_offset = 10704;
+
+    const auto plain_key = plain.cache_key();
+    const auto slice0_key = slice0.cache_key();
+    const auto slice1_key = slice1.cache_key();
+
+    // offset absent or zero collapses to the legacy path-only key so the cache layout for
+    // non-bundled segments is unchanged.
+    EXPECT_EQ(plain.path, plain_key);
+    EXPECT_EQ(plain_key, slice0_key);
+
+    // A non-zero bundle offset must fork off its own key; otherwise slice1 would collide with
+    // slice0 and receive slice0's Segment on cache hit.
+    EXPECT_NE(plain_key, slice1_key);
+    EXPECT_THAT(slice1_key, testing::HasSubstr("#10704"));
+}
+
+TEST_F(LakeTabletManagerTest, load_segment_returns_distinct_slices_for_same_path) {
+    // Construct a real file that encodes two back-to-back segments (a common shape produced
+    // by cross-boundary UPSERTs written through BundleWritableFile). We cannot call the full
+    // load_segment+open() path here without a SegmentWriter scaffold — Segment::open parses the
+    // bundle slice's footer — so the cheapest correctness check is that load_segment routes
+    // two different bundle offsets to distinct metacache entries. That is the specific
+    // invariant the cache-key fix protects.
+    const std::string path = _location_provider->segment_location(1, "segment_slice_test.dat");
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    const std::string payload_a(1024, 'A');
+    const std::string payload_b(2048, 'B');
+    {
+        WritableFileOptions opts;
+        ASSIGN_OR_ABORT(auto of, fs->new_writable_file(opts, path));
+        ASSERT_OK(of->append(payload_a));
+        ASSERT_OK(of->append(payload_b));
+        ASSERT_OK(of->close());
+    }
+
+    FileInfo info_a{.path = path};
+    info_a.size = payload_a.size();
+    info_a.bundle_file_offset = 0;
+
+    FileInfo info_b{.path = path};
+    info_b.size = payload_b.size();
+    info_b.bundle_file_offset = static_cast<int64_t>(payload_a.size());
+
+    const auto key_a = info_a.cache_key();
+    const auto key_b = info_b.cache_key();
+    ASSERT_NE(key_a, key_b);
+
+    // Seed the metacache with a marker for key_a, prove a lookup by key_b does NOT find it.
+    // This mirrors the failure mode pre-fix: lookup by path-only would collide.
+    auto marker = std::make_shared<Segment>(fs, info_a, /*segment_id*/ 0, nullptr, _tablet_manager);
+    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(key_a, marker);
+    ASSERT_NE(cached, nullptr);
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_a).get(), marker.get());
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_b), nullptr);
+
+    ASSERT_OK(fs->delete_file(path));
+}
+
 #ifdef USE_STAROS
 class MockStarOSWorker : public StarOSWorker {
 public:
@@ -1313,13 +1661,13 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load_from_remote) {
     shard_info.id = tablet_id;
     shard_info.properties.emplace("indexId", std::to_string(schema_id));
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     // set mock function excepted call
-    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    MockStarOSWorker* worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
     EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillOnce(::testing::Return(shard_info));
 
     // fire the testing
@@ -1340,10 +1688,10 @@ TEST_F(LakeTabletManagerTest, test_in_writing_data_size) {
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 200);
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    std::shared_ptr<StarOSWorker> origin_worker = g_worker;
-    g_worker.reset(new MockStarOSWorker());
-    DeferOp op([origin_worker] { g_worker = origin_worker; });
+    // Preserve original worker value, and reset it to our mocked worker.
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
 
     _tablet_manager->clean_in_writing_data_size();
     ASSERT_EQ(_tablet_manager->in_writing_data_size(1), 0);
@@ -1624,6 +1972,54 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets_capture_delta_versions_
         auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 0, 3);
         EXPECT_TRUE(res.status().is_not_supported());
     }
+}
+
+// Verify that pick_local_anchor_tablet_id prefers a tablet id that this worker owns.
+// In file-bundling mode the aggregator derives bundle/txn-log paths from a single
+// tablet id of the batch; using a remote tablet id forces the staros worker to fetch
+// shard info via RPC, so the helper must skip non-local ids and pick a local one.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_skips_non_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: tablets 100 and 101 are NOT on this worker; 102 is.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        if (p->first == 100 || p->first == 101) {
+            *(p->second) = false;
+        }
+    });
+
+    std::vector<int64_t> candidates{100, 101, 102, 103};
+    EXPECT_EQ(102, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_falls_back_to_first_when_none_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: no tablet is on this worker.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        *(p->second) = false;
+    });
+
+    std::vector<int64_t> candidates{200, 201, 202};
+    // No local tablet available → the helper must still return a usable id (the first).
+    EXPECT_EQ(200, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all_local) {
+    // Without any sync-point override, is_tablet_in_worker returns true by default in
+    // unit tests (the StarOS worker is null), so the first candidate is picked immediately.
+    std::vector<int64_t> candidates{300, 301, 302};
+    EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
 }
 
 #endif // USE_STAROS

@@ -12,29 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <aws/core/Aws.h>
-#include <aws/core/client/ClientConfiguration.h>
 #include <glog/logging.h>
 #include <unistd.h>
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 
 #include "base/time/timezone_utils.h"
 #include "common/config_lake_fwd.h"
 #include "common/configbase.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/system/mem_info.h"
+#include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"
+#include "platform/aws/aws_sdk_guard.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "types/time_types.h"
 
 namespace starrocks::lake {
 
 static bool _starrocks_format_inited = false;
-Aws::SDKOptions aws_sdk_options;
+static std::unique_ptr<starrocks::AwsSdkGuard> _aws_sdk_guard;
+static starrocks::ProcessMetricsRegistry* process_metrics_registry() {
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    return registry;
+}
 
 lake::TabletManager* _lake_tablet_manager = nullptr;
 
@@ -57,14 +64,17 @@ void starrocks_format_initialize(void) {
             return;
         }
 
-        Aws::InitAPI(aws_sdk_options);
+        _aws_sdk_guard = std::make_unique<starrocks::AwsSdkGuard>(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
+
+        auto lzo_status = starrocks::register_orc_lzo_decompressor();
+        CHECK(lzo_status.ok()) << "register ORC LZO decompressor error: " << lzo_status;
 
         MemInfo::init();
         date::init_date_cache();
 
         TimezoneUtils::init_time_zones();
 
-        auto ge_init_stat = GlobalEnv::GetInstance()->init();
+        auto ge_init_stat = GlobalEnv::GetInstance()->init(process_metrics_registry()->root_registry());
         CHECK(ge_init_stat.ok()) << "init global env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
@@ -79,8 +89,9 @@ void starrocks_format_initialize(void) {
 void starrocks_format_shutdown(void) {
     if (_starrocks_format_inited) {
         LOG(INFO) << "starrocks format module start to deinitialize";
-        Aws::ShutdownAPI(aws_sdk_options);
         SAFE_DELETE(_lake_tablet_manager);
+        starrocks::close_s3_clients();
+        _aws_sdk_guard.reset();
         // SAFE_DELETE(_lake_update_manager);
         LOG(INFO) << "starrocks format module has been deinitialized successfully";
     } else {

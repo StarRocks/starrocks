@@ -1,7 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
-description: Partition and bucket data
+description: "How to configure partitioning and bucketing in StarRocks for even data distribution and optimal query performance."
 sidebar_position: 30
 ---
 
@@ -198,11 +198,13 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 The bucketing method divides a partition into multiple buckets. Data in a bucket is referred to as a tablet.
 
-The supported bucketing methods are [random bucketing](#random-bucketing-since-v31) (from v3.1) and [hash bucketing](#hash-bucketing).
+The supported bucketing methods are [random bucketing](#random-bucketing-since-v31) (from v3.1), [hash bucketing](#hash-bucketing), and [range-based bucketing](#range-based-bucketing) (from v4.1).
 
 - Random bucketing: When creating a table or adding partitions, you do not need to set a bucketing key. Data within a partition is randomly distributed into different buckets.
 
 - Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
+
+- Range-based bucketing: From v4.1, if the FE configuration `enable_range_distribution` is enabled, a table that specifies an explicit key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause distributes data within a partition by the range of those columns. Tablets can be automatically split or merged to mitigate data skew. This semantic is disabled by default.
 
 The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). You can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
 
@@ -854,6 +856,30 @@ CREATE TABLE pk_table (
     name varchar(64)
 )
 PRIMARY KEY (tenant_id, created_time, id);
+```
+
+#### Limitations
+
+The following operations are not supported on tables with range distribution:
+
+| DDL | Reason |
+|---|---|
+| `ALTER TABLE ... ADD ROLLUP ...` | Synchronous rollup assumes 1-to-1 base/rollup tablet pairing with same row order, which range distribution does not provide. |
+| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | Same code path as `ADD ROLLUP`. |
+| `ALTER TABLE ... ORDER BY (...)` (modify sort key) | The sort key defines tablet boundaries, so modifying it would invalidate existing range tablets. |
+| `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
+| `ALTER TABLE ... ADD COLUMN <col> KEY ...` | New key columns auto-append to the (derived) range sort key on AGG/UNIQUE tables or tables without explicit `ORDER BY`. |
+| `ALTER TABLE ... DROP COLUMN <col>` where `<col>` is in the range sort key | Removing a sort-key column invalidates the stored 1:1-copied range tablet boundary values. |
+| `ALTER TABLE ... MODIFY COLUMN <col> ...` where `<col>` is in the range sort key | Changes the type/semantics under which the stored range tablet boundary values were recorded. |
+| `ALTER TABLE ... MODIFY COLUMN <col> ... KEY` (or value-column promotion in any keys-type) that flips keyness | A keyness flip shifts the key-derived range sort key on AGG/UNIQUE / no-explicit-ORDER-BY tables. |
+
+For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, e.g.:
+
+```sql
+CREATE MATERIALIZED VIEW mv
+DISTRIBUTED BY HASH(col)
+REFRESH ASYNC
+AS SELECT ... FROM range_table;
 ```
 
 ### Set the number of buckets

@@ -18,6 +18,7 @@ set(BASE_TEST_FILES
     bit/bit_packing_simd_test.cpp
     bit/bit_packing_test.cpp
     bit/bitmap_test.cpp
+    bit/frame_of_reference_coding_test.cpp
     bit/rle_encoding_test.cpp
     bit/bit_stream_utils_test.cpp
     bit/bit_util_test.cpp
@@ -28,14 +29,18 @@ set(BASE_TEST_FILES
     bthreads/single_flight_test.cpp
     brpc/ref_count_closure_test.cpp
     brpc/recoverable_closure_test.cpp
+    brpc/disposable_closure_test.cpp
     brpc/reusable_closure_test.cpp
     concurrency/await_test.cpp
     concurrency/blocking_queue_test.cpp
     concurrency/concurrent_limiter_test.cpp
     concurrency/limit_setter_test.cpp
     concurrency/countdown_latch_test.cpp
+    concurrency/multi_level_concurrent_queue_test.cpp
+    concurrency/once_test.cpp
     concurrency/shared_mutex_test.cpp
     concurrency/core_local_test.cpp
+    compression/block_compression_test.cpp
     container/heap_test.cpp
     lru_cache_test.cpp
     container/priority_queue_test.cpp
@@ -56,6 +61,7 @@ set(BASE_TEST_FILES
     hash/crc32c_test.cpp
     hash/hash_util_test.cpp
     json/easy_json-test.cpp
+    json/json_util_test.cpp
     path/filesystem_util_test.cpp
     path/file_util_test.cpp
     path/path_builder_test.cpp
@@ -67,6 +73,8 @@ set(BASE_TEST_FILES
     simd/batch_run_counter_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
+    simd/rle_simd_test.cpp
+    simd/string_length_filter_test.cpp
     stats/ndv_estimator_test.cpp
     string/base85_test.cpp
     string/c_string_test.cpp
@@ -80,6 +88,7 @@ set(BASE_TEST_FILES
     string/slice_test.cpp
     string/url_parser_test.cpp
     string/utf8_check_test.cpp
+    string/utf8_encoding_test.cpp
     string/volnitsky_test.cpp
     testutil/sync_point_test.cpp
     time/ratelimit_test.cpp

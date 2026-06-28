@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks v3.0 以降の JDBC catalog で、JDBC データソースからデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 4
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -68,6 +70,16 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | oracle.number.default-scale    | 6           | Oracle の `NUMBER` メタデータに明示的な精度とスケールが指定されていない場合に設定します。有効な範囲：`0`～`38`。             |
 | oracle.temporal.to-datetime    | false       | Oracle の `DATE`、`TIMESTAMP`、および `TIMESTAMP WITH LOCAL TIME ZONE` のマッピングを制御します。この設定が `true` に設定されている場合、これらのデータ型は StarRocks の `DATETIME` 型にマッピングされます。そうでない場合、`DATE` は `DATE` のままとなり、`TIMESTAMP` および `TIMESTAMP WITH LOCAL TIME ZONE` は `VARCHAR(64)` にマッピングされます。 |
 | oracle.timestamptz.to-datetime | false       | Oracle の `TIMESTAMP WITH TIME ZONE` のマッピングを制御します。`true` に設定されている場合、StarRocksの `DATETIME` 型にマッピングされます。それ以外の場合は、 `VARCHAR(64)` にマッピングされます。 |
+
+#### オプションの行数キャッシュプロパティ
+
+StarRocks は JDBC データソースのテーブルごとの行数をキャッシュし、クエリプランニング時のブロッキングを回避します。これらのプロパティを使用して、カタログごとにキャッシュの動作を調整できます。設定しない場合は、グローバル FE 設定値が使用されます。
+
+| **パラメータ**                       | **デフォルト** | **説明**                                                                                                              |
+| ----------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| jdbc_row_count_cache_refresh_sec    | 600          | バックグラウンド更新間隔（秒）。この間隔を過ぎると、古いキャッシュ値を即座に返しながらバックグラウンドで非同期に再読み込みします。 |
+| jdbc_row_count_cache_expire_sec     | 1200         | 強制削除 TTL（秒）。この期間内にアクセスされなかったキャッシュエントリは削除されます。`jdbc_row_count_cache_refresh_sec` より大きい値を設定してください。 |
+| jdbc_row_count_cache_max_size       | 10000        | このカタログの行数キャッシュの最大テーブルエントリ数。                                                                    |
 
 > **注意**
 >
@@ -215,6 +227,16 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
+
+## ネイティブ SQL で JDBC データをクエリする
+
+v4.1 以降、StarRocks は [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) テーブル関数を使用して、データベースネイティブの `SELECT` 文で JDBC データをクエリできます。
+
+ソースデータベース側の Join、事前にフィルタリングしたサブクエリ、またはベンダー固有の SQL 構文など、単一の external table クエリでは表現できない SQL をソースデータベースで実行する必要がある場合に `native_query` を使用できます。StarRocks はパススルークエリの結果を通常のリレーションとして公開するため、StarRocks 側でさらにフィルター、Join、集計、射影を適用できます。
+
+構文、制限事項、例については、[`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) を参照してください。
 
 ## FAQ
 

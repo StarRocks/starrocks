@@ -16,10 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
+#include "column/raw_data_visitor.h"
 
 namespace starrocks {
 
@@ -78,7 +80,9 @@ PARALLEL_TEST(ConstColumnTest, test_basic) {
     column->append_default();
     ASSERT_EQ(101, column->size());
 
-    auto data = reinterpret_cast<const int32_t*>(column->raw_data());
+    RawDataVisitor rv;
+    ASSERT_OK(column->accept(&rv));
+    const auto* data = reinterpret_cast<const int32_t*>(rv.result());
     ASSERT_EQ(data[0], 2020);
 
     int num = 10;
@@ -342,7 +346,7 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
 
     ASSERT_EQ(3, c1->size());
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(2);
     offsets.emplace_back(5);

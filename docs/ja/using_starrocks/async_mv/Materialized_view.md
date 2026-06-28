@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "非同期マテリアライズドビューは StarRocks v2.4 以降マルチテーブルジョインと複雑な集計クエリを加速させます。"
 sidebar_position: 10
 keywords: ['materialized', 'view', 'views']
 ---

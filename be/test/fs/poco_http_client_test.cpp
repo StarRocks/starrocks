@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/s3/poco_http_client.h"
+#include "platform/aws/poco_http_client.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
@@ -28,8 +28,9 @@
 #include "common/config_object_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_s3.h"
-#include "fs/s3/poco_http_client_factory.h"
 #include "io/s3_input_stream.h"
+#include "platform/aws/poco_common.h"
+#include "platform/aws/poco_http_client_factory.h"
 
 namespace starrocks::poco {
 
@@ -76,6 +77,7 @@ void S3PocoHttpClientTest::SetUpTestCase() {
 }
 
 void S3PocoHttpClientTest::TearDownTestCase() {
+    HTTPSessionPools::instance().shutdown();
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
 

@@ -274,7 +274,7 @@ public class PartitionUtilTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                                   ConnectorMetadatRequestContext requestContext) {
+                                                   ConnectorMetadataRequestContext requestContext) {
                 return partitionNames;
             }
         };
@@ -291,7 +291,7 @@ public class PartitionUtilTest {
         };
 
         PCellSortedSet partitionMap =
-                MVPartitionCellBuilder.getPartitionKeyRange(table, partitionColumn, null);
+                MVPartitionCellBuilder.getPartitionKeyRange(table, partitionColumn, null).cells();
         Assertions.assertEquals(partitionMap.size(), partitionNames.size());
         Assertions.assertTrue(partitionMap.containsName("p20221202"));
         PartitionKey upperBound = new PartitionKey();

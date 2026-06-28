@@ -107,7 +107,7 @@ Status DataCacheUtils::parse_conf_datacache_disk_paths(const std::string& config
             continue;
         }
 
-        string canonicalized_path;
+        std::string canonicalized_path;
         status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
         if (!status.ok()) {
             LOG(WARNING) << "datacache path can not be canonicalized. may be not exist. path: " << item;
@@ -188,7 +188,7 @@ dev_t DataCacheUtils::disk_device_id(const std::string& disk_path) {
 
 #ifdef USE_STAROS
 StatusOr<std::vector<std::string>> DataCacheUtils::get_corresponding_starlet_cache_dir(
-        const std::vector<StorePath>& store_paths, const std::string& starlet_cache_dir) {
+        const std::vector<std::string>& store_paths, const std::string& starlet_cache_dir) {
     std::vector<std::string> corresponding_starlet_dirs;
     if (starlet_cache_dir.empty()) {
         return corresponding_starlet_dirs;
@@ -219,8 +219,7 @@ StatusOr<std::vector<std::string>> DataCacheUtils::get_corresponding_starlet_cac
         }
     }
 
-    for (auto& store_path : store_paths) {
-        std::string root_path = store_path.path;
+    for (auto& root_path : store_paths) {
         auto id = DataCacheUtils::disk_device_id(root_path);
         if (id == 0) {
             std::string error_str =

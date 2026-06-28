@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks FE 配置参数完整参考：fe.conf 或 ADMIN SET FRONTEND CONFIG 可配置的所有参数。"
 ---
 
 import FEConfigMethod from '../../_assets/commonMarkdown/FE_config_method.mdx'
@@ -56,6 +57,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - [加载与卸载](./FE_parameters/user_query_loading.md)
 - [统计报告](./FE_parameters/stats_storage.md)
 - [存储](./FE_parameters/stats_storage.md)
-- [共享数据](./FE_parameters/shared_lake_other.md)
+- [存算分离](./FE_parameters/shared_lake_other.md)
 - [数据湖](./FE_parameters/shared_lake_other.md)
 - [其他](./FE_parameters/shared_lake_other.md)

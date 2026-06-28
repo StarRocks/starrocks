@@ -18,6 +18,7 @@
 #include <functional>
 #include <future>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,10 +26,9 @@
 #include "common/status.h"
 #include "common/statusor.h"
 
-namespace starrocks::io {
-class AsyncFlushOutputStream;
-}
 namespace starrocks::formats {
+
+class AsyncFlushOutputStream;
 
 struct FileWriterOptions {
     virtual ~FileWriterOptions() = default;
@@ -69,7 +69,7 @@ public:
 };
 
 struct WriterAndStream {
-    std::unique_ptr<io::AsyncFlushOutputStream> stream;
+    std::unique_ptr<AsyncFlushOutputStream> stream;
     std::unique_ptr<FileWriter> writer;
 };
 

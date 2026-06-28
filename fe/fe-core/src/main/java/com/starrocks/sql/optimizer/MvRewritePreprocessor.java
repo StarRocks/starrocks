@@ -65,7 +65,9 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -518,19 +520,25 @@ public class MvRewritePreprocessor {
                                                                  long timeoutMs) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
-            return MVPlanValidationResult.invalid("MV is not active");
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.MV_INACTIVE, "MV is not active");
+        }
+        if (mv.getRefreshMode().isIncrementalOrAuto()) {
+            String message = "query rewrite is not supported for refresh_mode=" + mv.getRefreshMode().name();
+            OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION, message);
         }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return MVPlanValidationResult.invalid(message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.QUERY_REWRITE_DISABLED, message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
-            return MVPlanValidationResult.invalid("MV contains extra tables besides FK-PK");
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                    "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         final List<MvPlanContext> planContexts = force ?
@@ -540,7 +548,8 @@ public class MvRewritePreprocessor {
                         .getPlanContextIfPresent(mv, timeoutMs);
         // if mv is not in plan cache, we cannot determine whether it's valid
         if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
-            return MVPlanValidationResult.unknown("MV plan is not in cache, valid check is unknown");
+            return MVPlanValidationResult.unknown(MVPlanValidationResult.Reason.UNKNOWN,
+                    "MV plan is not in cache, valid check is unknown");
         }
         if (CollectionUtils.isNotEmpty(planContexts) &&
                 planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
@@ -550,7 +559,8 @@ public class MvRewritePreprocessor {
                     .map(MvPlanContext::getInvalidReason)
                     .collect(Collectors.joining(";"));
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return MVPlanValidationResult.invalid("no valid plan: " + message);
+            return MVPlanValidationResult.invalid(MVPlanValidationResult.Reason.UNSUPPORTED_DEFINITION,
+                    "no valid plan: " + message);
         }
         return MVPlanValidationResult.valid();
     }
@@ -1194,7 +1204,11 @@ public class MvRewritePreprocessor {
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
-            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+            RangeDistributionSpec rangeSpec = DistributionSpecHelper
+                    .buildRangeDistributionSpecSkeleton(mv, columnMetaToColRefMap);
+            distributionSpec = rangeSpec != null
+                    ? rangeSpec
+                    : DistributionSpec.createAnyDistributionSpec();
         }
 
         return distributionSpec;

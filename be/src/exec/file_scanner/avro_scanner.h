@@ -21,11 +21,11 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "exprs/json_functions.h"
 #include "fs/fs.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -76,7 +76,7 @@ private:
     Status _construct_row(const avro_value_t& avro_value, Chunk* chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
-                             const std::string& col_name);
+                             std::string_view col_name);
     Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
                           avro_value_t* output_value);
     Status _handle_union(const avro_value_t* input_value, avro_value_t* branch);
@@ -97,6 +97,8 @@ private:
     ObjectPool _pool;
     std::shared_ptr<SequentialFile> _file;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+    // Maps each source slot id to its intermediate avro load type (see AvroScanner::_construct_avro_types).
+    std::unordered_map<SlotId, TypeDescriptor> _slot_id_to_avro_type;
     std::vector<bool> _found_columns;
     std::vector<SlotInfo> _data_idx_to_slot;
     std::vector<std::string> _data_idx_to_fieldname;

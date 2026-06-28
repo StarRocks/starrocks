@@ -29,9 +29,12 @@
 #include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
@@ -49,10 +52,12 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
     auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
     if (std::is_same_v<SinkFactory, SpillableAggregateBlockingSinkOperatorFactory> ||
         std::is_same_v<SinkFactory, SpillablePartitionWiseAggregateSinkOperatorFactory>) {
-        context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
+        ::starrocks::pipeline::builder::interpolate_spill_process(context, id(), spill_channel_factory,
+                                                                  degree_of_parallelism);
     }
 
-    auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
+    auto should_cache =
+            ::starrocks::pipeline::builder::should_interpolate_cache_operator(context, id(), ops_with_sink[0]);
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     auto operators_generator = [
         this, &should_cache, upstream_source_op, context,
@@ -87,7 +92,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
     // Create a shared RefCountedRuntimeFilterCollector
     // Initialize OperatorFactory's fields involving runtime filters.
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
     auto bucket_process_context_factory = std::make_shared<BucketProcessContextFactory>();
     if (per_bucket_optimize) {
         agg_sink_op = std::make_shared<BucketProcessSinkOperatorFactory>(
@@ -98,7 +103,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
 
     if (per_bucket_optimize) {
         auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
@@ -109,8 +114,8 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {
-        ops_with_source =
-                context->interpolate_cache_operator(id(), ops_with_sink, ops_with_source, operators_generator);
+        ops_with_source = ::starrocks::pipeline::builder::interpolate_cache_operator(
+                context, id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
 
@@ -132,13 +137,14 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
     bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
-        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
-            std::vector<ExprContext*> group_by_expr_ctxs;
-            WARN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
-                                                         runtime_state(), true),
-                          "create grouping expr failed");
-            return group_by_expr_ctxs;
-        });
+        return ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), ops, [this]() {
+                    std::vector<ExprContext*> group_by_expr_ctxs;
+                    WARN_IF_ERROR(ExprFactory::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs,
+                                                                 &group_by_expr_ctxs, runtime_state(), true),
+                                  "create grouping expr failed");
+                    return group_by_expr_ctxs;
+                });
     };
 
     if (!sorted_streaming_aggregate) {
@@ -150,8 +156,8 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
         //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
         if (agg_node.need_finalize) {
             if (!has_group_by_keys) {
-                ops_with_sink =
-                        context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
+                ops_with_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                        context, runtime_state(), id(), ops_with_sink);
             } else if (could_local_shuffle) {
                 ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
             }
@@ -174,8 +180,10 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
                                         SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context, false)));
     } else {
         // disable spill when group by with a small limit
+        // having clause filters rows after aggregation, so a small limit does not bound the
+        // aggregation input size; only disable spill when there is no having clause.
         bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
-        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+        if (limit() != -1 && limit() < runtime_state()->chunk_size() && _tnode.conjuncts.empty()) {
             enable_agg_spill = false;
         }
         if (enable_agg_spill && has_group_by_keys) {
@@ -211,10 +219,11 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+        pipeline::may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
-    ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
+    ops_with_source =
+            ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops_with_source);
 
     return ops_with_source;
 }

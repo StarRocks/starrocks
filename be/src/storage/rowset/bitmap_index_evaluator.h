@@ -14,12 +14,19 @@
 
 #pragma once
 
-#include "bitmap_index_reader.h"
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/range.h"
+#include "storage/primitive/bitmap_index_iterator.h"
+#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage/primitive/range.h"
 
 namespace starrocks {
+
+class Schema;
 
 struct BitmapContext {
     struct ColumnContext {

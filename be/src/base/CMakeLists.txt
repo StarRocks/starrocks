@@ -16,6 +16,13 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
 ADD_BE_LIB(Base
   bthreads/future_impl.cpp
+  bit/frame_of_reference_coding.cpp
+  compression/block_compression.cpp
+  compression/compression_context_pool_metrics.cpp
+  compression/compression_context_pool_singletons.cpp
+  compression/lzo_decompressor_registry.cpp
+  compression/stream_compressor.cpp
+  compression/stream_decompressor.cpp
   concurrency/await.cpp
   concurrency/core_local.cpp
   concurrency/spinlock.cpp
@@ -28,6 +35,7 @@ ADD_BE_LIB(Base
   debug/trace.cpp
   debug/trace_metrics.cpp
   coding.cpp
+  base64.cpp
   gc/gc_helper.cpp
   memory/jemalloc_allocator.cpp
   memory/malloc_allocator.cpp
@@ -39,6 +47,7 @@ ADD_BE_LIB(Base
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
   failpoint/fail_point.cpp
+  format.cpp
   path/filesystem_util.cc
   process/lite_exec.cpp
   types/decimal12.cpp
@@ -46,11 +55,13 @@ ADD_BE_LIB(Base
   types/int256.cpp
   types/int96.cpp
   json/easy_json.cc
+  json/json_util.cpp
   path/file_util.cpp
   path/path_builder.cpp
   path/path_util.cpp
   random/random.cc
   simd/expand.cpp
+  simd/rle_simd.cpp
   stats/ndv_estimator.cpp
   metrics.cpp
   string/base85.cpp
@@ -69,6 +80,9 @@ ADD_BE_LIB(Base
   time/time.cpp
   time/timezone_utils.cpp
   template/mustache/mustache.cc
+  # base/testutil is not the UT-only TestUtil library. Production sources
+  # include its BE_TEST-gated sync-point/fault-injection macros, which compile
+  # to no-ops outside unit-test builds.
   testutil/assert.cpp
   testutil/sync_point.cc
   testutil/sync_point_impl.cc

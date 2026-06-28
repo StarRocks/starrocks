@@ -351,38 +351,40 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         size_t type_size = res->type_size();
         memset(res->mutable_raw_data(), 1, res->size() * type_size);
     } else {
-        const Buffer<uint32_t>& offsets = haystack->get_offset();
+        const auto& offsets = haystack->get_offset();
         res->resize(haystack->size());
 
         const char* begin = haystack->get_string_begin();
-        const char* pos = begin;
         const char* end = haystack->get_string_end();
 
-        /// Current index in the array of strings.
-        size_t i = 0;
+        offsets.visit_storage([&](const auto& offsets_buf) {
+            const auto* __restrict offset_data = offsets_buf.data();
+            const char* pos = begin;
 
-        auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
-        /// We will search for the next occurrence in all strings at once.
-        while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
-            /// Determine which index it refers to.
-            while (begin + offsets[i + 1] <= pos) {
-                res->get_data()[i] = false;
+            /// Current index in the array of strings.
+            size_t i = 0;
+
+            auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
+            /// We will search for the next occurrence in all strings at once.
+            while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+                /// Determine which index it refers to.
+                while (begin + offset_data[i + 1] <= pos) {
+                    res->get_data()[i] = false;
+                    ++i;
+                }
+                const char* row_end = begin + offset_data[i + 1];
+
+                /// We check that the entry does not pass through the boundaries of strings.
+                res->get_data()[i] = pos + needle.size <= row_end;
+                pos = row_end;
                 ++i;
             }
-            /// We check that the entry does not pass through the boundaries of strings.
-            if (pos + needle.size > begin + offsets[i + 1]) {
-                res->get_data()[i] = false;
-            } else {
-                res->get_data()[i] = true;
-            }
-            pos = begin + offsets[i + 1];
-            ++i;
-        }
 
-        if (i < res->size()) {
-            size_t type_size = res->type_size();
-            memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
-        }
+            if (i < res->size()) {
+                size_t type_size = res->type_size();
+                memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
+            }
+        });
     }
 
     if (columns[0]->has_null()) {

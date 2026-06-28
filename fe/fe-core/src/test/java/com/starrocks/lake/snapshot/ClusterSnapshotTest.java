@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
@@ -36,6 +37,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -49,6 +51,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TBrokerFD;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -56,6 +59,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -135,6 +143,21 @@ public class ClusterSnapshotTest {
             public void deletePath(String path, Map<String, String> loadProperties) {
                 return;
             } // IOException
+
+            @Mock
+            public TBrokerFD openWriter(String path, Map<String, String> loadProperties) {
+                return new TBrokerFD();
+            }
+
+            @Mock
+            public void pwrite(TBrokerFD fd, long offset, byte[] data) {
+                return;
+            }
+
+            @Mock
+            public void closeWriter(TBrokerFD fd) {
+                return;
+            }
         };
 
         setAutomatedSnapshotOff(false);
@@ -224,6 +247,146 @@ public class ClusterSnapshotTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job));
         setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testUploadWritesMetaFile() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        List<String> writeFilePaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writeFilePaths.add(destFilePath);
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writeFilePaths.size());
+        Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testClearDeletesMetaFileFirst() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.FINISHED);
+
+        List<String> deletedPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> loadProperties) {
+                deletedPaths.add(path);
+            }
+        };
+
+        ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
+
+        Assertions.assertEquals(2, deletedPaths.size());
+        // First deletion should be the meta file
+        Assertions.assertTrue(deletedPaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        // Second deletion should be the snapshot directory
+        Assertions.assertFalse(deletedPaths.get(1).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testCheckSnapshotMetaFileExist() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) {
+                return remotePath.endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            }
+        };
+
+        Assertions.assertTrue(ClusterSnapshotUtils.checkSnapshotMetaFileExist(
+                "s3://bucket/path/snapshot1", new HashMap<>()));
+        Assertions.assertEquals("s3://bucket/path/snapshot1/" + ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME,
+                ClusterSnapshotUtils.getSnapshotMetaFilePath("s3://bucket/path/snapshot1"));
+    }
+
+    @Test
+    public void testDeleteSnapshotMetaFileException() {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                throw new StarRocksException("delete failed");
+            }
+        };
+
+        // Should not throw, just log warning
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.deleteSnapshotMetaFile("s3://bucket/path/snapshot1", new HashMap<>()));
+    }
+
+    @Test
+    public void testReadLocalSnapshotMetaFile() throws Exception {
+        Path tempDir = Files.createTempDirectory("snapshot_read_test");
+        try {
+            // Case 1: file does not exist — returns null
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 2: valid meta file — returns ClusterSnapshot
+            ClusterSnapshot snapshot = new ClusterSnapshot(1L, "test_snapshot",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8));
+
+            ClusterSnapshot result = ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString());
+            Assertions.assertNotNull(result);
+            Assertions.assertEquals("test_snapshot", result.getSnapshotName());
+            Assertions.assertEquals(100L, result.getFeJournalId());
+            Assertions.assertEquals(200L, result.getStarMgrJournalId());
+
+            // Case 3: corrupted file — returns null
+            Files.write(metaFile.toPath(), "invalid json".getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 4: valid JSON but missing snapshotName — returns null
+            ClusterSnapshot incomplete = new ClusterSnapshot(1L, null,
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(incomplete).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 5: valid JSON but zero journalId — returns null
+            ClusterSnapshot zeroJournal = new ClusterSnapshot(1L, "test",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 0L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(zeroJournal).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+        } finally {
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            metaFile.delete();
+            tempDir.toFile().delete();
+        }
+    }
+
+    @Test
+    public void testDeleteLocalSnapshotMetaFile() throws Exception {
+        // Create a temp directory and a snapshot_meta.json file
+        Path tempDir = Files.createTempDirectory("snapshot_test");
+        File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+        Assertions.assertTrue(metaFile.createNewFile());
+        Assertions.assertTrue(metaFile.exists());
+
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+        Assertions.assertFalse(metaFile.exists());
+
+        // Call again on non-existing file — should be a no-op
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+
+        tempDir.toFile().delete();
     }
 
     @Test
@@ -405,6 +568,33 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testSnapshotHealthAccessors() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+        Assertions.assertEquals(0, mgr.getConsecutiveFailureCount());
+        Assertions.assertEquals(0L, mgr.getLastSuccessTimeMs());
+
+        mgr.setAutomatedSnapshotOn(storageVolumeName);
+        ClusterSnapshotJob ok = mgr.createAutomatedSnapshotJob();
+        ok.setState(ClusterSnapshotJobState.FINISHED);
+        ClusterSnapshotJob e1 = mgr.createAutomatedSnapshotJob();
+        e1.setState(ClusterSnapshotJobState.ERROR);
+        ClusterSnapshotJob e2 = mgr.createAutomatedSnapshotJob();
+        e2.setState(ClusterSnapshotJobState.ERROR);
+        // A newer in-progress job must not be counted as a failure nor stop the count.
+        mgr.createAutomatedSnapshotJob(); // stays INITIALIZING (in-progress)
+
+        Assertions.assertEquals(2, mgr.getConsecutiveFailureCount());
+        Assertions.assertTrue(mgr.getLastSuccessTimeMs() > 0);
+        mgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
     public void testDeletionControl() {
         new MockUp<RunMode>() {
             @Mock
@@ -414,26 +604,106 @@ public class ClusterSnapshotTest {
         };
 
         {
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-            Assertions.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
-            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            // snapshot OFF -> no constraint
+            Assertions.assertEquals(Long.MAX_VALUE, mgr.getSafeDeletionTimeMs());
 
-            ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            // ON, zero jobs -> nothing to protect -> ~now (recycle bin free)
+            long before = System.currentTimeMillis();
+            long safe0 = mgr.getSafeDeletionTimeMs();
+            Assertions.assertTrue(safe0 >= before && safe0 <= System.currentTimeMillis() + 5000,
+                    "expected ~now, got " + safe0);
+
+            // exactly one FINISHED -> protect it
+            ClusterSnapshotJob job1 = mgr.createAutomatedSnapshotJob();
             job1.setState(ClusterSnapshotJobState.FINISHED);
-            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
-            ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            Assertions.assertEquals(job1.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+
+            // two FINISHED -> protect the 2nd-newest (unchanged behavior)
+            ClusterSnapshotJob job2 = mgr.createAutomatedSnapshotJob();
             job2.setState(ClusterSnapshotJobState.FINISHED);
-            Assertions.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), job1.getCreatedTimeMs());
-            localClusterSnapshotMgr.setAutomatedSnapshotOff();
+            Assertions.assertEquals(job1.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // all-ERROR history (production scenario) -> ~now (recycle bin free, not frozen)
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob jobE = mgr.createAutomatedSnapshotJob();
+            jobE.setState(ClusterSnapshotJobState.ERROR);
+            long before2 = System.currentTimeMillis();
+            long safeE = mgr.getSafeDeletionTimeMs();
+            Assertions.assertTrue(safeE >= before2 && safeE <= System.currentTimeMillis() + 5000,
+                    "expected ~now, got " + safeE);
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // zero finished + an in-progress job -> protect the in-progress job's createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob init = mgr.createAutomatedSnapshotJob(); // stays INITIALIZING (unfinished)
+            Assertions.assertEquals(init.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // one FINISHED + a newer in-progress job -> min(finished, in-progress) = the FINISHED createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob good = mgr.createAutomatedSnapshotJob();
+            good.setState(ClusterSnapshotJobState.FINISHED);
+            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob(); // INITIALIZING, created after good
+            Assertions.assertEquals(good.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // one FINISHED followed by a newer ERROR -> still protect the last good snapshot
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob good = mgr.createAutomatedSnapshotJob();
+            good.setState(ClusterSnapshotJobState.FINISHED);
+            ClusterSnapshotJob failAfter = mgr.createAutomatedSnapshotJob();
+            failAfter.setState(ClusterSnapshotJobState.ERROR);
+            Assertions.assertEquals(good.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // newer FINISHED with an older EXPIRED below it -> 2nd-completed boundary = the EXPIRED createdTime
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob older = mgr.createAutomatedSnapshotJob();
+            older.setState(ClusterSnapshotJobState.FINISHED);
+            older.setState(ClusterSnapshotJobState.EXPIRED);
+            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob();
+            newer.setState(ClusterSnapshotJobState.FINISHED);
+            Assertions.assertEquals(older.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
+        }
+        {
+            // production lifecycle: an old snapshot fully retired (FINISHED -> EXPIRED -> DELETED), a newer
+            // FINISHED, then a trailing ERROR. The DELETED job still anchors the 2nd-completed boundary
+            // (historical behavior); the trailing ERROR protects nothing.
+            final ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
+            mgr.setAutomatedSnapshotOn(storageVolumeName);
+            ClusterSnapshotJob retired = mgr.createAutomatedSnapshotJob();
+            retired.setState(ClusterSnapshotJobState.FINISHED);
+            retired.setState(ClusterSnapshotJobState.EXPIRED);
+            retired.setState(ClusterSnapshotJobState.DELETED);
+            ClusterSnapshotJob newer = mgr.createAutomatedSnapshotJob();
+            newer.setState(ClusterSnapshotJobState.FINISHED);
+            ClusterSnapshotJob failAfter = mgr.createAutomatedSnapshotJob();
+            failAfter.setState(ClusterSnapshotJobState.ERROR);
+            Assertions.assertEquals(retired.getCreatedTimeMs(), mgr.getSafeDeletionTimeMs());
+            mgr.setAutomatedSnapshotOff();
         }
 
         AlterJobV2 alterjob1 = new SchemaChangeJobV2(1, 2, 10, "table1", 100000);
         AlterJobV2 alterjob2 = new SchemaChangeJobV2(2, 2, 11, "table2", 100000);
         alterjob1.setJobState(AlterJobV2.JobState.FINISHED);
-        alterjob1.setFinishedTimeMs(1000);
+        alterjob1.setFinishedTimeMs(1000); // ancient alter (table 10): older than any snapshot boundary
         alterjob2.setJobState(AlterJobV2.JobState.FINISHED);
-        alterjob2.setFinishedTimeMs(1000);
+        alterjob2.setFinishedTimeMs(Long.MAX_VALUE); // "future" alter (table 11): newer than any boundary
         MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         schemaChangeHandler.addAlterJobV2(alterjob1);
@@ -453,21 +723,26 @@ public class ClusterSnapshotTest {
 
         {
             final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            // snapshot OFF -> always safe to delete tablets
             Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
             localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            // ON but no successful snapshot -> recycle bin is NOT frozen: an alter older than the
+            // safe-deletion boundary (table 10, finished at epoch 1000) is safe to delete; an alter
+            // newer than the boundary (table 11, finished in the future) is still protected.
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+
             ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             j1.setState(ClusterSnapshotJobState.FINISHED);
-
-            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
 
             ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
             j2.setState(ClusterSnapshotJobState.FINISHED);
-
             Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-            Assertions.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            Assertions.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
             localClusterSnapshotMgr.setAutomatedSnapshotOff();
         }
     }

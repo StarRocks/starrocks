@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/dictionary_cache_manager.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 
 #include <fmt/format.h>
 #include <gmock/gmock.h>
@@ -21,10 +21,16 @@
 #include <fstream>
 
 #include "base/testutil/assert.h"
-#include "exec/tablet_info.h"
+#include "column/chunk_factory.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/dictionary_cache/chunk_util.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "testutil/column_test_helper.h"
@@ -91,7 +97,7 @@ public:
                                             int64_t txn_id, const TabletSharedPtr& tablet,
                                             const std::vector<TColumn>* tcolumns = nullptr) {
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, 0);
+        auto chunk = ChunkFactory::new_chunk(schema, 0);
         chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
             chunk->set_slot_id_to_index(i + 1, i);
@@ -104,7 +110,7 @@ public:
         }
 
         std::unique_ptr<ChunkPB> pchunk = std::make_unique<ChunkPB>();
-        DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
+        DictionaryCacheChunkUtil::compress_and_serialize_chunk(chunk.get(), pchunk.get());
 
         TOlapTableSchemaParam tschema;
         tschema.db_id = 1;
@@ -198,7 +204,7 @@ public:
         ASSERT_TRUE(dictionary.get() != nullptr);
 
         auto schema = dictionary_cache_manager->get_dictionary_schema_by_id(dict_id);
-        auto chunk = ChunkHelper::new_chunk(*schema, 0);
+        auto chunk = ChunkFactory::new_chunk(*schema, 0);
         chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
             chunk->set_slot_id_to_index(i + 1, i);
@@ -215,10 +221,10 @@ public:
             vids.emplace_back(id);
         }
 
-        ChunkPtr key_chunk = ChunkHelper::new_chunk(Schema(schema.get(), kids), 0);
+        ChunkPtr key_chunk = ChunkFactory::new_chunk(Schema(schema.get(), kids), 0);
         key_chunk->get_column_raw_ptr_by_index(0)->append(*chunk->get_column_raw_ptr_by_index(0));
 
-        ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(schema.get(), vids), 0);
+        ChunkPtr value_chunk = ChunkFactory::new_chunk(Schema(schema.get(), vids), 0);
         auto st = DictionaryCacheManager::probe_given_dictionary_cache(
                 *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk, nullptr);
         ASSERT_TRUE(st.ok());
@@ -243,9 +249,34 @@ public:
         return e;
     }
 
-    starrocks::DictionaryCacheManager* dictionary_cache_manager = StorageEngine::instance()->dictionary_cache_manager();
+    starrocks::DictionaryCacheManager* dictionary_cache_manager =
+            ExecEnv::GetInstance()->compute_env()->dictionary_cache_manager();
     TabletSharedPtr test_tablet = nullptr;
 };
+
+// NOLINTNEXTLINE
+TEST_F(DictionaryCacheManagerTest, precheck_value_encode_resets_non_normal_flags_for_zero_byte) {
+    Fields fields;
+    fields.emplace_back(new Field(0, "v", TYPE_VARCHAR, false));
+    auto schema = std::make_shared<Schema>(std::move(fields));
+    auto chunk = ChunkFactory::new_chunk(*schema, 4);
+
+    auto* column = down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(0));
+    const std::string with_zero("a\0b", 3);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string(with_zero);
+    column->append_string("plain");
+
+    std::vector<uint8_t> value_encode_flags = {PRIMARY_KEY_DECODE_FAST, PRIMARY_KEY_DECODE_SKIP,
+                                               PRIMARY_KEY_DECODE_NORMAL, PRIMARY_KEY_DECODE_SKIP};
+    DictionaryCacheUtil::precheck_value_encode(chunk.get(), value_encode_flags);
+
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[0]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[1]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_NORMAL, value_encode_flags[2]);
+    EXPECT_EQ(PRIMARY_KEY_DECODE_SKIP, value_encode_flags[3]);
+}
 
 // NOLINTNEXTLINE
 TEST_F(DictionaryCacheManagerTest, concurrent_refresh_and_read) {
@@ -325,9 +356,10 @@ TEST_F(DictionaryCacheManagerTest, dictionary_get_expr_test) {
             new_mock_expr(ColumnTestHelper::build_column<Slice>({slice}), type_varchar, objpool));
 
     dictionary_get_expr->add_child(
-            new_mock_expr(ColumnTestHelper::build_column<long>({0}), LogicalType::TYPE_BIGINT, objpool));
+            new_mock_expr(ColumnTestHelper::build_column<int64_t>({0}), LogicalType::TYPE_BIGINT, objpool));
 
-    ASSERT_TRUE(dictionary_get_expr->prepare(nullptr, nullptr).ok());
+    RuntimeState runtime_state(ExecEnv::GetInstance());
+    ASSERT_TRUE(dictionary_get_expr->prepare(&runtime_state, nullptr).ok());
     auto res = dictionary_get_expr->evaluate_checked(nullptr, nullptr);
     ASSERT_TRUE(res.ok());
 

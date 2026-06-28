@@ -578,4 +578,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"), planFragment);
     }
+
+    @Test
+    @Order(7)
+    void testJoinReorderWithTwoChildDeterministicProjection() throws Exception {
+        connectContext.getSessionVariable().enableDPJoinReorder();
+        connectContext.getSessionVariable().enableGreedyJoinReorder();
+        String sql = "select sum(case when t1.v4 = 1 then t0.v1 end) " +
+                "from t1, t2, t3, t0 " +
+                "where t0.v1 = t1.v4 and t0.v2 = t2.v7 and t0.v3 = t3.v10";
+        String planFragment = getFragmentPlan(sql);
+        assertNotContains(planFragment, "CROSS JOIN");
+    }
 }

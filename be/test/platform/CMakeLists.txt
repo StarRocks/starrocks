@@ -1,0 +1,58 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set(PLATFORM_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    download_util_test.cpp
+    fs_broker_test.cpp
+    key_cache_test.cpp
+    llm/llm_cache_test.cpp
+    llm/model_config_test.cpp
+    path_rw_test.cpp
+    platform_env_test.cpp
+    platform_metrics_test.cpp
+    python_env_test.cpp
+    small_file_mgr_test.cpp
+    store_path_test.cpp
+    thrift_rpc_helper_test.cpp
+    user_function_cache_test.cpp
+)
+
+if(NOT APPLE)
+    list(APPEND PLATFORM_TEST_FILES
+        llm/llm_query_service_test.cpp
+    )
+else()
+    # The HTTP-backed LLMQueryServiceTest cases pass on macOS but can hang in
+    # EvHttpServer::join() during suite teardown. Keep this suite in
+    # platform_test for non-Apple builds until the platform HTTP teardown issue
+    # is fixed.
+endif()
+
+set(PLATFORM_TEST_LINK_LIBS
+    Platform
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_library(starrocks_platform_test_objs OBJECT ${PLATFORM_TEST_FILES})
+target_link_libraries(starrocks_platform_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_platform_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(platform_test $<TARGET_OBJECTS:starrocks_platform_test_objs>)
+target_link_libraries(platform_test ${PLATFORM_TEST_LINK_LIBS} gtest_main)

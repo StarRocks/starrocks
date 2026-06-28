@@ -18,42 +18,66 @@
 
 #include "base/concurrency/stopwatch.hpp"
 #include "common/config_exec_flow_fwd.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/timeout_tasks.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
+namespace {
+
+PipelineTimer* pipeline_timer(RuntimeState* state) {
+    const auto* services = state == nullptr ? nullptr : state->query_execution_services();
+    if (services == nullptr || services->execution == nullptr) {
+        return nullptr;
+    }
+    return services->execution->pipeline_timer;
+}
+
+Status schedule_wait_timer(RuntimeState* state, PipelineTimerTask* task, timespec abstime) {
+    auto* timer = pipeline_timer(state);
+    if (timer == nullptr) {
+        return Status::InternalError("Pipeline timer is not initialized");
+    }
+    return timer->schedule(task, abstime);
+}
+
+void unschedule_wait_timer(RuntimeState* state, PipelineTimerTask* task) {
+    auto* timer = pipeline_timer(state);
+    if (timer == nullptr || task == nullptr) {
+        return;
+    }
+    task->unschedule_and_join(timer);
+}
+
+} // namespace
+
 Status WaitSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     _mono_timer = state->obj_pool()->add(new MonotonicStopWatch());
     _mono_timer->start();
     _wait_context->observable->attach_source_observer(state, observer());
     if (state->enable_event_scheduler()) {
-        auto fragment_ctx = state->fragment_ctx();
-        auto timer = std::make_unique<RFScanWaitTimeout>();
+        auto timer = std::make_shared<RFScanWaitTimeout>();
         timer->add_observer(state, observer());
         _wait_timer_task = std::move(timer);
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         abstime.tv_nsec += _wait_time_ns;
         butil::timespec_normalize(&abstime);
-        RETURN_IF_ERROR(fragment_ctx->pipeline_timer()->schedule(_wait_timer_task.get(), abstime));
+        RETURN_IF_ERROR(schedule_wait_timer(state, _wait_timer_task.get(), abstime));
     }
     return Status::OK();
 }
 
-WaitSourceOperator::~WaitSourceOperator() {
-    close(runtime_state());
-}
-
 void WaitSourceOperator::close(RuntimeState* state) {
     if (_wait_timer_task != nullptr) {
-        state->fragment_ctx()->pipeline_timer()->unschedule(_wait_timer_task.get());
+        unschedule_wait_timer(state, _wait_timer_task.get());
         _wait_timer_task = nullptr;
     }
 }
 
 bool WaitSourceOperator::has_output() const {
-    if (!_reached_timeout) {
+    if (_source_should_block() && !_reached_timeout) {
         if (_mono_timer->elapsed_time() > _wait_time_ns) {
             _reached_timeout = true;
         } else {
@@ -75,10 +99,39 @@ Status WaitSinkOperator::prepare(RuntimeState* state) {
             _metrics.get(), 1, config::local_exchange_buffer_mem_limit_per_driver, state->chunk_size() * 16);
     _wait_context->observable = std::make_unique<PipeObservable>();
     _wait_context->observable->attach_sink_observer(state, observer());
+    _mono_timer = state->obj_pool()->add(new MonotonicStopWatch());
+    _mono_timer->start();
+    if (_sink_should_block() && state->enable_event_scheduler()) {
+        // When the event scheduler is enabled, drivers stuck in OUTPUT_FULL are not polled by the
+        // PipelineDriverPoller. Schedule a pipeline timer to fire an observer event on the sink
+        // driver when the block timeout elapses, so that need_input() gets re-evaluated and the
+        // driver resumes rather than hanging until query timeout.
+        auto timer = std::make_shared<RFScanWaitTimeout>();
+        timer->add_observer(state, observer());
+        _wait_timer_task = std::move(timer);
+        timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
+        abstime.tv_nsec += _wait_time_ns;
+        butil::timespec_normalize(&abstime);
+        RETURN_IF_ERROR(schedule_wait_timer(state, _wait_timer_task.get(), abstime));
+    }
     return Status::OK();
 }
 
+void WaitSinkOperator::close(RuntimeState* state) {
+    if (_wait_timer_task != nullptr) {
+        unschedule_wait_timer(state, _wait_timer_task.get());
+        _wait_timer_task = nullptr;
+    }
+}
+
 bool WaitSinkOperator::need_input() const {
+    if (_sink_should_block() && !_reached_timeout) {
+        if (_mono_timer->elapsed_time() > _wait_time_ns) {
+            _reached_timeout = true;
+        } else {
+            return false;
+        }
+    }
     return !_wait_context->chunk_buffer->is_full();
 }
 

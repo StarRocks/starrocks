@@ -16,27 +16,20 @@
 
 #include <sys/stat.h>
 
-#include "common/config_lake_fwd.h"
-#include "common/config_storage_fwd.h"
-#ifdef BE_TEST
-#include "agent/agent_server.h"
-#endif
-
 #include "base/debug/trace.h"
 #include "base/network/network_util.h"
 #include "base/string/string_parser.hpp"
+#include "common/config_lake_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/stringpiece.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
-#include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
-#include "util/thrift_rpc_helper.h"
+#include "http/core/http_client.h"
+#include "storage/remote_snapshot_client.h"
 
 namespace starrocks {
 
@@ -138,7 +131,8 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
                                               TSchemaHash schema_hash, TVersion version, int32_t timeout_s,
                                               const std::vector<Version>* missed_versions,
                                               const std::vector<int64_t>* missing_version_ranges,
-                                              std::string* remote_snapshot_path) {
+                                              std::string* remote_snapshot_path,
+                                              RemoteSnapshotClient* snapshot_client) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The make remote snapshot will stop");
     }
@@ -171,18 +165,11 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
     }
 
     TAgentResult result;
-
-#ifdef BE_TEST
-    ExecEnv::GetInstance()->agent_server()->make_snapshot(result, request);
-#else
     // snapshot will hard link all required rowsets' segment files, the number of files may be very large(>1000),
     // so it may take some time to process this rpc, so we increase rpc timeout from 5s to 20s to reduce the chance
     // of timeout for now, we may need a smart way to estimate the time of make_snapshot in future
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<BackendServiceClient>(
-            host, be_port,
-            [&request, &result](BackendServiceConnection& client) { client->make_snapshot(result, request); },
-            config::make_snapshot_rpc_timeout_ms));
-#endif
+    auto* client = snapshot_client == nullptr ? default_remote_snapshot_client() : snapshot_client;
+    RETURN_IF_ERROR(client->make_snapshot(host, be_port, request, &result));
 
     if (result.status.status_code != TStatusCode::OK) {
         return {result.status};
@@ -207,21 +194,16 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
 }
 
 Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t port,
-                                                 const std::string& src_snapshot_path) {
+                                                 const std::string& src_snapshot_path,
+                                                 RemoteSnapshotClient* snapshot_client) {
     if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
         return Status::InternalError("Process is going to quit. The release remote snapshot will stop");
     }
 
     TAgentResult result;
 
-#ifdef BE_TEST
-    ExecEnv::GetInstance()->agent_server()->release_snapshot(result, src_snapshot_path);
-#else
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<BackendServiceClient>(
-            ip, port, [&src_snapshot_path, &result](BackendServiceConnection& client) {
-                client->release_snapshot(result, src_snapshot_path);
-            }));
-#endif
+    auto* client = snapshot_client == nullptr ? default_remote_snapshot_client() : snapshot_client;
+    RETURN_IF_ERROR(client->release_snapshot(ip, port, src_snapshot_path, &result));
     return {result.status};
 }
 
@@ -342,12 +324,13 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 #endif
 }
 
-Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_path, const std::string& src_file_name,
-                                                    size_t src_file_size, const std::shared_ptr<FileSystem>& src_fs,
-                                                    const FileConverterCreatorFunc& file_converters,
-                                                    size_t* final_file_size) {
+Status ReplicationUtils::download_lake_file_with_converter(const std::string& src_file_path,
+                                                           const std::string& src_file_name, size_t src_file_size,
+                                                           const std::shared_ptr<FileSystem>& src_fs,
+                                                           const FileConverterCreatorFunc& file_converters,
+                                                           size_t* final_file_size) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_download_segment_cost_us");
-    TRACE("Start download_lake_segment_file, src_file: $0", src_file_path);
+    TRACE("Start download_lake_file_with_converter, src_file: $0", src_file_path);
 
     ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
     if (src_file_size == 0) {
@@ -403,7 +386,7 @@ Status ReplicationUtils::download_lake_segment_file(const std::string& src_file_
         *final_file_size = output_size;
     }
 
-    TRACE("Finish download_lake_segment_file, read_count: $0, final_size: $1", read_count, output_size);
+    TRACE("Finish download_lake_file_with_converter, read_count: $0, final_size: $1", read_count, output_size);
 
     return Status::OK();
 }

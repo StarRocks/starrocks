@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
@@ -585,9 +586,14 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testShouldRefreshBy() {
         MaterializedView mv = new MaterializedView();
         MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        mvRefreshScheme.setType(MaterializedViewRefreshType.ASYNC);
+        mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
         mv.setRefreshScheme(mvRefreshScheme);
         boolean shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assertions.assertFalse(shouldRefresh);
+
+        mvRefreshScheme.setType(MaterializedViewRefreshType.ASYNC);
+        mv.setRefreshScheme(mvRefreshScheme);
+        shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
         Assertions.assertTrue(shouldRefresh);
         mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
         shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
@@ -618,6 +624,83 @@ public class MaterializedViewTest extends StarRocksTestBase {
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
         Assertions.assertEquals(connectContext.getState().getStateType(), QueryState.MysqlStateType.EOF);
+    }
+
+    // Regression test: sync MVs are mv indexes inside an OLAP table, not registered as Tables.
+    // SHOW CREATE MATERIALIZED VIEW <sync_mv_name> must locate the index by name and return its
+    // CREATE statement instead of failing with "Table not found".
+    @Test
+    public void testShowCreateRollupSyncMV() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_rollup_sync_mv\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView(
+                        "create materialized view rollup_sync_mv_to_check as " +
+                                "select k2, sum(v1) as total from tbl_rollup_sync_mv group by k2;");
+        String showSql = "show create materialized view rollup_sync_mv_to_check;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.EOF, connectContext.getState().getStateType());
+    }
+
+    // Fallback scan exhaustion: a sync-MV-shaped lookup with a name that matches
+    // nothing in any base table runs through the full snapshot and falls through
+    // to ErrorReport.reportSemanticException(ERR_BAD_TABLE_ERROR, ...).
+    @Test
+    public void testShowCreateSyncMVNotFound() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_sync_mv_not_found\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String showSql = "show create materialized view does_not_exist_anywhere;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, connectContext.getState().getStateType());
+    }
+
+    // Authorization deny path: once the fallback locates the owning base table and
+    // calls Authorizer.checkAnyActionOnTable, mock the check to throw and verify
+    // the deny error fires (reportAccessDenied -> ERR state).
+    @Test
+    public void testShowCreateSyncMVAccessDenied() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl_sync_mv_auth\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView(
+                        "create materialized view sync_mv_auth_deny as " +
+                                "select k2, sum(v1) as total from tbl_sync_mv_auth group by k2;");
+        new mockit.MockUp<com.starrocks.sql.analyzer.Authorizer>() {
+            @mockit.Mock
+            public void checkAnyActionOnTable(ConnectContext context,
+                                              com.starrocks.catalog.TableName tableName)
+                    throws com.starrocks.authorization.AccessDeniedException {
+                throw new com.starrocks.authorization.AccessDeniedException();
+            }
+        };
+        String showSql = "show create materialized view sync_mv_auth_deny;";
+        StatementBase statement = SqlParser.parseSingleStatement(showSql, connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
+        stmtExecutor.execute();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR, connectContext.getState().getStateType());
     }
 
     @Test
@@ -1621,5 +1704,73 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Set<String> beforeNoOp = Sets.newHashSet(olapPartitionInfo.keySet());
         context.clearVisibleVersionMapByMVPartitions(Sets.newHashSet());
         Assertions.assertEquals(beforeNoOp, olapPartitionInfo.keySet());
+    }
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJson() {
+        MaterializedView mv = new MaterializedView();
+        Assertions.assertEquals("{}", mv.getBaseTableRefreshVersionTimesJson());
+
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+        Assertions.assertEquals("{}", mv.getBaseTableRefreshVersionTimesJson());
+
+        // External base table reports the max partition modified time, keyed by catalog.db.table.
+        long modifiedTime = 1735697100000L;
+        BaseTableInfo ext = new BaseTableInfo("iceberg0", "ice_db", "ice_t", "ice_t");
+        Map<String, MaterializedView.BasePartitionInfo> extParts = Maps.newHashMap();
+        extParts.put("p1", new MaterializedView.BasePartitionInfo(-1, 1, modifiedTime - 60000));
+        extParts.put("p2", new MaterializedView.BasePartitionInfo(-1, 1, modifiedTime));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(ext, extParts);
+
+        Assertions.assertEquals("{\"iceberg0.ice_db.ice_t\":\"" + TimeUtils.longToTimeString(modifiedTime) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+
+        // A base table whose partitions only carry version ids (lastRefreshTime <= 0, as OLAP partitions do)
+        // contributes no entry.
+        BaseTableInfo noTime = new BaseTableInfo("iceberg0", "ice_db", "no_time_t", "no_time_t");
+        Map<String, MaterializedView.BasePartitionInfo> noTimeParts = Maps.newHashMap();
+        noTimeParts.put("p1", new MaterializedView.BasePartitionInfo(1, 1, -1));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(noTime, noTimeParts);
+
+        Assertions.assertEquals("{\"iceberg0.ice_db.ice_t\":\"" + TimeUtils.longToTimeString(modifiedTime) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+    }
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJsonNormalizesConnectorUnits() {
+        long wallClockMillis = 1735697100000L;
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+
+        // Iceberg stores microseconds (the stored value keeps its native unit); the column normalizes for display.
+        BaseTableInfo iceberg = new BaseTableInfo("iceberg0", "ice_db", "ice_us", "ice_us");
+        Map<String, MaterializedView.BasePartitionInfo> parts = Maps.newHashMap();
+        parts.put("p1", new MaterializedView.BasePartitionInfo(-1, 1, wallClockMillis * 1000));
+        scheme.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().put(iceberg, parts);
+
+        Assertions.assertEquals(
+                "{\"iceberg0.ice_db.ice_us\":\"" + TimeUtils.longToTimeString(wallClockMillis) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
+    }
+
+    @Test
+    public void testGetBaseTableRefreshVersionTimesJsonOlapTable() {
+        long versionTimeMillis = 1735697100000L;
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        mv.setRefreshScheme(scheme);
+
+        // OLAP base table: keyed by table id in the OLAP version map; visibleVersionTime is already epoch millis.
+        long tableId = 10001L;
+        mv.setBaseTableInfos(Lists.newArrayList(new BaseTableInfo(100L, "db", "t_olap", tableId)));
+        Map<String, MaterializedView.BasePartitionInfo> parts = Maps.newHashMap();
+        parts.put("p1", new MaterializedView.BasePartitionInfo(1, 1, versionTimeMillis));
+        scheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(tableId, parts);
+
+        Assertions.assertEquals(
+                "{\"default_catalog.db.t_olap\":\"" + TimeUtils.longToTimeString(versionTimeMillis) + "\"}",
+                mv.getBaseTableRefreshVersionTimesJson());
     }
 }

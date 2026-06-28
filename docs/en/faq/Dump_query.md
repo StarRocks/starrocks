@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to use the query_dump interface in StarRocks to capture SQL query details for troubleshooting."
 ---
 
 # query_dump interface

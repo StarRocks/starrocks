@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['Routine Load']
+description: "How to create and manage Routine Load jobs in StarRocks to continuously stream data from Apache Kafka topics into StarRocks tables."
 ---
 
 # Load data using Routine Load
@@ -406,10 +407,10 @@ The data type mapping between the Avro data fields you want to load and the Star
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | Load the entire RECORD or its subfields into StarRocks as JSON. |
+| record         | STRUCT, or load the entire RECORD or its subfields into StarRocks as JSON. |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | MAP or JSON                                                  |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
 

@@ -23,6 +23,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -31,15 +32,17 @@
 #include "common/logging.h"
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "types/type_descriptor.h"
@@ -114,9 +117,8 @@ public:
             rowset->set_overlapped(true);
             rowset->set_id(1);
             rowset->set_next_compaction_offset(1);
-            auto* segs = rowset->mutable_segments();
             for (const auto& file : writer->segments()) {
-                segs->Add()->assign(file.path);
+                rowset->add_segment_metas()->set_filename(file.path);
             }
 
             writer->close();
@@ -127,6 +129,44 @@ public:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
+    // Writes one rowset into _tablet_metadata whose i-th segment holds per_segment_keys[i] (ascending),
+    // one chunk -> one segment, with segment_metas(i).shared() set from shared_flags[i]. Models a
+    // tablet-split child whose segments have DISTINCT key ranges and therefore genuinely non-uniform
+    // shared flags (segments with identical ranges would all get the same flag).
+    void add_rowset_with_segment_keys(const std::vector<std::vector<int>>& per_segment_keys,
+                                      const std::vector<bool>& shared_flags) {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        for (const auto& keys : per_segment_keys) {
+            auto c0 = Int32Column::create();
+            auto c1 = Int32Column::create();
+            for (int key : keys) {
+                c0->append(key);
+                c1->append(key * 2);
+            }
+            Chunk chunk({c0, c1}, _schema);
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish()); // flush one segment per chunk
+        }
+        ASSERT_EQ(per_segment_keys.size(), writer->segments().size());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(next_id());
+        size_t i = 0;
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_shared(shared_flags[i++]);
+        }
+        writer->close();
+
+        _tablet_metadata->set_version(_tablet_metadata->version() + 1);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_rowset";
 
@@ -134,6 +174,43 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
+
+// Rowset::data_size_after_deletion must never return a negative value. Before the fix,
+// a reshard child could inherit an inflated num_dels (the parent's full delvec
+// cardinality) while its num_rows was only its proportional share, so num_rows-num_dels
+// went negative and compaction tasks consumed a nonsense (int64 cast) data-size.
+TEST_F(LakeRowsetTest, test_data_size_after_deletion_clamps_negative_live_rows) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
+    schema->set_keys_type(DUP_KEYS);
+    auto* r = metadata->add_rowsets();
+    r->set_id(1);
+    r->set_num_rows(3);
+    r->set_data_size(300);
+    r->set_num_dels(10); // pathological: deletes > rows (post-split pre-fix pattern)
+
+    Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
+    EXPECT_EQ(0, rs.data_size_after_deletion());
+}
+
+// Sanity-check: when num_dels <= num_rows the formula keeps its original arithmetic.
+TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
+    schema->set_keys_type(DUP_KEYS);
+    auto* r = metadata->add_rowsets();
+    r->set_id(1);
+    r->set_num_rows(10);
+    r->set_data_size(1000);
+    r->set_num_dels(4);
+
+    Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
+    EXPECT_EQ(600, rs.data_size_after_deletion());
+}
 
 TEST_F(LakeRowsetTest, test_load_segments) {
     create_rowsets_for_testing();
@@ -253,7 +330,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1
                                                  /* compaction_segment_limit */);
@@ -265,7 +342,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 4);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 4);
         EXPECT_EQ(op_compaction->new_segment_offset(), 1);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -279,7 +356,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
     {
         TxnLogPB txn_log;
         auto op_compaction = txn_log.mutable_op_compaction();
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 0);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 0);
 
         auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
                                                  0 /* compaction_segment_limit */);
@@ -288,7 +365,7 @@ TEST_F(LakeRowsetTest, test_partial_compaction) {
         VersionedTablet vt(nullptr, _tablet_metadata);
         VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
         EXPECT_TRUE(task.fill_compaction_segment_info(op_compaction, writer.get()).ok());
-        EXPECT_EQ(op_compaction->output_rowset().segments_size(), 2);
+        EXPECT_EQ(op_compaction->output_rowset().segment_metas_size(), 2);
         EXPECT_EQ(op_compaction->new_segment_offset(), 0);
         EXPECT_EQ(op_compaction->new_segment_count(), 2);
 
@@ -304,10 +381,12 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     create_rowsets_for_testing();
     auto* rowset_meta = _tablet_metadata->mutable_rowsets(0);
     rowset_meta->set_next_compaction_offset(2);
-    rowset_meta->clear_segment_metas();
-    rowset_meta->add_segment_metas()->set_segment_idx(0);
-    rowset_meta->add_segment_metas()->set_segment_idx(2);
-    rowset_meta->add_segment_metas()->set_segment_idx(4);
+    // Assign sparse, non-contiguous segment ids to the existing (named) segments to exercise the
+    // sparse-segment_idx path without colliding ids. Keep the real filenames so load_segments works.
+    ASSERT_EQ(3, rowset_meta->segment_metas_size());
+    rowset_meta->mutable_segment_metas(0)->set_segment_idx(0);
+    rowset_meta->mutable_segment_metas(1)->set_segment_idx(2);
+    rowset_meta->mutable_segment_metas(2)->set_segment_idx(4);
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     int64_t txn_id = next_id();
@@ -340,14 +419,14 @@ TEST_F(LakeRowsetTest, test_partial_compaction_sparse_segment_id_no_collision) {
     ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
 
     const auto& output_rowset = op_compaction->output_rowset();
-    ASSERT_EQ(4, output_rowset.segments_size());
+    ASSERT_EQ(4, output_rowset.segment_metas_size());
     ASSERT_EQ(4, output_rowset.segment_metas_size());
     EXPECT_EQ(2, op_compaction->new_segment_offset());
     EXPECT_EQ(2, op_compaction->new_segment_count());
 
     std::unordered_set<uint32_t> segment_ids;
-    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
-        segment_ids.insert(output_rowset.segment_metas(i).segment_idx());
+    for (const auto& segment_meta : output_rowset.segment_metas()) {
+        segment_ids.insert(segment_meta.segment_idx());
     }
     EXPECT_EQ(static_cast<size_t>(output_rowset.segment_metas_size()), segment_ids.size());
     EXPECT_TRUE(segment_ids.contains(0));
@@ -382,9 +461,8 @@ static void set_tablet_range_int(TabletMetadata* tablet_meta, std::optional<int3
 }
 
 static void set_rowset_shared_segments(RowsetMetadataPB* rowset_meta, bool shared) {
-    rowset_meta->clear_shared_segments();
-    for (int i = 0; i < rowset_meta->segments_size(); i++) {
-        rowset_meta->add_shared_segments(shared);
+    for (auto& segment_meta : *rowset_meta->mutable_segment_metas()) {
+        segment_meta.set_shared(shared);
     }
 }
 
@@ -409,7 +487,7 @@ static size_t count_rows_from_iters(const std::vector<ChunkIteratorPtr>& iters, 
     for (const auto& it : iters) {
         CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
-        auto chunk = ChunkHelper::new_chunk(it->schema(), chunk_size);
+        auto chunk = ChunkFactory::new_chunk(it->schema(), chunk_size);
         while (true) {
             chunk->reset();
             auto st = it->get_next(chunk.get());
@@ -646,7 +724,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -681,7 +759,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_multi_column_range_pruning) {
     for (const auto& it : iters) {
         ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
-        auto out_chunk = ChunkHelper::new_chunk(it->schema(), 16);
+        auto out_chunk = ChunkFactory::new_chunk(it->schema(), 16);
         while (true) {
             out_chunk->reset();
             auto st = it->get_next(out_chunk.get());
@@ -755,7 +833,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_char_type_parsed_as_varchar) {
     rowset->set_overlapped(true);
     rowset->set_id(1);
     for (auto& file : files) {
-        rowset->add_segments(std::move(file.path));
+        rowset->add_segment_metas()->set_filename(std::move(file.path));
     }
     set_rowset_shared_segments(rowset, true);
 
@@ -929,60 +1007,59 @@ public:
         rowset->set_id(1);
         rowset->set_num_rows(33); // 11 + 11 + 11
 
-        for (const auto& file : files) {
-            rowset->add_segments(file.path);
-        }
-
         // Add segment_metas with sort_key_min/max
         // Segment 0: [0, 10]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[0].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("0");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("10");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 1: [20, 30]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[1].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("20");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("30");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         // Segment 2: [40, 50]
         {
-            auto* seg_meta = rowset->add_segment_metas();
-            auto* min_tuple = seg_meta->mutable_sort_key_min();
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(files[2].path);
+            auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
             TypeDescriptor td(TYPE_INT);
             *min_var->mutable_type() = td.to_protobuf();
             min_var->set_value("40");
 
-            auto* max_tuple = seg_meta->mutable_sort_key_max();
+            auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
             *max_var->mutable_type() = td.to_protobuf();
             max_var->set_value("50");
 
-            seg_meta->set_num_rows(11);
+            segment_meta->set_num_rows(11);
         }
 
         writer->close();
@@ -1072,7 +1149,7 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_with_skip_segment
     auto rowset =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
 
-    std::vector<SegmentPtr> segments;
+    std::vector<lake::Rowset::LoadedSegment> segments;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts.fill_data_cache = false;
     seg_options.lake_io_opts.fill_metadata_cache = false;
@@ -1086,11 +1163,15 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_with_skip_segment
     ASSERT_EQ(segments.size(), 3);
 
     // Segment 0 should be loaded
-    ASSERT_NE(segments[0], nullptr);
+    ASSERT_NE(segments[0].segment, nullptr);
     // Segment 1 should be skipped (nullptr)
-    ASSERT_EQ(segments[1], nullptr);
+    ASSERT_EQ(segments[1].segment, nullptr);
     // Segment 2 should be loaded
-    ASSERT_NE(segments[2], nullptr);
+    ASSERT_NE(segments[2].segment, nullptr);
+    // Each loaded slot must record its true metadata position.
+    EXPECT_EQ(segments[0].segment_meta_pos, 0);
+    EXPECT_EQ(segments[1].segment_meta_pos, 1);
+    EXPECT_EQ(segments[2].segment_meta_pos, 2);
 }
 
 // Test: load_segments with skip_segment_idxs in parallel mode with index mapping
@@ -1103,7 +1184,7 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_parallel_with_ski
     auto rowset =
             std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
 
-    std::vector<SegmentPtr> segments;
+    std::vector<lake::Rowset::LoadedSegment> segments;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts.fill_data_cache = false;
     seg_options.lake_io_opts.fill_metadata_cache = false;
@@ -1117,11 +1198,14 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_load_segments_parallel_with_ski
     ASSERT_EQ(segments.size(), 3);
 
     // Segment 0 should be loaded at index 0
-    ASSERT_NE(segments[0], nullptr);
+    ASSERT_NE(segments[0].segment, nullptr);
     // Segment 1 should be skipped (nullptr) at index 1
-    ASSERT_EQ(segments[1], nullptr);
+    ASSERT_EQ(segments[1].segment, nullptr);
     // Segment 2 should be loaded at index 2
-    ASSERT_NE(segments[2], nullptr);
+    ASSERT_NE(segments[2].segment, nullptr);
+    // Index mapping must keep each slot aligned to its metadata position.
+    EXPECT_EQ(segments[0].segment_meta_pos, 0);
+    EXPECT_EQ(segments[2].segment_meta_pos, 2);
 }
 
 // ================================================================================
@@ -1218,6 +1302,74 @@ TEST_F(LakeRowsetTest, test_segment_range_mode_segment_ids) {
     EXPECT_EQ(2, segments[1]->id());
 }
 
+// Regression test for the segment-range "shared() flag" mis-index bug.
+//
+// Real scenario: a tablet split stamps a PER-SEGMENT `shared` flag on each rowset segment
+// (tablet_splitter.cpp). A segment provably contained in the child's key range is private
+// (shared=false); a segment that straddles the split boundary keeps shared=true, and at read time
+// the child's tablet range MUST be applied to it to drop rows that belong to a sibling tablet
+// sharing the same physical file. Non-uniform flags therefore go hand-in-hand with DISTINCT
+// per-segment key ranges -- segments with identical ranges would all get the same flag.
+//
+// A parallel split-compaction sub-task compacts a segment sub-range [start, end): it builds a
+// segment-range Rowset (5-arg ctor, as tablet_parallel_compaction_manager::execute_subtask_segment_range
+// does) and reads it via Rowset::read (as lake TabletReader::get_segment_iterators does). load_segments
+// packs the loaded segments from position 0, so loaded position 0 is metadata segment `start`; the
+// buggy gate indexes segment_metas(0) by the loaded position, reading the WRONG segment's flag when
+// start > 0.
+//
+// Child owns key range [100, 200). seg0/seg2 are contained -> private; seg1 straddles 200 (keys >=200
+// belong to a sibling) -> shared. Reading sub-range [1,2) loads seg1 at loaded position 0:
+//   correct: seg1 is shared -> range applies -> keeps {150,170,190} = 3 rows;
+//   bug: reads seg0.shared()==false -> range skipped -> all 6 rows, leaking 210/230/250.
+// (The opposite mis-read -- applying the range to a private segment -- is benign on real data: a
+//  private segment is provably contained, so it has no out-of-range rows for the range to drop.)
+TEST_F(LakeRowsetTest, test_read_range_mode_uses_true_segment_shared_flag) {
+    add_rowset_with_segment_keys({{100, 120, 140, 160, 180},      // seg0: contained in [100,200) -> private
+                                  {150, 170, 190, 210, 230, 250}, // seg1: straddles 200 -> shared
+                                  {110, 130, 150, 170, 190}},     // seg2: contained -> private
+                                 {false, true, false});
+    set_tablet_range_int(_tablet_metadata.get(), 100, true, 200, false); // child tablet key range [100,200)
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    // Segment-range Rowset over [1, 2): metadata segment 1, the shared boundary-straddling segment.
+    auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* segment_start */,
+                                                 2 /* segment_end */);
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    EXPECT_EQ(3, count_rows_from_iters(iters))
+            << "segment 1 is shared and straddles the child range; the tablet range must filter its "
+               "foreign keys (>=200). The bug reads segment 0's private flag, skips the range, and "
+               "leaks 210/230/250 into the output.";
+}
+
+// Control: the SAME realistic rowset read in normal (full-rowset) mode, where loaded position ==
+// metadata position, must be correct on both buggy and fixed code -- proving the defect is specific
+// to segment-range mode.
+TEST_F(LakeRowsetTest, test_read_full_mode_non_uniform_shared_flags_control) {
+    add_rowset_with_segment_keys({{100, 120, 140, 160, 180},      // seg0: contained -> private (5 rows)
+                                  {150, 170, 190, 210, 230, 250}, // seg1: straddles 200 -> shared (3 in range)
+                                  {110, 130, 150, 170, 190}},     // seg2: contained -> private (5 rows)
+                                 {false, true, false});
+    set_tablet_range_int(_tablet_metadata.get(), 100, true, 200, false);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    // seg0 private -> no range -> 5 rows; seg1 shared -> range [100,200) -> {150,170,190} = 3 rows;
+    // seg2 private -> no range -> 5 rows. Total = 13.
+    EXPECT_EQ(5 + 3 + 5, count_rows_from_iters(iters));
+}
+
 // Verify that DeferOp in load_segments waits for all parallel tasks
 // before returning on error, preventing use-after-free of captured |this|.
 TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
@@ -1254,6 +1406,294 @@ TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
     auto rs = rowset->read(input_schema, rs_opts);
     ASSERT_FALSE(rs.ok());
     ASSERT_GE(total_hits.load(), 2);
+}
+
+// Test: collect_files_in_log collects .vi files for op_write abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->add_dels_meta()->set_name("del1.del");
+
+    // seg1 has two vector indexes, seg2 has one
+    auto* meta_seg1 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg1->set_filename("seg1.dat");
+    meta_seg1->add_vector_index_ids(100);
+    meta_seg1->add_vector_index_ids(200);
+    auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
+    meta_seg2->set_filename("seg2.dat");
+    meta_seg2->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Expected: 2 segments + 1 del + 3 vi files = 6
+    EXPECT_EQ(files_to_delete.size(), 6);
+
+    // Check .vi files are included
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg1.dat"));
+    EXPECT_TRUE(contains("seg2.dat"));
+    EXPECT_TRUE(contains("del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg2.dat", 100)));
+}
+
+// Test: collect_files_in_log collects .vi files only for new segments in op_compaction abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    // Partial compaction: segments [reused_a, new_x, new_y, reused_b]
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // All segments have vi tracking via segment_metas
+    auto* meta_a = output_rowset->add_segment_metas();
+    meta_a->set_filename("reused_a.dat");
+    meta_a->add_vector_index_ids(100);
+    auto* meta_x = output_rowset->add_segment_metas();
+    meta_x->set_filename("new_x.dat");
+    meta_x->add_vector_index_ids(100);
+    meta_x->add_vector_index_ids(200);
+    auto* meta_y = output_rowset->add_segment_metas();
+    meta_y->set_filename("new_y.dat");
+    meta_y->add_vector_index_ids(100);
+    auto* meta_b = output_rowset->add_segment_metas();
+    meta_b->set_filename("reused_b.dat");
+    meta_b->add_vector_index_ids(100);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Should only delete new segments and their vi files:
+    // new_x.dat, new_y.dat, new_x_100.vi, new_x_200.vi, new_y_100.vi = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    // New segments and their vi files should be collected
+    EXPECT_TRUE(contains("new_x.dat"));
+    EXPECT_TRUE(contains("new_y.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_y.dat", 100)));
+
+    // Reused segments and their vi files must NOT be collected
+    EXPECT_FALSE(contains("reused_a.dat"));
+    EXPECT_FALSE(contains("reused_b.dat"));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_a.dat", 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_b.dat", 100)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_schema_change abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_sc = txn_log.mutable_op_schema_change();
+    op_sc->set_linked_segment(false);
+    auto* rowset = op_sc->add_rowsets();
+
+    auto* meta_sc1 = rowset->add_segment_metas();
+    meta_sc1->set_filename("sc_seg1.dat");
+    meta_sc1->add_vector_index_ids(300);
+    auto* meta_sc2 = rowset->add_segment_metas();
+    meta_sc2->set_filename("sc_seg2.dat");
+    meta_sc2->add_vector_index_ids(300);
+    meta_sc2->add_vector_index_ids(400);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 2 segments + 3 vi files = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("sc_seg1.dat"));
+    EXPECT_TRUE(contains("sc_seg2.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg1.dat", 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 400)));
+}
+
+// Test: collect_files_in_log collects .vi files for op_replication abort
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_repl = txn_log.mutable_op_replication();
+    auto* op_write = op_repl->add_op_writes();
+    op_write->add_dels_meta()->set_name("repl_del1.del");
+
+    auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
+    meta_repl->set_filename("repl_seg1.dat");
+    meta_repl->add_vector_index_ids(500);
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 1 segment + 1 del + 1 vi file = 3
+    EXPECT_EQ(files_to_delete.size(), 3);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("repl_seg1.dat"));
+    EXPECT_TRUE(contains("repl_del1.del"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("repl_seg1.dat", 500)));
+}
+
+// Test: collect_files_in_log handles empty vector_index_ids gracefully
+TEST_F(LakeRowsetTest, test_collect_files_in_log_no_vi_files) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_no_vi.dat");
+    // No vector_index_ids in segment_metas
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the segment file, no vi files
+    EXPECT_EQ(files_to_delete.size(), 1);
+    EXPECT_TRUE(files_to_delete[0].find("seg_no_vi.dat") != std::string::npos);
+}
+
+// Test: collect_files_in_log honours the `i < segment_metas_size()` defensive
+// guard when segment_metas is partially populated. This can happen during
+// rolling upgrade or for rowsets that pre-date precise-vacuum tracking — the
+// loop must not walk past the end of the segment_metas array.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_write = txn_log.mutable_op_write();
+
+    // Only seg_a has vector_index_ids; seg_b and seg_c do not (e.g., pre-VI rowset).
+    auto* meta_a = op_write->mutable_rowset()->add_segment_metas();
+    meta_a->set_filename("seg_a.dat");
+    meta_a->add_vector_index_ids(100);
+    meta_a->add_vector_index_ids(200);
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
+    op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // 3 segments + 2 vi files (only seg_a has VI tracking) = 5
+    EXPECT_EQ(files_to_delete.size(), 5);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("seg_a.dat"));
+    EXPECT_TRUE(contains("seg_b.dat"));
+    EXPECT_TRUE(contains("seg_c.dat"));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 200)));
+    // No phantom .vi entries fabricated for seg_b / seg_c which lack metas.
+    EXPECT_FALSE(contains("seg_b.dat_"));
+    EXPECT_FALSE(contains("seg_c.dat_"));
+}
+
+// Test: collect_files_in_log for op_compaction with new_segment_offset / count
+// pointing past the segment_metas array. The combined `idx < segments.size()
+// && cnt < new_segment_count && idx < segment_metas_size()` guard must not crash
+// or fabricate VI filenames for indices without a corresponding segment_meta.
+TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_metas) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(_tablet_metadata->id());
+    txn_log.set_txn_id(next_id());
+
+    auto* op_compaction = txn_log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    op_compaction->set_new_segment_offset(1);
+    op_compaction->set_new_segment_count(2);
+
+    // Only reused.dat has vector_index_ids. new_a.dat and new_b.dat have
+    // segment_metas with no vector_index_ids. The op_compaction loop iterates
+    // idx=1 (new_a) and idx=2 (new_b) — no .vi filenames should be emitted for
+    // either.
+    auto* meta_reused = output_rowset->add_segment_metas();
+    meta_reused->set_filename("reused.dat");
+    meta_reused->add_vector_index_ids(100);
+    output_rowset->add_segment_metas()->set_filename("new_a.dat");
+    output_rowset->add_segment_metas()->set_filename("new_b.dat");
+
+    std::vector<std::string> files_to_delete;
+    collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
+
+    // Only the two new segments (reused is not part of new_segment_count window).
+    // No .vi entries since the new segments don't have segment_metas.
+    EXPECT_EQ(files_to_delete.size(), 2);
+
+    auto contains = [&](const std::string& substr) {
+        return std::any_of(files_to_delete.begin(), files_to_delete.end(),
+                           [&](const std::string& f) { return f.find(substr) != std::string::npos; });
+    };
+    EXPECT_TRUE(contains("new_a.dat"));
+    EXPECT_TRUE(contains("new_b.dat"));
+    EXPECT_FALSE(contains("reused.dat"));
+    // The one segment_meta entry sits at index 0; the new-segment window starts
+    // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
+}
+
+// Regression: the lake read-options propagation chain must carry has_predicate_above_iterator
+// from RowsetReadOptions into SegmentReadOptions. Before the fix, Rowset::read copied ~28 option
+// fields but skipped this one, so a shared-data ANN scan with an above-iterator residual saw the
+// default (false) and could wrongly take segment-level PRE, which under-returns. The non-lake
+// Rowset path already copies it (storage/rowset/rowset.cpp).
+TEST_F(LakeRowsetTest, test_propagate_has_predicate_above_iterator) {
+    create_rowsets_for_testing();
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+    rs_opts.has_predicate_above_iterator = true;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    bool seen = false;
+    bool propagated = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        propagated = seg_options->has_predicate_above_iterator;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto iters, rowset->read(input_schema, rs_opts));
+    ASSERT_TRUE(seen);
+    EXPECT_TRUE(propagated);
 }
 
 } // namespace starrocks::lake

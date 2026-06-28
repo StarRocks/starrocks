@@ -20,8 +20,8 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/data_sketch/ds_hll.h"
 #include "gutil/casts.h"
-#include "types/hll_sketch.h"
 
 namespace starrocks {
 
@@ -150,7 +150,7 @@ public:
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset().set(i + 1, new_size);
             old_size = new_size;
         }
     }

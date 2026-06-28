@@ -20,10 +20,10 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -407,8 +407,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                 _report_error(record, "Invalid UTF-8 row");
             }
             if (_state->enable_log_rejected_record()) {
-                RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), "Invalid UTF-8 row",
-                                                                   _curr_reader->filename());
+                LoadPathStateHelper::append_rejected_record_to_file(_state, record.to_string(), "Invalid UTF-8 row",
+                                                                    _curr_reader->filename());
             }
             continue;
         }
@@ -588,11 +588,16 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
 }
 
 void CSVScanner::_report_error(const CSVReader::Record& record, const std::string& err_msg) {
-    RuntimeStateHelper::append_error_msg_to_file(_state, record.to_string(), err_msg);
+    LoadPathStateHelper::append_error_msg_to_file(_state, record.to_string(), err_msg);
 }
 
 void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const std::string& err_msg) {
-    RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), err_msg, _curr_reader->filename());
+    // `append_rejected_record_to_file` routes the record into
+    // RejectedRecordWriter so the sync daemon can ship it to
+    // `_statistics_.rejected_records`. No direct writer call is needed
+    // here; the function name is kept only for historical symmetry with
+    // the pre-feature code path.
+    LoadPathStateHelper::append_rejected_record_to_file(_state, record.to_string(), err_msg, _curr_reader->filename());
 }
 
 static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {

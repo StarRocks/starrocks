@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 5
 keywords: ['iceberg']
+description: "An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards."
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
@@ -51,6 +52,7 @@ Before you create an Iceberg catalog, make sure your StarRocks cluster can integ
 Select the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
@@ -82,6 +84,14 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
 If an error indicating an unknown host is returned when you send a query, you must add the mapping between the host names and IP addresses of your HDFS cluster nodes to the **/etc/hosts** path.
 
 :::
+
+##### Pass HDFS client configurations through Catalog PROPERTIES
+
+In addition to placing **hdfs-site.xml** under the **conf** directories of FEs/BEs/CNs, you can declare HDFS client configurations directly in the `PROPERTIES` of `CREATE EXTERNAL CATALOG` (for example, the HA-related keys `dfs.nameservices`, `dfs.ha.namenodes.<ns>`, `dfs.namenode.rpc-address.<ns>.<nn>`, `dfs.client.failover.proxy.provider.<ns>`, `fs.defaultFS`, etc.). Both FEs and BEs/CNs receive these properties and apply them to the HDFS client.
+
+The main advantage of this approach is that **a single StarRocks cluster can access multiple independent HDFS HA clusters at the same time through different Iceberg Catalogs**. Because the **conf** directory of each FE/BE/CN can hold only one **hdfs-site.xml**, multiple HDFS HA clusters cannot coexist there. Passing the configuration through Catalog PROPERTIES lets each Catalog carry its own HA configuration, with no interference between Catalogs.
+
+For a complete HA example, see the [Examples - HDFS](#examples) section below.
 
 ---
 
@@ -153,6 +163,7 @@ The data access control policy. Valid values:
 A set of parameters about how StarRocks integrates with the metastore of your data source. Choose the tab that matches your metastore type:
 
 <Tabs groupId="metastore">
+
 <TabItem value="HIVE" label="Hive metastore" default>
 
 ##### Hive metastore
@@ -181,6 +192,7 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
 </TabItem>
+
 <TabItem value="GLUE" label="AWS Glue">
 
 ##### AWS Glue
@@ -247,6 +259,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
+
 <TabItem value="REST" label="REST">
 
 ##### REST
@@ -467,6 +480,7 @@ Note the following points:
 Choose the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 ##### AWS S3
@@ -690,6 +704,22 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
+
 - To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
 
 </TabItem>
@@ -794,6 +824,7 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster. Chose the tab that matches your storage type:
 
 <Tabs groupId="storage">
+
 <TabItem value="AWS" label="AWS S3" default>
 
 #### AWS S3
@@ -938,6 +969,77 @@ PROPERTIES
 );
 ```
 
+##### Access an HA-enabled HDFS cluster
+
+If the target HDFS cluster has HA enabled, you can declare the HA configurations directly in `PROPERTIES`:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog_ha
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    -- HDFS HA configurations
+    "dfs.nameservices" = "my_cluster",
+    "dfs.ha.namenodes.my_cluster" = "nn1,nn2",
+    "dfs.namenode.rpc-address.my_cluster.nn1" = "host1:8020",
+    "dfs.namenode.rpc-address.my_cluster.nn2" = "host2:8020",
+    "dfs.client.failover.proxy.provider.my_cluster" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://my_cluster"
+);
+```
+
+##### Access multiple HDFS HA clusters simultaneously
+
+If you need to query Iceberg tables that live on multiple independent HDFS HA clusters from the same StarRocks cluster, create one Catalog per HDFS cluster and let each Catalog carry its own `dfs.nameservices` and related HA parameters. The Catalogs do not interfere with each other.
+
+```SQL
+-- Catalog A: access HDFS HA cluster cluster_a
+CREATE EXTERNAL CATALOG iceberg_catalog_a
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-a.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+    "username" = "hdfs",
+
+    "dfs.nameservices" = "cluster_a",
+    "dfs.ha.namenodes.cluster_a" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_a.nn1" = "host-a-1:8020",
+    "dfs.namenode.rpc-address.cluster_a.nn2" = "host-a-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_a" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_a"
+);
+
+-- Catalog B: access another HDFS HA cluster cluster_b
+CREATE EXTERNAL CATALOG iceberg_catalog_b
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://hms-b.example.com:9083",
+
+    "hadoop.security.authentication" = "simple",
+
+    "dfs.nameservices" = "cluster_b",
+    "dfs.ha.namenodes.cluster_b" = "nn1,nn2",
+    "dfs.namenode.rpc-address.cluster_b.nn1" = "host-b-1:8020",
+    "dfs.namenode.rpc-address.cluster_b.nn2" = "host-b-2:8020",
+    "dfs.client.failover.proxy.provider.cluster_b" =
+        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+    "fs.defaultFS" = "hdfs://cluster_b"
+);
+```
+
+
 </TabItem>
 
 <TabItem value="MINIO" label="MinIO" >
@@ -960,6 +1062,7 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
 </TabItem>
 
 <TabItem value="AZURE" label="Microsoft Azure Blob Storage" >
@@ -1089,6 +1192,21 @@ PROPERTIES
   );
   ```
 
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 - If you choose REST catalog with vended credential, run a command like below:
 
   ```SQL
@@ -1191,7 +1309,7 @@ PROPERTIES
 
 </Tabs>
  
- ---
+---
 
 ## Use your catalog
 
@@ -1229,7 +1347,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
   ```SQL
   USE <catalog_name>.<db_name>
   ```
- 
+
 ---
 
 ### Drop an Iceberg catalog
@@ -1337,13 +1455,13 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 
 ##### iceberg_metadata_memory_cache_expiration_seconds
 
-- Unit: Seconds  
+- Unit: Seconds
 - Default value: `86500`
 - Description: The amount of time after which a cache entry in memory expires counting from its last access.
 
 ##### iceberg_metadata_disk_cache_expiration_seconds
 
-- Unit: Seconds  
+- Unit: Seconds
 - Default value: `604800`, equivalent to one week
 - Description: The amount of time after which a cache entry on disk expires counting from its last access.
 

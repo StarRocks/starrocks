@@ -100,23 +100,27 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public static final TxnStateComparator TXN_ID_COMPARATOR = new TxnStateComparator();
 
     public enum LoadJobSourceType {
-        FRONTEND(1),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
-        BACKEND_STREAMING(2),           // streaming load use this type
-        INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
-        ROUTINE_LOAD_TASK(4),           // routine load task use this type
-        BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6),                     // synchronization delete job use this type
-        LAKE_COMPACTION(7),            // compaction of LakeTable
-        FRONTEND_STREAMING(8),          // FE streaming load use this type
-        MV_REFRESH(9),                  // Refresh MV
-        REPLICATION(10),                // Replication
-        BYPASS_WRITE(11),               // Bypass BE, and write data file directly
-        MULTI_STATEMENT_STREAMING(12);  // multi statement streaming load
+        // The second argument marks whether the source type is a loading transaction, which is used to decide
+        // combined txn log support. When adding a new type, set it explicitly so the classification is not missed.
+        FRONTEND(1, false),                    // old dpp load, mini load, insert stmt(not streaming type) use this type
+        BACKEND_STREAMING(2, true),            // streaming load use this type
+        INSERT_STREAMING(3, true),             // insert stmt (streaming type) use this type
+        ROUTINE_LOAD_TASK(4, true),            // routine load task use this type
+        BATCH_LOAD_JOB(5, true),               // load job v2 for broker load
+        DELETE(6, false),                      // synchronization delete job use this type
+        LAKE_COMPACTION(7, false),             // compaction of LakeTable
+        FRONTEND_STREAMING(8, true),           // FE streaming load use this type
+        MV_REFRESH(9, false),                  // Refresh MV
+        REPLICATION(10, false),                // Replication
+        BYPASS_WRITE(11, false),               // Bypass BE, and write data file directly
+        MULTI_STATEMENT_STREAMING(12, false);  // multi statement streaming load
 
         private final int flag;
+        private final boolean loadingTransaction;
 
-        LoadJobSourceType(int flag) {
+        LoadJobSourceType(int flag, boolean loadingTransaction) {
             this.flag = flag;
+            this.loadingTransaction = loadingTransaction;
         }
 
         public int value() {
@@ -132,6 +136,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
         public int getFlag() {
             return flag;
+        }
+
+        public boolean isLoadingTransaction() {
+            return loadingTransaction;
         }
     }
 
@@ -263,6 +271,18 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("ctl")
     private boolean useCombinedTxnLog;
+
+    // Admin-issued "no-op publish" flag. Set by ADMIN SKIP COMMITTED TRANSACTION
+    // when a COMMITTED txn is stuck in publish. When true, PublishVersionDaemon
+    // propagates this flag into the publish RPC's TxnInfoPB.no_op_publish so BE
+    // bypasses txn-log loading and apply for this txn; the publish still writes a
+    // new tablet metadata file (so partition visible version advances) but it
+    // carries no data contribution from this txn.
+    @SerializedName("nop")
+    private boolean isNoOpPublish = false;
+
+    @SerializedName("npr")
+    private String noOpPublishReason = "";
 
     @SerializedName("loadIds")
     private List<TUniqueId> loadIds;
@@ -501,6 +521,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.tabletCommitInfos = txnState.tabletCommitInfos;
         this.unknownReplicas = txnState.unknownReplicas;
         this.useCombinedTxnLog = txnState.useCombinedTxnLog;
+        this.isNoOpPublish = txnState.isNoOpPublish;
+        this.noOpPublishReason = txnState.noOpPublishReason;
         this.loadIds = txnState.loadIds;
         this.latch = txnState.latch;
         this.publishVersionTasks = txnState.publishVersionTasks;
@@ -1028,6 +1050,16 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
+    // Raw materialized-index id snapshot recorded at OlapTableSink planning time
+    // for (tableId, physicalPartitionId); null if not recorded.
+    public List<Long> getPartitionLoadedIndexIdsWithoutLock(long tableId, long physicalPartitionId) {
+        Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.get(tableId);
+        if (loadedPartitionIndexes == null) {
+            return null;
+        }
+        return loadedPartitionIndexes.get(physicalPartitionId);
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("TransactionState. ");
@@ -1130,6 +1162,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public LoadJobSourceType getSourceType() {
         return sourceType;
+    }
+
+    public boolean isFromLakeCompaction() {
+        return sourceType == LoadJobSourceType.LAKE_COMPACTION;
     }
 
     public TransactionType getTransactionType() {
@@ -1327,6 +1363,19 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public boolean isUseCombinedTxnLog() {
         return useCombinedTxnLog;
+    }
+
+    public boolean isNoOpPublish() {
+        return isNoOpPublish;
+    }
+
+    public String getNoOpPublishReason() {
+        return noOpPublishReason;
+    }
+
+    public void markAsNoOpPublish(String reason) {
+        this.isNoOpPublish = true;
+        this.noOpPublishReason = reason == null ? "" : reason;
     }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition(long tableId) {

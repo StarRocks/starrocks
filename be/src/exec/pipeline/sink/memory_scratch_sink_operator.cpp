@@ -14,15 +14,19 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
-#include "exec/pipeline/pipeline_driver_executor.h"
-#include "exec/workgroup/work_group.h"
+#include <arrow/memory_pool.h>
+
+#include "compute_env/result/result_queue_mgr.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "exec/arrow/result_to_arrow_converter.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/result_queue_mgr.h"
-#include "util/arrow/row_batch.h"
-#include "util/arrow/starrocks_column_to_arrow.h"
 
 namespace starrocks::pipeline {
 
@@ -135,7 +139,8 @@ Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
 
     TUniqueId fragment_instance_id = state->fragment_instance_id();
-    state->exec_env()->result_queue_mgr()->create_queue(fragment_instance_id, &_queue);
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->result_queue_mgr->create_queue(fragment_instance_id, &_queue);
     return Status::OK();
 }
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the current UTC time as a value in 'HH:MM:SS'."
 ---
 
 # utc_time

@@ -57,7 +57,6 @@
 #include "common/logging.h"
 #include "gutil/atomicops.h"
 #include "gutil/dynamic_annotations.h"
-#include "gutil/once.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -74,7 +73,7 @@ __thread Thread* Thread::_tls = nullptr;
 static std::shared_ptr<ThreadMgr> thread_manager;
 //
 // Controls the single (lazy) initialization of thread_manager.
-static GoogleOnceType once = GOOGLE_ONCE_INIT;
+static std::once_flag thread_manager_once;
 
 // A singleton class that tracks all live threads, and groups them together for easy
 // auditing. Used only by Thread.
@@ -220,7 +219,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
 }
 
 void Thread::get_thread_infos(std::vector<BeThreadInfo>& infos) {
-    GoogleOnceInit(&once, &init_threadmgr);
+    std::call_once(thread_manager_once, init_threadmgr);
     thread_manager->get_thread_infos(infos);
 }
 
@@ -283,44 +282,24 @@ int64_t Thread::current_thread_id() {
 
 void Thread::set_thread_name(pthread_t t, const std::string& name) {
     // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
-    int ret;
-    if (name.length() < 16) {
+    std::string truncated = name.length() >= 16 ? name.substr(0, 15) : name;
 #ifdef __APPLE__
-        (void)t;
-        ret = pthread_setname_np(name.data());
+    (void)t;
+    int ret = pthread_setname_np(truncated.c_str());
 #else
-        ret = pthread_setname_np(t, name.data());
+    int ret = pthread_setname_np(t, truncated.c_str());
 #endif
-    } else {
-        std::string str = name;
-        str.at(15) = '\0';
-#ifdef __APPLE__
-        (void)t;
-        ret = pthread_setname_np(str.data());
-#else
-        ret = pthread_setname_np(t, str.data());
-#endif
-    }
     if (ret) {
-        LOG(WARNING) << "failed to set thread name: " << name;
+        LOG(WARNING) << "failed to set thread name, ret=" << ret << ", name: " << truncated;
     }
 }
 
 void Thread::set_thread_name(std::thread& t, std::string name) {
-    // pthread_setname_np's length is restricted to 16 bytes, including the terminating null byte ('\0')
-    if (name.length() >= 16) {
-        name.at(15) = '\0';
-    }
-    int ret;
 #ifdef __APPLE__
-    (void)t;
-    ret = pthread_setname_np(name.data());
+    set_thread_name(pthread_t{}, name);
 #else
-    ret = pthread_setname_np(t.native_handle(), name.data());
+    set_thread_name(t.native_handle(), name);
 #endif
-    if (ret) {
-        LOG(WARNING) << "failed to set thread name: " << name;
-    }
 }
 
 int64_t Thread::wait_for_tid() const {
@@ -333,7 +312,7 @@ int64_t Thread::wait_for_tid() const {
 
 Status Thread::start_thread(const std::string& category, const std::string& name, const ThreadFunctor& functor,
                             uint64_t flags, scoped_refptr<Thread>* holder) {
-    GoogleOnceInit(&once, &init_threadmgr);
+    std::call_once(thread_manager_once, init_threadmgr);
 
     // Temporary reference for the duration of this function.
     scoped_refptr<Thread> t(new Thread(category, name, functor));

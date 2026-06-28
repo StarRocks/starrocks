@@ -216,6 +216,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         vacuumFullRequest.setMaxCheckVersion(maxCheckVersion);
         vacuumFullRequest.setRetainVersions(retainVersions);
         vacuumFullRequest.setTabletId(nodeToTablet.get(chosenNode).getId());
+        vacuumFullRequest.setCleanupLegacyLoadSpill(true);
 
         LOG.info(
                 "Sending full vacuum request to cn={}: table={}, partition={}, max_check_version={}, " + "min_active_txn_id={}",

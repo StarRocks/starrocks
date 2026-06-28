@@ -15,7 +15,7 @@
 #pragma once
 
 #include "formats/parquet/group_reader.h"
-#include "storage/predicate_tree/predicate_tree.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks::parquet {
 
@@ -234,7 +234,17 @@ struct PredicateFilterEvaluator {
     GroupReader* group_reader;
     bool enable_page_index;
     bool enable_bloom_filter;
-    OptimizationCounter counter;
+
+    struct FilterCounter {
+        int bloom_filter_tried_counter = 0;
+        int bloom_filter_success_counter = 0;
+        int statistics_tried_counter = 0;
+        int statistics_success_counter = 0;
+        int page_index_tried_counter = 0;
+        int page_index_filter_group_counter = 0;
+        int page_index_success_counter = 0;
+    };
+    FilterCounter counter;
     std::optional<SparseRange<uint64_t>> row_ranges_before_bf = std::nullopt;
 };
 

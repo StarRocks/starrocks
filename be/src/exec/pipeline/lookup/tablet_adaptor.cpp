@@ -20,11 +20,12 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/column_access_path_resolver.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/extends_column_utils.h"
@@ -36,6 +37,7 @@
 #include "storage/metadata_util.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
 
@@ -46,8 +48,9 @@ namespace detail {
 StatusOr<std::vector<ColumnAccessPathPtr>> init_access_paths(const std::vector<TColumnAccessPath>& column_access_paths,
                                                              RuntimeState* state, ObjectPool* pool) {
     std::vector<ColumnAccessPathPtr> access_paths;
+    auto path_resolver = make_column_access_path_resolver(state, pool);
     for (int i = 0; i < column_access_paths.size(); ++i) {
-        auto st = ColumnAccessPath::create(column_access_paths[i], state, pool);
+        auto st = ColumnAccessPath::create(column_access_paths[i], path_resolver);
         if (LIKELY(st.ok())) {
             access_paths.emplace_back(std::move(st.value()));
         } else {
@@ -129,6 +132,7 @@ private:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
     ColumnIdToGlobalDictMap* _global_dicts = nullptr;
     OlapScanLazyMaterializationContext* _glm_ctx = nullptr;
+    bool _use_page_cache = false;
 };
 
 class LakeScanTabletAdaptor final : public LookUpTabletAdaptor {
@@ -163,6 +167,7 @@ private:
     ColumnIdToGlobalDictMap* _global_dicts = nullptr;
     LakeScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::vector<lake::RowsetPtr> _rowsets;
+    bool _use_page_cache = false;
 };
 
 Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
@@ -172,6 +177,7 @@ Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status OlapScanTabletAdaptor::init_schema(RuntimeState* state) {
+    _use_page_cache = state->use_page_cache();
     const auto& thrift_olap_scan_node = _glm_ctx->scan_node();
 
     if (thrift_olap_scan_node.__isset.schema_id && thrift_olap_scan_node.schema_id > 0 &&
@@ -230,6 +236,11 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
+    // which already respects the disable_storage_page_cache config and the session var).
+    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
+    // column page per row locator. See olap_chunk_source.cpp.
+    rs_opts.use_page_cache = _use_page_cache;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
@@ -259,7 +270,8 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
-    auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    _use_page_cache = state->use_page_cache();
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
     auto version = _glm_ctx->get_rowsets_version(_tablet_id);
@@ -273,7 +285,7 @@ Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
         schema_key_pb.set_table_id(t_schema_key.table_id);
         ASSIGN_OR_RETURN(_tablet_schema, tablet_mgr->table_schema_service()->get_schema_for_scan(
                                                  schema_key_pb, _tablet_id, state->query_id(),
-                                                 state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+                                                 state->fragment_runtime_state()->fe_addr(), _tablet.metadata()));
     } else {
         _tablet_schema = _tablet.get_schema();
     }
@@ -320,7 +332,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
                                   &target_segment_idx);
 
     if (target == nullptr) {
-        auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         _rowsets = lake::Rowset::get_rowsets(tablet_mgr, _tablet.metadata());
         target = _glm_ctx->get_rowset(_rowsets, static_cast<int32_t>(lake_rssid), &target_segment_idx);
     }
@@ -341,6 +353,12 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
+    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
+    // which already respects the disable_storage_page_cache config and the session var).
+    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
+    // column page per row locator. See lake_connector.cpp. Data-cache (fill_data_cache)
+    // is left at its default so the lookup does not override the scan's per-range policy.
+    rs_opts.use_page_cache = _use_page_cache;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;

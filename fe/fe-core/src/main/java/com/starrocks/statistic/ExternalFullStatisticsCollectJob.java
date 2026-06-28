@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
@@ -64,6 +63,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -119,34 +120,60 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
-        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-        long totalCollectSQL = collectSQLList.size();
+        long startMs = System.currentTimeMillis();
+        long jobId = analyzeStatus.getId();
+        LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
+                jobId, catalogName, db.getOriginName(), table.getName(),
+                partitionNames.size(), columnNames.size());
 
-        // First, the collection task is divided into several small tasks according to the column name and partition,
-        // and then the multiple small tasks are aggregated into several tasks
-        // that will actually be run according to the configured parallelism, and are connected by union all
-        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
-        // dop will be set to 1 to meet the requirements of the degree of parallelism.
-        // If the number of unions is less than the degree of parallelism,
-        // dop should be adjusted appropriately to use enough cpu cores
-        for (List<String> sqlUnion : collectSQLList) {
-            if (sqlUnion.size() < parallelism) {
-                context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
-            } else {
-                context.getSessionVariable().setPipelineDop(1);
-            }
-
-            String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
-
-            collectStatisticSync(sql, context, analyzeStatus);
-            finishedSQLNum++;
-            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        String tableSummary = table.getStatsCollectSummary();
+        if (!tableSummary.isEmpty()) {
+            LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), tableSummary);
         }
 
-        flushInsertStatisticsData(context, true);
+        String status = "SUCCESS";
+        String failureReason = "";
+        try {
+            long finishedSQLNum = 0;
+            int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+            List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+            long totalCollectSQL = collectSQLList.size();
+
+            // First, the collection task is divided into several small tasks according to the column name and partition,
+            // and then the multiple small tasks are aggregated into several tasks
+            // that will actually be run according to the configured parallelism, and are connected by union all
+            // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
+            // dop will be set to 1 to meet the requirements of the degree of parallelism.
+            // If the number of unions is less than the degree of parallelism,
+            // dop should be adjusted appropriately to use enough cpu cores
+            for (List<String> sqlUnion : collectSQLList) {
+                if (sqlUnion.size() < parallelism) {
+                    context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
+                } else {
+                    context.getSessionVariable().setPipelineDop(1);
+                }
+
+                String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
+
+                collectStatisticSync(sql, context, analyzeStatus);
+                finishedSQLNum++;
+                analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            }
+
+            flushInsertStatisticsData(context, true);
+        } catch (Exception e) {
+            status = "FAILED";
+            failureReason = e.getMessage();
+            throw e;
+        } finally {
+            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
+                            "durationMs={} partitions={} columns={} reason={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(),
+                    status, System.currentTimeMillis() - startMs,
+                    partitionNames.size(), columnNames.size(), failureReason);
+        }
     }
 
     protected List<List<String>> buildCollectSQLList(int parallelism) {
@@ -174,19 +201,19 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String columnNameStr = StringEscapeUtils.escapeSql(columnName);
         String quoteColumnName = StatisticUtils.quoting(table, columnName);
 
-        String nullValue;
+        Collection<String> nullValues;
         if (table.isIcebergTable()) {
-            nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+            nullValues = Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
         } else if (table.isPaimonTable()) {
-            nullValue = PaimonMetadata.PAIMON_PARTITION_NULL_VALUE;
+            nullValues = PaimonMetadata.PARTITION_NULL_VALUES;
         } else {
-            nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
+            nullValues = Collections.singleton(HiveMetaClient.PARTITION_NULL_VALUE);
         }
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         // all table now, partition later
         context.put("partitionNameStr", table.isIcebergTable() ? partitionName :
-                PartitionUtil.normalizePartitionName(partitionName, table.getPartitionColumnNames(), nullValue));
+                PartitionUtil.normalizePartitionName(partitionName, table.getPartitionColumnNames(), nullValues));
         context.put("columnNameStr", columnNameStr);
         context.put("dataSize", fullAnalyzeGetDataSize(quoteColumnName, columnType));
         context.put("dbName", db.getOriginName());
@@ -208,7 +235,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         if (table.isUnPartitioned()) {
             context.put("partitionPredicate", "1=1");
         } else {
-            List<String> partitionPredicate = generatePartitionPredicates(table, partitionName, nullValue);
+            List<String> partitionPredicate = generatePartitionPredicates(table, partitionName, nullValues);
             context.put("partitionPredicate", Joiner.on(" AND ").join(partitionPredicate));
         }
 
@@ -216,7 +243,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return builder.toString();
     }
 
-    private List<String> generatePartitionPredicates(Table table, String partitionName, String nullValue) {
+    private List<String> generatePartitionPredicates(Table table, String partitionName, Collection<String> nullValues) {
         if (table.isIcebergTable()) {
             return generatePartitionPredicatesForIcebergTable((IcebergTable) table, partitionName);
         }
@@ -226,7 +253,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         for (int i = 0; i < partitionColumnNames.size(); i++) {
             String partitionColumnName = partitionColumnNames.get(i);
             String partitionValue = partitionValues.get(i);
-            if (partitionValue.equals(nullValue)) {
+            if (nullValues.contains(partitionValue)) {
                 partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
             } else {
                 partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");

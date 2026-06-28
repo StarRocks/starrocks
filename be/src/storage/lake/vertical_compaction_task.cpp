@@ -14,15 +14,17 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
-#include "agent/master_info.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
@@ -32,7 +34,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
-#include "storage/row_source_mask.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -53,7 +54,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         input_bytes += rowset->data_size_after_deletion();
     }
 
-    const auto& store_paths = ExecEnv::GetInstance()->store_paths();
+    const auto* store_path_registry = _tablet.tablet_manager()->store_path_registry();
+    DCHECK(store_path_registry != nullptr);
+    const auto& store_paths = store_path_registry->store_paths();
     DCHECK(!store_paths.empty());
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
@@ -219,8 +222,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkFactory::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
@@ -269,8 +272,11 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                                  column_group_size);
+        if (_total_num_rows > 0 && column_group_size > 0) {
+            _context->progress.update(
+                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                    column_group_size);
+        }
         CompactionTaskStats temp_stats;
         temp_stats.collect(reader.stats());
         CompactionTaskStats diff_stats = temp_stats - prev_stats;

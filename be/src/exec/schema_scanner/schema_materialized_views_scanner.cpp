@@ -53,6 +53,15 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"CREATOR", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_REFRESH_PROCESS_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"LAST_REFRESH_JOB_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_TRIGGER", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_POLICY", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"RESOURCE_GROUP", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"QUERY_REWRITE_STATUS_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_FRESHNESS_CONFIRMED_AT", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"BASE_TABLE_REFRESH_VERSION_TIMES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -418,6 +427,114 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // LAST_REFRESH_JOB_ID
             if (info.__isset.last_refresh_job_id) {
                 const std::string* str = &info.last_refresh_job_id;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 28: {
+            // LAST_REFRESH_TIME
+            if (info.__isset.last_refresh_time) {
+                auto* nullable_column = down_cast<NullableColumn*>(column);
+                DateTimeValue t;
+                if (!t.from_date_str(info.last_refresh_time.data(), info.last_refresh_time.size())) {
+                    nullable_column->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
+                }
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 29: {
+            // WAREHOUSE
+            if (info.__isset.warehouse) {
+                const std::string* str = &info.warehouse;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 30: {
+            // REFRESH_MODE
+            if (info.__isset.refresh_mode) {
+                const std::string* str = &info.refresh_mode;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 31: {
+            // REFRESH_TRIGGER
+            if (info.__isset.refresh_trigger) {
+                const std::string* str = &info.refresh_trigger;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 32: {
+            // REFRESH_POLICY
+            if (info.__isset.refresh_policy) {
+                const std::string* str = &info.refresh_policy;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 33: {
+            // RESOURCE_GROUP
+            if (info.__isset.resource_group) {
+                const std::string* str = &info.resource_group;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 34: {
+            // QUERY_REWRITE_STATUS_REASON
+            if (info.__isset.query_rewrite_status_reason) {
+                const std::string* str = &info.query_rewrite_status_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 35: {
+            // LAST_FRESHNESS_CONFIRMED_AT
+            if (info.__isset.last_freshness_confirmed_at) {
+                auto* nullable_column = down_cast<NullableColumn*>(column);
+                DateTimeValue t;
+                if (!t.from_date_str(info.last_freshness_confirmed_at.data(),
+                                     info.last_freshness_confirmed_at.size())) {
+                    nullable_column->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
+                }
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 36: {
+            // BASE_TABLE_REFRESH_VERSION_TIMES
+            if (info.__isset.base_table_refresh_version_times) {
+                const std::string* str = &info.base_table_refresh_version_times;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

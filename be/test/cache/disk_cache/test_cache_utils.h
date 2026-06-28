@@ -20,7 +20,9 @@
 #include "base/testutil/assert.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_cache/starcache_engine.h"
+#ifdef WITH_STARCACHE
 #include "cache/peer_cache_engine.h"
+#endif
 #include "common/logging.h"
 
 namespace starrocks {
@@ -47,6 +49,7 @@ public:
     }
 
     static std::shared_ptr<BlockCache> create_cache(const DiskCacheOptions& options) {
+#ifdef WITH_STARCACHE
         BlockCacheOptions block_cache_options;
         block_cache_options.block_size = options.block_size;
         RemoteCacheOptions remote_cache_options;
@@ -58,6 +61,10 @@ public:
         EXPECT_OK(remote_cache->init(remote_cache_options));
         EXPECT_OK(block_cache->init(block_cache_options, local_cache, remote_cache));
         return block_cache;
+#else
+        (void)options;
+        return nullptr;
+#endif
     }
 };
 

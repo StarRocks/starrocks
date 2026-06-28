@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 3.3：共有データの高速スキーマ進化による準秒 DDL、StarRocks データ移行ツール、データレイク ウォームアップ用 CACHE SELECT。"
 ---
 
 # StarRocks version 3.3
@@ -284,7 +285,7 @@ displayed_sidebar: docs
 ### 改善点
 
 - 正則式の解析失敗時のエラーメッセージを改善しました。 [#57904](https://github.com/StarRocks/starrocks/pull/57904)
-- セキュリティ脆弱性 [SNYK-JAVA-ORGJSON-5488379](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) および [SNYK-JAVA-ORGJSON-5962464](https://snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464) を修正しました。 [#58425](https://github.com/StarRocks/starrocks/pull/58425)
+- セキュリティ脆弱性 [SNYK-JAVA-ORGJSON-5488379](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5488379) および [SNYK-JAVA-ORGJSON-5962464](https://security.snyk.io/vuln/SNYK-JAVA-ORGJSON-5962464) を修正しました。 [#58425](https://github.com/StarRocks/starrocks/pull/58425)
 
 ### バグ修正
 

@@ -15,12 +15,13 @@
 #include "agent/resource_group_usage_recorder.h"
 
 #include "base/testutil/assert.h"
-#include "common/config_runtime_fwd.h"
 #include "common/system/cpu_info.h"
-#include "exec/workgroup/work_group.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/workgroup/work_group.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
-#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -28,14 +29,13 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     const size_t num_cores = CpuInfo::num_cores();
 
     auto& exec_env = *ExecEnv::GetInstance();
-    workgroup::PipelineExecutorSetConfig executors_manager_opts(
-            CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
-            config::enable_resource_group_cpu_borrowing,
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
-    exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
-    ASSERT_OK(exec_env._workgroup_manager->start());
+    // Save original workgroup_manager to restore at end (otherwise subsequent tests fail)
+    auto original_wg_manager = std::move(exec_env.compute_env()->_workgroup_manager);
 
-    workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    ASSERT_OK(exec_env.compute_env()->_init_workgroup(compute_env_options, num_cores));
     auto default_wg = exec_env.workgroup_manager()->get_default_workgroup();
 
     ResourceGroupUsageRecorder recorder;
@@ -49,6 +49,11 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     ASSERT_EQ(group_usages[0].mem_pool, workgroup::WorkGroup::DEFAULT_MEM_POOL);
     ASSERT_EQ(group_usages[0].mem_limit_bytes, default_wg->mem_limit_bytes());
     ASSERT_EQ(group_usages[0].mem_pool_mem_limit_bytes, default_wg->mem_limit_bytes());
+
+    // Restore original workgroup_manager
+    exec_env.compute_env()->_stop_workgroup();
+    exec_env.compute_env()->_workgroup_manager->destroy();
+    exec_env.compute_env()->_workgroup_manager = std::move(original_wg_manager);
 }
 
 } // namespace starrocks

@@ -22,7 +22,7 @@
 
 namespace starrocks::avrocpp {
 
-ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string& col_name,
+ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string_view col_name,
                                                                const TypeDescriptor& type_desc,
                                                                const cctz::time_zone& timezone, bool invalid_as_null) {
     ColumnReaderUniquePtr reader = nullptr;
@@ -83,22 +83,35 @@ ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string
         std::vector<ColumnReaderUniquePtr> field_readers;
         field_readers.reserve(type_desc.children.size());
         for (size_t i = 0; i < type_desc.children.size(); ++i) {
-            field_readers.emplace_back(get_nullable_column_reader(type_desc.field_names[i], type_desc.children[i],
-                                                                  timezone, invalid_as_null));
+            if (type_desc.children[i].is_unknown_type()) {
+                field_readers.emplace_back(nullptr);
+            } else {
+                field_readers.emplace_back(get_nullable_column_reader(type_desc.field_names[i], type_desc.children[i],
+                                                                      timezone, invalid_as_null));
+            }
         }
         reader = std::make_unique<StructColumnReader>(col_name, type_desc, std::move(field_readers));
         break;
     }
 
     case TYPE_ARRAY: {
-        auto element_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
+        ColumnReaderUniquePtr element_reader = nullptr;
+        if (!type_desc.children[0].is_unknown_type()) {
+            element_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
+        }
         reader = std::make_unique<ArrayColumnReader>(col_name, type_desc, std::move(element_reader));
         break;
     }
 
     case TYPE_MAP: {
-        auto key_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
-        auto value_reader = get_nullable_column_reader(col_name, type_desc.children[1], timezone, invalid_as_null);
+        ColumnReaderUniquePtr key_reader = nullptr;
+        ColumnReaderUniquePtr value_reader = nullptr;
+        if (!type_desc.children[0].is_unknown_type()) {
+            key_reader = get_nullable_column_reader(col_name, type_desc.children[0], timezone, invalid_as_null);
+        }
+        if (!type_desc.children[1].is_unknown_type()) {
+            value_reader = get_nullable_column_reader(col_name, type_desc.children[1], timezone, invalid_as_null);
+        }
         reader = std::make_unique<MapColumnReader>(col_name, type_desc, std::move(key_reader), std::move(value_reader));
         break;
     }

@@ -14,12 +14,12 @@
 
 #include "storage/lake/versioned_tablet.h"
 
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/tablet_schema_map.h"
 
 namespace starrocks::lake {
@@ -111,7 +111,7 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
     int64_t num_row = 0;
     int64_t data_size = 0;
     for (const auto& rowset : _metadata->rowsets()) {
-        num_segment += rowset.segments_size();
+        num_segment += rowset.segment_metas_size();
         num_row += rowset.num_rows();
         data_size += rowset.data_size();
     }
@@ -147,7 +147,6 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
                 index_disk_usage += sst.filesize();
             }
             info.index_disk_usage = index_disk_usage;
-            info.data_size += index_disk_usage;
         }
     }
 

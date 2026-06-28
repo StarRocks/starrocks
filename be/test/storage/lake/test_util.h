@@ -15,29 +15,36 @@
 #pragma once
 #include <gtest/gtest.h>
 
+#include <ctime>
+#include <map>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "connector/connector.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "platform/platform_env.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "service/service_be/lake_service.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
@@ -77,7 +84,7 @@ public:
         }
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         (void)fs::remove_all(_test_dir);
     }
 
@@ -88,7 +95,13 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit,
+                                                          PlatformEnv::GetInstance()->store_path_registry())) {
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
+        }
         PFailPointTriggerMode trigger_mode;
         trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
         auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get(
@@ -157,108 +170,77 @@ private:
     T _old_val;
 };
 
+inline TxnInfoPB TEST_txn_info(int64_t txn_id, int64_t commit_time, bool rebuild_pindex = false) {
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(commit_time);
+    txn_info.set_force_publish(false);
+    if (rebuild_pindex) {
+        txn_info.set_rebuild_pindex(true);
+    }
+    return txn_info;
+}
+
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
                                                                int64_t new_version, int64_t txn_id,
                                                                bool rebuild_pindex) {
-    PublishVersionRequest request;
-    PublishVersionResponse response;
-
-    request.add_tablet_ids(tablet_id);
-    request.add_txn_ids(txn_id);
-    request.set_base_version(new_version - 1);
-    request.set_new_version(new_version);
-    request.set_commit_time(time(nullptr));
-    if (rebuild_pindex) {
-        request.add_rebuild_pindex_tablet_ids(tablet_id);
+    auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr), rebuild_pindex)};
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns, false);
+    if (!result.ok()) {
+        return Status::InternalError(fmt::format("failed to publish version. tablet_id={} txn_id={} new_version={}: {}",
+                                                 tablet_id, txn_id, new_version, result.status().to_string()));
     }
-
-    auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
-    lake_service.publish_version(nullptr, &request, &response, nullptr);
-
-    if (response.failed_tablets_size() == 0) {
-        return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
-    } else {
-        return Status::InternalError(fmt::format("failed to publish version. tablet_id={} txn_id={} new_version={}",
-                                                 tablet_id, txn_id, new_version));
-    }
+    return result;
 }
 
 inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vector<int64_t> tablet_ids,
                                              int64_t new_version, int64_t txn_id, bool rebuild_pindex) {
-    PublishVersionRequest request;
-    PublishVersionResponse response;
-
-    for (auto& tablet_id : tablet_ids) {
-        request.add_tablet_ids(tablet_id);
-        if (rebuild_pindex) {
-            request.add_rebuild_pindex_tablet_ids(tablet_id);
+    auto txn_info = TEST_txn_info(txn_id, time(nullptr), rebuild_pindex);
+    auto txns = std::vector<TxnInfoPB>{std::move(txn_info)};
+    std::map<int64_t, TabletMetadataPB> tablet_metas;
+    for (auto tablet_id : tablet_ids) {
+        auto result =
+                publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns, true);
+        if (!result.ok()) {
+            return Status::InternalError(
+                    fmt::format("failed to publish version. tablet_id={} tablet_sz={} txn_id={} new_version={}: {}",
+                                tablet_id, tablet_ids.size(), txn_id, new_version, result.status().to_string()));
         }
+        auto metadata = result.value();
+        tablet_metas.emplace(metadata->id(), *metadata);
     }
-    request.add_txn_ids(txn_id);
-    request.set_base_version(new_version - 1);
-    request.set_new_version(new_version);
-    request.set_commit_time(time(nullptr));
-    request.set_enable_aggregate_publish(true);
-
-    auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
-    lake_service.publish_version(nullptr, &request, &response, nullptr);
-
-    if (response.failed_tablets_size() == 0 && response.status().status_code() == 0) {
-        std::map<int64_t, TabletMetadataPB> tablet_metas;
-        for (const auto& meta : response.tablet_metas()) {
-            tablet_metas.emplace(meta.first, meta.second);
-        }
-        return tablet_mgr->put_bundle_tablet_metadata(tablet_metas);
-    } else {
-        return Status::InternalError(fmt::format("failed to publish version. tablet_sz={} txn_id={} new_version={}",
-                                                 tablet_ids.size(), txn_id, new_version));
-    }
+    return tablet_mgr->put_bundle_tablet_metadata(tablet_metas);
 }
 
 inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id,
                                                       int64_t base_version, int64_t new_version,
                                                       std::vector<int64_t>& txn_ids) {
-    PublishVersionRequest request;
-    PublishVersionResponse response;
-
-    request.add_tablet_ids(tablet_id);
+    auto txns = std::vector<TxnInfoPB>();
+    txns.reserve(txn_ids.size());
+    auto commit_time = time(nullptr);
     for (auto& txn_id : txn_ids) {
-        request.add_txn_ids(txn_id);
+        txns.emplace_back(TEST_txn_info(txn_id, commit_time));
     }
-    request.set_base_version(base_version);
-    request.set_new_version(new_version);
-    request.set_commit_time(time(nullptr));
-
-    auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
-    lake_service.publish_version(nullptr, &request, &response, nullptr);
-
-    if (response.failed_tablets_size() == 0) {
-        return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
-    } else {
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false);
+    if (!result.ok()) {
         return Status::InternalError(
-                fmt::format("failed to publish version. tablet_id={} txn_ids={} base_version={} new_version={}",
-                            tablet_id, JoinInts(txn_ids, ","), base_version, new_version));
+                fmt::format("failed to publish version. tablet_id={} txn_ids={} base_version={} new_version={}: {}",
+                            tablet_id, JoinInts(txn_ids, ","), base_version, new_version, result.status().to_string()));
     }
+    return result;
 }
 
 inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                               int64_t log_version) {
-    PublishLogVersionRequest request;
-    PublishLogVersionResponse response;
-
-    request.add_tablet_ids(tablet_id);
-    request.set_txn_id(txn_id);
-    request.set_version(log_version);
-
-    auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
-    lake_service.publish_log_version(nullptr, &request, &response, nullptr);
-
-    if (response.failed_tablets_size() == 0) {
-        return Status::OK();
-    } else {
+    auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr))};
+    auto status = publish_log_version(tablet_mgr, tablet_id, txns, &log_version);
+    if (!status.ok()) {
         return Status::InternalError(fmt::format("failed to publish log version. tablet_id={} txn_id={} version={}",
                                                  tablet_id, txn_id, log_version));
     }
+    return Status::OK();
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::publish_single_version(int64_t tablet_id, int64_t new_version,
@@ -362,8 +344,9 @@ inline std::shared_ptr<RuntimeState> create_runtime_state() {
 inline std::shared_ptr<RuntimeState> create_runtime_state(const TQueryOptions& query_options) {
     TUniqueId fragment_id;
     TQueryGlobals query_globals;
-    std::shared_ptr<RuntimeState> runtime_state =
-            std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+    auto* exec_env = ExecEnv::GetInstance();
+    std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+            fragment_id, query_options, query_globals, &exec_env->query_execution_services(), exec_env);
     auto* fragment_dict_state = runtime_state->obj_pool()->add(new FragmentDictState());
     runtime_state->set_fragment_dict_state(fragment_dict_state);
     TUniqueId id;

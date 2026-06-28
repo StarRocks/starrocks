@@ -22,11 +22,10 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "runtime/starrocks_metrics.h"
+#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -35,6 +34,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
 
@@ -109,6 +109,56 @@ TEST_F(MetaFileTest, test_meta_rw) {
 
     // 3. read meta from meta file
     ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, 10));
+}
+
+// Regression: when add_rowset accumulates multiple op_writes into ONE composite rowset
+// (a multi-statement / batch / cross-publish PK txn), it must SUM num_rows/data_size/num_dels,
+// not keep only the first op_write's counts. The bug left e.g. num_rows=1 on a rowset whose
+// segments hold 1 + 10000 = 10001 rows, corrupting reads until compaction rewrote the rowset.
+TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
+    const int64_t tablet_id = 10050;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    metadata->set_next_rowset_id(1);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    RowsetMetadataPB rs_tiny; // first op_write: 1 row, 1 segment
+    rs_tiny.set_num_rows(1);
+    rs_tiny.set_data_size(100);
+    rs_tiny.set_num_dels(2);
+    rs_tiny.set_overlapped(false);
+    {
+        auto* segment_meta = rs_tiny.add_segment_metas();
+        segment_meta->set_filename("seg_tiny.dat");
+        segment_meta->set_size(100);
+    }
+    builder.add_rowset(rs_tiny, {}, {}, {});
+
+    RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
+    rs_large.set_num_rows(10000);
+    rs_large.set_data_size(50000);
+    rs_large.set_num_dels(3);
+    rs_large.set_overlapped(false);
+    {
+        auto* segment_meta = rs_large.add_segment_metas();
+        segment_meta->set_filename("seg_large.dat");
+        segment_meta->set_size(50000);
+    }
+    builder.add_rowset(rs_large, {}, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rs = metadata->rowsets(0);
+    EXPECT_EQ(2, rs.segment_metas_size());
+    EXPECT_TRUE(rs.segment_metas(0).has_size());
+    EXPECT_TRUE(rs.segment_metas(1).has_size());
+    EXPECT_EQ(1 + 10000, rs.num_rows());    // before the fix: 1 (first op_write only)
+    EXPECT_EQ(100 + 50000, rs.data_size()); // before the fix: 100
+    EXPECT_EQ(2 + 3, rs.num_dels());        // before the fix: 2 (first op_write only)
+    EXPECT_TRUE(rs.overlapped());           // composite spanning >1 op_write
 }
 
 TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
@@ -323,7 +373,7 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("aaa.dat");
+        rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -337,7 +387,7 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("bbb.dat");
+        rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
@@ -346,7 +396,8 @@ TEST_F(MetaFileTest, test_dcg) {
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 4, 5});
         unique_column_id_list.push_back({6, 7, 8});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{111, 222};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -357,14 +408,15 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(13);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ccc.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ccc.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
         filenames.emplace_back("ccc.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({4, 7});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{333};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -376,14 +428,15 @@ TEST_F(MetaFileTest, test_dcg) {
         metadata->set_version(14);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ddd.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         std::vector<std::pair<std::string, std::string>> filenames;
         filenames.emplace_back("ddd.cols", "");
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 5});
-        builder.append_dcg(110, filenames, unique_column_id_list);
+        std::vector<int64_t> file_sizes{444};
+        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -392,6 +445,16 @@ TEST_F(MetaFileTest, test_dcg) {
         EXPECT_TRUE(dcg_ver_iter->second.versions_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.column_files_size() == 3);
         EXPECT_TRUE(dcg_ver_iter->second.unique_column_ids_size() == 3);
+        // column_file_sizes stays 1:1 with column_files, and carries forward the size
+        // of each retained `.cols` file regardless of how entries are reordered.
+        EXPECT_TRUE(dcg_ver_iter->second.column_file_sizes_size() == 3);
+        std::map<std::string, int64_t> file_to_size;
+        for (int i = 0; i < dcg_ver_iter->second.column_files_size(); i++) {
+            file_to_size[dcg_ver_iter->second.column_files(i)] = dcg_ver_iter->second.column_file_sizes(i);
+        }
+        EXPECT_EQ(444, file_to_size["ddd.cols"]);
+        EXPECT_EQ(222, file_to_size["bbb.cols"]);
+        EXPECT_EQ(333, file_to_size["ccc.cols"]);
         // <3, 5> -> ddd.cols
         // <6, 8> -> bbb.cols
         // <4, 7> -> ccc.cols
@@ -430,7 +493,7 @@ TEST_F(MetaFileTest, test_dcg) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(110);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("eee.dat");
+        rowset_metadata.add_segment_metas()->set_filename("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
         EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
@@ -444,7 +507,7 @@ TEST_F(MetaFileTest, test_dcg) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(110);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("fff.dat");
+        rowset_metadata.add_segment_metas()->set_filename("fff.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(14);
         EXPECT_FALSE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
@@ -500,7 +563,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("aaa.dat");
+        rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -514,7 +577,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("bbb.dat");
+        rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
         DelfileWithRowsetId delfile;
         delfile.set_name("bbb1.del");
         delfile.set_origin_rowset_id(metadata->next_rowset_id());
@@ -540,7 +603,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         op_compaction.add_input_rowsets(110);
         op_compaction.add_input_rowsets(111);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ccc.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ccc.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(13);
         builder.apply_opcompaction(op_compaction, 111, 0);
@@ -562,7 +625,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         metadata->set_version(14);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("ddd.dat");
+        rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
@@ -582,7 +645,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         op_compaction.add_input_rowsets(112);
         op_compaction.add_input_rowsets(113);
         RowsetMetadataPB rowset_metadata;
-        rowset_metadata.add_segments("eee.dat");
+        rowset_metadata.add_segment_metas()->set_filename("eee.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(rowset_metadata);
         op_compaction.set_compact_version(15);
         builder.apply_opcompaction(op_compaction, 113, 0);
@@ -606,10 +669,14 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
 
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(110);
-    input_rowset->add_segments("a.dat");
-    input_rowset->add_segments("b.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
-    input_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = input_rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(0);
+        auto* sm1 = input_rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(5);
+    }
 
     DeltaColumnGroupVerPB dcg;
     dcg.add_versions(13);
@@ -619,7 +686,7 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(110);
     op_compaction.set_compact_version(12);
-    op_compaction.mutable_output_rowset()->add_segments("out.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
 
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
 }
@@ -633,37 +700,87 @@ TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     op_compaction.add_input_rowsets(1);
     op_compaction.add_input_rowsets(11);
     op_compaction.add_input_rowsets(22);
-    op_compaction.mutable_output_rowset()->add_segments("aaa.dat");
-    op_compaction.mutable_output_rowset()->add_segments("bbb.dat");
-    op_compaction.mutable_output_rowset()->add_segments("ccc.dat");
-    op_compaction.mutable_output_rowset()->add_segments("ddd.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("bbb.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ccc.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ddd.dat");
     RowsetMetadataPB last_input_rowset_metadata;
 
     last_input_rowset_metadata.set_id(33);
-    last_input_rowset_metadata.mutable_segments()->Clear();
-    last_input_rowset_metadata.add_segments("aaa.dat");
-    last_input_rowset_metadata.add_segments("eee.dat");
-    last_input_rowset_metadata.add_segments("fff.dat");
-    last_input_rowset_metadata.add_segments("ddd.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    last_input_rowset_metadata.mutable_segment_metas()->Clear();
+    last_input_rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("eee.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("fff.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 4);
     // rowset id mismatch
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 4);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 4);
 
     last_input_rowset_metadata.set_id(22);
     // normal case, duplicate segments will be trimed
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
-    EXPECT_EQ(last_input_rowset_metadata.segments(0), "eee.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments(1), "fff.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas(0).filename(), "eee.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas(1).filename(), "fff.dat");
 
     // no duplicate segments
-    last_input_rowset_metadata.mutable_segments()->Clear();
-    last_input_rowset_metadata.add_segments("xxx.dat");
-    last_input_rowset_metadata.add_segments("yyy.dat");
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    last_input_rowset_metadata.mutable_segment_metas()->Clear();
+    last_input_rowset_metadata.add_segment_metas()->set_filename("xxx.dat");
+    last_input_rowset_metadata.add_segment_metas()->set_filename("yyy.dat");
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
     trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset_metadata);
-    EXPECT_EQ(last_input_rowset_metadata.segments_size(), 2);
+    EXPECT_EQ(last_input_rowset_metadata.segment_metas_size(), 2);
+}
+
+// Verify that trim_partial_compaction_last_input_rowset also trims segment_metas
+// so that vacuum won't delete .vi files still referenced by the output rowset.
+TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset_with_vi) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(9);
+    metadata->set_version(10);
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(22);
+    // Output rowset contains: aaa.dat (reused), new_seg.dat (new compacted), ddd.dat (reused)
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("aaa.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("new_seg.dat");
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("ddd.dat");
+
+    // Last input rowset has segments: [aaa.dat, bbb.dat, ccc.dat, ddd.dat]
+    // where aaa.dat and ddd.dat are reused in output (uncompacted), bbb.dat and ccc.dat are consumed
+    RowsetMetadataPB last_input_rowset;
+    last_input_rowset.set_id(22);
+
+    // All segments have vector index tracking via segment_metas
+    auto* meta_aaa = last_input_rowset.add_segment_metas();
+    meta_aaa->set_filename("aaa.dat");
+    meta_aaa->add_vector_index_ids(100);
+    auto* meta_bbb = last_input_rowset.add_segment_metas();
+    meta_bbb->set_filename("bbb.dat");
+    meta_bbb->add_vector_index_ids(100);
+    meta_bbb->add_vector_index_ids(200);
+    auto* meta_ccc = last_input_rowset.add_segment_metas();
+    meta_ccc->set_filename("ccc.dat");
+    meta_ccc->add_vector_index_ids(100);
+    auto* meta_ddd = last_input_rowset.add_segment_metas();
+    meta_ddd->set_filename("ddd.dat");
+    meta_ddd->add_vector_index_ids(100);
+
+    EXPECT_EQ(last_input_rowset.segment_metas_size(), 4);
+
+    trim_partial_compaction_last_input_rowset(metadata, op_compaction, last_input_rowset);
+
+    // After trim: only consumed segments (bbb.dat, ccc.dat) should remain
+    EXPECT_EQ(last_input_rowset.segment_metas(0).filename(), "bbb.dat");
+    EXPECT_EQ(last_input_rowset.segment_metas(1).filename(), "ccc.dat");
+
+    // segment_metas should also be trimmed: aaa.dat and ddd.dat entries removed
+    EXPECT_EQ(last_input_rowset.segment_metas_size(), 2);
+
+    // Verify the index IDs are preserved correctly
+    EXPECT_EQ(last_input_rowset.segment_metas(0).vector_index_ids_size(), 2); // bbb.dat
+    EXPECT_EQ(last_input_rowset.segment_metas(1).vector_index_ids_size(), 1); // ccc.dat
 }
 
 TEST_F(MetaFileTest, test_error_state) {
@@ -678,8 +795,8 @@ TEST_F(MetaFileTest, test_error_state) {
     // add rowset with segment
     RowsetMetadataPB rowset_metadata;
     rowset_metadata.set_id(110);
-    rowset_metadata.add_segments("aaa.dat");
-    rowset_metadata.add_segments("bbb.dat");
+    rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
+    rowset_metadata.add_segment_metas()->set_filename("bbb.dat");
     metadata->add_rowsets()->CopyFrom(rowset_metadata);
     std::map<uint32_t, size_t> segment_id_to_add_dels;
     for (int i = 0; i < 10; i++) {
@@ -689,16 +806,20 @@ TEST_F(MetaFileTest, test_error_state) {
     MetaFileBuilder builder(*tablet, metadata);
     Status st = builder.update_num_del_stat(segment_id_to_add_dels);
     EXPECT_FALSE(st.ok());
-    EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
+    EXPECT_TRUE(StorageMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
 TEST_F(MetaFileTest, test_segment_id_helper_fallback_and_override) {
     RowsetMetadataPB rowset;
     rowset.set_id(1000);
-    rowset.add_segments("a.dat");
-    rowset.add_segments("b.dat");
-    rowset.add_segment_metas()->set_num_rows(10);
-    rowset.add_segment_metas()->set_num_rows(20);
+    {
+        auto* sm0 = rowset.add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_num_rows(10);
+        auto* sm1 = rowset.add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_num_rows(20);
+    }
 
     // Backward compatibility: fallback to segment index when segment_id is absent.
     EXPECT_EQ(0, get_segment_idx(rowset, 0));
@@ -726,12 +847,16 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpWrite op_write;
     auto* rowset = op_write.mutable_rowset();
-    rowset->add_segments("a.dat");
-    rowset->add_segments("b.dat");
-    rowset->add_segment_metas()->set_segment_idx(2);
-    rowset->add_segment_metas()->set_segment_idx(7);
-    op_write.add_dels("d1.del");
-    op_write.add_dels("d2.del");
+    {
+        auto* sm0 = rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(2);
+        auto* sm1 = rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(7);
+    }
+    op_write.add_dels_meta()->set_name("d1.del");
+    op_write.add_dels_meta()->set_name("d2.del");
 
     builder.apply_opwrite(op_write, {}, {});
 
@@ -754,16 +879,23 @@ TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     // input rowset with sparse segment ids: rssids are 100 and 105.
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(100);
-    input_rowset->add_segments("a.dat");
-    input_rowset->add_segments("b.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
-    input_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = input_rowset->add_segment_metas();
+        sm0->set_filename("a.dat");
+        sm0->set_segment_idx(0);
+        auto* sm1 = input_rowset->add_segment_metas();
+        sm1->set_filename("b.dat");
+        sm1->set_segment_idx(5);
+    }
 
     // neighbor rowset with rssid 101 should not be deleted.
     auto* neighbor_rowset = metadata->add_rowsets();
     neighbor_rowset->set_id(101);
-    neighbor_rowset->add_segments("c.dat");
-    neighbor_rowset->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = neighbor_rowset->add_segment_metas();
+        sm->set_filename("c.dat");
+        sm->set_segment_idx(0);
+    }
 
     DelvecPagePB delvec_page;
     delvec_page.set_version(10);
@@ -782,8 +914,11 @@ TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(100);
-    op_compaction.mutable_output_rowset()->add_segments("out.dat");
-    op_compaction.mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = op_compaction.mutable_output_rowset()->add_segment_metas();
+        sm->set_filename("out.dat");
+        sm->set_segment_idx(0);
+    }
 
     ASSERT_OK(builder.apply_opcompaction(op_compaction, 101, 0));
 
@@ -808,17 +943,24 @@ TEST_F(MetaFileTest, test_apply_opcompaction_next_rowset_id_uses_max_segment_id)
 
     auto* input_rowset = metadata->add_rowsets();
     input_rowset->set_id(100);
-    input_rowset->add_segments("in.dat");
-    input_rowset->add_segment_metas()->set_segment_idx(0);
+    {
+        auto* sm = input_rowset->add_segment_metas();
+        sm->set_filename("in.dat");
+        sm->set_segment_idx(0);
+    }
 
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpCompaction op_compaction;
     op_compaction.add_input_rowsets(100);
     auto* output_rowset = op_compaction.mutable_output_rowset();
-    output_rowset->add_segments("out1.dat");
-    output_rowset->add_segments("out2.dat");
-    output_rowset->add_segment_metas()->set_segment_idx(1);
-    output_rowset->add_segment_metas()->set_segment_idx(5);
+    {
+        auto* sm0 = output_rowset->add_segment_metas();
+        sm0->set_filename("out1.dat");
+        sm0->set_segment_idx(1);
+        auto* sm1 = output_rowset->add_segment_metas();
+        sm1->set_filename("out2.dat");
+        sm1->set_segment_idx(5);
+    }
 
     ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
 
@@ -840,15 +982,15 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     // Batch 1: add two segments a.dat / b.dat
     TxnLogPB_OpWrite op_write1;
     RowsetMetadataPB rowset_meta1;
-    rowset_meta1.add_segments("a.dat");
-    rowset_meta1.add_segments("b.dat");
+    rowset_meta1.add_segment_metas()->set_filename("a.dat");
+    rowset_meta1.add_segment_metas()->set_filename("b.dat");
     op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
     builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
 
     // Batch 2: append one segment c.dat (no cross-batch replacement to avoid OOB)
     TxnLogPB_OpWrite op_write2;
     RowsetMetadataPB rowset_meta2;
-    rowset_meta2.add_segments("c.dat");
+    rowset_meta2.add_segment_metas()->set_filename("c.dat");
     op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
     builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
 
@@ -864,10 +1006,10 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(110, final_rowset.id());
-    ASSERT_EQ(3, final_rowset.segments_size());
-    EXPECT_EQ("a.dat", final_rowset.segments(0));
-    EXPECT_EQ("b.dat", final_rowset.segments(1));
-    EXPECT_EQ("c.dat", final_rowset.segments(2));
+    ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ("a.dat", final_rowset.segment_metas(0).filename());
+    EXPECT_EQ("b.dat", final_rowset.segment_metas(1).filename());
+    EXPECT_EQ("c.dat", final_rowset.segment_metas(2).filename());
     EXPECT_EQ(10, final_rowset.num_dels()); // 5 + 3 + 2
     EXPECT_EQ(113, metadata->next_rowset_id());
 
@@ -877,7 +1019,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 11));
     ASSERT_EQ(1, persisted->rowsets_size());
     EXPECT_EQ(10, persisted->rowsets(0).num_dels());
-    EXPECT_EQ("b.dat", persisted->rowsets(0).segments(1));
+    EXPECT_EQ("b.dat", persisted->rowsets(0).segment_metas(1).filename());
 }
 
 TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
@@ -893,33 +1035,39 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     // batch 1: two segments + two del files
     TxnLogPB_OpWrite op_write1;
     RowsetMetadataPB rowset_meta1;
-    rowset_meta1.add_segments("s1.dat");
-    rowset_meta1.add_segments("s2.dat");
-    rowset_meta1.add_segment_metas()->set_segment_idx(3);
-    rowset_meta1.add_segment_metas()->set_segment_idx(9);
+    {
+        auto* sm0 = rowset_meta1.add_segment_metas();
+        sm0->set_filename("s1.dat");
+        sm0->set_segment_idx(3);
+        auto* sm1 = rowset_meta1.add_segment_metas();
+        sm1->set_filename("s2.dat");
+        sm1->set_segment_idx(9);
+    }
     op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
-    op_write1.add_dels("d1.del");
-    op_write1.add_dels("d2.del");
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_dels_meta()->set_name("d2.del");
     builder.batch_apply_opwrite(op_write1, {}, {});
 
     // batch 2: one segment + one del file
     TxnLogPB_OpWrite op_write2;
     RowsetMetadataPB rowset_meta2;
-    rowset_meta2.add_segments("s3.dat");
-    rowset_meta2.add_segment_metas()->set_segment_idx(4);
+    {
+        auto* sm = rowset_meta2.add_segment_metas();
+        sm->set_filename("s3.dat");
+        sm->set_segment_idx(4);
+    }
     op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
-    op_write2.add_dels("d3.del");
+    op_write2.add_dels_meta()->set_name("d3.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
     EXPECT_EQ(500, final_rowset.id());
-    ASSERT_EQ(3, final_rowset.segments_size());
-    EXPECT_EQ("s1.dat", final_rowset.segments(0));
-    EXPECT_EQ("s2.dat", final_rowset.segments(1));
-    EXPECT_EQ("s3.dat", final_rowset.segments(2));
     ASSERT_EQ(3, final_rowset.segment_metas_size());
+    EXPECT_EQ("s1.dat", final_rowset.segment_metas(0).filename());
+    EXPECT_EQ("s2.dat", final_rowset.segment_metas(1).filename());
+    EXPECT_EQ("s3.dat", final_rowset.segment_metas(2).filename());
     EXPECT_EQ(3, final_rowset.segment_metas(0).segment_idx());
     EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
@@ -952,24 +1100,26 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
 
     MetaFileBuilder builder(*tablet, metadata);
 
-    // First rowset does not contain segment_metas (backward compatible input).
+    // First op_write's segment_metas omit segment_idx, so the builder must assign it positionally.
     TxnLogPB_OpWrite op_write1;
-    op_write1.mutable_rowset()->add_segments("m1.dat");
-    op_write1.mutable_rowset()->add_segments("m2.dat");
-    op_write1.add_dels("d1.del");
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("m1.dat");
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("m2.dat");
+    op_write1.add_dels_meta()->set_name("d1.del");
     builder.batch_apply_opwrite(op_write1, {}, {});
 
-    // Second rowset contains segment_metas.
+    // Second op_write sets segment_idx explicitly; it must be remapped into the merged rowset's id space.
     TxnLogPB_OpWrite op_write2;
-    op_write2.mutable_rowset()->add_segments("m3.dat");
-    op_write2.mutable_rowset()->add_segment_metas()->set_segment_idx(0);
-    op_write2.add_dels("d2.del");
+    {
+        auto* sm = op_write2.mutable_rowset()->add_segment_metas();
+        sm->set_filename("m3.dat");
+        sm->set_segment_idx(0);
+    }
+    op_write2.add_dels_meta()->set_name("d2.del");
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     ASSERT_TRUE(builder.set_final_rowset().ok());
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& final_rowset = metadata->rowsets(0);
-    ASSERT_EQ(3, final_rowset.segments_size());
     ASSERT_EQ(3, final_rowset.segment_metas_size());
     EXPECT_EQ(0, final_rowset.segment_metas(0).segment_idx());
     EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
@@ -1239,7 +1389,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("a.dat");
+        rs.add_segment_metas()->set_filename("a.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1249,7 +1399,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("b.dat");
+        rs.add_segment_metas()->set_filename("b.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1281,7 +1431,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(100);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
 
@@ -1334,8 +1484,8 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("seg0.dat");
-        rs.add_segments("seg1.dat");
+        rs.add_segment_metas()->set_filename("seg0.dat");
+        rs.add_segment_metas()->set_filename("seg1.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1347,7 +1497,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("other.dat");
+        rs.add_segment_metas()->set_filename("other.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1383,7 +1533,7 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_multi_segment_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(200);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 200, 0));
 
@@ -1419,7 +1569,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         metadata->set_version(11);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("a.dat");
+        rs.add_segment_metas()->set_filename("a.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1429,7 +1579,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         metadata->set_version(12);
         MetaFileBuilder builder(*tablet, metadata);
         RowsetMetadataPB rs;
-        rs.add_segments("b.dat");
+        rs.add_segment_metas()->set_filename("b.dat");
         TxnLogPB_OpWrite op_write;
         op_write.mutable_rowset()->CopyFrom(rs);
         builder.apply_opwrite(op_write, {}, {});
@@ -1476,7 +1626,7 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
         TxnLogPB_OpCompaction op_compaction;
         op_compaction.add_input_rowsets(300);
         RowsetMetadataPB output_rs;
-        output_rs.add_segments("compacted.dat");
+        output_rs.add_segment_metas()->set_filename("compacted.dat");
         op_compaction.mutable_output_rowset()->CopyFrom(output_rs);
         ASSERT_OK(builder.apply_opcompaction(op_compaction, 300, 0));
         ASSERT_OK(builder.finalize(next_id()));
@@ -1499,6 +1649,844 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     }
 
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
+}
+
+// Verify that remove_compacted_sst takes the shared flag from tablet metadata
+// rather than the txn log, because during tablet split the txn log value may
+// have lost the shared=true marking.
+TEST_F(MetaFileTest, test_remove_compacted_sst_shared_from_metadata) {
+    const int64_t tablet_id = 10020;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // Pre-populate sstable_meta in tablet metadata with shared=true
+    auto* sst_in_meta = metadata->mutable_sstable_meta()->add_sstables();
+    sst_in_meta->set_filename("shared.sst");
+    sst_in_meta->set_filesize(100);
+    sst_in_meta->set_shared(true);
+
+    // Build an OpCompaction where the input_sstable has shared=false (lost during cross-publish)
+    TxnLogPB_OpCompaction op_compaction;
+    auto* input = op_compaction.add_input_sstables();
+    input->set_filename("shared.sst");
+    input->set_filesize(100);
+    input->set_shared(false); // incorrect value from txn log
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("new_output.sst");
+    output->set_filesize(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // The orphan file should have shared=true from metadata, not false from txn log
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "shared.sst");
+    EXPECT_TRUE(metadata->orphan_files(0).shared());
+}
+
+// Verify that remove_compacted_sst falls back to the txn log shared flag
+// when the SST is not found in tablet metadata.
+TEST_F(MetaFileTest, test_remove_compacted_sst_shared_fallback_to_txn_log) {
+    const int64_t tablet_id = 10021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // No matching SST in metadata sstable_meta (empty)
+
+    TxnLogPB_OpCompaction op_compaction;
+    auto* input = op_compaction.add_input_sstables();
+    input->set_filename("only_in_txnlog.sst");
+    input->set_filesize(150);
+    input->set_shared(true); // value only in txn log
+
+    auto* output = op_compaction.add_output_sstables();
+    output->set_filename("new_output.sst");
+    output->set_filesize(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.remove_compacted_sst(op_compaction);
+
+    // Should use the txn log value since SST not found in metadata
+    ASSERT_EQ(metadata->orphan_files_size(), 1);
+    EXPECT_EQ(metadata->orphan_files(0).name(), "only_in_txnlog.sst");
+    EXPECT_TRUE(metadata->orphan_files(0).shared());
+}
+
+// Verify apply_opwrite copies op_write.shared_dels into the per-del shared flag on
+// rowset.del_files. Regression guard for the cross-publish path where new dels in an
+// in-flight write are shared across sibling split tablets.
+TEST_F(MetaFileTest, test_apply_opwrite_preserves_shared_dels) {
+    const int64_t tablet_id = 10030;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("seg.dat");
+    {
+        auto* d0 = op_write.add_dels_meta();
+        d0->set_name("shared_d.del");
+        d0->set_shared(true);
+        auto* d1 = op_write.add_dels_meta();
+        d1->set_name("private_d.del");
+        d1->set_shared(false);
+    }
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 2);
+    EXPECT_EQ(rowset.del_files(0).name(), "shared_d.del");
+    EXPECT_TRUE(rowset.del_files(0).shared());
+    EXPECT_EQ(rowset.del_files(1).name(), "private_d.del");
+    EXPECT_FALSE(rowset.del_files(1).shared());
+}
+
+// Verify backward compatibility: when op_write.shared_dels is empty (old txn log or
+// non-cross-publish path), apply_opwrite leaves del_files[i].shared unset (default false).
+TEST_F(MetaFileTest, test_apply_opwrite_empty_shared_dels_defaults_false) {
+    const int64_t tablet_id = 10031;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("seg.dat");
+    op_write.add_dels_meta()->set_name("d.del");
+    // shared_dels left empty — legacy/normal write
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 1);
+    EXPECT_FALSE(rowset.del_files(0).shared());
+}
+
+// Verify batch_apply_opwrite + set_final_rowset preserve shared_dels across multiple
+// op_writes merged into a single rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_preserves_shared_dels) {
+    const int64_t tablet_id = 10032;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // First opwrite: 1 shared del
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->add_segment_metas()->set_filename("seg1.dat");
+    {
+        auto* d = op_write1.add_dels_meta();
+        d->set_name("d1.del");
+        d->set_shared(true);
+    }
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // Second opwrite: no shared_dels set (legacy / private)
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("seg2.dat");
+    op_write2.add_dels_meta()->set_name("d2.del");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    // Third opwrite: 1 shared del
+    TxnLogPB_OpWrite op_write3;
+    op_write3.mutable_rowset()->add_segment_metas()->set_filename("seg3.dat");
+    {
+        auto* d = op_write3.add_dels_meta();
+        d->set_name("d3.del");
+        d->set_shared(true);
+    }
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.del_files_size(), 3);
+    EXPECT_EQ(rowset.del_files(0).name(), "d1.del");
+    EXPECT_TRUE(rowset.del_files(0).shared());
+    EXPECT_EQ(rowset.del_files(1).name(), "d2.del");
+    EXPECT_FALSE(rowset.del_files(1).shared());
+    EXPECT_EQ(rowset.del_files(2).name(), "d3.del");
+    EXPECT_TRUE(rowset.del_files(2).shared());
+}
+
+// Verify that apply_opwrite clears shared_segments[i] to false for segments replaced
+// by partial-update rewrite files. The rewrite file is private to this tablet and
+// must not be routed through the shared-file GC path.
+TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
+    const int64_t tablet_id = 10040;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    // Build op_write with 2 segments, both marked shared (simulating post-cross-publish).
+    TxnLogPB_OpWrite op_write;
+    auto* src_rowset = op_write.mutable_rowset();
+    {
+        auto* sm0 = src_rowset->add_segment_metas();
+        sm0->set_filename("orig0.dat");
+        sm0->set_size(1000);
+        sm0->set_shared(true);
+        auto* sm1 = src_rowset->add_segment_metas();
+        sm1->set_filename("orig1.dat");
+        sm1->set_size(1000);
+        sm1->set_shared(true);
+    }
+
+    // Partial update: segment 0 is rewritten into a new private file.
+    std::map<int, FileInfo> replace_segments;
+    FileInfo rewrite_info;
+    rewrite_info.path = "rewrite0.dat";
+    rewrite_info.size = 1500;
+    replace_segments[0] = rewrite_info;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.apply_opwrite(op_write, replace_segments, {});
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.segment_metas_size(), 2);
+    // Segment 0 was rewritten: filename updated AND shared flag cleared.
+    EXPECT_EQ(rowset.segment_metas(0).filename(), "rewrite0.dat");
+    EXPECT_FALSE(rowset.segment_metas(0).shared());
+    // Segment 1 was not touched: shared flag preserved.
+    EXPECT_EQ(rowset.segment_metas(1).filename(), "orig1.dat");
+    EXPECT_TRUE(rowset.segment_metas(1).shared());
+}
+
+// Verify the same behavior for the batched path (batch_apply_opwrite + set_final_rowset).
+TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite) {
+    const int64_t tablet_id = 10041;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    TxnLogPB_OpWrite op_write;
+    auto* src_rowset = op_write.mutable_rowset();
+    {
+        auto* sm0 = src_rowset->add_segment_metas();
+        sm0->set_filename("orig0.dat");
+        sm0->set_size(1000);
+        sm0->set_shared(true);
+        auto* sm1 = src_rowset->add_segment_metas();
+        sm1->set_filename("orig1.dat");
+        sm1->set_size(1000);
+        sm1->set_shared(true);
+    }
+
+    std::map<int, FileInfo> replace_segments;
+    FileInfo rewrite_info;
+    rewrite_info.path = "rewrite0.dat";
+    rewrite_info.size = 1500;
+    replace_segments[0] = rewrite_info;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    builder.batch_apply_opwrite(op_write, replace_segments, {});
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(rowset.segment_metas_size(), 2);
+    EXPECT_EQ(rowset.segment_metas(0).filename(), "rewrite0.dat");
+    EXPECT_FALSE(rowset.segment_metas(0).shared());
+    EXPECT_EQ(rowset.segment_metas(1).filename(), "orig1.dat");
+    EXPECT_TRUE(rowset.segment_metas(1).shared());
+}
+
+// --- Lake IDG (ADD/DROP INDEX fast path) --------------------------------
+
+namespace {
+void push_segment_entry(TxnLogPB_OpAddIndex* op, uint32_t seg_id, int64_t version, const std::string& idx_file,
+                        int32_t col_uid, IndexType type, bool set_seg_id = true) {
+    auto* se = op->add_segment_entries();
+    if (set_seg_id) {
+        se->set_segment_id(seg_id);
+    }
+    auto* e = se->mutable_entry();
+    e->set_index_file(idx_file);
+    e->set_version(version);
+    auto* k = e->add_keys();
+    k->set_col_unique_id(col_uid);
+    k->set_index_type(type);
+}
+
+void push_dropped(TxnLogPB_OpDropIndex* op, int64_t index_id, int32_t col_uid, IndexType type, bool set_col_uid = true,
+                  bool set_type = true) {
+    auto* d = op->add_dropped();
+    d->set_index_id(index_id);
+    if (set_col_uid) {
+        d->set_col_unique_id(col_uid);
+    }
+    if (set_type) {
+        d->set_index_type(type);
+    }
+}
+} // namespace
+
+TEST_F(MetaFileTest, test_apply_add_index_happy_path) {
+    // Two segments each get one IDG entry; schema gains the corresponding
+    // TabletIndexPB entry (idempotent reconciliation with FE schema publish).
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20001);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20001);
+    metadata->set_version(5);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "idx_seg0.idx", 100, BITMAP);
+    push_segment_entry(&op, /*seg_id=*/1, /*version=*/6, "idx_seg1.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+
+    builder.apply_add_index(op);
+
+    ASSERT_TRUE(metadata->has_idg_meta());
+    const auto& idgs = metadata->idg_meta().idgs();
+    ASSERT_EQ(2u, idgs.size());
+    EXPECT_EQ("idx_seg0.idx", idgs.at(0).entries(0).index_file());
+    EXPECT_EQ("idx_seg1.idx", idgs.at(1).entries(0).index_file());
+
+    ASSERT_EQ(1, metadata->schema().table_indices_size());
+    EXPECT_EQ(7001, metadata->schema().table_indices(0).index_id());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_missing_segment_id_skipped) {
+    // A segment_entry missing segment_id would index the map at default 0
+    // and corrupt segment 0's IDG — the builder must skip it.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20002);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20002);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    // malformed — no segment_id
+    push_segment_entry(&op, /*seg_id=*/999, /*version=*/1, "bogus.idx", 1, BITMAP, /*set_seg_id=*/false);
+    // well-formed — should land
+    push_segment_entry(&op, /*seg_id=*/3, /*version=*/1, "good.idx", 1, BITMAP);
+
+    builder.apply_add_index(op);
+
+    const auto& idgs = metadata->idg_meta().idgs();
+    ASSERT_EQ(1u, idgs.size());
+    EXPECT_TRUE(idgs.find(0) == idgs.end());
+    ASSERT_NE(idgs.find(3), idgs.end());
+    EXPECT_EQ("good.idx", idgs.at(3).entries(0).index_file());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
+    // Second apply prepends the newer entry; the per-segment entries list
+    // becomes [new, old]. Mirrors DCG reverse-by-version ordering.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20003);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20003);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op1;
+    push_segment_entry(&op1, 5, /*version=*/10, "old.idx", 1, BITMAP);
+    builder.apply_add_index(op1);
+
+    TxnLogPB_OpAddIndex op2;
+    push_segment_entry(&op2, 5, /*version=*/11, "new.idx", 1, BITMAP);
+    builder.apply_add_index(op2);
+
+    const auto& v = metadata->idg_meta().idgs().at(5);
+    ASSERT_EQ(2, v.entries_size());
+    EXPECT_EQ("new.idx", v.entries(0).index_file());
+    EXPECT_EQ("old.idx", v.entries(1).index_file());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
+    // Three or more sequential applies must preserve strict newest-first
+    // ordering: [v3, v2, v1]. Reader short-circuits on the first matching
+    // entry, so a regression here silently resolves a column against a
+    // stale .idx payload.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20013);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20013);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op1;
+    push_segment_entry(&op1, /*seg_id=*/7, /*version=*/10, "v1.idx", /*index_id=*/100, BITMAP);
+    builder.apply_add_index(op1);
+
+    TxnLogPB_OpAddIndex op2;
+    push_segment_entry(&op2, /*seg_id=*/7, /*version=*/11, "v2.idx", /*index_id=*/101, BITMAP);
+    builder.apply_add_index(op2);
+
+    TxnLogPB_OpAddIndex op3;
+    push_segment_entry(&op3, /*seg_id=*/7, /*version=*/12, "v3.idx", /*index_id=*/102, BITMAP);
+    builder.apply_add_index(op3);
+
+    TxnLogPB_OpAddIndex op4;
+    push_segment_entry(&op4, /*seg_id=*/7, /*version=*/13, "v4.idx", /*index_id=*/103, BITMAP);
+    builder.apply_add_index(op4);
+
+    const auto& v = metadata->idg_meta().idgs().at(7);
+    ASSERT_EQ(4, v.entries_size());
+    EXPECT_EQ("v4.idx", v.entries(0).index_file());
+    EXPECT_EQ("v3.idx", v.entries(1).index_file());
+    EXPECT_EQ("v2.idx", v.entries(2).index_file());
+    EXPECT_EQ("v1.idx", v.entries(3).index_file());
+    // Verify per-entry versions stay strictly decreasing so the reader's
+    // version-based tie-breaker sees the same order as the array order.
+    EXPECT_EQ(13, v.entries(0).version());
+    EXPECT_EQ(12, v.entries(1).version());
+    EXPECT_EQ(11, v.entries(2).version());
+    EXPECT_EQ(10, v.entries(3).version());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_populates_tombstone) {
+    // Dropping an index from schema.table_indices must also copy the
+    // TabletIndexPB into schema.dropped_table_indices so BE readers know
+    // the footer payload (e.g. legacy NGRAMBF bloom) is stale until
+    // compaction rewrites the segment.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20004);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20004);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3001);
+    idx->set_index_type(NGRAMBF);
+    idx->add_col_unique_id(7);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/3001, /*col_uid=*/7, NGRAMBF);
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(0, schema->table_indices_size());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ(3001, schema->dropped_table_indices(0).index_id());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_tombstone_dedup) {
+    // Dropping the same index_id twice (replay of a legacy log) must not
+    // duplicate the tombstone entry.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20005);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20005);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3002);
+    idx->set_index_type(BITMAP);
+    idx->add_col_unique_id(8);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, 3002, 8, BITMAP);
+
+    builder.apply_drop_index(op);
+    // Second apply: schema.table_indices already empty; tombstone stays at one.
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(0, schema->table_indices_size());
+    EXPECT_EQ(1, schema->dropped_table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_skips_malformed_entries) {
+    // Drop entries missing col_unique_id or index_type must not feed the
+    // drop_keys set — default 0 / INDEX_UNKNOWN would fabricate a matching
+    // key for unrelated entries. Index_id-based removal still proceeds.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20006);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20006);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3003);
+    idx->set_index_type(BITMAP);
+    idx->add_col_unique_id(9);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    // malformed — no col_unique_id
+    push_dropped(&op, /*index_id=*/3003, /*col_uid=*/9, BITMAP, /*set_col_uid=*/false, /*set_type=*/true);
+    // malformed — no index_type
+    push_dropped(&op, /*index_id=*/3003, /*col_uid=*/9, BITMAP, /*set_col_uid=*/true, /*set_type=*/false);
+
+    builder.apply_drop_index(op);
+
+    // Index_id 3003 still got removed from active list (index_id-based removal
+    // is independent of the drop_keys set), and tombstone list has exactly one
+    // entry for it — no bogus (0, INDEX_UNKNOWN) key was produced.
+    EXPECT_EQ(0, schema->table_indices_size());
+    EXPECT_EQ(1, schema->dropped_table_indices_size());
+}
+
+// --- Per-column flag flip on apply_add_index (the R3 fix) -----------------
+
+namespace {
+ColumnPB* push_column(TabletSchemaPB* schema, int col_uid, const std::string& name) {
+    auto* c = schema->add_column();
+    c->set_unique_id(col_uid);
+    c->set_name(name);
+    c->set_type("INT");
+    c->set_has_bitmap_index(false);
+    c->set_is_bf_column(false);
+    return c;
+}
+} // namespace
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_has_bitmap_index_flag) {
+    // BITMAP add must flip column.has_bitmap_index=true so a future
+    // compaction inlines the bitmap into the new segment footer.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20100);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20100);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/42, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7777);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(42);
+    builder.apply_add_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_ngrambf) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20101);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20101);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/55, "v1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(8888);
+    new_ix->set_index_type(NGRAMBF);
+    new_ix->add_col_unique_id(55);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_bloom_filter) {
+    // Plain BLOOM_FILTER (the bf_columns property fast path) also needs
+    // the per-column flag flipped.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20102);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20102);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/77, "v2");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(77);
+    builder.apply_add_index(op);
+
+    EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_columns) {
+    // If the index references a unique_id that isn't on any column (e.g. the
+    // column was dropped between alter request and publish), bump_flag must
+    // silently skip rather than touch the wrong column.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20103);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20103);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/42, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(9001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(/*ghost=*/999);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+    // table_indices still gets the entry (it's keyed by index_id and is
+    // logically the source of truth even if the column was dropped).
+    EXPECT_EQ(1, schema->table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_self_heals_existing_index_id) {
+    // Replay path: same index_id already in table_indices. The add must NOT
+    // duplicate the entry, but should still flip per-column flags so older
+    // metadata written before the R3 fix gets repaired on the next publish.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20104);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20104);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/12, "c");
+    auto* ix = schema->add_table_indices();
+    ix->set_index_id(123);
+    ix->set_index_type(BITMAP);
+    ix->add_col_unique_id(12);
+    // Simulate older BE that didn't bump the flag.
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(123);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(12);
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());        // not duplicated
+    EXPECT_TRUE(schema->column(0).has_bitmap_index()); // self-healed
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_no_segment_entries_only_index_pb) {
+    // op carries new_indexes but no segment_entries (e.g. an alter that
+    // touches schema only). idg_meta stays empty; schema gets the index.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20105);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20105);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/1, "c1");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(42);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(1);
+    builder.apply_add_index(op);
+
+    // mutable_idg_meta() lazy-allocates so has_idg_meta() is true; the
+    // contract-relevant check is that the idgs map stayed empty.
+    EXPECT_TRUE(metadata->idg_meta().idgs().empty());
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_index_without_type_skips_flag_bump) {
+    // index_type unset → bump_flag never called.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20106);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20106);
+    auto* schema = metadata->mutable_schema();
+    push_column(schema, /*col_uid=*/3, "c");
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(99);
+    // intentionally omit set_index_type
+    new_ix->add_col_unique_id(3);
+    builder.apply_add_index(op);
+
+    EXPECT_FALSE(schema->column(0).has_bitmap_index());
+    EXPECT_FALSE(schema->column(0).is_bf_column());
+}
+
+// CompactionUpdateConflictChecker must detect a racing ADD INDEX (IDG entry
+// version > op_compaction.compact_version) and force the compaction to land
+// as a with_conflict no-op, mirroring the DCG conflict path. This covers
+// column_mode_partial_update_handler.cpp lines 493-502.
+TEST_F(MetaFileTest, test_compaction_conflict_checker_with_idg_race) {
+    const int64_t tablet_id = 32011;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(20);
+    metadata->set_next_rowset_id(300);
+
+    // Input rowset id 210 covers two segments at rssid 210 and 211.
+    auto* input_rowset = metadata->add_rowsets();
+    input_rowset->set_id(210);
+    input_rowset->add_segment_metas()->set_filename("a.dat");
+    input_rowset->add_segment_metas()->set_filename("b.dat");
+
+    // Racing ADD INDEX landed at version 19 on segment 211, *after* the
+    // compaction's compact_version (=18). The checker must report a conflict.
+    auto& idg_ver = (*metadata->mutable_idg_meta()->mutable_idgs())[211];
+    auto* entry = idg_ver.add_entries();
+    entry->set_index_file("race.idx");
+    entry->set_version(19);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(210);
+    op_compaction.set_compact_version(18);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
+
+    EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_unknown_id_noop) {
+    // Drop op references an index_id not present in schema → table_indices
+    // unchanged, dropped_table_indices stays empty, no crash.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20107);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20107);
+    auto* schema = metadata->mutable_schema();
+    auto* ix = schema->add_table_indices();
+    ix->set_index_id(11);
+    ix->set_index_type(BITMAP);
+    ix->add_col_unique_id(0);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/9999, /*col_uid=*/0, BITMAP);
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(0, schema->dropped_table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_second_bitmap_with_sentinel_id_lands) {
+    // BITMAP / NGRAMBF / BLOOM_FILTER all share index_id=-1 in FE-sent
+    // protos. Dedup by id alone would skip every additional same-class
+    // index after the first. Verify a second BITMAP on a different column
+    // (also id=-1) actually gets added to schema.table_indices.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20200);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20200);
+    auto* schema = metadata->mutable_schema();
+    auto* existing = schema->add_table_indices();
+    existing->set_index_id(-1);
+    existing->set_index_name("idx_a");
+    existing->set_index_type(BITMAP);
+    existing->add_col_unique_id(101);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("idx_b");
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(102);
+    builder.apply_add_index(op);
+
+    ASSERT_EQ(2, schema->table_indices_size());
+    EXPECT_EQ("idx_a", schema->table_indices(0).index_name());
+    EXPECT_EQ("idx_b", schema->table_indices(1).index_name());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_same_name_with_sentinel_id_dedups) {
+    // The defensive idempotent reconciliation must still skip a re-apply of
+    // the *same* index (FE may have pushed the schema, then publish replays
+    // the OpAddIndex). For id=-1 entries the dedup key is index_name.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20201);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20201);
+    auto* schema = metadata->mutable_schema();
+    auto* existing = schema->add_table_indices();
+    existing->set_index_id(-1);
+    existing->set_index_name("idx_a");
+    existing->set_index_type(BITMAP);
+    existing->add_col_unique_id(101);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpAddIndex op;
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("idx_a"); // same name
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(101);
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(1, schema->table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_drops_only_target) {
+    // Schema has two BITMAP indexes both at index_id=-1 (idx_a on col 201,
+    // idx_b on col 202). Dropping idx_a must remove only idx_a; idx_b
+    // must remain. Pre-fix, an id-only match removed every TabletIndexPB
+    // whose id was -1, wiping idx_b too.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20202);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20202);
+    auto* schema = metadata->mutable_schema();
+    auto* a = schema->add_table_indices();
+    a->set_index_id(-1);
+    a->set_index_name("idx_a");
+    a->set_index_type(BITMAP);
+    a->add_col_unique_id(201);
+    auto* b = schema->add_table_indices();
+    b->set_index_id(-1);
+    b->set_index_name("idx_b");
+    b->set_index_type(BITMAP);
+    b->add_col_unique_id(202);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/-1, /*col_uid=*/201, BITMAP);
+    builder.apply_drop_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ("idx_b", schema->table_indices(0).index_name());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ("idx_a", schema->dropped_table_indices(0).index_name());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
+    // (col_uid=300, BITMAP) and (col_uid=300, NGRAMBF) live as two
+    // TabletIndexPB with id=-1. Dropping BITMAP must not touch NGRAMBF
+    // and vice versa.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20203);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20203);
+    auto* schema = metadata->mutable_schema();
+    auto* a = schema->add_table_indices();
+    a->set_index_id(-1);
+    a->set_index_name("bm_300");
+    a->set_index_type(BITMAP);
+    a->add_col_unique_id(300);
+    auto* b = schema->add_table_indices();
+    b->set_index_id(-1);
+    b->set_index_name("bf_300");
+    b->set_index_type(NGRAMBF);
+    b->add_col_unique_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/-1, /*col_uid=*/300, NGRAMBF);
+    builder.apply_drop_index(op);
+
+    ASSERT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(BITMAP, schema->table_indices(0).index_type());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
 }
 
 } // namespace starrocks::lake

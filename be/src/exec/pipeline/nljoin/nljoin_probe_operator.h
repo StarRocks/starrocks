@@ -60,7 +60,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
-    void update_exec_stats(RuntimeState* state) override;
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override;
 
 private:
     enum JoinStage {

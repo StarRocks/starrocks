@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE 設定パラメーター：統計情報収集とストレージエンジンに関連する設定項目。"
 sidebar_label: "統計とストレージ"
 ---
 
@@ -35,7 +36,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-このトピックでは、以下の種類のFE構成について紹介します：
+このトピックでは、以下の種類のBE構成について紹介します：
 - [統計レポート](#統計レポート)
 - [ストレージ](#ストレージ)
 
@@ -242,6 +243,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: No
 - 説明: 列データおよびインデックスページを構築する際に使用されるターゲットの非圧縮ページサイズ（バイト）。この値は ColumnWriterOptions.data_page_size と IndexedColumnWriterOptions.index_page_size にコピーされ、ページビルダ（例: BinaryPlainPageBuilder::is_page_full およびバッファ予約ロジック）によってページを完了するタイミングや確保するメモリ量の判断に参照されます。値が 0 の場合、ビルダ内のページサイズ制限は無効化されます。この値を変更するとページ数、メタデータのオーバーヘッド、メモリ予約、および I/O/圧縮のトレードオフに影響します（ページを小さくするとページ数とメタデータが増え、ページを大きくするとページ数は減り圧縮効率が向上する可能性があるがメモリのスパイクが大きくなる）。変更はランタイムで反映されないため、完全に有効にするにはプロセスの再起動と再作成された rowset が必要です。
 - 導入バージョン: 3.2.4
+
+### enable_binary_plain_delta_offset
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 高カーディナリティの string/varchar 列が plain（非辞書）エンコーディングにフォールバックする際、ページ末尾のオフセット配列を絶対オフセットではなく値ごとの差分（文字列長）として格納するかどうか。絶対オフセットは単調増加するため LZ4 ではほとんど圧縮できませんが、差分は長さがほぼ一定の文字列に対してほぼ一定値となり、はるかによく圧縮されます（非圧縮時の末尾サイズは変わりません）。圧縮後の列サイズの削減量はオフセット末尾のサイズ（1 行あたり約 4 バイト）にほぼ等しく、高カーディナリティの文字列列ほど効果が大きくなります。有効化すると、そのような列は独立した列エンコーディング `PLAIN_ENCODING_DELTA_OFFSET` として segment メタデータに記録されるため、形式は列ごとに自己記述的です。本設定は書き込み側のみを制御します。このエンコーディングを認識しない BE バージョンは、segment を誤読するのではなく開く際にエラーになります。したがってクラスタ全体をアップグレードするまで有効化しないでください。また、このエンコーディングで書き込まれた segment は、サポートのないバージョンへダウングレードすると読み取れなくなる点に注意してください。
+- 導入バージョン: v4.2.0
 
 ### default_num_rows_per_column_file_block
 
@@ -774,6 +784,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
+### pk_index_parallel_rebuild_mem_ratio
+
+- デフォルト: 50
+- タイプ: Int
+- 単位: パーセント (0-100)
+- 変更可能: はい
+- 説明: 共有データモードで、Primary Key インデックスの再構築時に使用される並列プリフェッチ経路に対するメモリ圧迫ゲートです。update メモリトラッカーの使用量が上限のこの割合を超えている場合、再構築は一度に 1 つのデコード済みカラムのみを保持するシングルパスループにフォールバックし、コールドスタートのレイテンシ改善を諦めてピークメモリを抑制します。再構築中の del ファイル、segment ファイルなどの並列読み込みを制御します。値を大きくすると、より高いメモリ圧迫下でも最適化を許可します。`100` に設定するとメモリゲートが無効化され、`enable_pk_index_parallel_execution=true` の場合は常に並列実行されます。
+- 導入バージョン: -
+
+### lake_partial_update_thread_pool_max_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データモードでの部分更新セグメントレベル並列実行用のスレッドプールの最大スレッド数。このスレッドプールは行モード（並列 load_segment + rewrite_segment）と列モード（並列 DCG 生成）の両方の部分更新で使用されます。0 は CPU コア数の半分に自動設定されることを意味します。実行時のオン/オフは `enable_pk_index_parallel_execution` で制御されます。
+- 導入バージョン: v4.1
+
+### lake_partial_update_thread_pool_queue_size
+
+- デフォルト: 2048
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 部分更新スレッドプールのタスクキューサイズ。
+- 導入バージョン: v4.1
+
 ### pk_index_size_tiered_level_multiplier
 
 - デフォルト: 10
@@ -944,6 +981,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: Yes
 - 説明: sender ジョブのメモリ使用量が高いとき、`stale_memtable_flush_time_sec` 秒より長く更新されていない memtable はメモリ圧力を下げるためにフラッシュされます。この動作はメモリ制限に近づいている場合（`limit_exceeded_by_ratio(70)` 以上）のみ考慮されます。`LocalTabletsChannel` ではさらに高いメモリ使用時（`limit_exceeded_by_ratio(95)`）に、`write_buffer_size / 4` より大きいサイズの memtable をフラッシュする追加パスが存在します。値が `0` の場合、年齢に基づく stale-memtable のフラッシュは無効になります（immutable-partition の memtable はアイドル時や高メモリ時に即座にフラッシュされます）。
 - 導入バージョン: v3.2.0
+
+### storage_cleanup_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ストレージファイルをクリーンアップするために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
+- 導入バージョン: -
 
 ### storage_flood_stage_left_capacity_bytes
 

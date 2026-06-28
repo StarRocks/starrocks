@@ -79,7 +79,7 @@ TEST(StructColumnTest, test_column_downgrade) {
         fields.emplace_back(std::move(name));
         auto column = StructColumn::create(std::move(fields), field_name);
 
-        for (size_t i = 0; i < 10; i++) {
+        for (uint64_t i = 0; i < 10; i++) {
             column->append_datum(DatumStruct{i, Slice(std::to_string(i))});
         }
 
@@ -89,7 +89,7 @@ TEST(StructColumnTest, test_column_downgrade) {
         ASSERT_TRUE(ret.value() == nullptr);
         ASSERT_FALSE(column->has_large_column());
         ASSERT_EQ(column->size(), 10);
-        for (size_t i = 0; i < 10; i++) {
+        for (uint64_t i = 0; i < 10; i++) {
             DatumStruct datum = column->get(i).get_struct();
             ASSERT_EQ(i, datum[0].get_uint64());
             ASSERT_EQ(std::to_string(i), datum[1].get_slice());
@@ -209,9 +209,9 @@ TEST(StructColumnTest, equals) {
 TEST(StructColumnTest, test_byte_size) {
     auto col = create_test_column();
 
-    ASSERT_EQ(sizeof(uint64_t) * 2 + sizeof(BinaryColumn::Offset) * 2 + 11 + 2 * 2, col->byte_size());
-    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 6 + 2, col->byte_size(1, 1));
-    ASSERT_EQ(sizeof(uint64_t) + sizeof(BinaryColumn::Offset) + 5 + 2, col->byte_size(0));
+    ASSERT_EQ(sizeof(uint64_t) * 2 + sizeof(uint32_t) * 2 + 11 + 2 * 2, col->byte_size());
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(uint32_t) + 6 + 2, col->byte_size(1, 1));
+    ASSERT_EQ(sizeof(uint64_t) + sizeof(uint32_t) + 5 + 2, col->byte_size(0));
 }
 
 TEST(StructColumnTest, test_resize) {

@@ -15,6 +15,17 @@
 
 set -eo pipefail
 
+# build.sh sources build-support/darwin_build_env.sh before calling us (directly or via the auto-
+# trigger when thirdparty is not yet built), which exports a batch of CMake
+# behavior-control vars intended for the BE build only. They leak into
+# thirdparty subprocesses and break bundled cmake logic
+# (e.g. velocypack's TargetArch.cmake rejects CMAKE_OSX_ARCHITECTURES=arm64
+# with "Invalid OS X arch name: arm64"). Unset at entry so running via
+# build.sh matches running this script standalone.
+unset CMAKE_OSX_ARCHITECTURES CMAKE_BUILD_TARGET_ARCH \
+      CMAKE_GENERATOR CMAKE_FIND_LIBRARY_SUFFIXES \
+      BUILD_SHARED_LIBS CMAKE_BUILD_TYPE MAKEFLAGS
+
 curdir="$(cd -- "$(dirname -- "$0")" >/dev/null 2>&1 && pwd)"
 
 export STARROCKS_HOME="${STARROCKS_HOME:-$curdir/..}"
@@ -125,6 +136,23 @@ __hash_memory(const void* __ptr, size_t __size) noexcept {
 EOF
 }
 
+ensure_macos_libtool_wrapper() {
+    local wrapper_dir="${TP_DIR}/build/libtool-wrapper"
+    local wrapper_path="${wrapper_dir}/libtool"
+
+    mkdir -p "${wrapper_dir}"
+    cat > "${wrapper_path}" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "-V" ]]; then
+    /usr/bin/libtool -V 2>&1
+    exit $?
+fi
+exec /usr/bin/libtool "$@"
+EOF
+    chmod +x "${wrapper_path}"
+    echo "${wrapper_path}"
+}
+
 append_object_to_archive() {
     local archive="$1"
     local object_file="$2"
@@ -148,6 +176,33 @@ check_if_source_exist() {
         echo "Source directory ${TP_SOURCE_DIR}/$1 does not exist"
         exit 1
     fi
+}
+
+find_libevent_pkg_config_dir() {
+    local prefix="$1"
+    local dir
+
+    for dir in "${prefix}/lib/pkgconfig" "${prefix}/lib64/pkgconfig"; do
+        if [[ -f "${dir}/libevent.pc" ]]; then
+            echo "${dir}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+libevent_version() {
+    local prefix="$1"
+    local header
+
+    for header in "${prefix}/include/event2/event-config.h" "${prefix}/include/event.h"; do
+        [[ -f "${header}" ]] || continue
+        sed -n -E 's/^#define[[:space:]]+_EVENT_VERSION[[:space:]]+"([^"]+)".*/\1/p' "${header}" | head -n 1
+        return 0
+    done
+
+    return 1
 }
 
 clean_sources() {
@@ -222,19 +277,38 @@ link_matching_if_missing() {
 
 link_formula_metadata() {
     local prefix="$1"
+    local path
+    local name
+
     link_children_if_missing "${prefix}/lib/pkgconfig" "${TP_INSTALL_DIR}/lib/pkgconfig"
     link_children_if_missing "${prefix}/lib/cmake" "${TP_INSTALL_DIR}/lib/cmake"
-    link_children_if_missing "${prefix}/share" "${TP_INSTALL_DIR}/share"
+
+    [[ -d "${prefix}/share" ]] || return 0
+    mkdir -p "${TP_INSTALL_DIR}/share"
+    for path in "${prefix}/share"/*; do
+        [[ -e "${path}" || -L "${path}" ]] || continue
+        name="$(basename "${path}")"
+        case "${name}" in
+            doc|info|man)
+                continue
+                ;;
+        esac
+        link_if_missing "${path}" "${TP_INSTALL_DIR}/share/${name}"
+    done
 }
 
 sync_lib64_links() {
     local lib
+    local dst
     mkdir -p "${TP_INSTALL_DIR}/lib64"
     for lib in "${TP_INSTALL_DIR}"/lib/*; do
         [[ -e "${lib}" || -L "${lib}" ]] || continue
         case "$(basename "${lib}")" in
             *.a|*.dylib|*.so|*.so.*)
-                link_if_missing "../lib/$(basename "${lib}")" "${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                dst="${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                if [[ ! -e "${dst}" && ! -L "${dst}" ]]; then
+                    ln -s "../lib/$(basename "${lib}")" "${dst}"
+                fi
                 ;;
         esac
     done
@@ -348,11 +422,16 @@ detect_java_jni_platform_include() {
 ensure_hadoop_libhdfs_makefile_uses_platform_include() {
     local makefile="$1"
 
-    if ! grep -Fq 'JNI_PLATFORM_INCLUDE ?= linux' "${makefile}"; then
-        perl -0pi -e 's@CC\s+:=\s+gcc@JNI_PLATFORM_INCLUDE ?= linux\n\nCC      := gcc@' "${makefile}"
-    fi
-
-    perl -0pi -e 's@-I\$\(JAVA_HOME\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g' "${makefile}"
+    perl -0pi -e '
+        my $jni_platform = "JNI_PLATFORM_INCLUDE ?= linux";
+        if (index($_, $jni_platform) < 0) {
+            s@CC\s+:=\s+gcc@$jni_platform\n\nCC ?= cc@
+                or s@CC\s+\?=\s+cc@$jni_platform\n\nCC ?= cc@;
+        }
+        s@CC\s+:=\s+gcc@CC ?= cc@g;
+        s@(^\s*)ar rcs @${1}\$(AR) rcs @mg;
+        s@-I\$\(\QJAVA_HOME\E\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g;
+    ' "${makefile}"
 
     if ! grep -Fq -- '-I$(JAVA_HOME)/include/$(JNI_PLATFORM_INCLUDE)' "${makefile}"; then
         echo "Failed to update ${makefile} to use JNI_PLATFORM_INCLUDE" >&2
@@ -491,7 +570,7 @@ build_protobuf() {
     "${CXX}" ${CXXFLAGS} -c "${shim_src}" -o "${shim_obj}"
 
     local protobuf_ldflags
-    protobuf_ldflags="$(append_flags "${LDFLAGS:-}" "${shim_obj}")"
+    protobuf_ldflags="$(append_flags "${LDFLAGS:-}" "-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64 ${shim_obj}")"
 
     ./configure \
         --prefix="${TP_INSTALL_DIR}" \
@@ -521,8 +600,6 @@ build_thrift() {
         return 0
     fi
 
-    ensure_formula libevent
-
     check_if_source_exist "${THRIFT_SOURCE}"
     cd "${TP_SOURCE_DIR}/${THRIFT_SOURCE}"
     if [[ ! -f configure ]]; then
@@ -536,12 +613,57 @@ build_thrift() {
     local shim_src="${TP_DIR}/build/thrift/hash_memory_impl.cc"
     local shim_obj="${TP_DIR}/build/thrift/hash_memory_shim.o"
     local libevent_prefix
-    libevent_prefix="$(formula_prefix libevent)"
+    local libevent_libdir
+    local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
+    local old_pkg_config_libdir="${PKG_CONFIG_LIBDIR:-}"
+    local thrift_pkg_config_dir="${TP_DIR}/build/thrift/pkgconfig"
+    local libevent_pkg_config_dir=""
+    local libevent_pkg_config_prefix=""
+    if [[ -f "${TP_INSTALL_DIR}/lib/libevent.a" || -f "${TP_INSTALL_DIR}/lib/libevent.dylib" || -f "${TP_INSTALL_DIR}/lib64/libevent.a" ]]; then
+        libevent_prefix="${TP_INSTALL_DIR}"
+    else
+        ensure_formula libevent
+        libevent_prefix="$(formula_prefix libevent)"
+    fi
+    if compgen -G "${libevent_prefix}/lib/libevent*.a" >/dev/null || compgen -G "${libevent_prefix}/lib/libevent*.dylib" >/dev/null; then
+        libevent_libdir="${libevent_prefix}/lib"
+    elif compgen -G "${libevent_prefix}/lib64/libevent*.a" >/dev/null || compgen -G "${libevent_prefix}/lib64/libevent*.dylib" >/dev/null; then
+        libevent_libdir="${libevent_prefix}/lib64"
+    else
+        echo "Failed to locate libevent library directory under ${libevent_prefix}"
+        exit 1
+    fi
+
     write_hash_memory_shim "${shim_src}"
     "${CXX}" ${CXXFLAGS} -c "${shim_src}" -o "${shim_obj}"
+    if ! libevent_pkg_config_dir="$(find_libevent_pkg_config_dir "${libevent_prefix}")"; then
+        local detected_libevent_version
+        detected_libevent_version="$(libevent_version "${libevent_prefix}" || true)"
+        mkdir -p "${thrift_pkg_config_dir}"
+        cat > "${thrift_pkg_config_dir}/libevent.pc" <<EOF
+prefix=${libevent_prefix}
+exec_prefix=\${prefix}
+libdir=${libevent_libdir}
+includedir=\${prefix}/include
+
+Name: libevent
+Description: asynchronous event notification library
+EOF
+        if [[ -n "${detected_libevent_version}" ]]; then
+            printf 'Version: %s\n' "${detected_libevent_version}" >> "${thrift_pkg_config_dir}/libevent.pc"
+        fi
+        cat >> "${thrift_pkg_config_dir}/libevent.pc" <<EOF
+Libs: -L\${libdir} -levent
+Cflags: -I\${includedir}
+EOF
+        libevent_pkg_config_dir="${thrift_pkg_config_dir}"
+    fi
+    libevent_pkg_config_prefix="${libevent_pkg_config_dir}:"
+    export PKG_CONFIG_PATH="${libevent_pkg_config_prefix}${libevent_prefix}/lib/pkgconfig:${libevent_prefix}/lib64/pkgconfig:${TP_INSTALL_DIR}/lib/pkgconfig:${TP_INSTALL_DIR}/lib64/pkgconfig${old_pkg_config_path:+:${old_pkg_config_path}}"
+    export PKG_CONFIG_LIBDIR="${libevent_pkg_config_prefix}${libevent_prefix}/lib/pkgconfig:${libevent_prefix}/lib64/pkgconfig:${TP_INSTALL_DIR}/lib/pkgconfig:${TP_INSTALL_DIR}/lib64/pkgconfig${old_pkg_config_libdir:+:${old_pkg_config_libdir}}"
 
     ./configure \
-        LDFLAGS="-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64 -L${libevent_prefix}/lib" \
+        LDFLAGS="-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64 -L${libevent_libdir}" \
         LIBS="-lssl -lcrypto ${shim_obj}" \
         CPPFLAGS="-DTHRIFT_STATIC_DEFINE -I${TP_INCLUDE_DIR} -I${libevent_prefix}/include" \
         --prefix="${TP_INSTALL_DIR}" \
@@ -569,6 +691,7 @@ build_thrift() {
         --without-java \
         --without-rs \
         --without-swift \
+        --without-cl \
         --with-cpp \
         --with-libevent="${libevent_prefix}" \
         --with-boost="${TP_INSTALL_DIR}" \
@@ -596,6 +719,34 @@ build_thrift() {
         echo "Failed to build thrift"
         exit 1
     fi
+    restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
+    restore_env_var PKG_CONFIG_LIBDIR "${old_pkg_config_libdir}"
+    sync_lib64_links
+}
+
+build_libevent() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libevent.a" && -d "${TP_INCLUDE_DIR}/event2" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${LIBEVENT_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${LIBEVENT_SOURCE}"
+    if [[ ! -f configure ]]; then
+        ./autogen.sh
+    fi
+    if [[ -f Makefile ]]; then
+        make distclean >/dev/null 2>&1 || true
+    fi
+
+    ./configure \
+        --prefix="${TP_INSTALL_DIR}" \
+        --enable-shared=no \
+        --disable-samples \
+        --disable-libevent-regress \
+        CC="${CC}" \
+        CFLAGS="${CFLAGS}"
+    make -j"${PARALLEL}"
+    make install
     sync_lib64_links
 }
 
@@ -630,6 +781,9 @@ build_brpc() {
     if ! grep -q "Force C++17 for glog 0.7.1 compatibility on macOS" CMakeLists.txt; then
         perl -0pi -e 's/set\(CMAKE_CXX_STANDARD_REQUIRED ON\)/set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n# Force C++17 for glog 0.7.1 compatibility on macOS\nset(CMAKE_CXX_STANDARD 17)\nset(CMAKE_CXX_STANDARD_REQUIRED ON)/' CMakeLists.txt
     fi
+    if ! grep -q "Respect caller-provided OpenSSL root on macOS" CMakeLists.txt; then
+        perl -0pi -e 's/if\(CMAKE_SYSTEM_NAME STREQUAL "Darwin"\)\n        set\(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        \)\n    endif\(\)/if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND NOT OPENSSL_ROOT_DIR)\n        # Respect caller-provided OpenSSL root on macOS.\n        set(OPENSSL_ROOT_DIR\n            "\/usr\/local\/opt\/openssl" # Homebrew installed OpenSSL\n        )\n    endif()/' CMakeLists.txt
+    fi
 
     local old_path="${PATH}"
     local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
@@ -646,10 +800,12 @@ build_brpc() {
     mkdir -p cmake_build
     cd cmake_build
 
-    local brpc_cxx_flags="-isystem ${TP_INCLUDE_DIR}"
-    local brpc_c_flags="-isystem ${TP_INCLUDE_DIR}"
+    local brpc_cxx_flags="-I${TP_INCLUDE_DIR}"
+    local brpc_c_flags="-I${TP_INCLUDE_DIR}"
+    local brpc_linker_flags="-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64"
     brpc_cxx_flags="$(append_flags "${brpc_cxx_flags}" "${CXXFLAGS}")"
     brpc_c_flags="$(append_flags "${brpc_c_flags}" "${CFLAGS}")"
+    brpc_linker_flags="$(append_flags "${brpc_linker_flags}" "${LDFLAGS:-}")"
 
     "${CMAKE_CMD}" .. \
         -G "${CMAKE_GENERATOR}" \
@@ -659,6 +815,7 @@ build_brpc() {
         -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
         -DCMAKE_CXX_FLAGS="${brpc_cxx_flags}" \
         -DCMAKE_C_FLAGS="${brpc_c_flags}" \
+        -DCMAKE_EXE_LINKER_FLAGS="${brpc_linker_flags}" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DWITH_GLOG=ON \
@@ -666,6 +823,15 @@ build_brpc() {
         -DWITH_THRIFT=OFF \
         -Dgflags_DIR="${TP_INSTALL_DIR}/lib/cmake/gflags" \
         -DProtobuf_DIR="${TP_INSTALL_DIR}/lib/cmake/protobuf" \
+        -DProtobuf_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DProtobuf_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf.a" \
+        -DProtobuf_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+        -DPROTOBUF_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DOPENSSL_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DOPENSSL_SSL_LIBRARY="${TP_INSTALL_DIR}/lib/libssl.a" \
+        -DOPENSSL_CRYPTO_LIBRARY="${TP_INSTALL_DIR}/lib/libcrypto.a" \
         -Dglog_DIR="${TP_INSTALL_DIR}/lib/cmake/glog" \
         -DGLOG_INCLUDE_PATH="${TP_INCLUDE_DIR}" \
         -DGLOG_LIB="${TP_INSTALL_DIR}/lib/libglog.a" \
@@ -686,7 +852,14 @@ build_rocksdb() {
         return 0
     fi
 
-    ensure_formula zstd
+    local zstd_prefix
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_zstd
+        zstd_prefix="${TP_INSTALL_DIR}"
+    else
+        ensure_formula zstd
+        zstd_prefix="$(formula_prefix zstd)"
+    fi
 
     check_if_source_exist "${ROCKSDB_SOURCE}"
     cd "${TP_SOURCE_DIR}/${ROCKSDB_SOURCE}"
@@ -711,6 +884,18 @@ build_rocksdb() {
         -DBUILD_TESTING=OFF \
         -DWITH_SNAPPY=ON \
         -DWITH_ZSTD=ON \
+        -DSnappy_ROOT="${TP_INSTALL_DIR}" \
+        -DSnappy_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DSnappy_INCLUDE_DIRS="${TP_INCLUDE_DIR}" \
+        -DSnappy_LIBRARY="${TP_INSTALL_DIR}/lib/libsnappy.a" \
+        -DSnappy_LIBRARIES="${TP_INSTALL_DIR}/lib/libsnappy.a" \
+        -DSNAPPY_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DSNAPPY_LIBRARIES="${TP_INSTALL_DIR}/lib/libsnappy.a" \
+        -DZSTD_ROOT="${zstd_prefix}" \
+        -DZSTD_ROOT_DIR="${zstd_prefix}" \
+        -Dzstd_DIR="${zstd_prefix}/lib/cmake/zstd" \
+        -DZSTD_INCLUDE_DIR="${zstd_prefix}/include" \
+        -DZSTD_LIBRARY="${zstd_prefix}/lib/libzstd.a" \
         -DWITH_TESTS=OFF \
         -DWITH_BENCHMARKS=OFF \
         -DWITH_TOOLS=OFF \
@@ -938,7 +1123,11 @@ build_curl() {
         make distclean >/dev/null 2>&1 || true
     fi
 
-    LDFLAGS="-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64" LIBS="-lssl -lcrypto" \
+    PKG_CONFIG_PATH="" \
+        PKG_CONFIG_LIBDIR="${TP_INSTALL_DIR}/lib/pkgconfig:${TP_INSTALL_DIR}/lib64/pkgconfig" \
+        CPPFLAGS="-I${TP_INCLUDE_DIR}" \
+        LDFLAGS="-L${TP_INSTALL_DIR}/lib -L${TP_INSTALL_DIR}/lib64" \
+        LIBS="-lssl -lcrypto" \
         ./configure \
         --prefix="${TP_INSTALL_DIR}" \
         --disable-shared \
@@ -1074,10 +1263,6 @@ build_croaringbitmap() {
 
     check_if_source_exist "${CROARINGBITMAP_SOURCE}"
     cd "${TP_SOURCE_DIR}/${CROARINGBITMAP_SOURCE}"
-    mkdir -p cmake
-    if [[ ! -f cmake/CPM.cmake ]]; then
-        curl -fL -o cmake/CPM.cmake "https://github.com/cpm-cmake/CPM.cmake/releases/download/v0.38.6/CPM.cmake" >/dev/null 2>&1 || true
-    fi
 
     rm -rf cmake_build
     mkdir -p cmake_build
@@ -1099,6 +1284,7 @@ build_croaringbitmap() {
         -DROARING_DISABLE_NATIVE=ON \
         -DFORCE_AVX="${force_avx}" \
         -DROARING_DISABLE_AVX512=ON \
+        -DROARING_USE_CPM=OFF \
         -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-Wno-error")" \
         -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-D_LIBCPP_HAS_NO_HASH_MEMORY=1 -Wno-error")" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5; then
@@ -1218,7 +1404,42 @@ build_formula_libevent() {
     sync_lib64_links
 }
 
+build_zlib() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libz.a" && -f "${TP_INCLUDE_DIR}/zlib.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ZLIB_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${ZLIB_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DZLIB_COMPAT=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DWITH_GTEST=OFF \
+        -DWITH_FUZZERS=OFF \
+        -DWITH_BENCHMARKS=OFF \
+        -DWITH_BENCHMARK_APPS=OFF \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j"${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+    sync_lib64_links
+}
+
 build_formula_zlib() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_zlib
+        return 0
+    fi
+
     ensure_formula zlib
     local prefix
     prefix="$(formula_prefix zlib)"
@@ -1229,6 +1450,11 @@ build_formula_zlib() {
 }
 
 build_formula_lz4() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_lz4
+        return 0
+    fi
+
     ensure_formula lz4
     local prefix
     prefix="$(formula_prefix lz4)"
@@ -1238,7 +1464,56 @@ build_formula_lz4() {
     sync_lib64_links
 }
 
+build_lz4() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/liblz4.a" && -f "${TP_INCLUDE_DIR}/lz4/lz4.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${LZ4_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${LZ4_SOURCE}"
+
+    make -C lib -j"${PARALLEL}" install \
+        PREFIX="${TP_INSTALL_DIR}" \
+        INCLUDEDIR="${TP_INCLUDE_DIR}/lz4" \
+        BUILD_SHARED=no
+    sync_lib64_links
+}
+
+build_zstd() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libzstd.a" && -f "${TP_INCLUDE_DIR}/zstd.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ZSTD_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${ZSTD_SOURCE}/build/cmake"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DZSTD_BUILD_SHARED=OFF \
+        -DZSTD_BUILD_STATIC=ON \
+        -DZSTD_BUILD_PROGRAMS=OFF \
+        -DZSTD_BUILD_TESTS=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j"${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+
+    mkdir -p "${TP_INCLUDE_DIR}/zstd"
+    cp "${TP_INCLUDE_DIR}"/zstd*.h "${TP_INCLUDE_DIR}/zstd/"
+    sync_lib64_links
+}
+
 build_formula_zstd() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_zstd
+        return 0
+    fi
+
     ensure_formula zstd
     local prefix
     prefix="$(formula_prefix zstd)"
@@ -1258,7 +1533,25 @@ build_formula_lzo2() {
     sync_lib64_links
 }
 
+build_bzip() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libbz2.a" && -f "${TP_INCLUDE_DIR}/bzlib.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${BZIP_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${BZIP_SOURCE}"
+    make clean >/dev/null 2>&1 || true
+    make -j"${PARALLEL}" CC="${CC}" AR="${AR}" RANLIB="${RANLIB}" CFLAGS="${CFLAGS}"
+    make install PREFIX="${TP_INSTALL_DIR}"
+    sync_lib64_links
+}
+
 build_formula_bzip() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_bzip
+        return 0
+    fi
+
     ensure_formula bzip2
     local prefix
     prefix="$(formula_prefix bzip2)"
@@ -1267,7 +1560,43 @@ build_formula_bzip() {
     sync_lib64_links
 }
 
+build_openssl() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libcrypto.a" && -f "${TP_INCLUDE_DIR}/openssl/ssl.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${OPENSSL_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${OPENSSL_SOURCE}"
+    if [[ -f Makefile ]]; then
+        make clean >/dev/null 2>&1 || true
+    fi
+
+    unset CXXFLAGS
+    unset CPPFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+
+    LDFLAGS="-L${TP_INSTALL_DIR}/lib" \
+        LIBDIR="lib" \
+        ./Configure \
+            --prefix="${TP_INSTALL_DIR}" \
+            --openssldir="${TP_INSTALL_DIR}/ssl" \
+            --libdir=lib \
+            no-shared \
+            no-tests \
+            darwin64-arm64-cc
+    make -j"${PARALLEL}"
+    make install_sw
+
+    restore_compile_flags
+    sync_lib64_links
+}
+
 build_formula_openssl() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_openssl
+        return 0
+    fi
+
     ensure_formula openssl@3
     local prefix
     prefix="$(formula_prefix openssl@3)"
@@ -1278,6 +1607,11 @@ build_formula_openssl() {
 }
 
 build_formula_simdjson() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_simdjson
+        return
+    fi
+
     ensure_formula simdjson
     local prefix
     prefix="$(formula_prefix simdjson)"
@@ -1288,7 +1622,70 @@ build_formula_simdjson() {
     sync_lib64_links
 }
 
+build_simdjson() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libsimdjson.a" && -f "${TP_INCLUDE_DIR}/simdjson.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${SIMDJSON_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${SIMDJSON_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-O3 -fPIC")" \
+        -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-O3 -fPIC")" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DSIMDJSON_AVX512_ALLOWED=OFF \
+        -DSIMDJSON_SKIPUTF8VALIDATION=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j"${PARALLEL}"
+    mkdir -p "${TP_INSTALL_DIR}/lib"
+    cp libsimdjson.a "${TP_INSTALL_DIR}/lib/libsimdjson.a"
+    cp -r ../include/* "${TP_INCLUDE_DIR}/"
+    sync_lib64_links
+}
+
+build_snappy() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libsnappy.a" && -f "${TP_INCLUDE_DIR}/snappy.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${SNAPPY_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${SNAPPY_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_INCLUDEDIR=include/snappy \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DSNAPPY_BUILD_TESTS=OFF \
+        -DSNAPPY_BUILD_BENCHMARKS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j"${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+
+    cp "${TP_INCLUDE_DIR}/snappy/snappy-c.h" "${TP_INCLUDE_DIR}/snappy-c.h"
+    cp "${TP_INCLUDE_DIR}/snappy/snappy-sinksource.h" "${TP_INCLUDE_DIR}/snappy-sinksource.h"
+    cp "${TP_INCLUDE_DIR}/snappy/snappy-stubs-public.h" "${TP_INCLUDE_DIR}/snappy-stubs-public.h"
+    cp "${TP_INCLUDE_DIR}/snappy/snappy.h" "${TP_INCLUDE_DIR}/snappy.h"
+    cp "${TP_INSTALL_DIR}/lib/libsnappy.a" "${TP_INSTALL_DIR}/libsnappy.a"
+    sync_lib64_links
+}
+
 build_formula_snappy() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_snappy
+        return 0
+    fi
+
     ensure_formula snappy
     local prefix
     prefix="$(formula_prefix snappy)"
@@ -1330,24 +1727,117 @@ build_formula_sasl() {
     sync_lib64_links
 }
 
-build_formula_absl() {
-    ensure_formula abseil
-    local prefix
-    prefix="$(formula_prefix abseil)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libabsl"*.a "${prefix}/lib/libabsl"*.dylib
-    link_formula_metadata "${prefix}"
+# Build abseil from TP source (pinned 20220623). Homebrew's abseil ABI drifts
+# across releases and newer ones are too new for gRPC 1.43; source build
+# keeps the whole TP chain consistent.
+build_absl() {
+    check_if_source_exist "${ABSL_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_absl run — cmake --install
+    # would follow them into Homebrew's Cellar (corrupt or EACCES).
+    rm -rf "${TP_INCLUDE_DIR}/absl"
+    rm -rf "${TP_INSTALL_DIR}/lib/cmake/absl"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.a \
+        "${TP_INSTALL_DIR}/lib64/libabsl_"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/absl_"*.pc
+
+    cd "${TP_SOURCE_DIR}/${ABSL_SOURCE}"
+
+    # Narrow the APPLE+Clang branch to AppleClang only — Homebrew LLVM clang
+    # does not implement Apple Clang's -Xarch_* driver and fails on arm64.
+    local patch_file="${TP_PATCH_DIR}/abseil-cpp-20220623.0-apple-clang-only.patch"
+    local copts_file="absl/copts/AbseilConfigureCopts.cmake"
+    if [[ -f "${patch_file}" ]] && grep -q "MATCHES \\[\\[Clang\\]\\]" "${copts_file}" 2>/dev/null; then
+        patch -p1 --forward --batch < "${patch_file}" >/dev/null || true
+    fi
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
-build_formula_grpc() {
-    ensure_formula grpc
-    local prefix
-    prefix="$(formula_prefix grpc)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib
-    link_matching_if_missing "${TP_INSTALL_DIR}/bin" "${prefix}/bin/grpc"* "${prefix}/bin/protoc-gen-grpc"* "${prefix}/bin/grpc_cpp_plugin"
-    link_formula_metadata "${prefix}"
+# Build gRPC 1.43 from TP source with all providers pinned to TP deps
+# (protobuf 3.14, abseil 20220623, re2, openssl). The Homebrew symlink
+# approach would drag in protobuf 33.x and collide with arrow-flight targets.
+build_grpc() {
+    check_if_source_exist "${GRPC_SOURCE}"
+
+    # Drop stale symlinks from a prior build_formula_grpc run (see build_absl).
+    rm -rf \
+        "${TP_INCLUDE_DIR}/grpc" \
+        "${TP_INCLUDE_DIR}/grpc++" \
+        "${TP_INCLUDE_DIR}/grpcpp"
+    rm -rf \
+        "${TP_INSTALL_DIR}/lib/cmake/grpc" \
+        "${TP_INSTALL_DIR}/lib/cmake/gRPC"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.a \
+        "${TP_INSTALL_DIR}/lib/libaddress_sorting"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libupb"*.a \
+        "${TP_INSTALL_DIR}/lib/libupb"*.dylib \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.a \
+        "${TP_INSTALL_DIR}/lib/libutf8_range"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgrpc"*.dylib \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.a \
+        "${TP_INSTALL_DIR}/lib64/libgpr"*.dylib \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/grpc"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/gpr"*.pc \
+        "${TP_INSTALL_DIR}/bin/grpc_cpp_plugin" \
+        "${TP_INSTALL_DIR}/bin/grpc_"* \
+        "${TP_INSTALL_DIR}/bin/protoc-gen-grpc"*
+
+    cd "${TP_SOURCE_DIR}/${GRPC_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" .. \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DgRPC_INSTALL=ON \
+        -DgRPC_BUILD_TESTS=OFF \
+        -DgRPC_BUILD_CSHARP_EXT=OFF \
+        -DgRPC_BUILD_GRPC_RUBY_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PYTHON_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_PHP_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_OBJECTIVE_C_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_NODE_PLUGIN=OFF \
+        -DgRPC_BUILD_GRPC_CSHARP_PLUGIN=OFF \
+        -DgRPC_BACKWARDS_COMPATIBILITY_MODE=OFF \
+        -DgRPC_SSL_PROVIDER=package \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DOPENSSL_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DOPENSSL_SSL_LIBRARY="${TP_INSTALL_DIR}/lib/libssl.a" \
+        -DOPENSSL_CRYPTO_LIBRARY="${TP_INSTALL_DIR}/lib/libcrypto.a" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DZLIB_LIBRARY_RELEASE="${TP_INSTALL_DIR}/lib/libz.a" \
+        -DgRPC_ABSL_PROVIDER=package \
+        -Dabsl_DIR="${TP_INSTALL_DIR}/lib/cmake/absl" \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_RE2_PROVIDER=package \
+        -DRE2_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DRE2_LIBRARY="${TP_INSTALL_DIR}/lib/libre2.a" \
+        -DgRPC_CARES_PROVIDER=module \
+        -DCARES_ROOT_DIR="${TP_SOURCE_DIR}/${CARES_SOURCE}/" \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}" install
     sync_lib64_links
 }
 
@@ -1362,7 +1852,40 @@ build_formula_flatbuffers() {
     sync_lib64_links
 }
 
+build_brotli() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libbrotlicommon.a" &&
+          -f "${TP_INCLUDE_DIR}/brotli/decode.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${BROTLI_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${BROTLI_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+    for lib in brotlienc brotlidec brotlicommon; do
+        if [[ -f "${TP_INSTALL_DIR}/lib/lib${lib}-static.a" ]]; then
+            mv -f "${TP_INSTALL_DIR}/lib/lib${lib}-static.a" "${TP_INSTALL_DIR}/lib/lib${lib}.a"
+        fi
+    done
+    safe_remove_glob "${TP_INSTALL_DIR}/lib/libbrotli"*.dylib
+    sync_lib64_links
+}
+
 build_formula_brotli() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_brotli
+        return 0
+    fi
+
     ensure_formula brotli
     local prefix
     prefix="$(formula_prefix brotli)"
@@ -1371,17 +1894,223 @@ build_formula_brotli() {
     sync_lib64_links
 }
 
-build_formula_arrow() {
-    ensure_formula apache-arrow
-    local prefix
-    prefix="$(formula_prefix apache-arrow)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libarrow"*.a "${prefix}/lib/libarrow"*.dylib "${prefix}/lib/libparquet"*.a "${prefix}/lib/libparquet"*.dylib "${prefix}/lib/libgandiva"*.a "${prefix}/lib/libgandiva"*.dylib
-    link_formula_metadata "${prefix}"
+build_arrow() {
+    # libarrow_flight_sql.a as short-circuit sentinel: it is installed last,
+    # so its presence implies libarrow_flight.a + libarrow.a; a pre-Flight
+    # install or a run interrupted mid-way falls through to a full rebuild.
+    if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" \
+          && -f "${TP_INSTALL_DIR}/lib/libarrow_flight_sql.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ARROW_SOURCE}"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libarrow"* \
+        "${TP_INSTALL_DIR}/lib/libparquet"* \
+        "${TP_INSTALL_DIR}/lib/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib64/libarrow"* \
+        "${TP_INSTALL_DIR}/lib64/libparquet"* \
+        "${TP_INSTALL_DIR}/lib64/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/arrow"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/parquet"*.pc
+    rm -rf \
+        "${TP_INCLUDE_DIR}"/arrow* \
+        "${TP_INCLUDE_DIR}/parquet" \
+        "${TP_INCLUDE_DIR}/gandiva" \
+        "${TP_INSTALL_DIR}/lib/cmake"/Arrow* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Parquet* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Gandiva*
+
+    cd "${TP_SOURCE_DIR}/${ARROW_SOURCE}/cpp"
+    rm -rf release
+    mkdir -p release
+    cd release
+
+    export ARROW_BROTLI_URL="${TP_SOURCE_DIR}/${BROTLI_NAME}"
+    export ARROW_GLOG_URL="${TP_SOURCE_DIR}/${GLOG_NAME}"
+    export ARROW_LZ4_URL="${TP_SOURCE_DIR}/${LZ4_NAME}"
+    export ARROW_SNAPPY_URL="${TP_SOURCE_DIR}/${SNAPPY_NAME}"
+    export ARROW_ZLIB_URL="${TP_SOURCE_DIR}/${ZLIB_NAME}"
+    export ARROW_FLATBUFFERS_URL="${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}"
+    export ARROW_ZSTD_URL="${TP_SOURCE_DIR}/${ZSTD_NAME}"
+    export ARROW_THRIFT_URL="${TP_SOURCE_DIR}/${THRIFT_NAME}"
+
+    # Pin pkg-config to TP's protobuf to keep arrow-flight's static-link probe
+    # from picking up Homebrew's v33.x. Saved/restored so it does not leak.
+    local old_pkg_config_path="${PKG_CONFIG_PATH:-}"
+    export PKG_CONFIG_PATH="${TP_INSTALL_DIR}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+
+    # Arrow 19's FindProtobufAlt tries find_package(protobuf CONFIG) then
+    # find_package(Protobuf). CMAKE_DISABLE_FIND_PACKAGE_<name> is case-
+    # sensitive: the lowercase _protobuf guard (set below) blocks only the
+    # CONFIG probe, which is where a stray protobuf-config.cmake would leak.
+    # The capital-P module fallback is intentionally kept and pinned to TP
+    # via the Protobuf_LIBRARY / _INCLUDE_DIR / _PROTOC_EXECUTABLE hints.
+    # Adding _Protobuf (capital) would break Flight configure.
+
+    local formula
+    for formula in rapidjson zlib lz4 snappy brotli flatbuffers; do
+        ensure_formula "${formula}"
+    done
+
+    local rapidjson_prefix
+    local zlib_prefix
+    local lz4_prefix
+    local lz4_include_dir
+    local snappy_prefix
+    local zstd_prefix
+    local brotli_prefix
+    local flatbuffers_prefix
+    local arrow_zstd_source="BUNDLED"
+    rapidjson_prefix="$(formula_prefix rapidjson)"
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        zlib_prefix="${TP_INSTALL_DIR}"
+    else
+        zlib_prefix="$(formula_prefix zlib)"
+    fi
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_lz4
+        lz4_prefix="${TP_INSTALL_DIR}"
+        lz4_include_dir="${TP_INCLUDE_DIR}/lz4"
+    else
+        lz4_prefix="$(formula_prefix lz4)"
+        lz4_include_dir="${lz4_prefix}/include"
+    fi
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        snappy_prefix="${TP_INSTALL_DIR}"
+    else
+        snappy_prefix="$(formula_prefix snappy)"
+    fi
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_zstd
+        zstd_prefix="${TP_INSTALL_DIR}"
+        arrow_zstd_source="SYSTEM"
+    else
+        ensure_formula zstd
+        zstd_prefix="$(formula_prefix zstd)"
+    fi
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_brotli
+        brotli_prefix="${TP_INSTALL_DIR}"
+    else
+        brotli_prefix="$(formula_prefix brotli)"
+    fi
+    flatbuffers_prefix="$(formula_prefix flatbuffers)"
+
+    local arrow_simd_level="DEFAULT"
+    local arrow_runtime_simd_level="SSE4_2"
+    if [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
+        arrow_simd_level="AVX2"
+        arrow_runtime_simd_level="AVX2"
+    fi
+
+    local arrow_prefix_path="${TP_INSTALL_DIR};${flatbuffers_prefix};${snappy_prefix};${lz4_prefix};${brotli_prefix};${zlib_prefix};${zstd_prefix};${rapidjson_prefix}"
+    local libtool_wrapper
+    libtool_wrapper="$(ensure_macos_libtool_wrapper)"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_LIBTOOL="${libtool_wrapper}" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DARROW_BUILD_STATIC=ON \
+        -DARROW_BUILD_SHARED=OFF \
+        -DARROW_BUILD_TESTS=OFF \
+        -DARROW_BUILD_EXAMPLES=OFF \
+        -DARROW_BUILD_INTEGRATION=OFF \
+        -DARROW_BUILD_UTILITIES=OFF \
+        -DARROW_BUILD_BENCHMARKS=OFF \
+        -DARROW_GANDIVA=OFF \
+        -DARROW_PARQUET=ON \
+        -DARROW_JSON=ON \
+        -DARROW_IPC=ON \
+        -DARROW_USE_GLOG=OFF \
+        -DARROW_WITH_BROTLI=ON \
+        -DARROW_WITH_LZ4=ON \
+        -DARROW_WITH_SNAPPY=ON \
+        -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_UTF8PROC=OFF \
+        -DARROW_WITH_RE2=OFF \
+        -DARROW_JEMALLOC=OFF \
+        -DARROW_MIMALLOC=OFF \
+        -DARROW_SIMD_LEVEL="${arrow_simd_level}" \
+        -DARROW_RUNTIME_SIMD_LEVEL="${arrow_runtime_simd_level}" \
+        -DARROW_GFLAGS_USE_SHARED=OFF \
+        -DJEMALLOC_HOME="${TP_INSTALL_DIR}/jemalloc" \
+        -Dzstd_SOURCE="${arrow_zstd_source}" \
+        -DARROW_ZSTD_USE_SHARED=OFF \
+        -DZSTD_ROOT="${zstd_prefix}" \
+        -DZSTD_INCLUDE_DIR="${zstd_prefix}/include" \
+        -DZSTD_LIB="${zstd_prefix}/lib/libzstd.a" \
+        -DRapidJSON_ROOT="${rapidjson_prefix}" \
+        -DARROW_SNAPPY_USE_SHARED=OFF \
+        -DZLIB_ROOT="${zlib_prefix}" \
+        -DZLIB_INCLUDE_DIR="${zlib_prefix}/include" \
+        -DZLIB_LIBRARY="${zlib_prefix}/lib/libz.a" \
+        -DLZ4_INCLUDE_DIR="${lz4_include_dir}" \
+        -DARROW_LZ4_USE_SHARED=OFF \
+        -DBROTLI_ROOT="${brotli_prefix}" \
+        -DBrotli_SOURCE=SYSTEM \
+        -Dlz4_SOURCE=SYSTEM \
+        -DARROW_BROTLI_USE_SHARED=OFF \
+        -Dgflags_ROOT="${TP_INSTALL_DIR}" \
+        -DSnappy_ROOT="${snappy_prefix}" \
+        -DGLOG_ROOT="${TP_INSTALL_DIR}" \
+        -DLZ4_ROOT="${lz4_prefix}" \
+        -DSnappy_INCLUDE_DIR="${snappy_prefix}/include" \
+        -DSnappy_INCLUDE_DIRS="${snappy_prefix}/include" \
+        -DSnappy_LIBRARY="${snappy_prefix}/lib/libsnappy.a" \
+        -DSnappy_LIBRARIES="${snappy_prefix}/lib/libsnappy.a" \
+        -DBoost_DIR="${TP_INSTALL_DIR}" \
+        -DBoost_ROOT="${TP_INSTALL_DIR}" \
+        -DARROW_BOOST_USE_SHARED=OFF \
+        -DBoost_NO_BOOST_CMAKE=ON \
+        -DARROW_FLIGHT=ON \
+        -DARROW_FLIGHT_SQL=ON \
+        -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew/anaconda3" \
+        -DCMAKE_DISABLE_FIND_PACKAGE_protobuf=ON \
+        -DProtobuf_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+        -DProtobuf_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DProtobuf_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf.a" \
+        -DProtobuf_PROTOC_LIBRARY="${TP_INSTALL_DIR}/lib/libprotoc.a" \
+        -DProtobuf_LITE_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf-lite.a" \
+        -DProtobuf_USE_STATIC_LIBS=ON \
+        -Dflatbuffers_ROOT="${flatbuffers_prefix}" \
+        -DCMAKE_PREFIX_PATH="${arrow_prefix_path}" \
+        -DThrift_ROOT="${TP_INSTALL_DIR}" \
+        -Dthrift_SOURCE=SYSTEM \
+        -Dxsimd_SOURCE=SYSTEM \
+        -Dxsimd_DIR="${TP_INSTALL_DIR}/share/cmake/xsimd" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
+
+    if [[ "${arrow_zstd_source}" == "BUNDLED" ]]; then
+        # Hoist Arrow's bundled zstd for the Homebrew-oriented path.
+        if [ -f ./zstd_ep-install/lib64/libzstd.a ]; then
+            cp -rf ./zstd_ep-install/lib64/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+        else
+            cp -rf ./zstd_ep-install/lib/libzstd.a "${TP_INSTALL_DIR}/lib/libzstd.a"
+        fi
+        mkdir -p "${TP_INSTALL_DIR}/include/zstd"
+        cp ./zstd_ep-install/include/* "${TP_INSTALL_DIR}/include/zstd"
+    fi
+
+    restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
+
     sync_lib64_links
 }
 
 build_formula_librdkafka() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_librdkafka
+        return
+    fi
+
     ensure_formula librdkafka
     local prefix
     prefix="$(formula_prefix librdkafka)"
@@ -1391,7 +2120,98 @@ build_formula_librdkafka() {
     sync_lib64_links
 }
 
+build_librdkafka() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/librdkafka.a" && -f "${TP_INSTALL_DIR}/lib/librdkafka++.a" \
+          && -d "${TP_INCLUDE_DIR}/librdkafka" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${LIBRDKAFKA_SOURCE}"
+
+    local zstd_prefix
+    if [[ ! -f "${TP_INSTALL_DIR}/lib/libzstd.a" && ! -f "${TP_INSTALL_DIR}/lib64/libzstd.a" ]]; then
+        build_zstd
+    fi
+    zstd_prefix="${TP_INSTALL_DIR}"
+
+    cd "${TP_SOURCE_DIR}/${LIBRDKAFKA_SOURCE}"
+    rm -rf starrocks_build
+    mkdir -p starrocks_build
+    cd starrocks_build
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_LIBRARY_PATH="${TP_INSTALL_DIR}/lib;${TP_INSTALL_DIR}/lib64" \
+        -DCMAKE_INCLUDE_PATH="${TP_INCLUDE_DIR};${TP_INCLUDE_DIR}/zstd;${TP_INCLUDE_DIR}/lz4" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DRDKAFKA_BUILD_STATIC=ON \
+        -DRDKAFKA_BUILD_EXAMPLES=OFF \
+        -DRDKAFKA_BUILD_TESTS=OFF \
+        -DWITH_SSL=ON \
+        -DWITH_ZSTD=ON \
+        -DWITH_SASL=ON \
+        -DWITH_SASL_SCRAM=ON \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DZSTD_ROOT="${zstd_prefix}" \
+        -DZSTD_INCLUDE_DIR="${zstd_prefix}/include" \
+        -DZSTD_LIBRARY="${zstd_prefix}/lib/libzstd.a" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
+    sync_lib64_links
+}
+
 build_formula_pulsar() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        if [[ -f "${TP_INSTALL_DIR}/lib/libpulsar.a" && -d "${TP_INCLUDE_DIR}/pulsar" ]]; then
+            return 0
+        fi
+
+        check_if_source_exist "${PULSAR_SOURCE}"
+        cd "${TP_SOURCE_DIR}/${PULSAR_SOURCE}"
+        if ! grep -q "Use module-mode protobuf for StarRocks Nix builds" CMakeLists.txt; then
+            perl -0pi -e 's/if \(APPLE\)\n    # See https:\/\/github\.com\/apache\/arrow\/issues\/35987\n    add_definitions\(-DPROTOBUF_USE_DLLS\)\n    # Use Config mode to avoid FindProtobuf\.cmake does not find the Abseil library\n    find_package\(Protobuf REQUIRED CONFIG\)\nelse \(\)\n    find_package\(Protobuf REQUIRED\)\nendif \(\)/# Use module-mode protobuf for StarRocks Nix builds. The bundled\n# protobuf is installed by autotools and does not ship ProtobufConfig.cmake.\nfind_package(Protobuf REQUIRED)/' CMakeLists.txt
+        fi
+        if ! grep -q "Only enable x86 SIMD flags on x86 targets" CMakeLists.txt; then
+            perl -0pi -e 's/if \(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR APPLE\)\n        add_compile_options\(-msse4\.2 -mpclmul\)\n    endif\(\)/# Only enable x86 SIMD flags on x86 targets.\n    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")\n        add_compile_options(-msse4.2 -mpclmul)\n    endif()/' CMakeLists.txt
+        fi
+        rm -rf cmake_build
+        mkdir -p cmake_build
+        cd cmake_build
+
+        "${CMAKE_CMD}" .. \
+            -G "${CMAKE_GENERATOR}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_LIBRARY_PATH="${TP_INSTALL_DIR}/lib;${TP_INSTALL_DIR}/lib64" \
+            -DCMAKE_INCLUDE_PATH="${TP_INSTALL_DIR}/include" \
+            -DPROTOC_PATH="${TP_INSTALL_DIR}/bin/protoc" \
+            -DProtobuf_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+            -DProtobuf_LIBRARY="${TP_INSTALL_DIR}/lib/libprotobuf.a" \
+            -DProtobuf_PROTOC_EXECUTABLE="${TP_INSTALL_DIR}/bin/protoc" \
+            -DProtobuf_PROTOC_LIBRARY="${TP_INSTALL_DIR}/lib/libprotoc.a" \
+            -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_PYTHON_WRAPPER=OFF \
+            -DBUILD_DYNAMIC_LIB=OFF \
+            -DBUILD_STATIC_LIB=ON \
+            -DUSE_ASIO=ON \
+            -DUSE_LOG4CXX=OFF \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+
+        cp lib/libpulsar.a "${TP_INSTALL_DIR}/lib/"
+        cp -R ../include/pulsar "${TP_INCLUDE_DIR}/"
+        sync_lib64_links
+        return 0
+    fi
+
     ensure_formula libpulsar
     local prefix
     prefix="$(formula_prefix libpulsar)"
@@ -1411,7 +2231,46 @@ build_formula_fmt_shared() {
     sync_lib64_links
 }
 
+build_aws_cpp_sdk() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libaws-cpp-sdk-core.a" && -f "${TP_INSTALL_DIR}/lib/cmake/AWSSDK/AWSSDKConfig.cmake" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${AWS_SDK_CPP_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${AWS_SDK_CPP_SOURCE}"
+    rm -rf build
+
+    "${CMAKE_CMD}" -S . -B build \
+        -G "${CMAKE_GENERATOR}" \
+        -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts;kms" \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DENABLE_TESTING=OFF \
+        -DENABLE_CURL_LOGGING=OFF \
+        -DAWS_SDK_WARNINGS_ARE_ERRORS=OFF \
+        -DCURL_LIBRARY_RELEASE="${TP_INSTALL_DIR}/lib/libcurl.a" \
+        -DCURL_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DZLIB_LIBRARY_RELEASE="${TP_INSTALL_DIR}/lib/libz.a" \
+        -DZLIB_INCLUDE_DIR="${TP_INCLUDE_DIR}" \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DOPENSSL_USE_STATIC_LIBS=TRUE \
+        -Dcrypto_LIBRARY="${TP_INSTALL_DIR}/lib/libcrypto.a" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+    "${CMAKE_CMD}" --build build -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install build
+
+    restore_compile_flags
+    sync_lib64_links
+}
+
 build_formula_aws_cpp_sdk() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_aws_cpp_sdk
+        return 0
+    fi
+
     ensure_formula aws-sdk-cpp
     ensure_formula aws-crt-cpp
     local prefix
@@ -1456,6 +2315,11 @@ build_formula_fast_float() {
 }
 
 build_formula_streamvbyte() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_streamvbyte
+        return
+    fi
+
     ensure_formula streamvbyte
     local prefix
     prefix="$(formula_prefix streamvbyte)"
@@ -1465,7 +2329,60 @@ build_formula_streamvbyte() {
     sync_lib64_links
 }
 
+build_streamvbyte() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libstreamvbyte_static.a" && -f "${TP_INCLUDE_DIR}/streamvbyte.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${STREAMVBYTE_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${STREAMVBYTE_SOURCE}"
+    rm -rf build
+    mkdir -p build
+    cd build
+    "${CMAKE_CMD}" .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DSTREAMVBYTE_ENABLE_TESTS=OFF \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    ${BUILD_SYSTEM} -j"${PARALLEL}"
+    ${BUILD_SYSTEM} install
+    sync_lib64_links
+}
+
+build_jansson() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libjansson.a" && -f "${TP_INCLUDE_DIR}/jansson.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${JANSSON_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${JANSSON_SOURCE}"
+    rm -rf build
+    mkdir -p build
+    cd build
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DJANSSON_INSTALL_LIB_DIR=lib \
+        -DJANSSON_BUILD_SHARED_LIBS=OFF \
+        -DJANSSON_EXAMPLES=OFF \
+        -DJANSSON_BUILD_DOCS=OFF \
+        -DJANSSON_WITHOUT_TESTS=ON \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j"${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+    sync_lib64_links
+}
+
 build_formula_jansson() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_jansson
+        return 0
+    fi
+
     ensure_formula jansson
     local prefix
     prefix="$(formula_prefix jansson)"
@@ -1507,6 +2424,22 @@ build_poco() {
     clean_poco_install_artifacts
     cd "${BUILD_DIR}"
 
+    local pcre2_root
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        pcre2_root="${PCRE2_ROOT_DIR:-}"
+        if [[ -z "${pcre2_root}" || ! -d "${pcre2_root}" ]]; then
+            echo "PCRE2_ROOT_DIR must point to a valid Nix pcre2 root when STARROCKS_USE_NIX_DEPS=1"
+            exit 1
+        fi
+    else
+        pcre2_root="${HOMEBREW_PREFIX}/opt/pcre2"
+    fi
+
+    local poco_dependency_flags=(
+        -DPOCO_UNBUNDLED=ON
+        -DPCRE2_ROOT_DIR="${pcre2_root}"
+    )
+
     "${CMAKE_CMD}" .. \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1514,10 +2447,9 @@ build_poco() {
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
-        -DPOCO_UNBUNDLED=ON \
+        "${poco_dependency_flags[@]}" \
         -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
         -DZLIB_ROOT="${TP_INSTALL_DIR}" \
-        -DPCRE2_ROOT_DIR="${HOMEBREW_PREFIX}/opt/pcre2" \
         -DENABLE_XML=OFF \
         -DENABLE_JSON=OFF \
         -DENABLE_NET=ON \
@@ -1546,7 +2478,31 @@ build_poco() {
     sync_lib64_links
 }
 
+build_xsimd() {
+    if [[ -d "${TP_INCLUDE_DIR}/xsimd" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${XSIMD_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${XSIMD_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" install
+    sync_lib64_links
+}
+
 build_formula_xsimd() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_xsimd
+        return 0
+    fi
+
     ensure_formula xsimd
     local prefix
     prefix="$(formula_prefix xsimd)"
@@ -1554,7 +2510,41 @@ build_formula_xsimd() {
     link_formula_metadata "${prefix}"
 }
 
+build_libxml2() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libxml2.a" &&
+          -f "${TP_INCLUDE_DIR}/libxml2/libxml/parser.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${LIBXML2_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${LIBXML2_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DLIBXML2_WITH_ICONV=OFF \
+        -DLIBXML2_WITH_LZMA=OFF \
+        -DLIBXML2_WITH_PYTHON=OFF \
+        -DLIBXML2_WITH_ZLIB=OFF \
+        -DLIBXML2_WITH_TESTS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${BUILD_SYSTEM}" -j "${PARALLEL}"
+    "${BUILD_SYSTEM}" install
+    sync_lib64_links
+}
+
 build_formula_libxml2() {
+    if [[ "${STARROCKS_USE_NIX_DEPS:-0}" == "1" ]]; then
+        build_libxml2
+        return 0
+    fi
+
     ensure_formula libxml2
     local prefix
     prefix="$(formula_prefix libxml2)"
@@ -1596,12 +2586,55 @@ build_formula_azure() {
     sync_lib64_links
 }
 
-build_formula_xxhash() {
-    ensure_formula xxhash
+build_xxhash() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          ! -L "${TP_INSTALL_DIR}/lib/libxxhash.a" &&
+          -f "${TP_INCLUDE_DIR}/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash.h" &&
+          -f "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          ! -L "${TP_INCLUDE_DIR}/xxhash/xxhash.h" &&
+          -f "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          ! -L "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc" &&
+          -d "${TP_INSTALL_DIR}/lib/cmake/xxHash" &&
+          ! -L "${TP_INSTALL_DIR}/lib/cmake/xxHash" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${XXHASH_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${XXHASH_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+
+    rm -rf "${TP_INCLUDE_DIR}/xxhash" \
+        "${TP_INSTALL_DIR}/lib/cmake/xxHash"
+    rm -f "${TP_INCLUDE_DIR}/xxhash.h" \
+        "${TP_INCLUDE_DIR}/xxh3.h" \
+        "${TP_INCLUDE_DIR}/xxh_x86dispatch.h" \
+        "${TP_INSTALL_DIR}/lib/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib64/libxxhash"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/libxxhash.pc"
+
+    "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
+        -S cmake_unofficial -B "${BUILD_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DXXHASH_BUILD_XXHSUM=OFF
+    "${CMAKE_CMD}" --build "${BUILD_DIR}" -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install "${BUILD_DIR}"
+
+    mkdir -p "${TP_INCLUDE_DIR}/xxhash"
+    cp "${TP_INCLUDE_DIR}/xxhash.h" "${TP_INCLUDE_DIR}/xxhash/xxhash.h"
+    sync_lib64_links
+}
+
+build_formula_blake3() {
+    ensure_formula blake3
     local prefix
-    prefix="$(formula_prefix xxhash)"
-    link_if_missing "${prefix}/include/xxhash.h" "${TP_INCLUDE_DIR}/xxhash.h"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libxxhash.a" "${prefix}/lib/libxxhash"*.dylib
+    prefix="$(formula_prefix blake3)"
+    link_if_missing "${prefix}/include/blake3.h" "${TP_INCLUDE_DIR}/blake3.h"
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libblake3.a" "${prefix}/lib/libblake3"*.dylib
     link_formula_metadata "${prefix}"
     sync_lib64_links
 }
@@ -1673,7 +2706,7 @@ build_hadoop_src() {
 
     cd "${libhdfs_dir}"
     make clean >/dev/null 2>&1 || true
-    make JNI_PLATFORM_INCLUDE="${jni_platform_include}"
+    make CC="${CC}" AR="${AR}" JNI_PLATFORM_INCLUDE="${jni_platform_include}"
     mkdir -p "${TP_INSTALL_DIR}/include/hdfs"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h" "${TP_INSTALL_DIR}/include/hdfs/"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a" "${TP_INSTALL_DIR}/lib/"
@@ -1873,6 +2906,8 @@ build_flamegraph() {
 build_benchgen() {
     check_if_source_exist "${BENCHGEN_SOURCE}"
     cd "${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}"
+    perl -0pi -e 's/brotlicommon snappy zstd\)/brotlicommon lz4 snappy zstd)/' \
+        cmake_modules/BenchmarkArrow.cmake
     "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
@@ -2054,7 +3089,7 @@ for package in "${packages[@]}"; do
             build_hyperscan
             ;;
         libevent)
-            build_formula_libevent
+            build_libevent
             ;;
         zlib)
             build_formula_zlib
@@ -2099,10 +3134,10 @@ for package in "${packages[@]}"; do
             build_formula_sasl
             ;;
         absl)
-            build_formula_absl
+            build_absl
             ;;
         grpc)
-            build_formula_grpc
+            build_grpc
             ;;
         flatbuffers)
             build_formula_flatbuffers
@@ -2114,7 +3149,7 @@ for package in "${packages[@]}"; do
             build_formula_brotli
             ;;
         arrow)
-            build_formula_arrow
+            build_arrow
             ;;
         librdkafka)
             build_formula_librdkafka
@@ -2202,7 +3237,10 @@ for package in "${packages[@]}"; do
             build_flamegraph
             ;;
         xxhash)
-            build_formula_xxhash
+            build_xxhash
+            ;;
+        blake3)
+            build_formula_blake3
             ;;
         benchgen)
             build_benchgen

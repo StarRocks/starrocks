@@ -1,0 +1,189 @@
+-- name: test_partial_update_after_full_insert_same_table_rejected
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 100, 1000), (2, 200, 2000);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 values (3, 300, 3000);
+-- result:
+-- !result
+insert into t1 (k, v2) values (3, 3333);
+-- result:
+E: (5308, "Getting analyzing error. Detail message: Partial update cannot be applied to table 't1' modified earlier in the same transaction.")
+-- !result
+rollback;
+-- result:
+-- !result
+select * from t1 order by k;
+-- result:
+1	100	1000
+2	200	2000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_two_partial_updates_same_table_rejected
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 100, 1000), (2, 200, 2000);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 (k, v1) values (1, 111), (2, 222);
+-- result:
+-- !result
+insert into t1 (k, v2) values (1, 1111), (2, 2222);
+-- result:
+E: (5308, "Getting analyzing error. Detail message: Partial update cannot be applied to table 't1' modified earlier in the same transaction.")
+-- !result
+rollback;
+-- result:
+-- !result
+select * from t1 order by k;
+-- result:
+1	100	1000
+2	200	2000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_single_partial_update_in_txn_ok
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 100, 1000), (2, 200, 2000);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 (k, v1) values (1, 111);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t1 order by k;
+-- result:
+1	111	1000
+2	200	2000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_partial_update_different_tables_ok
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t2 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 100, 1000);
+-- result:
+-- !result
+insert into t2 values (1, 100, 1000);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 (k, v1) values (1, 111);
+-- result:
+-- !result
+insert into t2 (k, v2) values (1, 2222);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select 't1' tbl, k, v1, v2 from t1 order by k;
+-- result:
+t1	1	111	1000
+-- !result
+select 't2' tbl, k, v1, v2 from t2 order by k;
+-- result:
+t2	1	100	2222
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_full_inserts_same_table_in_txn_ok @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v1 INT NULL, v2 INT NULL) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 100, 1000);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+insert into t1 values (2, 200, 2000);
+-- result:
+-- !result
+insert into t1 values (3, 300, 3000);
+-- result:
+-- !result
+commit;
+-- result:
+-- !result
+select * from t1 order by k;
+-- result:
+1	100	1000
+2	200	2000
+3	300	3000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

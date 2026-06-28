@@ -20,8 +20,9 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// Used by vector query cache, 500MB in default
-CONF_Int64(vector_query_cache_capacity, "536870912");
+// Vector index cache total capacity (HNSW whole-index + IVF-PQ blocks share
+// the same LRU). Accepts bytes, K/M/G/T suffix, or a % of process_mem_limit.
+CONF_mString(vector_query_cache_capacity, "20%");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
@@ -31,6 +32,41 @@ CONF_mBool(enable_vector_index_block_cache, "true");
 CONF_mInt32(config_vector_index_build_concurrency, "8");
 
 // default not to build the empty index
-CONF_mInt32(config_vector_index_default_build_threshold, "100");
+CONF_mInt32(config_vector_index_default_build_threshold, "10000");
+
+// Maximum fraction of CPU cores that vector index build targets to use.
+// Effective pool_size * omp_threads is sized from nproc * this value, but a minimum
+// budget of 2 is enforced, so on small-core machines or with small ratios the effective
+// value may exceed nproc * this value.
+CONF_mDouble(vector_index_build_max_cpu_ratio, "0.5");
+
+// Per-segment adaptive ef_search for HNSW vector queries.
+// Compensates for recall degradation on larger segments (e.g. after compaction
+// merges many small segments into one large segment).
+//
+// Formula:
+//   ef_effective = max(user_ef, query_k) * min(1 + alpha * log2(rows/baseline), cap)
+CONF_mBool(enable_vector_adaptive_search, "true");
+
+CONF_mDouble(vector_adaptive_ef_alpha, "1.0");
+
+CONF_mDouble(vector_adaptive_ef_cap, "8.0");
+
+CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
+
+// PRE short-circuit: when the residual pre-filter bitmap holds at most this fraction of the segment's
+// rows, skip the filtered ANN search and score the candidates exactly (a sparse bitmap makes the HNSW
+// traversal slow and likely to under-return, paying the exact rescan on top of the wasted search).
+// Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
+// ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
+CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// Per-builder in-memory row buffer cap before tenann does an intermediate
+// add into the faiss in-memory index. Bounds peak memory during HNSWFlat
+// build by capping data_buffer_ at |rows| × dim × 4 bytes (does NOT cap
+// the trained index storage itself, only the staging buffer).
+// 256K rows ≈ 128 MiB at dim=128. Lower this if BE memory is tight.
+// Set to 0 to disable intermediate flushing (whole tablet buffered in RAM).
+CONF_mInt64(vector_index_build_flush_threshold_rows, "262144");
 
 } // namespace starrocks::config

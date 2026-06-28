@@ -37,4 +37,50 @@ public class PublishTabletsInfoTest {
         Assertions.assertFalse(publishTabletsInfo.getReshardingTablets().isEmpty());
         Assertions.assertFalse(publishTabletsInfo.getOldTabletIds().isEmpty());
     }
+
+    @Test
+    public void testAddReshardingTabletIsIdempotentByIdentityKey() {
+        // The same MergingTablet is registered under every one of its old tablet ids
+        // (see MergeTabletJob.registerReshardingTablets), so Utils.processTablets calls
+        // addReshardingTablet once per input. The dedup guard must keep the reshard op
+        // in the wire list exactly once regardless of how many times it is added.
+        PublishTabletsInfo info = new PublishTabletsInfo();
+
+        MergingTablet merge = new MergingTablet(List.of(31L, 32L, 33L, 34L), 100L);
+        info.addReshardingTablet(merge);
+        info.addReshardingTablet(merge);
+        info.addReshardingTablet(merge);
+        info.addReshardingTablet(merge);
+
+        Assertions.assertEquals(1, info.getReshardingTablets().size());
+        Assertions.assertEquals(100L, merge.getFirstNewTabletId());
+    }
+
+    @Test
+    public void testAddReshardingTabletDedupsLogicallyEqualButDistinctObjects() {
+        // Robustness goal: survive future changes that might produce multiple
+        // ReshardingTablet instances for the same logical op (e.g. image reload,
+        // replay, clone). Dedup is by content-derived identity key (first new tablet id),
+        // not by Java reference.
+        PublishTabletsInfo info = new PublishTabletsInfo();
+
+        info.addReshardingTablet(new MergingTablet(List.of(31L, 32L), 100L));
+        info.addReshardingTablet(new MergingTablet(List.of(31L, 32L), 100L));
+
+        Assertions.assertEquals(1, info.getReshardingTablets().size());
+    }
+
+    @Test
+    public void testAddReshardingTabletAcceptsDistinctReshardOps() {
+        // Different reshard ops have different new tablet ids (globally allocated
+        // via GlobalStateMgr.getNextId()), so they must not dedupe.
+        PublishTabletsInfo info = new PublishTabletsInfo();
+
+        info.addReshardingTablet(new MergingTablet(List.of(31L, 32L), 100L));
+        info.addReshardingTablet(new MergingTablet(List.of(41L, 42L), 200L));
+        info.addReshardingTablet(new SplittingTablet(50L, List.of(300L, 301L)));
+        info.addReshardingTablet(new IdenticalTablet(60L, 400L));
+
+        Assertions.assertEquals(4, info.getReshardingTablets().size());
+    }
 }

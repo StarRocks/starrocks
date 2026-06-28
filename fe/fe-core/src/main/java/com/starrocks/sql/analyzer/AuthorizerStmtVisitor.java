@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -146,6 +148,12 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedDeleteClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -215,7 +223,9 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -256,6 +266,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -372,8 +383,149 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    @Override
+    public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+
+        boolean needsInsert = false;
+        boolean needsUpdate = false;
+        boolean needsDelete = false;
+        for (MergeWhenClause clause : statement.getWhenClauses()) {
+            if (clause instanceof MergeWhenNotMatchedInsertClause) {
+                needsInsert = true;
+            } else if (clause instanceof MergeWhenMatchedUpdateClause) {
+                needsUpdate = true;
+            } else if (clause instanceof MergeWhenMatchedDeleteClause) {
+                needsDelete = true;
+            }
+        }
+
+        if (needsInsert) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsUpdate) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.UPDATE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+        if (needsDelete) {
+            try {
+                Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+            }
+        }
+
+        TableName tableNameForSelect = TableName.fromTableRef(tableRef);
+        // The analyzer's join puts the target table on the right side, which would
+        // normally be excluded from SELECT checks because INSERT/UPDATE/DELETE on
+        // the target already passed above. But when the source references the same
+        // table as the target (self-merge, or a subquery scanning the target),
+        // excluding by TableName also skips the user-written source side — letting
+        // a user with the MERGE action but no SELECT read target columns through
+        // expressions like `SET data = s.secret`. In that case do not exclude;
+        // re-checking the target's SELECT is harmless because the target privileges
+        // already cleared above.
+        List<TableName> excludeTables = sourceReferencesTarget(statement)
+                ? Lists.newArrayList()
+                : Lists.newArrayList(tableNameForSelect);
+        checkSelectTableAction(context, statement.getQueryStatement(), excludeTables);
+        return null;
+    }
+
+    /**
+     * True when any {@link TableRelation} reachable from the source side resolves
+     * to the same {@link Table} object as the target. Comparing Table identity
+     * avoids the false-negative where the user writes the source unqualified
+     * (e.g. {@code USING t AS s} in the target db), so the source TableName lacks
+     * catalog/db and would not equal the canonical target TableName even though
+     * both sides point at the same physical table.
+     */
+    private static boolean sourceReferencesTarget(MergeIntoStmt statement) {
+        Table targetTable = statement.getTable();
+        if (targetTable == null || statement.getSourceRelation() == null) {
+            return false;
+        }
+        Set<Table> sourceTables = new HashSet<>();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitTable(TableRelation node, Void context) {
+                Table t = node.getTable();
+                if (t != null) {
+                    sourceTables.add(t);
+                }
+                return null;
+            }
+        }.visit(statement.getSourceRelation());
+        return sourceTables.contains(targetTable);
+    }
+
     public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
+        checkNativeQueryCatalogUsage(context, statement);
         ColumnPrivilege.check(context, statement, excludeTables);
+    }
+
+    private void checkNativeQueryCatalogUsage(ConnectContext context, QueryStatement statement) {
+        if (statement == null) {
+            return;
+        }
+
+        Set<String> catalogs = new HashSet<>();
+        new NativeQueryCatalogCollector(catalogs).visit(statement);
+        for (String catalog : catalogs) {
+            try {
+                Authorizer.checkCatalogAction(context, catalog, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        catalog,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(),
+                        ObjectType.CATALOG.name(),
+                        catalog);
+            }
+        }
+    }
+
+    private static class NativeQueryCatalogCollector extends AstTraverser<Void, Void> {
+        private final Set<String> catalogs;
+
+        private NativeQueryCatalogCollector(Set<String> catalogs) {
+            this.catalogs = catalogs;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            if (node.getRight() != null) {
+                visit(node.getRight(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            if (node.getQueryTable() != null) {
+                catalogs.add(node.getQueryTable().getCatalogName());
+            }
+            return null;
+        }
     }
 
     // --------------------------------- Routine Load Statement ---------------------------------
@@ -2261,6 +2413,20 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     }
 
     @Override
+    public Void visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement,
+                                                              ConnectContext context) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        }
+        return null;
+    }
+
+    @Override
     public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
@@ -2494,19 +2660,22 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         if (!statement.containsExternalCatalog()) {
             List<TableRef> tableRefs = statement.getTableRefs();
             List<FunctionRef> functionRefs = statement.getFnRefs();
-            if (tableRefs.isEmpty() && functionRefs.isEmpty()) {
+            if (tableRefs.isEmpty() && functionRefs.isEmpty()
+                    && !statement.allTable() && !statement.allMV()
+                    && !statement.allView() && !statement.allFunction()) {
                 String dBName = statement.getDbName();
                 throw new SemanticException("Database: %s is empty", dBName);
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+            String resolvedDbName = statement.getDbName();
+            if (resolvedDbName == null) {
+                resolvedDbName = context.getDatabase();
+            }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(resolvedDbName);
+            final String dbNameForRefs = resolvedDbName;
             tableRefs.forEach(tableRef -> {
-                String dbName = statement.getDbName();
-                if (dbName == null) {
-                    dbName = context.getDatabase();
-                }
                 String tblName = tableRef.getTableName();
-                TableName tableName = new TableName(context.getCurrentCatalog(), dbName, tblName);
+                TableName tableName = new TableName(context.getCurrentCatalog(), dbNameForRefs, tblName);
 
                 try {
                     Authorizer.checkTableAction(context, tableName, PrivilegeType.EXPORT);
@@ -2517,6 +2686,10 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                             PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
                 }
             });
+
+            if (db == null && (!functionRefs.isEmpty() || statement.allFunction())) {
+                throw new SemanticException("Database: " + resolvedDbName + " does not exist");
+            }
 
             functionRefs.forEach(functionRef -> {
                 String functionName = functionRef.getFunctionName();
@@ -2530,10 +2703,23 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                         AccessDeniedException.reportAccessDenied(
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.DROP.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
                     }
                 }
             });
+
+            if (statement.allFunction()) {
+                for (Function fn : db.getFunctions()) {
+                    try {
+                        Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.USAGE.name(), ObjectType.FUNCTION.name(), fn.getSignature());
+                    }
+                }
+            }
         } else {
             List<CatalogRef> externalCatalogs = statement.getExternalCatalogRefs();
             externalCatalogs.forEach(externalCatalog -> {

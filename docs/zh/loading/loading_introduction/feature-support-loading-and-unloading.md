@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 数据导入导出功能支持的文件格式、数据源和版本参考。"
 sidebar_label: "能力边界"
 ---
 
@@ -308,13 +309,28 @@ sidebar_label: "能力边界"
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 

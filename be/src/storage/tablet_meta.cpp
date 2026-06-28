@@ -37,8 +37,9 @@
 #include <memory>
 #include <sstream>
 
+#include "base/format.h"
 #include "base/uid_util.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_common.h"
@@ -160,7 +161,7 @@ Status TabletMeta::create_from_file(const string& file_path) {
 
 Status TabletMeta::create_from_memory(std::string_view data) {
     TabletMetaPB tablet_meta_pb;
-    Status st = ProtobufFileWithHeader::load(&tablet_meta_pb, data);
+    Status st = ProtobufFileWithHeader::load_from_buffer(&tablet_meta_pb, data);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
         return st;
@@ -694,3 +695,9 @@ bool operator!=(const TabletMeta& a, const TabletMeta& b) {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::TabletState>::format(const starrocks::TabletState value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::TabletState>>::format(starrocks::enum_to_underlying_type(value),
+                                                                             ctx);
+}

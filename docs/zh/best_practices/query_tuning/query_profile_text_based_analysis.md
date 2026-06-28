@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Obtain and analyze text-based Query Profiles in StarRocks using EXPLAIN ANALYZE to diagnose slow query execution and find optimization opportunities."
 sidebar_position: 60
 ---
 

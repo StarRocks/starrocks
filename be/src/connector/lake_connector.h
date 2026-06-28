@@ -16,11 +16,12 @@
 
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
-#include "storage/conjunctive_predicates.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/conjunctive_predicates.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class TabletSchema;
@@ -77,6 +78,7 @@ public:
     Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
 
     TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
+    const TabletReaderParams& TEST_params() const { return _params; }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
@@ -132,7 +134,13 @@ private:
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
-    // The following are profile meatures
+    // Vector index search
+    bool _use_vector_index = false;
+    bool _refine_distance = false;
+    std::string _vector_distance_column_name;
+    SlotId _vector_slot_id = 0;
+
+    // The following are profile measures
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;
@@ -232,7 +240,7 @@ class LakeDataSourceProvider final : public DataSourceProvider {
 public:
     friend class LakeDataSource;
     LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    ~LakeDataSourceProvider() override = default;
+    ~LakeDataSourceProvider() override;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
@@ -241,13 +249,14 @@ public:
 
     bool always_shared_scan() const override { return false; }
 
-    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
+    lake::TabletManager* tablet_manager() const { return _tablet_manager; }
 
     // possiable physical distribution optimize of data source
     bool sorted_by_keys_per_tablet() const override {
@@ -283,7 +292,7 @@ protected:
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
-    lake::TabletManager* _tablet_manager;
+    lake::TabletManager* _tablet_manager = nullptr;
 
     bool _could_split = false;
     bool _could_split_physically = false;
@@ -295,6 +304,13 @@ private:
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
+    // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the
+    // inherited `_partition_exprs` in DataSourceProvider which stores bucket expressions.
+    std::vector<ExprContext*> _partition_conjunct_ctxs;
+    // RuntimeState captured during init(); used by the destructor to close
+    // _partition_conjunct_ctxs without reaching back through _scan_node.
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::connector

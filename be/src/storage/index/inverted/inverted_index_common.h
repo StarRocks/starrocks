@@ -15,6 +15,7 @@
 #pragma once
 #include "common/global_types.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/inverted_index_common.h"
 
 namespace starrocks {
 
@@ -42,31 +43,16 @@ const std::string INVERTED_INDEX_PARSER_NONE = "none";
 const std::string INVERTED_INDEX_PARSER_STANDARD = "standard";
 const std::string INVERTED_INDEX_PARSER_ENGLISH = "english";
 const std::string INVERTED_INDEX_PARSER_CHINESE = "chinese";
-const std::string LIKE_FN_NAME = "like";
-
 const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
+const std::string INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
     TEXT = 0,
     STRING = 1,
     NUMERIC = 2,
-};
-
-enum class InvertedIndexQueryType {
-    UNKNOWN_QUERY = -1,
-    EQUAL_QUERY = 0,
-    LESS_THAN_QUERY = 1,
-    LESS_EQUAL_QUERY = 2,
-    GREATER_THAN_QUERY = 3,
-    GREATER_EQUAL_QUERY = 4,
-    MATCH_WILDCARD_QUERY = 5,
-    MATCH_FUZZY_QUERY = 6,
-    MATCH_ALL_QUERY = 7,
-    MATCH_PHRASE_QUERY = 8,
-    MATCH_ANY_QUERY = 9
 };
 
 } // namespace starrocks

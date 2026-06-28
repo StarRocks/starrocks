@@ -19,7 +19,10 @@
 #include <sstream>
 
 #include "base/testutil/assert.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/complex_column_reader.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -336,7 +339,7 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     ASSERT_TRUE(st.ok()) << st.status().to_string();
     ASSERT_NE(st.value(), nullptr);
 
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     // metadata/value plus shredded typed/fallback readers should contribute extra ranges.
@@ -345,6 +348,76 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     SparseRange<uint64_t> sparse_range;
     sparse_range.add(Range<uint64_t>(0, 8));
     st.value()->select_offset_index(sparse_range, 0);
+}
+
+TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+
+    auto collect_range_count = [&variant](ColumnReaderOptions opts) {
+        auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
+        EXPECT_TRUE(st.ok()) << st.status().to_string();
+        if (!st.ok()) {
+            return size_t{0};
+        }
+
+        std::vector<SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+        return ranges.size();
+    };
+
+    auto baseline_opts = make_opts_with_num_cols(5);
+    const size_t baseline_ranges = collect_range_count(baseline_opts);
+
+    auto all_null_opts = make_opts_with_num_cols(5);
+    auto mark_all_null = [&](int idx) {
+        auto* row_group_meta = const_cast<tparquet::RowGroup*>(all_null_opts.row_group_meta);
+        auto& meta = row_group_meta->columns[idx].meta_data;
+        meta.__set_num_values(8);
+        tparquet::Statistics statistics;
+        statistics.__set_null_count(meta.num_values);
+        meta.__set_statistics(statistics);
+    };
+    mark_all_null(2);
+    mark_all_null(3);
+
+    const size_t skipped_ranges = collect_range_count(all_null_opts);
+    ASSERT_GT(baseline_ranges, skipped_ranges);
+    ASSERT_EQ(baseline_ranges - 2, skipped_ranges);
+}
+
+TEST(ColumnReaderFactoryTest, VariantShreddedTypedLeafSkipsTopLevelBinaryIoRange) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+    auto opts = make_opts_with_num_cols(5);
+    auto* row_group_meta = const_cast<tparquet::RowGroup*>(opts.row_group_meta);
+    row_group_meta->__set_num_rows(8);
+
+    auto set_null_count = [&](int idx, int64_t null_count, int64_t num_values) {
+        auto& meta = row_group_meta->columns[idx].meta_data;
+        meta.__set_num_values(num_values);
+        tparquet::Statistics statistics;
+        statistics.__set_null_count(null_count);
+        meta.__set_statistics(statistics);
+    };
+    // Top-level metadata has no nulls, so the fast path can synthesize the outer null mask.
+    set_null_count(0, 0, 8);
+    // Requested leaf fallback is all null, so the fast path will not fall back to top-level value.
+    set_null_count(3, 8, 8);
+
+    VariantShreddedReadHints hints;
+    ASSERT_OK(hints.add_path("obj.k"));
+    auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, hints);
+    ASSERT_TRUE(st.ok()) << st.status().to_string();
+
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+
+    // Only the requested INT32 typed_value leaf should need page IO. Top-level metadata/value
+    // and the all-null leaf fallback value are all skipped.
+    ASSERT_EQ(1, ranges.size());
 }
 
 TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName) {
@@ -455,6 +528,44 @@ TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysi
     ASSERT_NE(struct_reader, nullptr);
     ASSERT_NE(struct_reader->get_child_column_reader("a"), nullptr);
     ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
+}
+
+// Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
+class TestColumnReader : public ColumnReader {
+public:
+    explicit TestColumnReader(const ParquetField* field) : ColumnReader(field) {}
+    Status prepare() override { return Status::OK(); }
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
+    void get_levels(level_t**, level_t**, size_t*) override {}
+    void set_need_parse_levels(bool) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+};
+
+// Covers the FIXED_LEN_BYTE_ARRAY condition added to check_type_can_apply_bloom_filter.
+TEST(ColumnReaderTest, CheckTypeCanApplyBloomFilterFixedLenByteArray) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::SCALAR;
+    field.physical_column_index = 0;
+
+    auto check = [&](LogicalType logical, tparquet::Type::type physical) -> bool {
+        field.physical_type = physical;
+        TestColumnReader reader(&field);
+        return reader.check_type_can_apply_bloom_filter(TypeDescriptor(logical), field);
+    };
+
+    // VARBINARY + FIXED_LEN_BYTE_ARRAY is applicable (the new condition)
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // VARCHAR + FIXED_LEN_BYTE_ARRAY is not applicable
+    // UUID is stored as FIXED_LEN_BYTE_ARRAY and typically read as VARCHAR
+    EXPECT_FALSE(check(TYPE_VARCHAR, tparquet::Type::FIXED_LEN_BYTE_ARRAY));
+
+    // BYTE_ARRAY baseline: both VARCHAR and VARBINARY remain applicable
+    EXPECT_TRUE(check(TYPE_VARCHAR, tparquet::Type::BYTE_ARRAY));
+    EXPECT_TRUE(check(TYPE_VARBINARY, tparquet::Type::BYTE_ARRAY));
 }
 
 } // namespace starrocks::parquet

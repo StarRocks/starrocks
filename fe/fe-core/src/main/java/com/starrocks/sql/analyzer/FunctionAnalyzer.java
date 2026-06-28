@@ -42,6 +42,7 @@ import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -162,15 +163,15 @@ public class FunctionAnalyzer {
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
             if (!functionCallExpr.getChild(0).getType().isStringType() ||
-                    !functionCallExpr.getChild(0).getType().isStringType()) {
+                    !functionCallExpr.getChild(1).getType().isStringType()) {
                 throw new SemanticException(
                         fnName + " function 's first parameter and second parameter must be string type",
                         functionCallExpr.getPos());
             }
 
-            if (!functionCallExpr.getChild(1).isConstant() || !functionCallExpr.getChild(2).isConstant()) {
+            if (!functionCallExpr.getChild(2).isConstant()) {
                 throw new SemanticException(
-                        fnName + " function 's second parameter and third parameter must be constant",
+                        fnName + " function 's third parameter must be constant",
                         functionCallExpr.getPos());
             }
         }
@@ -561,9 +562,22 @@ public class FunctionAnalyzer {
                                     ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
                 if (n.get() > Config.minmax_n_max_size) {
-                    throw new SemanticException("The second parameter of " + fnName + 
+                    throw new SemanticException("The second parameter of " + fnName +
                             " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
+            }
+        }
+
+        // histogram(expr, bucket_num, sample_ratio[, ...]): bucket_num is a constant INT used as a
+        // divisor / bucket-size base in the BE finalize step. A non-positive value divided by zero
+        // (SIGFPE crash) or mis-bucketed every row; reject it here at analysis instead.
+        if (fnName.equals(FunctionSet.HISTOGRAM) && functionCallExpr.hasChild(1)) {
+            Expr bucketNumExpr = functionCallExpr.getChild(1);
+            Optional<Long> bucketNum = extractIntegerValue(bucketNumExpr);
+            if (!bucketNum.isPresent() || bucketNum.get() <= 0) {
+                throw new SemanticException(
+                        "The second parameter (bucket_num) of histogram must be a constant positive integer: " +
+                                ExprToSql.toSql(functionCallExpr), bucketNumExpr.getPos());
             }
         }
 
@@ -711,6 +725,12 @@ public class FunctionAnalyzer {
     private static Optional<Long> extractIntegerValue(Expr expr) {
         if (expr instanceof UserVariableExpr) {
             expr = ((UserVariableExpr) expr).getValue();
+        }
+
+        // Unwrap a cast over a constant integer, e.g. cast(64 as int). Auto-generated statistics
+        // collection SQL wraps the bucket_num literal in such a cast, so fold it to the inner value.
+        if (expr instanceof CastExpr && expr.getType().isFixedPointType()) {
+            return extractIntegerValue(expr.getChild(0));
         }
 
         if (expr instanceof LiteralExpr && expr.getType().isFixedPointType()) {
@@ -1101,6 +1121,11 @@ public class FunctionAnalyzer {
             }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
@@ -1354,6 +1379,11 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName,
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);

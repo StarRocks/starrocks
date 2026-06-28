@@ -14,6 +14,7 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    agg_state_desc_test.cpp
     bitmap_value_test.cpp
     copied_datum_test.cpp
     date_value_test.cpp
@@ -31,7 +32,7 @@ set(TYPES_TEST_FILES
 )
 
 set(TYPES_TEST_LINK_LIBS
-    TypesCore
+    Types
     Common
     Base
     Gutil

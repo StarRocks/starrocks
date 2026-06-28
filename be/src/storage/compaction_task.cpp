@@ -23,11 +23,11 @@
 #include "common/config_storage_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/compaction_manager.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -211,17 +211,17 @@ void CompactionTask::_success_callback() {
 
     // for compatible
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
-        StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
-        StarRocksMetrics::instance()->cumulative_compaction_bytes_total.increment(_task_info.input_rowsets_size);
-        StarRocksMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
-        StarRocksMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(
-                _task_info.input_rowsets_size / (cost_time / 1000.0 + 1));
+        StorageMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
+        StorageMetrics::instance()->cumulative_compaction_bytes_total.increment(_task_info.input_rowsets_size);
+        StorageMetrics::instance()->cumulative_compaction_task_cost_time_ms.set_value(cost_time);
+        StorageMetrics::instance()->cumulative_compaction_task_byte_per_second.set_value(_task_info.input_rowsets_size /
+                                                                                         (cost_time / 1000.0 + 1));
     } else {
-        StarRocksMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
-        StarRocksMetrics::instance()->base_compaction_bytes_total.increment(_task_info.input_rowsets_size);
-        StarRocksMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
-        StarRocksMetrics::instance()->base_compaction_task_byte_per_second.set_value(_task_info.input_rowsets_size /
-                                                                                     (cost_time / 1000.0 + 1));
+        StorageMetrics::instance()->base_compaction_deltas_total.increment(_input_rowsets.size());
+        StorageMetrics::instance()->base_compaction_bytes_total.increment(_task_info.input_rowsets_size);
+        StorageMetrics::instance()->base_compaction_task_cost_time_ms.set_value(cost_time);
+        StorageMetrics::instance()->base_compaction_task_byte_per_second.set_value(_task_info.input_rowsets_size /
+                                                                                   (cost_time / 1000.0 + 1));
     }
 
     // preload the rowset
@@ -239,10 +239,10 @@ void CompactionTask::_failure_callback(const Status& st) {
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_failure_time(UnixMillis());
         _tablet->set_last_cumu_compaction_failure_status(st.code());
-        StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
+        StorageMetrics::instance()->cumulative_compaction_request_failed.increment(1);
     } else {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());
-        StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
+        StorageMetrics::instance()->base_compaction_request_failed.increment(1);
     }
 }
 

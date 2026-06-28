@@ -14,10 +14,6 @@
 
 #include "runtime/runtime_state_helper.h"
 
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
@@ -29,11 +25,8 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "fs/fs_util.h"
-#include "runtime/exec_env.h"
-#include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -41,10 +34,6 @@
 #endif
 
 namespace starrocks {
-
-namespace {
-constexpr int64_t kMaxErrorNum = 50;
-}
 
 void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
     if (state->_runtime_filter_port != nullptr) {
@@ -55,108 +44,7 @@ void RuntimeStateHelper::init_runtime_filter_port(RuntimeState* state) {
 }
 
 ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
-    if (state->_query_ctx == nullptr) {
-        return state->obj_pool();
-    }
-    return state->_query_ctx->object_pool();
-}
-
-Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
-    RETURN_IF_ERROR(state->_exec_env->load_path_mgr()->get_load_error_file_name(state->_fragment_instance_id,
-                                                                                &state->_error_log_file_path));
-    std::string error_log_absolute_path =
-            state->_exec_env->load_path_mgr()->get_load_error_absolute_path(state->_error_log_file_path);
-    state->_error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
-    if (!state->_error_log_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open error file: [" << state->_error_log_file_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
-    }
-    return Status::OK();
-}
-
-Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
-    auto rejected_record_absolute_path = state->_exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
-            "", state->_db, state->_load_label, state->_txn_id, state->_fragment_instance_id);
-    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
-
-    state->_rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
-    if (!state->_rejected_record_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
-    }
-    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
-    state->_rejected_record_file_path = rejected_record_absolute_path;
-    return Status::OK();
-}
-
-void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std::string& line,
-                                                  const std::string& error_msg, bool is_summary) {
-    std::lock_guard<std::mutex> l(state->_error_log_lock);
-    if (state->_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-    // If file havn't been opened, open it here
-    if (state->_error_log_file == nullptr) {
-        Status status = RuntimeStateHelper::create_error_log_file(state);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.message();
-            if (state->_error_log_file != nullptr) {
-                state->_error_log_file->close();
-                delete state->_error_log_file;
-                state->_error_log_file = nullptr;
-            }
-            return;
-        }
-    }
-
-    // if num of printed error row exceeds the limit, and this is not a summary message,
-    // return
-    if (state->_num_print_error_rows.fetch_add(1, std::memory_order_relaxed) > kMaxErrorNum && !is_summary) {
-        return;
-    }
-
-    std::stringstream out;
-    if (is_summary) {
-        out << "Error: ";
-        out << error_msg;
-    } else {
-        // Note: export reason first in case src line too long and be truncated.
-        out << "Error: " << error_msg << ". Row: " << line;
-    }
-
-    if (!out.str().empty()) {
-        (*state->_error_log_file) << out.str() << std::endl;
-    }
-}
-
-void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
-                                                        const std::string& error_msg, const std::string& source) {
-    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
-    // Only load job need to write rejected record
-    if (state->_query_options.query_type != TQueryType::LOAD) {
-        return;
-    }
-
-    // If file havn't been opened, open it here
-    if (state->_rejected_record_file == nullptr) {
-        Status status = RuntimeStateHelper::create_rejected_record_file(state);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (state->_rejected_record_file != nullptr) {
-                state->_rejected_record_file->close();
-                state->_rejected_record_file.reset();
-            }
-            return;
-        }
-    }
-    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
-
-    // TODO(meegoo): custom delimiter
-    (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+    return state->global_obj_pool();
 }
 
 void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {

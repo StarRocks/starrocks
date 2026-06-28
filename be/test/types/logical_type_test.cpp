@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "types/olap_type_infra.h"
+
 namespace starrocks {
 
 TEST(LogicalTypeTest, StringToLogicalType) {
@@ -46,6 +48,56 @@ TEST(LogicalTypeTest, TypePredicates) {
     EXPECT_TRUE(is_binary_type(TYPE_BINARY));
     EXPECT_TRUE(is_binary_type(TYPE_VARBINARY));
     EXPECT_FALSE(is_binary_type(TYPE_VARCHAR));
+}
+
+namespace {
+
+struct DispatchLogicalTypeFunctor {
+    template <LogicalType field_type>
+    LogicalType operator()(LogicalType* observed) const {
+        *observed = field_type;
+        return field_type;
+    }
+};
+
+struct DispatchStatusFunctor {
+    template <LogicalType field_type>
+    Status operator()(LogicalType* observed) const {
+        *observed = field_type;
+        return Status::OK();
+    }
+};
+
+struct DispatchBoolFunctor {
+    template <LogicalType field_type>
+    bool operator()(LogicalType* observed) const {
+        *observed = field_type;
+        return true;
+    }
+};
+
+} // namespace
+
+TEST(LogicalTypeInfraTest, FieldTypeDispatchBasic) {
+    LogicalType observed = TYPE_UNKNOWN;
+    EXPECT_EQ(TYPE_INT, field_type_dispatch_basic(TYPE_INT, DispatchLogicalTypeFunctor(), &observed));
+    EXPECT_EQ(TYPE_INT, observed);
+}
+
+TEST(LogicalTypeInfraTest, FieldTypeDispatchBloomFilterRejectsTinyInt) {
+    LogicalType observed = TYPE_UNKNOWN;
+    auto status = field_type_dispatch_bloomfilter(TYPE_TINYINT, DispatchStatusFunctor(), &observed);
+    EXPECT_TRUE(status.is_not_supported());
+    EXPECT_EQ(TYPE_UNKNOWN, observed);
+}
+
+TEST(LogicalTypeInfraTest, FieldTypeDispatchColumnPredicateUsesDefaultForUnsupportedType) {
+    LogicalType observed = TYPE_UNKNOWN;
+    EXPECT_FALSE(field_type_dispatch_column_predicate(TYPE_ARRAY, false, DispatchBoolFunctor(), &observed));
+    EXPECT_EQ(TYPE_UNKNOWN, observed);
+
+    EXPECT_TRUE(field_type_dispatch_column_predicate(TYPE_INT, false, DispatchBoolFunctor(), &observed));
+    EXPECT_EQ(TYPE_INT, observed);
 }
 
 } // namespace starrocks

@@ -173,8 +173,17 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
         HttpConnectContext context = ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
-        if (context != null && context.isRegistered()) {
-            // Context is registered in ExecuteSqlAction#executeWithoutPassword
+        if (context != null) {
+            // Do NOT gate on isRegistered(): that flag is set AFTER
+            // ConnectScheduler.registerConnection adds the context to the map, and
+            // ExecuteSqlAction runs catalog/db/parse work before calling
+            // registerContextOnce at all. If channelInactive fires inside either
+            // window, isRegistered() returns false and the context is stranded in
+            // connectionMap forever, which manifests as ConnectContext.checkTimeout
+            // repeatedly trying to kill a connection whose TCP socket is already
+            // gone. unregisterConnection is safe to call with a never-registered
+            // context because it uses an identity-aware remove — it will only drop
+            // the entry if the mapping at our connectionId is actually this context.
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(context);
         }
         super.channelInactive(ctx);

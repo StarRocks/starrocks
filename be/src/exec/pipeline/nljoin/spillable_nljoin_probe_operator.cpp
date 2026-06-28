@@ -19,9 +19,10 @@
 #include <memory>
 
 #include "common/statusor.h"
-#include "exec/spill/common.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller_factory.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller_factory.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -132,7 +133,7 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
     spill::SpilledOptions opts;
-    opts.wg = state->fragment_ctx()->workgroup();
+    opts.wg = state->fragment_runtime_state()->workgroup();
     _spiller = _spill_factory->create(opts);
     _spiller->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));

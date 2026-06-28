@@ -25,6 +25,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task_context.h"
@@ -172,8 +173,9 @@ protected:
             rowset->set_data_size(rowset_size);
 
             std::string segment_name = fmt::format("segment_{}.dat", i);
-            rowset->add_segments(segment_name);
-            rowset->add_segment_size(rowset_size);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(segment_name);
+            segment_meta->set_size(rowset_size);
 
             // Create dummy segment file
             std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -924,9 +926,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     output0->set_num_rows(100);
     output0->set_data_size(1024);
     output0->set_overlapped(true);
-    output0->add_segments("segment_0.dat");
-    output0->add_segment_size(512);
-    output0->add_segment_encryption_metas("meta0");
+    auto* output0_seg = output0->add_segment_metas();
+    output0_seg->set_filename("segment_0.dat");
+    output0_seg->set_size(512);
+    output0_seg->set_encryption_meta("meta0");
     ctx0->txn_log->mutable_op_compaction()->set_compact_version(10);
     ctx0->table_id = 1001;
     ctx0->partition_id = 2001;
@@ -943,9 +946,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     output1->set_num_rows(200);
     output1->set_data_size(2048);
     output1->set_overlapped(false);
-    output1->add_segments("segment_1.dat");
-    output1->add_segment_size(1024);
-    output1->add_segment_encryption_metas("meta1");
+    auto* output1_seg = output1->add_segment_metas();
+    output1_seg->set_filename("segment_1.dat");
+    output1_seg->set_size(1024);
+    output1_seg->set_encryption_meta("meta1");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1025,7 +1029,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -1041,7 +1045,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1068,8 +1072,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     EXPECT_TRUE(subtask0.has_output_rowset());
     EXPECT_EQ(50, subtask0.output_rowset().num_rows());
     EXPECT_EQ(500, subtask0.output_rowset().data_size());
-    EXPECT_EQ(1, subtask0.output_rowset().segments_size());
-    EXPECT_EQ("segment_0.dat", subtask0.output_rowset().segments(0));
+    EXPECT_EQ(1, subtask0.output_rowset().segment_metas_size());
+    EXPECT_EQ("segment_0.dat", subtask0.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -1233,8 +1237,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_single_sm
     rowset->set_overlapped(false); // Not overlapped, may not be selected
     rowset->set_num_rows(10);
     rowset->set_data_size(100);
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(100);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename("segment_0.dat");
+    segment_meta->set_size(100);
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
 
@@ -1386,6 +1391,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     ctx0->start_time.store(::time(nullptr) - 10, std::memory_order_relaxed);
     ctx0->finish_time.store(::time(nullptr), std::memory_order_release);
     ctx0->skipped.store(false, std::memory_order_relaxed);
+    ctx0->subtask_input_rowsets = 4;
+    ctx0->stats->in_queue_time_sec = 7;
     ctx0->txn_log = std::make_unique<TxnLogPB>();
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
@@ -1398,6 +1405,21 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
 
     // Should have tasks listed
     EXPECT_GE(infos.size(), 1);
+
+    // The PROFILE for a completed parallel subtask must carry both the CompactionTaskStats
+    // counters and the subtask metadata - i.e. the same JSON schema as a running subtask.
+    bool found_completed_profile = false;
+    for (const auto& info : infos) {
+        if (info.finish_time > 0 && info.runs > 0) {
+            EXPECT_NE(info.profile.find(R"("in_queue_sec":7)"), std::string::npos);
+            EXPECT_NE(info.profile.find(R"("subtask_id":0)"), std::string::npos);
+            EXPECT_NE(info.profile.find(R"("input_rowsets":4)"), std::string::npos);
+            EXPECT_EQ(info.profile.find(R"("input_bytes")"), std::string::npos);
+            EXPECT_NE(info.profile.find(R"("is_parallel_subtask":true)"), std::string::npos);
+            found_completed_profile = true;
+        }
+    }
+    EXPECT_TRUE(found_completed_profile);
 
     // Complete subtask 1 to finish
     auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
@@ -1744,7 +1766,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     output0->set_num_rows(100);
     output0->set_data_size(1000);
     output0->set_overlapped(false);
-    output0->add_segments("merged_segment_0.dat");
+    output0->add_segment_metas()->set_filename("merged_segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -1760,7 +1782,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     output1->set_num_rows(200);
     output1->set_data_size(2000);
     output1->set_overlapped(false);
-    output1->add_segments("merged_segment_1.dat");
+    output1->add_segment_metas()->set_filename("merged_segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -1779,7 +1801,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     EXPECT_TRUE(subtask0.has_output_rowset());
     EXPECT_EQ(100, subtask0.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask0.output_rowset().data_size());
-    EXPECT_EQ("merged_segment_0.dat", subtask0.output_rowset().segments(0));
+    EXPECT_EQ("merged_segment_0.dat", subtask0.output_rowset().segment_metas(0).filename());
 
     const auto& subtask1 = op_parallel.subtask_compactions(1);
     EXPECT_EQ(1, subtask1.subtask_id());
@@ -1789,7 +1811,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(200, subtask1.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask1.output_rowset().data_size());
-    EXPECT_EQ("merged_segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ("merged_segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -2095,7 +2117,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -2107,7 +2129,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2119,7 +2141,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(11);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
+    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_2.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2147,7 +2169,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(100, subtask1.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask1.output_rowset().data_size());
-    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     const auto& subtask2 = op_parallel.subtask_compactions(1);
     EXPECT_EQ(2, subtask2.subtask_id());
@@ -2157,7 +2179,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     EXPECT_TRUE(subtask2.has_output_rowset());
     EXPECT_EQ(200, subtask2.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask2.output_rowset().data_size());
-    EXPECT_EQ("segment_2.dat", subtask2.output_rowset().segments(0));
+    EXPECT_EQ("segment_2.dat", subtask2.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -2203,7 +2225,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success
@@ -2216,9 +2238,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(7);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(150);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(750);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta1");
+    auto* ctx1_seg = ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx1_seg->set_filename("segment_1.dat");
+    ctx1_seg->set_size(750);
+    ctx1_seg->set_encryption_meta("meta1");
     ctx1->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2232,9 +2255,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(12);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta2");
+    auto* ctx2_seg = ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx2_seg->set_filename("segment_2.dat");
+    ctx2_seg->set_size(1000);
+    ctx2_seg->set_encryption_meta("meta2");
     ctx2->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2247,7 +2271,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     ctx3->txn_log->mutable_op_compaction()->add_input_rowsets(16);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(250);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2500);
-    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_3.dat");
+    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_3.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 3, std::move(ctx3));
 
     ASSERT_TRUE(closure.is_finished());
@@ -2336,7 +2360,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success (should be applied)
@@ -2348,7 +2372,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(6);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_1.dat");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2374,8 +2398,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(100, subtask1.output_rowset().num_rows());
     EXPECT_EQ(1000, subtask1.output_rowset().data_size());
-    EXPECT_EQ(1, subtask1.output_rowset().segments_size());
-    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segments(0));
+    EXPECT_EQ(1, subtask1.output_rowset().segment_metas_size());
+    EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
     block_promise.set_value();
     pool->wait();
@@ -2421,7 +2445,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(1);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_0.dat");
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_0.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     // Subtask 1: success
@@ -2434,9 +2458,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(7);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(150);
     ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1500);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_1.dat");
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(750);
-    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta1");
+    auto* ctx1_seg = ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx1_seg->set_filename("segment_1.dat");
+    ctx1_seg->set_size(750);
+    ctx1_seg->set_encryption_meta("meta1");
     ctx1->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -2450,9 +2475,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(12);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(200);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_2.dat");
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_encryption_metas("meta2");
+    auto* ctx2_seg = ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas();
+    ctx2_seg->set_filename("segment_2.dat");
+    ctx2_seg->set_size(1000);
+    ctx2_seg->set_encryption_meta("meta2");
     ctx2->txn_log->mutable_op_compaction()->set_compact_version(10);
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -2465,7 +2491,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     ctx3->txn_log->mutable_op_compaction()->add_input_rowsets(16);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(250);
     ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(2500);
-    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("segment_3.dat");
+    ctx3->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("segment_3.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 3, std::move(ctx3));
 
     ASSERT_TRUE(closure.is_finished());
@@ -2650,8 +2676,9 @@ protected:
 
         for (int i = 0; i < num_segments; i++) {
             std::string segment_name = fmt::format("segment_{}.dat", i);
-            rowset->add_segments(segment_name);
-            rowset->add_segment_size(segment_size);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(segment_name);
+            segment_meta->set_size(segment_size);
 
             // Create dummy segment file
             std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -2689,8 +2716,9 @@ protected:
 
             for (int i = 0; i < num_segments; i++) {
                 std::string segment_name = fmt::format("rowset_{}_segment_{}.dat", rowset_id, i);
-                rowset->add_segments(segment_name);
-                rowset->add_segment_size(segment_size);
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(segment_name);
+                segment_meta->set_size(segment_size);
 
                 // Create dummy segment file
                 std::string path = _lp->segment_location(tablet_id, segment_name);
@@ -3648,8 +3676,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_all_l
         rowset->set_overlapped(false);
         rowset->set_num_rows(1000);
         rowset->set_data_size(large_size);
-        rowset->add_segments("segment_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(large_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("segment_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(large_size);
         std::string path = _lp->segment_location(tablet_id, "segment_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
@@ -3716,8 +3745,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_split_rowsets_into_groups_fallb
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(2 * 1024 * 1024);
-        rowset->add_segments("seg_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(2 * 1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("seg_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(2 * 1024 * 1024);
         if (i == 0) {
             rowset->mutable_delete_predicate()->set_version(version);
         }
@@ -3754,8 +3784,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_filter_compactable_rowsets_skip
         rowset->set_overlapped(i > 0);
         rowset->set_num_rows(100);
         rowset->set_data_size(i == 0 ? large_size : 2 * 1024 * 1024);
-        rowset->add_segments("s_" + std::to_string(i) + ".dat");
-        rowset->add_segment_size(i == 0 ? large_size : 2 * 1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename("s_" + std::to_string(i) + ".dat");
+        segment_meta->set_size(i == 0 ? large_size : 2 * 1024 * 1024);
         std::string path = _lp->segment_location(tablet_id, "s_" + std::to_string(i) + ".dat");
         std::string dir = std::filesystem::path(path).parent_path().string();
         CHECK_OK(fs::create_directories(dir));
@@ -3898,10 +3929,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("s0.dat");
-    out0->add_segment_size(1000);
-    out0->add_segment_encryption_metas("enc0");
-    out0->add_segment_metas()->set_segment_idx(0);
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("s0.dat");
+    out0_seg->set_size(1000);
+    out0_seg->set_encryption_meta("enc0");
+    out0_seg->set_segment_idx(0);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
@@ -3912,9 +3944,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("s1.dat");
-    out1->add_segment_size(2000);
-    out1->add_segment_metas()->set_segment_idx(0);
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("s1.dat");
+    out1_seg->set_size(2000);
+    out1_seg->set_segment_idx(0);
     op1->add_ssts();
     op1->add_sst_ranges();
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
@@ -3927,7 +3960,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     EXPECT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(300, merged.output_rowset().num_rows());
     EXPECT_EQ(3000, merged.output_rowset().data_size());
-    EXPECT_EQ(2, merged.output_rowset().segments_size());
     EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
     EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
@@ -3936,60 +3968,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
-TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset_segment_meta_size_mismatch) {
-    int64_t tablet_id = 10056;
-    int64_t txn_id = 20056;
-    int64_t version = 2;
-
-    auto state = std::make_shared<TabletParallelCompactionState>();
-    state->tablet_id = tablet_id;
-    state->txn_id = txn_id;
-    state->version = version;
-    state->total_subtasks_created = 2;
-    state->large_rowset_split_groups[0] = {0, 1};
-    state->expected_large_rowset_split_counts[0] = 2;
-
-    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
-    ctx0->subtask_id = 0;
-    ctx0->txn_log = std::make_unique<TxnLogPB>();
-    auto* op0 = ctx0->txn_log->mutable_op_compaction();
-    op0->add_input_rowsets(0);
-    auto* out0 = op0->mutable_output_rowset();
-    out0->set_num_rows(100);
-    out0->set_data_size(1000);
-    out0->add_segments("s0.dat");
-    out0->add_segment_size(1000);
-    out0->add_segment_metas()->set_segment_idx(0);
-
-    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
-    ctx1->subtask_id = 1;
-    ctx1->txn_log = std::make_unique<TxnLogPB>();
-    auto* op1 = ctx1->txn_log->mutable_op_compaction();
-    op1->add_input_rowsets(0);
-    auto* out1 = op1->mutable_output_rowset();
-    out1->set_num_rows(200);
-    out1->set_data_size(2000);
-    out1->add_segments("s1.dat");
-    out1->add_segment_size(2000);
-    // Invalid subtask output: missing segment metadata for the segment above.
-
-    state->completed_subtasks.emplace_back(std::move(ctx0));
-    state->completed_subtasks.emplace_back(std::move(ctx1));
-    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
-
-#if DCHECK_IS_ON()
-    ASSERT_DEATH(
-            {
-                auto result = _manager->get_merged_txn_log(tablet_id, txn_id);
-                (void)result;
-            },
-            "segment_metas_size");
-#else
-    GTEST_SKIP() << "DCHECK is disabled";
-#endif
-
-    _manager->cleanup_tablet(tablet_id, txn_id);
-}
+// NOTE: the former test_get_merged_txn_log_large_rowset_segment_meta_size_mismatch was removed
+// during the segment_metas refactor. It forced a mismatch between the legacy `segments[]` array
+// and `segment_metas[]` to trip a DCHECK in get_merged_txn_log. With segment_metas now the sole
+// canonical source (no parallel arrays), that inconsistency is structurally impossible to express,
+// and the corresponding DCHECK was removed.
 
 // Test get_merged_txn_log large rowset group with no valid subtasks (RemoveLast, lines 1132-1140)
 TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset_no_valid_subtasks) {
@@ -4311,12 +4294,14 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op0->add_input_rowsets(0);
     op0->mutable_output_rowset()->set_num_rows(500);
     op0->mutable_output_rowset()->set_data_size(4000000000L);
-    op0->mutable_output_rowset()->add_segments("out_seg_0.dat");
-    op0->mutable_output_rowset()->add_segments("out_seg_1.dat");
-    op0->mutable_output_rowset()->add_segment_size(2000000000L);
-    op0->mutable_output_rowset()->add_segment_size(2000000000L);
-    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
-    op0->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
+    auto* op0_seg0 = op0->mutable_output_rowset()->add_segment_metas();
+    op0_seg0->set_filename("out_seg_0.dat");
+    op0_seg0->set_size(2000000000L);
+    op0_seg0->set_segment_idx(0);
+    auto* op0_seg1 = op0->mutable_output_rowset()->add_segment_metas();
+    op0_seg1->set_filename("out_seg_1.dat");
+    op0_seg1->set_size(2000000000L);
+    op0_seg1->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
     ASSERT_FALSE(closure.is_finished());
@@ -4329,12 +4314,14 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     op1->add_input_rowsets(0);
     op1->mutable_output_rowset()->set_num_rows(500);
     op1->mutable_output_rowset()->set_data_size(4000000000L);
-    op1->mutable_output_rowset()->add_segments("out_seg_2.dat");
-    op1->mutable_output_rowset()->add_segments("out_seg_3.dat");
-    op1->mutable_output_rowset()->add_segment_size(2000000000L);
-    op1->mutable_output_rowset()->add_segment_size(2000000000L);
-    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(0);
-    op1->mutable_output_rowset()->add_segment_metas()->set_segment_idx(1);
+    auto* op1_seg0 = op1->mutable_output_rowset()->add_segment_metas();
+    op1_seg0->set_filename("out_seg_2.dat");
+    op1_seg0->set_size(2000000000L);
+    op1_seg0->set_segment_idx(0);
+    auto* op1_seg1 = op1->mutable_output_rowset()->add_segment_metas();
+    op1_seg1->set_filename("out_seg_3.dat");
+    op1_seg1->set_size(2000000000L);
+    op1_seg1->set_segment_idx(1);
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
     ASSERT_TRUE(closure.is_finished());
@@ -4351,7 +4338,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     EXPECT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(1000, merged.output_rowset().num_rows());         // 500+500
     EXPECT_EQ(8000000000L, merged.output_rowset().data_size()); // 4G+4G
-    EXPECT_EQ(4, merged.output_rowset().segments_size());       // 2+2
+    EXPECT_EQ(4, merged.output_rowset().segment_metas_size());  // 2+2
     EXPECT_EQ(4, merged.output_rowset().segment_metas_size());
     EXPECT_EQ(0, merged.output_rowset().segment_metas(0).segment_idx());
     EXPECT_EQ(1, merged.output_rowset().segment_metas(1).segment_idx());
@@ -4423,12 +4410,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_can_use_range_split) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(100);
             rowset->set_data_size(1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
-            seg_meta->set_num_rows(100);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 99));
+            segment_meta->set_num_rows(100);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4459,12 +4445,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(200);
             rowset->set_data_size(2000);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
-            seg_meta->set_num_rows(200);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 15));
+            segment_meta->set_num_rows(200);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4495,15 +4480,12 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(0);
         rowset->set_data_size(6000);
-        rowset->add_segments("seg_0.dat");
-        rowset->add_segments("seg_1.dat");
-        rowset->add_segments("seg_2.dat");
-
         for (int i = 0; i < 3; i++) {
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
-            seg_meta->set_num_rows(0);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 9));
+            segment_meta->set_num_rows(0);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4538,11 +4520,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_collect_segment_key_bounds) {
         rowset->set_data_size(4000);
 
         for (int i = 0; i < 2; i++) {
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
-            seg_meta->set_num_rows(i == 0 ? 100 : 300);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 10));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 10 + 5));
+            segment_meta->set_num_rows(i == 0 ? 100 : 300);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4669,12 +4651,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups) {
         rowset->set_num_rows(1000);
         rowset->set_data_size(10 * 1024 * 1024); // 10MB each
 
-        rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-        auto* seg_meta = rowset->add_segment_metas();
-        seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        seg_meta->set_num_rows(1000);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+        segment_meta->set_num_rows(1000);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -4731,10 +4712,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split)
         auto* out = op->mutable_output_rowset();
         out->set_num_rows(100 * (i + 1));
         out->set_data_size(1000 * (i + 1));
-        out->add_segments(fmt::format("range_seg_{}.dat", i));
-        out->add_segment_size(1000 * (i + 1));
         // Each subtask assigns segment_idx=0 independently; merge must renumber them.
         auto* sm = out->add_segment_metas();
+        sm->set_filename(fmt::format("range_seg_{}.dat", i));
+        sm->set_size(1000 * (i + 1));
         sm->set_segment_idx(0);
         sm->set_num_rows(100 * (i + 1));
 
@@ -4764,7 +4745,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split)
     ASSERT_TRUE(merged.has_output_rowset());
     EXPECT_EQ(600, merged.output_rowset().num_rows());   // 100+200+300
     EXPECT_EQ(6000, merged.output_rowset().data_size()); // 1000+2000+3000
-    EXPECT_EQ(3, merged.output_rowset().segments_size());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
     EXPECT_FALSE(merged.output_rowset().overlapped());
     // next_compaction_offset must NOT be set for non-overlapped rowsets (proto contract).
     EXPECT_FALSE(merged.output_rowset().has_next_compaction_offset());
@@ -4876,8 +4857,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split_
         op->set_compact_version(version);
         op->mutable_output_rowset()->set_num_rows(100);
         op->mutable_output_rowset()->set_data_size(1000);
-        op->mutable_output_rowset()->add_segments(fmt::format("range_seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(1000);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("range_seg_{}.dat", i));
+        segment_meta->set_size(1000);
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -4934,7 +4916,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_range_split_
         op->set_compact_version(version);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         auto* lcrm = op->mutable_lcrm_file();
         lcrm->set_name(fmt::format("lcrm_{}", i));
@@ -5024,14 +5006,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_segment_metas
         auto* output = op->mutable_output_rowset();
         output->set_num_rows(100);
         output->set_data_size(1000);
-        output->add_segments(fmt::format("range_{}_seg_0.dat", i));
-        output->add_segments(fmt::format("range_{}_seg_1.dat", i));
-        output->add_segment_size(500);
-        output->add_segment_size(500);
-
         // Each subtask produces 2 segment_metas with segment_idx starting from 0
         for (int j = 0; j < 2; j++) {
             auto* sm = output->add_segment_metas();
+            sm->set_filename(fmt::format("range_{}_seg_{}.dat", i, j));
+            sm->set_size(500);
             sm->set_segment_idx(j); // Each subtask starts from 0
             sm->set_num_rows(50);
             sm->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100 + j * 50));
@@ -5058,7 +5037,6 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_segment_metas
 
     const auto& merged_output = op_parallel.subtask_compactions(0).output_rowset();
     // 3 subtasks * 2 segments each = 6 segments total
-    EXPECT_EQ(6, merged_output.segments_size());
     EXPECT_EQ(6, merged_output.segment_metas_size());
     EXPECT_EQ(300, merged_output.num_rows());
     EXPECT_FALSE(merged_output.overlapped());
@@ -5101,7 +5079,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
         op->add_input_rowsets(100);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments("seg_0.dat");
+        op->mutable_output_rowset()->add_segment_metas()->set_filename("seg_0.dat");
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5144,7 +5122,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
         op->add_input_rowsets(200);
         op->mutable_output_rowset()->set_num_rows(100);
         op->mutable_output_rowset()->set_data_size(1000);
-        op->mutable_output_rowset()->add_segments("seg_2.dat");
+        op->mutable_output_rowset()->add_segment_metas()->set_filename("seg_2.dat");
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5209,7 +5187,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_incomp
         op->add_input_rowsets(100);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         {
             std::lock_guard<std::mutex> lock(state->mutex);
@@ -5298,8 +5276,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_is_large_rowset_next
 
     for (int i = 0; i < num_segments; i++) {
         std::string segment_name = fmt::format("segment_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
 
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -5344,8 +5323,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_m
 
     for (int i = 0; i < 5; i++) {
         std::string segment_name = fmt::format("segment_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(segment_size);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(segment_size);
 
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -5394,8 +5374,9 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_t
     rowset->set_data_size(segment_size);
 
     // Only 1 segment
-    rowset->add_segments("segment_0.dat");
-    rowset->add_segment_size(segment_size);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename("segment_0.dat");
+    segment_meta->set_size(segment_size);
     std::string path = _lp->segment_location(tablet_id, "segment_0.dat");
     std::string dir = std::filesystem::path(path).parent_path().string();
     CHECK_OK(fs::create_directories(dir));
@@ -5559,9 +5540,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
             auto* output = op->mutable_output_rowset();
             output->set_num_rows(50);
             output->set_data_size(500);
-            output->add_segments(fmt::format("seg_{}.dat", i));
-            output->add_segment_size(500);
-            output->add_segment_encryption_metas(fmt::format("enc_{}", i));
+            auto* segment_meta = output->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->set_size(500);
+            segment_meta->set_encryption_meta(fmt::format("enc_{}", i));
 
             auto* sst = op->add_ssts();
             sst->set_name(fmt::format("sst_{}.sst", i));
@@ -5586,10 +5568,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
         ASSERT_EQ(1, op_parallel.subtask_compactions_size());
         const auto& merged = op_parallel.subtask_compactions(0);
 
-        EXPECT_EQ(2, merged.output_rowset().segment_encryption_metas_size());
-        EXPECT_EQ("enc_0", merged.output_rowset().segment_encryption_metas(0));
-        EXPECT_EQ("enc_1", merged.output_rowset().segment_encryption_metas(1));
-        EXPECT_EQ(2, merged.output_rowset().segment_size_size());
+        EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
+        EXPECT_EQ("enc_0", merged.output_rowset().segment_metas(0).encryption_meta());
+        EXPECT_EQ("enc_1", merged.output_rowset().segment_metas(1).encryption_meta());
+        EXPECT_EQ(2, merged.output_rowset().segment_metas_size());
         EXPECT_EQ(2, merged.ssts_size());
         EXPECT_EQ(2, merged.sst_ranges_size());
         EXPECT_FALSE(merged.output_rowset().overlapped());
@@ -5644,8 +5626,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_auxiliary_fie
             auto* out = op->mutable_output_rowset();
             out->set_num_rows((i + 1) * 100);
             out->set_data_size((i + 1) * 1000);
-            out->add_segments(fmt::format("seg_{}.dat", i));
             auto* meta = out->add_segment_metas();
+            meta->set_filename(fmt::format("seg_{}.dat", i));
             meta->set_segment_idx(0); // Both subtasks start from 0
             _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
         }
@@ -5820,9 +5802,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("range_seg_0.dat");
-    out0->add_segment_size(500);
-    out0->add_segment_encryption_metas("enc_meta_0");
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("range_seg_0.dat");
+    out0_seg->set_size(500);
+    out0_seg->set_encryption_meta("enc_meta_0");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
 
@@ -5837,9 +5820,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("range_seg_1.dat");
-    out1->add_segment_size(1000);
-    out1->add_segment_encryption_metas("enc_meta_1");
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("range_seg_1.dat");
+    out1_seg->set_size(1000);
+    out1_seg->set_encryption_meta("enc_meta_1");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
 
@@ -5854,9 +5838,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
     auto* out2 = op2->mutable_output_rowset();
     out2->set_num_rows(300);
     out2->set_data_size(3000);
-    out2->add_segments("range_seg_2.dat");
-    out2->add_segment_size(1500);
-    out2->add_segment_encryption_metas("enc_meta_2");
+    auto* out2_seg = out2->add_segment_metas();
+    out2_seg->set_filename("range_seg_2.dat");
+    out2_seg->set_size(1500);
+    out2_seg->set_encryption_meta("enc_meta_2");
 
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
@@ -5882,15 +5867,15 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_all_success) 
 
     // Merged output
     EXPECT_TRUE(merged.has_output_rowset());
-    EXPECT_EQ(600, merged.output_rowset().num_rows());    // 100+200+300
-    EXPECT_EQ(6000, merged.output_rowset().data_size());  // 1000+2000+3000
-    EXPECT_FALSE(merged.output_rowset().overlapped());    // Non-overlapped for range split
-    EXPECT_EQ(3, merged.output_rowset().segments_size()); // 3 segments merged
-    EXPECT_EQ("range_seg_0.dat", merged.output_rowset().segments(0));
-    EXPECT_EQ("range_seg_1.dat", merged.output_rowset().segments(1));
-    EXPECT_EQ("range_seg_2.dat", merged.output_rowset().segments(2));
-    EXPECT_EQ(3, merged.output_rowset().segment_size_size());
-    EXPECT_EQ(3, merged.output_rowset().segment_encryption_metas_size());
+    EXPECT_EQ(600, merged.output_rowset().num_rows());         // 100+200+300
+    EXPECT_EQ(6000, merged.output_rowset().data_size());       // 1000+2000+3000
+    EXPECT_FALSE(merged.output_rowset().overlapped());         // Non-overlapped for range split
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size()); // 3 segments merged
+    EXPECT_EQ("range_seg_0.dat", merged.output_rowset().segment_metas(0).filename());
+    EXPECT_EQ("range_seg_1.dat", merged.output_rowset().segment_metas(1).filename());
+    EXPECT_EQ("range_seg_2.dat", merged.output_rowset().segment_metas(2).filename());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
+    EXPECT_EQ(3, merged.output_rowset().segment_metas_size());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -6082,8 +6067,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("split_seg_0.dat");
-    out0->add_segment_size(500);
+    auto* out0_seg = out0->add_segment_metas();
+    out0_seg->set_filename("split_seg_0.dat");
+    out0_seg->set_size(500);
     // Set LCRM file
     auto* lcrm0 = op0->mutable_lcrm_file();
     lcrm0->set_name("lcrm_0.dat");
@@ -6103,8 +6089,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("split_seg_1.dat");
-    out1->add_segment_size(1000);
+    auto* out1_seg = out1->add_segment_metas();
+    out1_seg->set_filename("split_seg_1.dat");
+    out1_seg->set_size(1000);
     // Set LCRM file
     auto* lcrm1 = op1->mutable_lcrm_file();
     lcrm1->set_name("lcrm_1.dat");
@@ -6126,10 +6113,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_merge_with_l
     EXPECT_EQ(1, merged.input_rowsets_size());
     EXPECT_EQ(0, merged.input_rowsets(0));
     EXPECT_TRUE(merged.has_output_rowset());
-    EXPECT_EQ(300, merged.output_rowset().num_rows());    // 100+200
-    EXPECT_EQ(3000, merged.output_rowset().data_size());  // 1000+2000
-    EXPECT_TRUE(merged.output_rowset().overlapped());     // Large rowset split is overlapped
-    EXPECT_EQ(2, merged.output_rowset().segments_size()); // 2 segments
+    EXPECT_EQ(300, merged.output_rowset().num_rows());         // 100+200
+    EXPECT_EQ(3000, merged.output_rowset().data_size());       // 1000+2000
+    EXPECT_TRUE(merged.output_rowset().overlapped());          // Large rowset split is overlapped
+    EXPECT_EQ(2, merged.output_rowset().segment_metas_size()); // 2 segments
 
     // Verify orphan LCRM files are recorded
     EXPECT_EQ(2, op_parallel.orphan_lcrm_files_size());
@@ -6204,7 +6191,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_txn
     ctx2->txn_log->mutable_op_compaction()->add_input_rowsets(2);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(100);
     ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(1000);
-    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segments("seg_2.dat");
+    ctx2->txn_log->mutable_op_compaction()->mutable_output_rowset()->add_segment_metas()->set_filename("seg_2.dat");
     _manager->on_subtask_complete(tablet_id, txn_id, 2, std::move(ctx2));
 
     ASSERT_TRUE(closure.is_finished());
@@ -6345,7 +6332,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_incomplete) 
         }
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
+        op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
 
         _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
     }
@@ -6474,7 +6461,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     auto* out0 = op0->mutable_output_rowset();
     out0->set_num_rows(100);
     out0->set_data_size(1000);
-    out0->add_segments("range_seg_0.dat");
+    out0->add_segment_metas()->set_filename("range_seg_0.dat");
     // Add SST
     auto* sst0 = op0->add_ssts();
     sst0->set_name("sst_0.sst");
@@ -6500,7 +6487,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_merge_with_lcrm_fil
     auto* out1 = op1->mutable_output_rowset();
     out1->set_num_rows(200);
     out1->set_data_size(2000);
-    out1->add_segments("range_seg_1.dat");
+    out1->add_segment_metas()->set_filename("range_seg_1.dat");
     // Add SST
     auto* sst1 = op1->add_ssts();
     sst1->set_name("sst_1.sst");
@@ -6554,7 +6541,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups_error
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
+            rowset->add_segment_metas()->set_filename(fmt::format("seg_{}.dat", i));
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6583,12 +6570,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_range_split_groups_error
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(100));
-            seg_meta->set_num_rows(1000);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(100));
+            segment_meta->set_num_rows(1000);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6676,8 +6662,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_no_valid_wit
         op->set_segment_range_end((i + 1) * 2);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("grp0_seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(500);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("grp0_seg_{}.dat", i));
+        segment_meta->set_size(500);
         auto* lcrm = op->mutable_lcrm_file();
         lcrm->set_name(fmt::format("lcrm_grp0_{}.dat", i));
         lcrm->set_size(lcrm_file_sizes[i]);
@@ -6754,7 +6741,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             op->add_input_rowsets(2);
             op->mutable_output_rowset()->set_num_rows(100);
             op->mutable_output_rowset()->set_data_size(1000);
-            op->mutable_output_rowset()->add_segments(fmt::format("range_seg_{}.dat", i));
+            op->mutable_output_rowset()->add_segment_metas()->set_filename(fmt::format("range_seg_{}.dat", i));
             _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
         }
 
@@ -6776,12 +6763,11 @@ TEST_F(TabletParallelCompactionManagerTest, test_range_split_vlog_paths) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(1000);
             rowset->set_data_size(10 * 1024 * 1024);
-            rowset->add_segments(fmt::format("seg_{}.dat", i));
-
-            auto* seg_meta = rowset->add_segment_metas();
-            seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-            seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-            seg_meta->set_num_rows(1000);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+            segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+            segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+            segment_meta->set_num_rows(1000);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -6873,8 +6859,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_range_split_vlog_paths) {
         op->set_segment_range_end((i + 1) * 2);
         op->mutable_output_rowset()->set_num_rows(50);
         op->mutable_output_rowset()->set_data_size(500);
-        op->mutable_output_rowset()->add_segments(fmt::format("seg_{}.dat", i));
-        op->mutable_output_rowset()->add_segment_size(500);
+        auto* segment_meta = op->mutable_output_rowset()->add_segment_metas();
+        segment_meta->set_filename(fmt::format("seg_{}.dat", i));
+        segment_meta->set_size(500);
         _manager->on_subtask_complete(tablet_id, txn_id, i, std::move(ctx));
     }
 
@@ -6928,13 +6915,12 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         rowset->set_data_size(50 * 1024 * 1024);
 
         std::string segment_name = fmt::format("rs_seg_{}.dat", i);
-        rowset->add_segments(segment_name);
-        rowset->add_segment_size(50 * 1024 * 1024);
-
-        auto* seg_meta = rowset->add_segment_metas();
-        seg_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
-        seg_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
-        seg_meta->set_num_rows(10000);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(segment_name);
+        segment_meta->set_size(50 * 1024 * 1024);
+        segment_meta->mutable_sort_key_min()->CopyFrom(make_int_tuple(i * 100));
+        segment_meta->mutable_sort_key_max()->CopyFrom(make_int_tuple(i * 100 + 200));
+        segment_meta->set_num_rows(10000);
 
         std::string path = _lp->segment_location(tablet_id, segment_name);
         std::string dir = std::filesystem::path(path).parent_path().string();
@@ -6964,7 +6950,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
     std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("range_split_test_pool").set_max_threads(4).build(&pool);
+    ThreadPoolBuilder("rng_split_test").set_max_threads(4).build(&pool);
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});

@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 
 set(STARROCKS_PRECONFIG_MODE "AUTO" CACHE STRING "Preconfigure bootstrap mode: AUTO, ON, or OFF")
 set_property(CACHE STARROCKS_PRECONFIG_MODE PROPERTY STRINGS AUTO ON OFF)
@@ -113,6 +113,22 @@ set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
+# Keep the active Thrift package version in the compile command so cached
+# objects built against an older Thrift header ABI cannot be reused after
+# a runtime upgrade.
+set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
+if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
+    file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
+         REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
+    if (STARROCKS_THRIFT_VERSION_LINE)
+        string(REGEX REPLACE "^#define PACKAGE_VERSION \"([^\"]+)\"$" "\\1"
+               STARROCKS_THRIFT_PACKAGE_VERSION "${STARROCKS_THRIFT_VERSION_LINE}")
+        add_compile_definitions(STARROCKS_THRIFT_PACKAGE_VERSION="${STARROCKS_THRIFT_PACKAGE_VERSION}")
+        message(STATUS "Thrift package version is ${STARROCKS_THRIFT_PACKAGE_VERSION}")
+    endif()
+endif()
+
 if (APPLE)
     find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
                  ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
@@ -176,6 +192,9 @@ option(WITH_STARCACHE "Build binary with starcache library" ${WITH_STARCACHE_DEF
 option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires brpc 1.8)" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
+option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
+option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -273,7 +292,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_
 #  -fno-omit-frame-pointers: Keep frame pointer for functions in register
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-pragmas -pthread -Wno-register")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++20 -D__STDC_FORMAT_MACROS")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++23 -D__STDC_FORMAT_MACROS")
 if (APPLE)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS")
@@ -293,6 +312,12 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif()
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unknown-warning-option")
+    # GCC 15's libstdc++ annotates __find_if (used by std::find_if/any_of/all_of/remove_if) with
+    # "#pragma GCC unroll 4". clang treats that as an explicit unroll request and emits
+    # -Wpass-failed=transform-warning when the predicate is not trivially unrollable, which -Werror
+    # turns into a build failure. These are missed-optimization diagnostics, not correctness issues,
+    # so keep the warning but do not let it fail the build.
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-error=pass-failed")
     # Turn on following warning as error explicitly
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
@@ -393,11 +418,6 @@ endif()
 if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-endif()
-
-if (ENABLE_QUERY_DEBUG_TRACE)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
-    message(STATUS "enable query debug trace")
 endif()
 
 if (ENABLE_FAULT_INJECTION)
@@ -519,43 +539,51 @@ endif()
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
+    HttpService
+    Tools
+    AgentServer
     ${WL_START_GROUP}
-    Agent
-    Column
     Connector
+    # Legacy connector registration pulls concrete connector objects that
+    # depend on Exec symbols, so keep it in the static library group.
+    ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
-    IO
-    Serde
-    Storage
-    Rowset
     Runtime
-    Service
-    ServiceBE
-    Types
+    DataWorkflows
     Udf
     Util
     Script
-    Webserver
-    TestUtil
-    Tools
-    Geo
-    Cache
-    orc
     ${WL_END_GROUP}
-    ${WL_WHOLE_ARCHIVE_PREFIX} ExprCore ${WL_WHOLE_ARCHIVE_SUFFIX}
+    Storage
+    FormatAvro
+    FormatCsv
+    FormatJson
+    FormatOrc
+    FormatCore
+    ExecRuntime
+    ComputeEnv
+    ExecPrimitive
+    StoragePrimitive
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    Serde
+    $<TARGET_FILE:Cache>
+    RuntimeEnv
     RuntimeCore
-    ChunkCore
-    ColumnCore
-    TypesCore
-    FSCore
-    IOCore
-    Common
-    Base
-    Gutil
-    StarRocksGen
+    Platform
+    $<TARGET_FILE:HttpCore>
+    $<TARGET_FILE:ChunkCore>
+    $<TARGET_FILE:ColumnCore>
+    $<TARGET_FILE:Types>
+    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:IO>
+    Geo
+    $<TARGET_FILE:Common>
+    $<TARGET_FILE:Base>
+    $<TARGET_FILE:Gutil>
+    $<TARGET_FILE:StarRocksGen>
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -617,7 +645,6 @@ set(STARROCKS_DEPENDENCIES
     arrow
     arrow_flight
     arrow_flight_sql
-    benchgen
     gRPC::grpc
     gRPC::grpc++
     parquet
@@ -656,6 +683,7 @@ set(STARROCKS_DEPENDENCIES
     icuuc
     icui18n
     icudata
+    blake3
     ${WL_END_GROUP}
 )
 
@@ -742,7 +770,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (APPLE)
+        # Darwin only supports the dynamic ASan runtime selected by -fsanitize=address.
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
         set(DEP_SANITIZE_LIBS -static-libsan)
     else()
@@ -843,13 +873,22 @@ if (WITH_GCOV)
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} --coverage)
 endif()
 
-# Set libraries for test
-set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
+# Set libraries for test. TestUtil is UT-only and intentionally stays out of
+# STARROCKS_LINK_LIBS so normal BE, format-lib, and benchmark builds do not
+# compile or link test helper code.
+set (TEST_LINK_LIBS
+    Orchestration
+    ${STARROCKS_LINK_LIBS}
+    ConnectorBuiltinRegistry
+    ConnectorBootstrap
+    TestUtil
     ${WL_START_GROUP}
     gmock
     gtest
     ${WL_END_GROUP}
 )
+
+set (BENCH_LINK_LIBS ${STARROCKS_LINK_LIBS})
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
@@ -918,7 +957,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${TEST_LINK_LIBS})
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
     STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
@@ -942,14 +981,18 @@ add_subdirectory(${SRC_DIR}/geo)
 add_subdirectory(${SRC_DIR}/gutil)
 add_subdirectory(${SRC_DIR}/http)
 add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/platform)
 add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/data_workflows)
+add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/cache)
+add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/serde)
+add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
@@ -999,8 +1042,11 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
-    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
+
+install(FILES
+    ${BASE_DIR}/../conf/type_checker_config.xml
+    DESTINATION ${OUTPUT_DIR}/lib)
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

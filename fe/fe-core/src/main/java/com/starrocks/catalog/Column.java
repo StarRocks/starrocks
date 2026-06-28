@@ -820,23 +820,26 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public String getMetaDefaultValue(List<String> extras) {
+        // Generator expressions must win over any materialized defaultValue: schema-change paths freeze
+        // ALTER-time into defaultValue so BE can backfill existing rows, but metadata callers (DESCRIBE,
+        // information_schema.columns) must still report the generator, not the frozen literal.
+        if (defaultExpr != null && isEmptyDefaultTimeFunction(defaultExpr)) {
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
+            }
+            return "CURRENT_TIMESTAMP";
+        }
         if (defaultValue != null) {
             return defaultValue;
-        } else if (defaultExpr != null) {
-            if (isEmptyDefaultTimeFunction(defaultExpr)) {
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return "CURRENT_TIMESTAMP";
-            } else {
-                if (defaultExpr.hasExprObject()) {
-                    return defaultExpr.toSql();
-                }
-                if (extras != null) {
-                    extras.add("DEFAULT_GENERATED");
-                }
-                return defaultExpr.getExpr();
+        }
+        if (defaultExpr != null) {
+            if (defaultExpr.hasExprObject()) {
+                return defaultExpr.toSql();
             }
+            if (extras != null) {
+                extras.add("DEFAULT_GENERATED");
+            }
+            return defaultExpr.getExpr();
         }
         return null;
     }
@@ -899,6 +902,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public boolean equals(Object obj) {
+        if (!equalsIgnoreComment(obj)) {
+            return false;
+        }
+
+        Column other = (Column) obj;
+        return comment == null ? other.comment == null : comment.equals(other.getComment());
+    }
+
+    public boolean equalsIgnoreComment(Object obj) {
         if (obj == this) {
             return true;
         }
@@ -932,18 +944,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-        if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
+        if (this.isGeneratedColumn() != other.isGeneratedColumn()) {
             return false;
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
-        if (this.isHidden != other.isHidden()) {
-            return false;
-        }
-
-        return comment == null ? other.comment == null : comment.equals(other.getComment());
+        return this.isHidden == other.isHidden();
     }
 
     public boolean isSchemaCompatible(Column other) {

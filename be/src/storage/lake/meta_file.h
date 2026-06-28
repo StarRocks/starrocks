@@ -53,7 +53,8 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                    const std::vector<int64_t>& file_sizes);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
@@ -62,12 +63,27 @@ public:
                               int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
 
+    // Merge an OpAddIndex (produced by the ADD INDEX fast path) into
+    // TabletMetadataPB.idg_meta. For each SegmentEntry, the new IDG entry is
+    // inserted at the front of the per-segment `entries` list (newest-first
+    // ordering, consistent with LakeIndexDeltaGroupLoader). new_indexes are
+    // reconciled into schema.table_indices in an idempotent way (FE has
+    // usually already published the new schema, so this is a belt-and-braces
+    // step to cover edge cases like FE publish races).
+    void apply_add_index(const TxnLogPB_OpAddIndex& op);
+
+    // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
+    // tombstones into the dropped_keys list of each matching IDG entry; any
+    // entry whose keys are fully tombstoned gets its .idx file moved to
+    // orphan_files and the entry removed. Also removes matching TabletIndexPB
+    // from schema.table_indices if still present.
+    void apply_drop_index(const TxnLogPB_OpDropIndex& op);
+
     // batch processing functions for merging multiple opwrites into one rowset
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
-                    const std::vector<std::string>& del_encryption_metas);
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
     Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
@@ -123,8 +139,10 @@ private:
         RowsetMetadataPB rowset_pb;
         std::map<int, FileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
-        std::vector<std::string> dels;
-        std::vector<std::string> del_encryption_metas;
+        // Per-del metadata: name + shared + encryption_meta carried together so the
+        // parallel-array invariant between filename / shared / encryption can't drift.
+        // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
+        std::vector<FileMetaPB> dels;
         uint32_t assigned_segment_idx = 0;
     };
 
@@ -152,6 +170,16 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
                           int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
                           std::vector<uint64_t>* offsets, const Slice& extra_data = {},
                           uint64_t* extra_data_offset = nullptr);
+
+// Write a brand-new delvec file containing only |buffer|. Used by tablet merge
+// when the only contributor is a synthesized gap delvec and there are no
+// existing source delvec files to concatenate with — sidesteps
+// merge_delvec_files's DCHECK on (empty old_files + non-empty extra_data) and
+// avoids generating an empty file by mistake. Buffer is written at offset 0;
+// the resulting FileMetaPB is shared=false, encryption is per-call when
+// |buffer| is non-empty.
+Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
+                                     const Slice& buffer, FileMetaPB* new_delvec_file);
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);

@@ -17,12 +17,14 @@ package com.starrocks.connector.iceberg;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
@@ -35,14 +37,27 @@ import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.LocationUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public final class IcebergUtil {
+    private static final Logger LOG = LogManager.getLogger(IcebergUtil.class);
+
+    // Fallback target file size when neither the Iceberg table property
+    // `write.target-file-size-bytes` nor the session variable
+    // `connector_sink_target_max_file_size` is set. Kept at 1 GiB to preserve
+    // StarRocks' historical default; Iceberg's own default is 512 MiB.
+    static final long DEFAULT_TARGET_FILE_SIZE_BYTES = 1024L * 1024 * 1024;
+
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
     }
@@ -79,6 +94,7 @@ public final class IcebergUtil {
                     break;
                 case BIGINT:
                 case TIME:
+                case DATETIME:
                     texpr.setType(TExprNodeType.INT_LITERAL);
                     if (minValue instanceof Integer) {
                         texpr.setMin_int_value(((Integer) minValue).longValue());
@@ -127,7 +143,8 @@ public final class IcebergUtil {
             Type.TypeID.FLOAT,
             Type.TypeID.DOUBLE,
             Type.TypeID.DATE,
-            Type.TypeID.TIME
+            Type.TypeID.TIME,
+            Type.TypeID.TIMESTAMP
     );
 
     @VisibleForTesting
@@ -170,8 +187,32 @@ public final class IcebergUtil {
             Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
             minMaxValue.minValue = low;
             minMaxValue.maxValue = high;
+            if (type.typeId() == Type.TypeID.TIMESTAMP) {
+                Types.TimestampType timestampType = (Types.TimestampType) type;
+                if (timestampType.shouldAdjustToUTC() && low instanceof Long && high instanceof Long) {
+                    // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
+                    // values in the session timezone, so we convert file-level bounds into session-local micros
+                    // before sending them to BE.
+                    //
+                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
+                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
+                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
+                    // best-effort approximation rather than an exact local min/max for the full file.
+                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                }
+            }
         }
         return minMaxValues;
+    }
+
+    private static long adjustTimestampMicrosToSessionTz(long micros) {
+        long seconds = Math.floorDiv(micros, 1_000_000L);
+        long microsRemainder = Math.floorMod(micros, 1_000_000L);
+        int nanos = (int) (microsRemainder * 1000L);
+        ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
+        ZoneOffset offset = zoneId.getRules().getOffset(Instant.ofEpochSecond(seconds, nanos));
+        return micros + offset.getTotalSeconds() * 1_000_000L;
     }
 
     public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
@@ -203,6 +244,36 @@ public final class IcebergUtil {
         String tableLocation = table.location();
         return table.properties().getOrDefault(TableProperties.WRITE_DATA_LOCATION,
                 String.format("%s/data", LocationUtil.stripTrailingSlash(tableLocation)));
+    }
+
+    /**
+     * Resolve the target max file size for an Iceberg sink. Priority:
+     *   1. Table property `write.target-file-size-bytes` (Iceberg standard)
+     *   2. Session variable `connector_sink_target_max_file_size` (when &gt; 0)
+     *   3. {@link #DEFAULT_TARGET_FILE_SIZE_BYTES}
+     * Unparseable property values are skipped with a WARN log so a misconfigured
+     * table never breaks DML; the next source in the chain is used instead.
+     */
+    public static long resolveTargetMaxFileSize(Table nativeTable, SessionVariable sessionVariable) {
+        Preconditions.checkArgument(nativeTable != null, "nativeTable is null");
+        String raw = nativeTable.properties().get(TableProperties.WRITE_TARGET_FILE_SIZE_BYTES);
+        if (raw != null) {
+            try {
+                long parsed = Long.parseLong(raw.trim());
+                if (parsed > 0) {
+                    return parsed;
+                }
+                LOG.warn("Iceberg table property {}={} is not positive; falling back to session/default",
+                        TableProperties.WRITE_TARGET_FILE_SIZE_BYTES, raw);
+            } catch (NumberFormatException e) {
+                LOG.warn("Iceberg table property {}={} is not a valid long; falling back to session/default",
+                        TableProperties.WRITE_TARGET_FILE_SIZE_BYTES, raw);
+            }
+        }
+        if (sessionVariable != null && sessionVariable.getConnectorSinkTargetMaxFileSize() > 0) {
+            return sessionVariable.getConnectorSinkTargetMaxFileSize();
+        }
+        return DEFAULT_TARGET_FILE_SIZE_BYTES;
     }
 
     public static CloudConfiguration getVendedCloudConfiguration(String catalogName, IcebergTable icebergTable) {

@@ -18,6 +18,7 @@
 
 #include <filesystem>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
@@ -30,7 +31,6 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
-#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 
@@ -65,12 +65,11 @@ public:
         return row_desc->tuple_descriptors()[0];
     }
 
-    static void make_column_info_vector(const TupleDescriptor* tuple_desc,
-                                        std::vector<HdfsScannerContext::ColumnInfo>* columns) {
+    static void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<FormatColumnInfo>* columns) {
         columns->clear();
         for (int i = 0; i < tuple_desc->slots().size(); i++) {
             SlotDescriptor* slot = tuple_desc->slots()[i];
-            HdfsScannerContext::ColumnInfo c;
+            FormatColumnInfo c;
             c.idx_in_chunk = i;
             c.slot_desc = slot;
             columns->emplace_back(c);

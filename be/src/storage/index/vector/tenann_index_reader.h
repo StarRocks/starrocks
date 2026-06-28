@@ -21,6 +21,7 @@
 #include "tenann/common/type_traits.h"
 #include "tenann/factory/ann_searcher_factory.h"
 #include "tenann/factory/index_factory.h"
+#include "tenann/index/index_cache.h"
 #include "tenann/searcher/ann_searcher.h"
 #include "tenann/searcher/faiss_hnsw_ann_searcher.h"
 #include "tenann/searcher/id_filter.h"
@@ -33,7 +34,13 @@ public:
     TenANNReader() = default;
     ~TenANNReader() override = default;
 
-    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) override;
+    // fs == nullptr reads index_path from the local filesystem; otherwise
+    // VectorIndexFileReader bridges tenann to the provided FileSystem.
+    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path,
+                         FileSystem* fs = nullptr) override;
+
+    Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path, FileSystem* fs,
+                         size_t segment_num_rows, int query_k, bool user_set_ef) override;
 
     Status search(tenann::PrimitiveSeqView query_vector, int k, int64_t* result_ids, uint8_t* result_distances,
                   tenann::IdFilter* id_filter = nullptr) override;
@@ -41,8 +48,13 @@ public:
                         std::vector<float>* result_distances, tenann::IdFilter* id_filter, float range,
                         int order) override;
 
+    // tenann HNSW/IVF accept an IdFilter (faiss IDSelector), so filtered search is efficient.
+    bool supports_efficient_filtered_search() const override { return true; }
+
 private:
     std::shared_ptr<tenann::AnnSearcher> _searcher;
+    // Pins the cache entry for the reader's lifetime.
+    tenann::IndexCacheHandle _cache_handle;
 };
 
 } // namespace starrocks

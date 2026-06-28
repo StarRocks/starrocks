@@ -17,17 +17,21 @@
 #include <bthread/mutex.h>
 
 #include <map>
+#include <memory>
+#include <ostream>
+#include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "base/auth/auth_info.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/sync_point.h"
+#include "cache/dynamic_cache.h"
+#include "common/statusor.h"
 #include "common/thread/threadpool.h"
-#include "common/utils.h"
-#include "util/dynamic_cache.h"
-#include "util/thrift_rpc_helper.h"
+#include "gen_cpp/Status_types.h"
 
 namespace starrocks {
 

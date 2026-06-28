@@ -1,16 +1,8 @@
 #pragma once
 
-#include <cstddef>
 #include <memory>
 
 namespace starrocks {
-namespace agg {
-#ifdef NDEBUG
-constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
-#else
-constexpr size_t two_level_memory_threshold = 64;
-#endif
-} // namespace agg
 
 class Aggregator;
 class SortedStreamingAggregator;

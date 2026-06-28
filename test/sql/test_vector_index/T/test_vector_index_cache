@@ -1,0 +1,97 @@
+-- name: test_vector_index_cache @sequential
+
+-- Exercise the SR-owned VectorIndexCache integration:
+--   * vector_query_cache_capacity config callback (config_update_hooks.cpp happy path)
+--   * BE startup VectorIndexCache construction (storage_env.cpp)
+--   * Cold-load via TenANNReader::init_searcher loader (warm-cache probe in
+--     VectorIndexReaderFactory + GetOrCreate + AttachIndexRef)
+--   * Warm-cache repeat search (Lookup short-circuit in factory)
+-- These paths are end-to-end-only; unit tests can drive isolated pieces but
+-- can't reach init_searcher's happy path without spinning up the BE.
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+
+-- ---- vector_query_cache_capacity runtime config (config_update_hooks callback) ----
+
+-- Default. parse_mem_spec accepts a bare percentage and resolves it against
+-- the BE process_mem_limit at /api/update_config time.
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
+
+-- Absolute byte count.
+update information_schema.be_configs set value = "4294967296" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
+
+-- Unit-suffixed value (parse_mem_spec accepts K/M/G/T).
+update information_schema.be_configs set value = "512M" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
+
+update information_schema.be_configs set value = "4G" where name = "vector_query_cache_capacity";
+select distinct value from information_schema.be_configs where name = "vector_query_cache_capacity";
+
+-- Restore default before exercising search-time cache lifecycle.
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
+
+-- ---- HNSW search drives the cache (loader cold-load, AttachIndexRef warm) ----
+
+CREATE TABLE t_vi_cache (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "hnsw",
+        "dim" = "5",
+        "metric_type" = "l2_distance",
+        "is_vector_normed" = "false",
+        "M" = "16",
+        "efconstruction" = "40")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_vi_cache values
+    (1, [1,2,3,4,5]),
+    (2, [4,5,6,7,8]),
+    (3, [2,3,4,5,6]),
+    (4, [3,4,5,6,7]),
+    (5, [5,6,7,8,9]);
+
+-- First search: cold cache. Drives TenANNReader::init_searcher through:
+--   VectorIndexReaderFactory::create_from_file (Lookup probe -> miss)
+--   -> path_exist + new_random_access_file (factory's cold-path metadata)
+--   -> new TenANNReader -> init_searcher
+--      -> cache->GetOrCreate(index_path, loader, &handle)
+--         -> loader runs: VectorIndexFileReader::open + ReadIndexFile
+--      -> AttachIndexRef(handle.index_ref())
+select count(*) from (
+    select id from t_vi_cache
+    order by approx_l2_distance([1,2,3,4,5], v1) limit 3
+) t;
+
+-- Second search: warm cache. Same code path but:
+--   VectorIndexReaderFactory::create_from_file (Lookup probe -> HIT)
+--   -> skip OSS/local path_exist + new_random_access_file (warm shortcut)
+--   -> new TenANNReader -> init_searcher
+--      -> cache->GetOrCreate (warm hit, loader NOT invoked)
+--      -> AttachIndexRef
+select count(*) from (
+    select id from t_vi_cache
+    order by approx_l2_distance([2,3,4,5,6], v1) limit 3
+) t;
+
+-- Shrink cache mid-flight: SetCapacity drops to a small value. The pinned
+-- handle from any inflight reader survives via DynamicCache's deferred
+-- release, even when the entry is evicted from the LRU map immediately.
+update information_schema.be_configs set value = "1M" where name = "vector_query_cache_capacity";
+select count(*) from (
+    select id from t_vi_cache
+    order by approx_l2_distance([5,5,5,5,5], v1) limit 3
+) t;
+
+-- Restore + cleanup.
+update information_schema.be_configs set value = "20%" where name = "vector_query_cache_capacity";
+DROP TABLE t_vi_cache;
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

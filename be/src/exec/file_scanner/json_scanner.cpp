@@ -16,16 +16,20 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <utility>
 
+#include "base/format.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -36,12 +40,15 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
+
+// Constant slices for the binary __op column (0 = upsert, 1 = delete).
+// Avoids per-row std::string allocation in CDC load paths.
+static const Slice kCdcOpSlices[] = {Slice("0"), Slice("1")};
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -285,8 +292,8 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
           _type_descs(std::move(type_descs)),
-
-          _range_desc(range_desc) {
+          _range_desc(range_desc),
+          _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         const auto& desc = _slot_descs[i];
@@ -389,7 +396,9 @@ Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
 
         Status st;
         // Eliminates virtual function call.
-        if (!_scanner->_root_paths.empty()) {
+        if (_envelope_type == TEnvelopeType::DEBEZIUM) {
+            st = _read_rows<DebeziumJsonDocumentStreamParser>(chunk, rows_to_read, &rows_read);
+        } else if (!_scanner->_root_paths.empty()) {
             // With json root set, expand the outer array automatically.
             // The strip_outer_array determines whether to expand the sub-array of json root.
             if (_scanner->_strip_outer_array) {
@@ -432,6 +441,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
     auto parser = down_cast<ParserType*>(_parser.get());
 
     while (*rows_read < rows_to_read) {
+        // Reset to sentinel so any stale read of _cdc_op is caught by DCHECK.
+        _cdc_op = 0xFF;
         auto st = parser->get_current(&row);
         if (!st.ok()) {
             if (st.is_end_of_file()) {
@@ -442,6 +453,11 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             return st;
         }
         size_t chunk_row_num = chunk->num_rows();
+        // For Debezium CDC format, capture the op type before constructing the row,
+        // so that _construct_row can use it for the __op column.
+        if (UNLIKELY(_envelope_type == TEnvelopeType::DEBEZIUM)) {
+            _cdc_op = down_cast<DebeziumJsonDocumentStreamParser*>(_parser.get())->current_op();
+        }
         st = _construct_row(&row, chunk);
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
@@ -455,8 +471,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             if (_state->enable_log_rejected_record()) {
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
-                RuntimeStateHelper::append_rejected_record_to_file(_state, std::string(sv.data(), sv.size()),
-                                                                   st.to_string(), _file->filename());
+                LoadPathStateHelper::append_rejected_record_to_file(_state, std::string(sv.data(), sv.size()),
+                                                                    st.to_string(), _file->filename());
             }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
@@ -571,11 +587,14 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
         if (!_parsed_columns[i]) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
-                // special treatment for __op column, fill default value '0' rather than null
+                // special treatment for __op column, fill default value rather than null.
+                // For Debezium CDC format, use the op from the CDC envelope (0=upsert, 1=delete).
+                DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
+                uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                 if (column->is_binary()) {
-                    std::ignore = column->append_strings(std::vector<Slice>{Slice{"0"}});
+                    (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                 } else {
-                    column->append_datum(Datum((uint8_t)0));
+                    column->append_datum(Datum(op_val));
                 }
             } else {
                 column->append_nulls(1);
@@ -592,18 +611,20 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         if (_slot_descs[i] == nullptr) {
             continue;
         }
-        const char* column_name = _slot_descs[i]->col_name().c_str();
+        std::string_view column_name = _slot_descs[i]->col_name();
 
         // The columns in JsonReader's chunk are all in NullableColumn type;
         auto* column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_slot_descs[i]->id()));
         if (i >= jsonpath_size) {
-            if (strcmp(column_name, "__op") == 0) {
-                // special treatment for __op column, fill default value '0' rather than null
+            if (column_name.compare("__op") == 0) {
+                // special treatment for __op column, fill default value rather than null.
+                // For Debezium CDC format, use the op from the CDC envelope.
+                DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
+                uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                 if (column->is_binary()) {
-                    Slice s{"0"};
-                    column->append_strings(&s, 1);
+                    (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                 } else {
-                    column->append_datum(Datum((uint8_t)0));
+                    column->append_datum(Datum(op_val));
                 }
             } else {
                 column->append_nulls(1);
@@ -630,13 +651,15 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             if (st.ok()) {
                 RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             } else if (st.is_not_found()) {
-                if (strcmp(column_name, "__op") == 0) {
-                    // special treatment for __op column, fill default value '0' rather than null
+                if (column_name.compare("__op") == 0) {
+                    // special treatment for __op column, fill default value rather than null.
+                    // For Debezium CDC format, use the op from the CDC envelope.
+                    DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
+                    uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                     if (column->is_binary()) {
-                        Slice s{"0"};
-                        column->append_strings(&s, 1);
+                        (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                     } else {
-                        column->append_datum(Datum((uint8_t)0));
+                        column->append_datum(Datum(op_val));
                     }
                 } else {
                     column->append_nulls(1);
@@ -651,17 +674,22 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
 
 Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
     if (_scanner->_json_paths.empty()) return _construct_row_without_jsonpath(row, chunk);
-
     return _construct_row_with_jsonpath(row, chunk);
 }
 
 Status JsonReader::_read_file_stream() {
-    // TODO: Remove the down_cast, should not rely on the specific implementation.
-    auto pipe = make_shared<StreamLoadPipeReader>(down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe());
+    // TODO: Remove the dynamic_cast, should not rely on the specific implementation.
+    // Use dynamic_cast (not down_cast) and check the result: the stream is expected to be a
+    // StreamLoadPipeInputStream here, but if it has been wrapped (e.g. in a CompressedInputStream),
+    // a blind down_cast would reinterpret the wrong type and crash on the bogus pipe pointer.
+    auto* stream = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    if (stream == nullptr) {
+        return Status::InternalError("JSON stream load expects a StreamLoadPipeInputStream");
+    }
+    auto pipe = make_shared<StreamLoadPipeReader>(stream->pipe());
     if (_range_desc.compression_type != TCompressionType::NO_COMPRESSION &&
         _range_desc.compression_type != TCompressionType::UNKNOWN_COMPRESSION) {
-        pipe = std::make_shared<CompressedStreamLoadPipeReader>(
-                down_cast<StreamLoadPipeInputStream*>(_file->stream().get())->pipe(), _range_desc.compression_type);
+        pipe = std::make_shared<CompressedStreamLoadPipeReader>(stream->pipe(), _range_desc.compression_type);
     }
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
@@ -696,16 +724,20 @@ Status JsonReader::_read_file_broker() {
     ++_counter->file_read_count;
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
-    // TODO: Remove the down_cast, should not rely on the specific implementation.
-    auto* stream = down_cast<io::SeekableInputStream*>(_file->stream().get());
-    auto res = stream->get_size();
-    if (!res.ok()) {
-        return res.status();
+    // Check if the stream is SeekableInputStream
+    auto* seekable_stream = dynamic_cast<io::SeekableInputStream*>(_file->stream().get());
+
+    if (seekable_stream != nullptr) {
+        return _read_seekable_stream(seekable_stream);
+    } else {
+        return _read_non_seekable_stream();
     }
-    auto sz = res.value();
-    if (sz == 0) {
-        return Status::EndOfFile("EOF of reading file");
-    }
+}
+
+Status JsonReader::_read_seekable_stream(io::SeekableInputStream* seekable_stream) {
+    ASSIGN_OR_RETURN(size_t sz, seekable_stream->get_size());
+
+    RETURN_IF(sz == 0, Status::EndOfFile("EOF of reading file"));
 
     if (sz >= _scanner->_params.json_file_size_limit) {
         return Status::MemoryLimitExceeded(
@@ -736,6 +768,78 @@ Status JsonReader::_read_file_broker() {
         }
         _state->update_num_bytes_scan_from_source(_file_broker_buffer_size);
     }
+    _payload = _file_broker_buffer.get();
+    _payload_size = _file_broker_buffer_size;
+    _payload_capacity = _file_broker_buffer_capacity;
+
+    return Status::OK();
+}
+
+Status JsonReader::_read_non_seekable_stream() {
+    // Handle non-seekable streams by reading data streamingly
+    // Initialize buffer for streaming read
+    const size_t initial_buffer_size = 1024 * 1024; // 1MB initial buffer
+    const size_t max_buffer_size = _scanner->_params.json_file_size_limit;
+
+    if (_file_broker_buffer_size > 0) {
+        return Status::EndOfFile("EOF of reading file");
+    }
+
+    if (_file_broker_buffer == nullptr || _file_broker_buffer_capacity < initial_buffer_size) {
+        _file_broker_buffer.reset(new char[initial_buffer_size]);
+        _file_broker_buffer_capacity = initial_buffer_size;
+        _file_broker_buffer_size = 0;
+    }
+
+    size_t total_read = 0;
+    size_t buffer_offset = 0;
+
+    // Read data streamingly while checking size limits
+    while (!_state->is_cancelled()) {
+        // Check if we've exceeded the size limit
+        if (total_read >= max_buffer_size) {
+            return Status::MemoryLimitExceeded(fmt::format(
+                    "The stream size {} exceeds the limit {}, adjust the FE configuration json_file_size_limit "
+                    "if you are sure you want to perform the operation",
+                    total_read, max_buffer_size));
+        }
+
+        // Ensure we have enough space in the buffer
+        if (buffer_offset + 1024 > _file_broker_buffer_capacity) {
+            size_t new_capacity = std::min(_file_broker_buffer_capacity * 2, max_buffer_size);
+            if (new_capacity <= _file_broker_buffer_capacity) {
+                new_capacity = max_buffer_size;
+            }
+
+            auto new_buffer = std::make_unique<char[]>(new_capacity);
+            std::memcpy(new_buffer.get(), _file_broker_buffer.get(), buffer_offset);
+            std::swap(new_buffer, _file_broker_buffer);
+            _file_broker_buffer_capacity = new_capacity;
+        }
+
+        // Read a chunk of data
+        ASSIGN_OR_RETURN(int64_t bytes_read, _file->read(_file_broker_buffer.get() + buffer_offset,
+                                                         _file_broker_buffer_capacity - buffer_offset));
+        if (bytes_read == 0) {
+            // EOF reached
+            break;
+        }
+
+        buffer_offset += bytes_read;
+        total_read += bytes_read;
+        _file_broker_buffer_size = buffer_offset;
+        _state->update_num_bytes_scan_from_source(_file_broker_buffer_size);
+    }
+
+    // Add SIMDJSON padding if needed
+    if (_file_broker_buffer_capacity < _file_broker_buffer_size + simdjson::SIMDJSON_PADDING) {
+        auto new_capacity = _file_broker_buffer_size + simdjson::SIMDJSON_PADDING;
+        auto new_buffer = std::make_unique<char[]>(new_capacity);
+        std::memcpy(new_buffer.get(), _file_broker_buffer.get(), _file_broker_buffer_size);
+        std::swap(new_buffer, _file_broker_buffer);
+        _file_broker_buffer_capacity = new_capacity;
+    }
+
     _payload = _file_broker_buffer.get();
     _payload_size = _file_broker_buffer_size;
     _payload_capacity = _file_broker_buffer_capacity;
@@ -780,7 +884,11 @@ Status JsonReader::_read_and_parse_json() {
 
     RETURN_IF_ERROR(_check_ndjson());
 
-    if (!_scanner->_root_paths.empty()) {
+    if (_envelope_type == TEnvelopeType::DEBEZIUM) {
+        // Debezium CDC format: each message is a JSON document with envelope structure.
+        // The parser handles extracting payload.after/before and op field internally.
+        _parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&_simdjson_parser);
+    } else if (!_scanner->_root_paths.empty()) {
         // With json root set, expand the outer array automatically.
         // The strip_outer_array determines whether to expand the sub-array of json root.
         if (_scanner->_strip_outer_array) {
@@ -813,16 +921,16 @@ Status JsonReader::_read_and_parse_json() {
 
 // _construct_column constructs column based on no value.
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
-                                     const std::string& col_name) {
+                                     std::string_view col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
 }
 
 void JsonReader::_append_error_msg(const std::string& row, const std::string& error_msg) {
     if (_file_stream_buffer == nullptr || _file_stream_buffer->meta()->type() == ByteBufferMetaType::NONE) {
-        RuntimeStateHelper::append_error_msg_to_file(_state, row, error_msg);
+        LoadPathStateHelper::append_error_msg_to_file(_state, row, error_msg);
     } else {
         std::string row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
-        RuntimeStateHelper::append_error_msg_to_file(_state, row_with_meta, error_msg);
+        LoadPathStateHelper::append_error_msg_to_file(_state, row_with_meta, error_msg);
     }
 }
 

@@ -254,21 +254,37 @@ SELECT '--- Full Variant Comparison ---' as label;
 -- result:
 --- Full Variant Comparison ---
 -- !result
-(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label, data FROM test_shredding_variant)
+(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label,
+        get_variant_int(data, '$.age') as age,
+        get_variant_string(data, '$.city') as city,
+        cast(variant_query(data, '$.score') as string) as score,
+        get_variant_double(data, '$.profile.salary') as salary,
+        get_variant_string(data, '$.profile.department') as dept,
+        get_variant_string(data, '$.name') as name,
+        get_variant_string(data, '$.email') as email
+ FROM test_shredding_variant)
 UNION ALL
-(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label, data FROM test_noshredding_variant)
+(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label,
+        get_variant_int(data, '$.age') as age,
+        get_variant_string(data, '$.city') as city,
+        cast(variant_query(data, '$.score') as string) as score,
+        get_variant_double(data, '$.profile.salary') as salary,
+        get_variant_string(data, '$.profile.department') as dept,
+        get_variant_string(data, '$.name') as name,
+        get_variant_string(data, '$.email') as email
+ FROM test_noshredding_variant)
 ORDER BY id, label;
 -- result:
-1000	noshred	{"age":20,"city":"city_0","email":"user0@example.com","events":[{"count":1,"detail":"detail_view_0","type":"view"},{"count":2,"detail":"detail_click_0","type":"click"}],"groups":[{"name":"group_0","note":"note_0_0","scores":[10,20,30]},{"name":"group_1","note":"note_0_1","scores":[40,50,60]}],"id":1000,"name":"name_0","numbers":[1,2,3],"profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
-1000	shredded	{"age":20,"city":"city_0","email":"user0@example.com","events":[{"count":1,"detail":"detail_view_0","type":"view"},{"count":2,"detail":"detail_click_0","type":"click"}],"groups":[{"name":"group_0","note":"note_0_0","scores":[10,20,30]},{"name":"group_1","note":"note_0_1","scores":[40,50,60]}],"id":1000,"name":"name_0","numbers":[1,2,3],"profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
-1001	noshred	{"age":21,"city":"city_1","email":"user1@example.com","events":[{"count":2,"detail":"detail_view_1","type":"view"},{"count":4,"detail":"detail_click_1","type":"click"}],"groups":[{"name":"group_0","note":"note_1_0","scores":[11,21,31]},{"name":"group_1","note":"note_1_1","scores":[41,51,61]}],"id":1001,"name":"name_1","numbers":[2,3,4],"profile":{"department":"dept_1","metrics":{"ratio":0.15000000000000002,"views":110},"rank":"L2","salary":51000.0},"score":"S81","status":"inactive"}
-1001	shredded	{"age":21,"city":"city_1","email":"user1@example.com","events":[{"count":2,"detail":"detail_view_1","type":"view"},{"count":4,"detail":"detail_click_1","type":"click"}],"groups":[{"name":"group_0","note":"note_1_0","scores":[11,21,31]},{"name":"group_1","note":"note_1_1","scores":[41,51,61]}],"id":1001,"name":"name_1","numbers":[2,3,4],"profile":{"department":"dept_1","metrics":{"ratio":0.15000000000000002,"views":110},"rank":"L2","salary":51000.0},"score":"S81","status":"inactive"}
-1002	noshred	{"age":22,"city":"city_2","email":"user2@example.com","events":[{"count":3,"detail":"detail_view_2","type":"view"},{"count":6,"detail":"detail_click_2","type":"click"}],"groups":[{"name":"group_0","note":"note_2_0","scores":[12,22,32]},{"name":"group_1","note":"note_2_1","scores":[42,52,62]}],"id":1002,"name":"name_2","numbers":[3,4,5],"profile":{"department":"dept_2","metrics":{"ratio":0.20000000000000001,"views":120},"rank":3,"salary":52000.0},"score":82,"status":"active"}
-1002	shredded	{"age":22,"city":"city_2","email":"user2@example.com","events":[{"count":3,"detail":"detail_view_2","type":"view"},{"count":6,"detail":"detail_click_2","type":"click"}],"groups":[{"name":"group_0","note":"note_2_0","scores":[12,22,32]},{"name":"group_1","note":"note_2_1","scores":[42,52,62]}],"id":1002,"name":"name_2","numbers":[3,4,5],"profile":{"department":"dept_2","metrics":{"ratio":0.20000000000000001,"views":120},"rank":3,"salary":52000.0},"score":82,"status":"active"}
-1003	noshred	{"age":23,"city":"city_3","email":"user3@example.com","events":[{"count":4,"detail":"detail_view_3","type":"view"},{"count":8,"detail":"detail_click_3","type":"click"}],"groups":[{"name":"group_0","note":"note_3_0","scores":[13,23,33]},{"name":"group_1","note":"note_3_1","scores":[43,53,63]}],"id":1003,"name":"name_3","numbers":[4,5,6],"profile":{"department":"dept_3","metrics":{"ratio":0.25,"views":130},"rank":"L4","salary":53000.0},"score":"S83","status":"inactive"}
-1003	shredded	{"age":23,"city":"city_3","email":"user3@example.com","events":[{"count":4,"detail":"detail_view_3","type":"view"},{"count":8,"detail":"detail_click_3","type":"click"}],"groups":[{"name":"group_0","note":"note_3_0","scores":[13,23,33]},{"name":"group_1","note":"note_3_1","scores":[43,53,63]}],"id":1003,"name":"name_3","numbers":[4,5,6],"profile":{"department":"dept_3","metrics":{"ratio":0.25,"views":130},"rank":"L4","salary":53000.0},"score":"S83","status":"inactive"}
-1004	noshred	{"age":24,"city":"city_4","email":"user4@example.com","events":[{"count":5,"detail":"detail_view_4","type":"view"},{"count":10,"detail":"detail_click_4","type":"click"}],"groups":[{"name":"group_0","note":"note_4_0","scores":[14,24,34]},{"name":"group_1","note":"note_4_1","scores":[44,54,64]}],"id":1004,"name":"name_4","numbers":[5,6,7],"profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
-1004	shredded	{"age":24,"city":"city_4","email":"user4@example.com","events":[{"count":5,"detail":"detail_view_4","type":"view"},{"count":10,"detail":"detail_click_4","type":"click"}],"groups":[{"name":"group_0","note":"note_4_0","scores":[14,24,34]},{"name":"group_1","note":"note_4_1","scores":[44,54,64]}],"id":1004,"name":"name_4","numbers":[5,6,7],"profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
+1000	noshred	20	city_0	80	50000.0	dept_0	name_0	user0@example.com
+1000	shredded	20	city_0	80	50000.0	dept_0	name_0	user0@example.com
+1001	noshred	21	city_1	S81	51000.0	dept_1	name_1	user1@example.com
+1001	shredded	21	city_1	S81	51000.0	dept_1	name_1	user1@example.com
+1002	noshred	22	city_2	82	52000.0	dept_2	name_2	user2@example.com
+1002	shredded	22	city_2	82	52000.0	dept_2	name_2	user2@example.com
+1003	noshred	23	city_3	S83	53000.0	dept_3	name_3	user3@example.com
+1003	shredded	23	city_3	S83	53000.0	dept_3	name_3	user3@example.com
+1004	noshred	24	city_4	84	54000.0	dept_4	name_4	user4@example.com
+1004	shredded	24	city_4	84	54000.0	dept_4	name_4	user4@example.com
 -- !result
 SELECT id, age, city,
        get_variant_int(data, '$.id') as v_id,

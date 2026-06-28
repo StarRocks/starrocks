@@ -23,9 +23,9 @@
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitshuffle_page.h"
-#include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/plain_page.h"
 #include "storage/types.h"
@@ -125,6 +125,7 @@ private:
 template <LogicalType Type>
 class DictPageDecoder final : public PageDecoder {
     using ValueType = StorageCppType<Type>;
+    static_assert(!lt_is_string_or_binary<Type>, "DictPageDecoder does not support string or binary types");
 
 public:
     DictPageDecoder(Slice data);

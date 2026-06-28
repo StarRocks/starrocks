@@ -50,6 +50,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
@@ -62,7 +63,6 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
@@ -88,6 +88,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -139,6 +140,29 @@ public class AlterJobMgr {
         schemaChangeHandler.setStop();
         materializedViewHandler.setStop();
         clusterHandler.setStop();
+    }
+
+    /**
+     * Coordinated stop for leader demotion: drain each handler so onStopped() runs and the
+     * worker threads exit cleanly. Wraps each handler call in its own try-catch so a
+     * misbehaving handler cannot abort the remaining handlers' drain.
+     */
+    public void stopGracefully(long timeoutMs) {
+        try {
+            schemaChangeHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop schemaChangeHandler failed", t);
+        }
+        try {
+            materializedViewHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop materializedViewHandler failed", t);
+        }
+        try {
+            clusterHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop clusterHandler failed", t);
+        }
     }
 
     public void processDropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
@@ -247,15 +271,20 @@ public class AlterJobMgr {
             }
 
             // Skip checks to maintain eventual consistency when replay
-            List<BaseTableInfo> baseTableInfos =
-                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
+            Map<TableName, Table> tableNameTableMap =
+                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
+            Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
+            if (!isReplay) {
+                MaterializedViewAnalyzer.checkBaseTables(
+                        tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
+            }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]",
                         materializedView.getName());
             }
-            return new AlterMaterializedViewStatusContext(status, reason, baseTableInfos, task);
+            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
@@ -266,7 +295,7 @@ public class AlterJobMgr {
                             "mv status:" + materializedView.getName());
                 }
                 try {
-                    taskRunManager.killTaskRun(currentTask.getId(), true);
+                    taskRunManager.killTaskRun(currentTask.getId(), true, "killed by ALTER MATERIALIZED VIEW");
                 } finally {
                     taskRunManager.taskRunUnlock();
                 }
@@ -324,7 +353,11 @@ public class AlterJobMgr {
         List<Column> newColumns = createStmt.getMvColumnItems().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        List<Column> existedColumns = materializedView.getOrderedOutputColumns(true).stream()
+        // Use baseSchemaWithoutGeneratedColumn (not getOrderedOutputColumns) because this
+        // compares the MV's full schema against createStmt.getMvColumnItems(). The latter
+        // includes storage-filled columns (e.g. AUTO_INCREMENT __ROW_ID__) which are not
+        // part of query output but are in the MV schema.
+        List<Column> existedColumns = materializedView.getBaseSchemaWithoutGeneratedColumn().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
         if (newColumns.size() != existedColumns.size()) {
@@ -376,6 +409,25 @@ public class AlterJobMgr {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Whether every unfinished alter job on the given table tolerates concurrent partition
+     * creation (see {@link AlterJobV2#allowConcurrentPartitionCreation()}). Returns false when
+     * there is no unfinished job (an anomaly when the table is in a non-NORMAL state, e.g. stale
+     * state after a crash), so callers fall back to the legacy exclusive behavior. The check is
+     * lock-free; the checked job set can only shrink (a new unsafe job cannot start while the
+     * table state is non-NORMAL), and the deeper serialization is the table WRITE lock plus
+     * {@code checkIfMetaChange} inside {@code addPartitions}.
+     */
+    public static boolean unfinishedAlterJobsAllowConcurrentPartitionCreation(long tableId) {
+        List<AlterJobV2> jobs = Lists.newArrayList();
+        jobs.addAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .getUnfinishedAlterJobV2ByTableId(tableId));
+        jobs.addAll(GlobalStateMgr.getCurrentState().getRollupHandler()
+                .getUnfinishedAlterJobV2ByTableId(tableId));
+        return !jobs.isEmpty()
+                && jobs.stream().allMatch(AlterJobV2::allowConcurrentPartitionCreation);
     }
 
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
@@ -433,8 +485,13 @@ public class AlterJobMgr {
         MaterializedView oldMaterializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getId(), materializedViewId);
         if (oldMaterializedView != null) {
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
-                    Lists.newArrayList(oldMaterializedView.getId()), LockType.WRITE)) {
+            // Rename drops and re-registers the MV in the db's nameToTable/idToTable maps (DB-level
+            // state), so it needs the DB WRITE lock, not an intensive table lock (IX is compatible with
+            // IS/IX and would let a follower query thread observe the torn maps). Mirrors the live
+            // rename lock and the existing replayRenameTable.
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
                 db.dropTable(oldMaterializedView.getName());
                 oldMaterializedView.setName(newMaterializedViewName);
                 db.registerTableUnlocked(oldMaterializedView);
@@ -444,6 +501,8 @@ public class AlterJobMgr {
             } catch (Throwable e) {
                 oldMaterializedView.setInactiveAndReason("replay rename failed: " + e.getMessage());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }
@@ -489,6 +548,7 @@ public class AlterJobMgr {
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+            newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
@@ -511,15 +571,26 @@ public class AlterJobMgr {
     }
 
     public void replaySwapTable(SwapTableOperationLog log) {
-        swapTableInternal(log);
         long dbId = log.getDbId();
         long origTblId = log.getOrigTblId();
         long newTblId = log.getNewTblId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        OlapTable origTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
-        OlapTable newTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
-        LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
-                newTbl.getName());
+        // swapTableInternal drops and re-registers both tables in the db's nameToTable/idToTable maps
+        // (DB-level state), racing follower query threads, so hold the DB WRITE lock for the whole
+        // sequence (the live swap path also runs under DB WRITE).
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            swapTableInternal(log);
+            OlapTable origTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), origTblId);
+            OlapTable newTbl =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), newTblId);
+            LOG.debug("finish replay swap table {}-{} with table {}-{}", origTblId, origTable.getName(), newTblId,
+                    newTbl.getName());
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
     }
 
     /**

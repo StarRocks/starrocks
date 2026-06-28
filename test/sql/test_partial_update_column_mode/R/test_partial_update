@@ -275,3 +275,242 @@ select * from site_access;
 drop database test_column_partial_update_with_condition_update;
 -- result:
 -- !result
+
+
+
+
+-- name: test_lake_column_partial_update_with_condition_update @sequential @cloud
+create database test_lake_column_partial_update_with_condition_update;
+-- result:
+-- !result
+use test_lake_column_partial_update_with_condition_update;
+-- result:
+-- !result
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tab1 values (1, 10, 100, 1000), (2, 20, 200, 2000);
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	1000
+2	20	200	2000
+-- !result
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_ok -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	1000
+2	30	888	2000
+-- !result
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_bad -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:v2 -H columns:k,ver,v1 ${url}/api/test_lake_column_partial_update_with_condition_update/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Merge condition column v2 does not exist. If you are doing partial update with condition update, please check condition column is in the given update columns. Otherwise please check condition column is in table tab1"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	1000
+2	30	888	2000
+-- !result
+drop database test_lake_column_partial_update_with_condition_update;
+-- result:
+-- !result
+
+
+
+
+
+-- name: test_lake_column_pcu_condition_after_drop_column @sequential @cloud
+create database test_lake_column_pcu_condition_after_drop_column;
+-- result:
+-- !result
+use test_lake_column_pcu_condition_after_drop_column;
+-- result:
+-- !result
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL,
+  v3 INT NULL,
+  ver INT NOT NULL,
+  v4 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tab1 values (1, 1, 1, 1, 10, 1), (2, 2, 2, 2, 20, 2);
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	1	1	1	10	1
+2	2	2	2	20	2
+-- !result
+alter table tab1 drop column v2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1 order by k;
+-- result:
+1	1	1	10	1
+2	2	2	20	2
+-- !result
+shell: curl --location-trusted -u root: -d "1,5,777|2,30,888" -XPUT -H label:lake_pcu_cond_drop -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v3 ${url}/api/test_lake_column_pcu_condition_after_drop_column/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	1	1	10	1
+2	2	888	30	2
+-- !result
+drop database test_lake_column_pcu_condition_after_drop_column;
+-- result:
+-- !result
+
+
+
+
+
+
+
+-- name: test_lake_column_pcu_condition_after_add_column @sequential @cloud
+create database test_lake_column_pcu_condition_after_add_column;
+-- result:
+-- !result
+use test_lake_column_pcu_condition_after_add_column;
+-- result:
+-- !result
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tab1 values (1, 10, 100), (2, 20, 200);
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100
+2	20	200
+-- !result
+alter table tab1 add column v2 INT NULL DEFAULT "999";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	999
+2	20	200	999
+-- !result
+shell: curl --location-trusted -u root: -d "1,5,777|2,30,888|3,50,555" -XPUT -H label:lake_pcu_cond_add -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_after_add_column/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	999
+2	30	888	999
+3	50	555	999
+-- !result
+drop database test_lake_column_pcu_condition_after_add_column;
+-- result:
+-- !result
+
+
+-- name: test_lake_column_pcu_condition_with_order_by @sequential @cloud
+create database test_lake_column_pcu_condition_with_order_by;
+-- result:
+-- !result
+use test_lake_column_pcu_condition_with_order_by;
+-- result:
+-- !result
+CREATE TABLE tab1 (
+  k INT NOT NULL,
+  ver INT NOT NULL,
+  v1 INT NULL,
+  v2 INT NULL
+) ENGINE=OLAP
+PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+ORDER BY (ver)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into tab1 values (1, 10, 100, 1000), (2, 20, 200, 2000);
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	1000
+2	20	200	2000
+-- !result
+shell: curl --location-trusted -u root: -d "1,5,999|2,30,888" -XPUT -H label:lake_pcu_cond_orderby -H column_separator:, -H row_delimiter:| -H partial_update:true -H partial_update_mode:column -H merge_condition:ver -H columns:k,ver,v1 ${url}/api/test_lake_column_pcu_condition_with_order_by/tab1/_stream_load 2>/dev/null | grep -oE '"Status": *"Fail"|partial update on table with sort key must provide all sort key columns' | sort -u
+-- result:
+0
+partial update on table with sort key must provide all sort key columns
+"Status": "Fail"
+-- !result
+sync;
+-- result:
+-- !result
+select * from tab1 order by k;
+-- result:
+1	10	100	1000
+2	20	200	2000
+-- !result
+drop database test_lake_column_pcu_condition_with_order_by;
+-- result:
+-- !result

@@ -358,8 +358,13 @@ public class CostModel {
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
                                                                     Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
+            final var enableForceGroupBySkewEliminateWhenSkewed = ConnectContext.get().getSessionVariable()
+                    .isEnableForceGroupBySkewEliminateWhenSkewed();
 
             if (skewInfo.getStage() != 1) {
+                if (enableForceGroupBySkewEliminateWhenSkewed && skewInfo.isGroupBySkewDetected()) {
+                    return 0.0;
+                }
                 return skewInfo.getPenaltyFactor();
             }
 
@@ -377,6 +382,10 @@ public class CostModel {
             // Basic skew detection on the group by columns. We are weighting this heavily if we know
             // that group by columns are skewed since this optimization has significant speed up then.
             if (isGroupBySkewed(groupByStatistics, inputStatistics)) {
+                if (enableForceGroupBySkewEliminateWhenSkewed) {
+                    skewInfo.setGroupBySkewDetected(true);
+                    return 0.0;
+                }
                 return 0.2;
             }
 
@@ -439,6 +448,14 @@ public class CostModel {
                 case ROUND_ROBIN:
                     result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
                     break;
+                case RANGE_LOCAL:
+                    // RangeDistributionSpec is scan-local only and must never
+                    // reach a PhysicalDistributionOperator (enforced by
+                    // DistributionProperty.appendEnforcers). Reaching the cost
+                    // model for RANGE_LOCAL is a bug.
+                    throw new StarRocksPlannerException(
+                            "RangeDistributionSpec cannot be the required property of an exchange",
+                            ErrorType.UNSUPPORTED);
                 default:
                     throw new StarRocksPlannerException(
                             "not support " + distributionSpec.getType() + "distribution type",
@@ -584,10 +601,15 @@ public class CostModel {
         // is relatively slow when exchange a large amount of data.
         private double setExchangeCostFactor(Operator childOp) {
             double factor = 1.0;
+            final var enableForceGroupBySkewEliminateWhenSkewed = ConnectContext.get().getSessionVariable()
+                    .isEnableForceGroupBySkewEliminateWhenSkewed();
             if (childOp instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
+                if (skewInfo != null && enableForceGroupBySkewEliminateWhenSkewed
+                        && skewInfo.isGroupBySkewDetected() && skewInfo.getStage() < 4) {
+                    factor = 0.0;
+                } else if (skewInfo != null && skewInfo.getStage() == 3) {
                     factor = skewInfo.getPenaltyFactor();
                 } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
                     factor = 0.1;
@@ -595,7 +617,10 @@ public class CostModel {
             } else if (childOp instanceof PhysicalHashAggregateOperator) {
                 PhysicalHashAggregateOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
+                if (skewInfo != null && enableForceGroupBySkewEliminateWhenSkewed
+                        && skewInfo.isGroupBySkewDetected() && skewInfo.getStage() < 4) {
+                    factor = 0.0;
+                } else if (skewInfo != null && skewInfo.getStage() == 3) {
                     factor = skewInfo.getPenaltyFactor();
                 } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
                     factor = 0.1;

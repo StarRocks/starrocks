@@ -17,10 +17,11 @@
 #include <boost/algorithm/string.hpp>
 #include <mutex>
 
+#include "compute_env/workgroup/work_group.h"
 #include "exec/schema_scanner.h"
-#include "exec/workgroup/work_group.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

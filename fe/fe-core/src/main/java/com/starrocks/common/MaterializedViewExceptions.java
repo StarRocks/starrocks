@@ -95,12 +95,20 @@ public class MaterializedViewExceptions {
         return "base table schema changed for columns: " + StringUtils.join(columns, ",");
     }
 
+    public static String inactiveReasonForSchemaCheckFailed(String mvName, String detail) {
+        return "base table schema check failed for " + mvName + ": " + detail;
+    }
+
     public static SemanticException reportBaseTableNotExists(String tableName) {
         return new SemanticException(inactiveReasonForBaseTableNotExists(tableName));
     }
 
     public static String inactiveReasonForConsecutiveFailures(String mvName) {
         return INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES + mvName;
+    }
+
+    public static String unsupportedReasonForLegacyIncrementalMaintenance() {
+        return "Legacy incremental materialized view maintenance is no longer supported";
     }
 
     public static String unSupportedReasonForMVFSE(String reason) {

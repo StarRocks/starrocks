@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/json_flattener.h"
+#include "column/flat_json/json_flattener.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest-param-test.h>
@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
 #include "column/column.h"
@@ -34,6 +35,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/bloom_filter.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/object_pool.h"
@@ -44,10 +46,9 @@
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/strip.h"
+#include "storage/json_path_deriver.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/compression/block_compression.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 

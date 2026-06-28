@@ -14,11 +14,20 @@
 
 #pragma once
 
+#include <cstdint>
+
+#include "common/config_exec_flow_fwd.h"
+#include "compute_env/spill/spiller.h"
+#include "exec/pipeline/primitives/block_reason.h"
+#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
-#include "exec/spill/spiller.h"
+#include "exec/pipeline/spill_process_channel.h"
 
 namespace starrocks::pipeline {
-class SpillablePartitionSortSinkOperator final : public PartitionSortSinkOperator {
+class SpillablePartitionSortSinkOperator final : public PartitionSortSinkOperator,
+                                                 public SpillableFlatSinkMixin<SpillablePartitionSortSinkOperator> {
+    friend class SpillableFlatSinkMixin<SpillablePartitionSortSinkOperator>;
+
 public:
     template <class... Args>
     SpillablePartitionSortSinkOperator(Args&&... args)
@@ -31,7 +40,14 @@ public:
 
     void close(RuntimeState* state) override;
 
-    bool need_input() const override { return !is_finished() && !_chunks_sorter->is_full(); }
+    // The sink sleeps OUTPUT_FULL on need_input(): a full writer (spiller is_full(), woken by the
+    // flush-completion defer on the sink list) or the spill-process channel still holding a task (woken by the
+    // channel handshake). The two reasons are read separately -- ChunksSorter::is_full() collapses them into a
+    // single bool, which the SpillableFlatSinkMixin predicate keeps distinct for block_reason().
+    bool need_input() const override { return spill_sink_need_input(); }
+    BlockReason block_reason() const override { return spill_sink_block_reason(); }
+    static constexpr uint32_t kCoveredWakeups = kSpillSinkCoveredWakeups;
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
 
     bool is_finished() const override { return _is_finished || _sort_context->is_finished(); }
 
@@ -53,8 +69,19 @@ public:
     Status set_finished(RuntimeState* state) override;
 
 private:
+    // Raw spiller/spill-channel pair that the SpillableFlatSinkMixin reads to compute
+    // need_input()/block_reason(). These return the underlying spiller and channel directly
+    // (not the collapsed ChunksSorter::is_full(), which ORs spiller-full with channel-has-task into one bool)
+    // so the mixin reads WAIT_FLUSH (spiller->is_full()) and WAIT_CHANNEL (channel->has_task()) as distinct
+    // named reasons.
+    const std::shared_ptr<spill::Spiller>& _spiller() const { return _chunks_sorter->spiller(); }
+    SpillProcessChannelPtr _spill_channel() const { return _chunks_sorter->spill_channel(); }
+
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
+
+static_assert(SpillablePartitionSortSinkOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_FLUSH));
+static_assert(SpillablePartitionSortSinkOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_CHANNEL));
 
 class SpillablePartitionSortSinkOperatorFactory final : public PartitionSortSinkOperatorFactory {
 public:
@@ -69,7 +96,10 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    bool support_event_scheduler() const override { return false; }
+    // Event-scheduler opt-in, gated on enable_spill_sort_events (default false). This is the only false edge
+    // among the sort fragment's factories (the source and spill-process factories already report true), so
+    // the kill-switch demotes the whole sort fragment back to the poller without a rebuild.
+    bool support_event_scheduler() const override { return config::enable_spill_sort_events; }
 
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;

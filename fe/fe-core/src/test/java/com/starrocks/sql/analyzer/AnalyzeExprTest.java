@@ -407,9 +407,9 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map{NULL:NULL}");
         analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
         analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
-        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
-        analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
+        analyzeFail("select map<int,map<int,int>>{map{3:3}:2}");
+        analyzeFail("select map<int,map<int,int>>{'2s':map{3:3}}");
         analyzeFail("select map(null)");
         analyzeFail("select map(1:4)");
         analyzeFail("select map(1,3,4)");
@@ -613,9 +613,18 @@ public class AnalyzeExprTest {
 
     @Test
     public void testNgramSearch() {
+        // missing gram_num argument
         analyzeFail("select ngram_search('abc', 'a')");
+        // non-string first parameter
         analyzeFail("select ngram_search(date('2020-06-23'), \"2020\", 4);");
-        analyzeFail("select ngram_search(th,th,4) from tall;");
+        // non-string haystack column (th is datetime in tall)
+        analyzeFail("select ngram_search(th, th, 4) from tall;");
+        // non-string non-constant needle must also be rejected (type check, not constant check)
+        analyzeFail("select ngram_search(ta, th, 4) from tall;");
+        // non-constant needle is now allowed
+        analyzeSuccess("select ngram_search(ta, ta, 4) from tall;");
+        // non-constant gram_num is still rejected
+        analyzeFail("select ngram_search(ta, ta, tc) from tall;");
     }
 
 }

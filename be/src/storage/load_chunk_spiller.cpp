@@ -14,25 +14,24 @@
 
 #include "storage/load_chunk_spiller.h"
 
+#include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
-#include "exec/spill/options.h"
-#include "exec/spill/serde.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller_factory.h"
-#include "runtime/exec_env.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/serde.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/merge_iterator.h"
-#include "storage/union_iterator.h"
+#include "storage/primitive/union_iterator.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -89,12 +88,12 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
     RETURN_IF_ERROR(_block->flush());
     if (_block->is_remote()) {
         // Update remote block write metric
-        StarRocksMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
-        StarRocksMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
+        StorageMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
+        StorageMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
     } else {
         // Update local block write metric
-        StarRocksMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
-        StarRocksMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
+        StorageMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
+        StorageMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
     }
     RETURN_IF_ERROR(_block_manager->release_block(_block));
     // Save this block into the block group, which is tagged with slot_idx for ordering
@@ -157,12 +156,12 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         // 1. alloc & prepare spiller
         spill::SpilledOptions options;
         options.encode_level = 7;
-        options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
+        // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
+        // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-        spill::SpillProcessMetrics metrics(_profile,
-                                           RuntimeStateHelper::mutable_total_spill_bytes(_runtime_state.get()));
+        spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
         _spiller->set_metrics(metrics);
         // 2. prepare serde
         if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {
@@ -213,13 +212,13 @@ public:
                 COUNTER_UPDATE(metrics.block_count, 1);
                 if (_blocks[_block_idx]->is_remote()) {
                     COUNTER_UPDATE(metrics.remote_block_count, 1);
-                    StarRocksMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
-                    StarRocksMetrics::instance()->load_spill_remote_bytes_read_total.increment(
+                    StorageMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
+                    StorageMetrics::instance()->load_spill_remote_bytes_read_total.increment(
                             _blocks[_block_idx]->size());
                 } else {
                     COUNTER_UPDATE(metrics.local_block_count, 1);
-                    StarRocksMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
-                    StarRocksMetrics::instance()->load_spill_local_bytes_read_total.increment(
+                    StorageMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
+                    StorageMetrics::instance()->load_spill_local_bytes_read_total.increment(
                             _blocks[_block_idx]->size());
                 }
             }
@@ -319,7 +318,7 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
     std::vector<ChunkIteratorPtr> merge_inputs;
     auto merge_func = [&](const ChunkIteratorPtr& merge_itr) {
         total_merges++;
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(*_schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(*_schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
         while (true) {
             chunk->reset();

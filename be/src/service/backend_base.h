@@ -36,7 +36,6 @@
 
 #include <ctime>
 #include <map>
-#include <memory>
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
@@ -45,7 +44,6 @@
 namespace starrocks {
 
 class ExecEnv;
-class ThriftServer;
 class TAgentResult;
 class TAgentTaskRequest;
 class TAgentPublishRequest;
@@ -60,17 +58,17 @@ class TTransmitDataResult;
 class TExportTaskRequest;
 class TExportStatusResult;
 
+namespace orchestration {
+class OrchestrationEnv;
+}
+
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
 class BackendServiceBase : public BackendServiceIf {
 public:
-    explicit BackendServiceBase(ExecEnv* exec_env);
+    BackendServiceBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env);
 
     ~BackendServiceBase() override = default;
-
-    // NOTE: now we do not support multiple backend in one process
-    template <class Service>
-    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
     // Agent service
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override {
@@ -132,6 +130,7 @@ public:
 private:
     Status start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params);
     ExecEnv* _exec_env;
+    [[maybe_unused]] orchestration::OrchestrationEnv* _orchestration_env;
 };
 
 } // namespace starrocks

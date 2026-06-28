@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TabletInfoPB;
@@ -44,6 +45,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
@@ -176,6 +178,38 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
+
+        // Confirmed/lagged-watermark debounce, against a begin-transaction vs autovacuum race:
+        // beginTransaction() draws an id (advancing peekNextTransactionId()) BEFORE registering it in
+        // idToRunningTransactionState, so a probe landing in that gap can compute a minActiveTxnId one
+        // greater than an in-flight txn. Acting on it would let the BE delete that txn's still-needed
+        // combined log and permanently wedge publish on the partition. So we only act on a value confirmed
+        // by the PREVIOUS round (non-decreasing) and sweep txn logs with that older, confirmed value.
+        //
+        // When the current value is NOT confirmed -- first observation (also after FE restart/failover,
+        // since lastMinActiveTxnId is in-memory and resets to 0) or a regression -- we skip the ENTIRE
+        // round, not merely the txn-log delete. Skipping only the delete would still let the round advance
+        // lastSuccVacuumVersion; with lake_autovacuum_detect_vaccumed_version=true, shouldVacuum() then
+        // stops scheduling the partition once lastSuccVacuumVersion >= minRetainVersion, so for a partition
+        // that goes cold the confirming follow-up round (and its sweep) might never run, leaking txn logs.
+        // A full skip leaves lastSuccVacuumVersion untouched, so the partition stays schedulable and the
+        // next round runs with a confirmed watermark; the only cost is deferring this partition's
+        // metadata/data vacuum by one (rare) cycle. lastVacuumTime is set so naptime is still respected.
+        long lastMinActiveTxnId = partition.getLastMinActiveTxnId();
+        if (lastMinActiveTxnId <= 0 || minActiveTxnId < lastMinActiveTxnId) {
+            if (minActiveTxnId < lastMinActiveTxnId) {
+                LOG.warn("minActiveTxnId regressed {} -> {} for {}.{}.{}; skipping this vacuum round "
+                                + "(possible begin/vacuum race)",
+                        lastMinActiveTxnId, minActiveTxnId, db.getFullName(), table.getName(), partition.getId());
+            }
+            partition.setLastMinActiveTxnId(minActiveTxnId);
+            partition.setLastVacuumTime(startTime);
+            return;
+        }
+        // Confirmed non-decreasing: sweep txn logs with the previous (older, lower) value.
+        final long txnLogSweepWatermark = lastMinActiveTxnId;
+        partition.setLastMinActiveTxnId(minActiveTxnId);
+
         long preExtraFileSize = 0;
         // If shared file cleanup is enabled, vacuum runs on a single aggregator node.
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
@@ -209,26 +243,81 @@ public class AutovacuumDaemon extends FrontendDaemon {
         boolean enableSharedFileCleanup = fileBundling || rangeDistribution;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
-        ComputeNode pickNode = null;
-        for (Tablet tablet : tablets) {
-            LakeTablet lakeTablet = (LakeTablet) tablet;
 
-            if (enableSharedFileCleanup) {
-                // shared cleanup runs on a single node.
-                if (pickNode == null) {
-                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
-                }
-            } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
+        // Resolve all tablet owners in a single batched RPC. The result serves both:
+        // - enableSharedFileCleanup: collect candidate aggregator nodes (prefer a node
+        //   that owns at least one tablet), then assign all tablets to the chosen one.
+        // - non-shared: assign each tablet to its first alive owner CN.
+        // This avoids N per-tablet getComputeNodeAssignedToTablet RPCs in either path.
+        Map<Long, List<Long>> shardToNodeIds = null;
+        if (!tablets.isEmpty()) {
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            List<Long> tabletIds = tablets.stream().map(Tablet::getId).collect(Collectors.toList());
+            try {
+                shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                        tabletIds, computeResource.getWorkerGroupId());
+            } catch (Exception e) {
+                LOG.warn("Failed to batch-resolve tablet owners for {} tablets, falling back",
+                        tablets.size(), e);
             }
+        }
 
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        if (enableSharedFileCleanup) {
+            // Collect candidate aggregator nodes from the batched result, then pick one.
+            Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
+            if (shardToNodeIds != null) {
+                for (List<Long> nodeIds : shardToNodeIds.values()) {
+                    if (nodeIds == null || nodeIds.isEmpty()) {
+                        continue;
+                    }
+                    ComputeNode owner = clusterInfo.getBackendOrComputeNode(nodeIds.get(0));
+                    if (owner != null) {
+                        candidateAggregatorNodes.add(owner);
+                    }
+                }
+            }
+            ComputeNode pickNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
             if (pickNode == null) {
                 return;
             }
-            TabletInfoPB tabletInfo = new TabletInfoPB();
-            tabletInfo.setTabletId(tablet.getId());
-            tabletInfo.setMinVersion(lakeTablet.getMinVersion());
-            nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            for (Tablet tablet : tablets) {
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                TabletInfoPB tabletInfo = new TabletInfoPB();
+                tabletInfo.setTabletId(tablet.getId());
+                tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+                nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            }
+        } else {
+            for (Tablet tablet : tablets) {
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                // Try batched result first: find first alive owner for this tablet.
+                ComputeNode pickNode = null;
+                List<Long> nodeIds = (shardToNodeIds != null)
+                        ? shardToNodeIds.get(lakeTablet.getId()) : null;
+                if (nodeIds != null) {
+                    for (long nodeId : nodeIds) {
+                        if (clusterInfo.checkBackendAlive(nodeId)
+                                || clusterInfo.checkComputeNodeAlive(nodeId)) {
+                            pickNode = clusterInfo.getBackendOrComputeNode(nodeId);
+                            break;
+                        }
+                    }
+                }
+                if (pickNode == null) {
+                    // Batched result missing or no alive replica — fall back to per-tablet RPC.
+                    pickNode = warehouseManager.getComputeNodeAssignedToTablet(
+                            computeResource, lakeTablet.getId());
+                }
+                if (pickNode == null) {
+                    return;
+                }
+                TabletInfoPB tabletInfo = new TabletInfoPB();
+                tabletInfo.setTabletId(tablet.getId());
+                tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+                nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            }
         }
 
         ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
@@ -256,11 +345,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     Math.max(clusterSnapshotMgr.getSafeDeletionTimeMs() / MILLISECONDS_PER_SECOND, 1));
             vacuumRequest.retainVersions = clusterSnapshotMgr.getVacuumRetainVersions(
                                            db.getId(), table.getId(), partition.getParentId(), partition.getId());
-            vacuumRequest.minActiveTxnId = minActiveTxnId;
+            vacuumRequest.minActiveTxnId = txnLogSweepWatermark;
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
             vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
+            // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
+            // The BE checks it periodically during execution and aborts the task once it has
+            // elapsed, instead of running on as a zombie that no caller is waiting for.
+            vacuumRequest.timeoutMs = LakeService.TIMEOUT_VACUUM;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
@@ -336,10 +429,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
         MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} extraFileSize={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} txnLogSweepWatermark={} " +
+                        "vacuumVersion={} extraFileSize={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, extraFileSize, 
-                System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, txnLogSweepWatermark,
+                vacuumedVersion, extraFileSize, System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {

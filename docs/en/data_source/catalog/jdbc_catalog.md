@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "StarRocks supports JDBC catalogs from v3.0 onwards."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -68,6 +70,16 @@ When `driver_class` is set to Oracle, you can configure the following optional p
 | oracle.number.default-scale    | 6           | Set it when Oracle `NUMBER` metadata does not provide explicit precision and scale. Valid range: `0` to `38`. |
 | oracle.temporal.to-datetime    | false       | Controls Oracle `DATE`, `TIMESTAMP`, and `TIMESTAMP WITH LOCAL TIME ZONE` mapping. If it is set to `true`, these data types are mapped to StarRocks' `DATETIME` type; otherwise, `DATE` remains `DATE`, and `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` are mapped to `VARCHAR(64)`. |
 | oracle.timestamptz.to-datetime | false       | Controls Oracle `TIMESTAMP WITH TIME ZONE` mapping. If it is set to `true`, it is mapped to StarRocks' `DATETIME` type; otherwise, it is mapped to `VARCHAR(64)`. |
+
+#### Optional row-count cache properties
+
+StarRocks caches per-table row counts from JDBC sources to avoid blocking query planning. These properties let you tune the cache behavior per catalog. If not set, the global FE configuration values are used.
+
+| **Parameter**                       | **Default** | **Description**                                                                                                                                             |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| jdbc_row_count_cache_refresh_sec    | 600         | Background refresh interval (seconds). After this interval, the cached value is returned immediately while a reload runs asynchronously in the background.  |
+| jdbc_row_count_cache_expire_sec     | 1200        | Hard eviction TTL (seconds). Cache entries not accessed within this window are evicted. Must be greater than `jdbc_row_count_cache_refresh_sec`.            |
+| jdbc_row_count_cache_max_size       | 10000       | Maximum number of table entries in the row-count cache for this catalog.                                                                                   |
 
 > **NOTE**
 >
@@ -215,6 +227,16 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
+
+## Query JDBC data with native SQL
+
+From v4.1 onwards, StarRocks supports querying JDBC data with database-native `SELECT` statements by using the [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) table function.
+
+`native_query` is useful when the source database must run SQL that cannot be expressed as a single external table query, such as source-side joins, pre-filtered subqueries, or vendor-specific SQL syntax. StarRocks exposes the pass-through query result as a normal relation, so you can continue to apply StarRocks-side filters, joins, aggregations, and projections.
+
+For syntax, limitations, and examples, see [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md).
 
 ## FAQ
 

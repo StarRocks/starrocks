@@ -29,7 +29,7 @@ class ThreadPoolToken;
 // avoiding data races between concurrent tasks.
 struct ParallelPublishSlot {
     MutableColumnPtr pk_column;       // Encoded primary key column for this batch
-    std::vector<Slice> keys;          // Primary keys for this task, data inside slices owned by `pk_column`.
+    Buffer<Slice> keys;               // Primary keys for this task, data inside slices owned by `pk_column`.
     std::vector<uint64_t> values;     // New row IDs (rssid + segment row id) to be inserted/updated
     std::vector<uint64_t> old_values; // Existing row IDs found in the index (for get operations)
 };

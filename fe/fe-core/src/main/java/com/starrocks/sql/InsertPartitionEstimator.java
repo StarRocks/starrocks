@@ -16,7 +16,7 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -94,7 +94,7 @@ public class InsertPartitionEstimator {
                     .listPartitionNames(table.getCatalogName(),
                             table.getCatalogDBName(),
                             table.getCatalogTableName(),
-                            new ConnectorMetadatRequestContext());
+                            new ConnectorMetadataRequestContext());
             existingPartitionCount = partitionNames.size();
             metadataAvailable = true;
 

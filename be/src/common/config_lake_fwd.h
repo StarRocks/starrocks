@@ -71,7 +71,11 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 
-CONF_mBool(lake_enable_publish_version_trace_log, "false");
+// Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
+// When writing a txn log takes longer than this threshold, the stack trace of the slow thread
+// is dumped to the log to help diagnose slow object-storage writes.
+// Disabled by default (<= 0); set to a positive value such as 4000 (4 seconds) to enable.
+CONF_mInt64(lake_put_txn_log_timeout_guard_ms, "-1");
 
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 
@@ -79,15 +83,29 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "100");
 
-CONF_mInt64(lake_max_garbage_version_distance, "100");
+// Whether vacuum tasks honor the timeout carried in the request (VacuumRequest.timeout_ms)
+// and abort themselves once it elapses. Set to false to let vacuum tasks always run to
+// completion no matter how long the FE caller waits.
+CONF_mBool(lake_vacuum_enable_task_timeout, "true");
 
-CONF_mBool(enable_strict_delvec_crc_check, "true");
+CONF_mInt64(lake_max_garbage_version_distance, "100");
 
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
 // Turn this on after upgrade to clean up existing orphans, then turn it off once done.
 CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
+
+CONF_mBool(enable_strict_delvec_crc_check, "true");
+
+// When true, shared-data (lake) tablet metadata and txn log files are written with an
+// Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
+// corruption can be detected on read. Readers always auto-detect and verify the checksum when
+// a file has it, regardless of this flag; the flag only controls the write format. Defaults to
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
@@ -106,7 +124,7 @@ CONF_mBool(experimental_enable_lake_capture_tablet_and_rowsets, "false");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_min_batch_delete_size, "100");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
 // If the local pk index file is older than this threshold
 // it may be evicted if the disk is full

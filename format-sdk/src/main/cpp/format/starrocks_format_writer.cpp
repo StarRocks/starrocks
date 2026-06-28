@@ -129,8 +129,7 @@ private:
             op_write->mutable_rowset()->add_segments(f.path);
             op_write->mutable_rowset()->add_segment_size(f.size.value());
             auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-            f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            f.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(f.num_rows);
         }
         for (const auto& f : _tablet_writer->dels()) {

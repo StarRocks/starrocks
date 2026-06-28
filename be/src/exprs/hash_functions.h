@@ -25,6 +25,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(murmur_hash3_32);
 
+    DEFINE_VECTORIZED_FN(xx_hash32);
+
+    DEFINE_VECTORIZED_FN(xx_hash64);
+
     /**
      * @param columns: [BinaryColumn, ...]
      * @return BigIntColumn

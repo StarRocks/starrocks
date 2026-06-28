@@ -41,7 +41,7 @@ public class PatternMatcher {
     /*
      * Mysql has only 2 patterns.
      * '%' to match any character sequence
-     * '_' to master any single character.
+     * '_' to match any single character.
      * So we convert '%' to '.*', and '_' to '.'
      *
      * eg:
@@ -49,88 +49,58 @@ public class PatternMatcher {
      *      ab_c -> ab.c
      *
      * We also need to handle escape character '\'.
-     * User use '\' to escape reserved words like '%', '_', or '\' it self
+     * User use '\' to escape reserved words like '%', '_', or '\' itself
      *
      * eg:
-     *      ab\%c = ab%c
-     *      ab\_c = ab_c
-     *      ab\\c = ab\c
+     *      abc%  -> abc.*
+     *      ab_c  -> ab.c
+     *      ab\%c -> matches ab%c
+     *      ab\_c -> matches ab_c
+     *      ab\\c -> matches ab\c
      *
      * We also have to ignore meaningless '\' like:'ab\c', convert it to 'abc'.
-     * The following characters are not permitted:
-     *   <([{^=$!|]})?*+>
+     * Literal segments are wrapped with {@link Pattern#quote} so regex metacharacters
+     * (for example '(', ')', '+') in table or database names do not break compilation.
      */
     private static String convertMysqlPattern(String mysqlPattern) {
-        String newMysqlPattern = mysqlPattern;
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < newMysqlPattern.length(); ++i) {
-            char ch = newMysqlPattern.charAt(i);
+        for (int i = 0; i < mysqlPattern.length(); ++i) {
+            char ch = mysqlPattern.charAt(i);
             switch (ch) {
                 case '%':
                     sb.append(".*");
                     break;
-                case '.':
-                    sb.append("\\.");
-                    break;
                 case '_':
                     sb.append(".");
                     break;
-                case '\\': {
-                    if (i == newMysqlPattern.length() - 1) {
-                        // last character of this pattern. leave this '\' as it is
-                        sb.append('\\');
-                        break;
-                    }
-                    // we need to look ahead the next character 
-                    // to decide ignore this '\' or treat it as escape character.
-                    char nextChar = newMysqlPattern.charAt(i + 1);
-                    switch (nextChar) {
-                        case '%':
-                        case '_':
-                        case '\\':
-                            // this is a escape character, eat this '\' and get next character.
-                            sb.append(nextChar);
-                            ++i;
-                            break;
-                        default:
-                            // ignore this '\' and continue;
-                            break;
-                    }
-                    break;
-                }
-                default:
-                    sb.append(ch);
-                    break;
-            }
-        }
-
-        // Replace all the '\' to '\\' in Java pattern
-        newMysqlPattern = sb.toString();
-        sb = new StringBuilder();
-        for (int i = 0; i < newMysqlPattern.length(); ++i) {
-            char ch = newMysqlPattern.charAt(i);
-            switch (ch) {
                 case '\\':
-                    if (i == newMysqlPattern.length() - 1) {
-                        // last character of this pattern. leave this '\' as it is
-                        sb.append('\\').append('\\');
-                        break;
+                    if (i + 1 < mysqlPattern.length()) {
+                        char next = mysqlPattern.charAt(i + 1);
+                        if (next == '%' || next == '_') {
+                            // \% or \_ → literal char (not special in regex)
+                            sb.append(next);
+                            i++;
+                        } else if (next == '\\') {
+                            // \\ → literal backslash → regex needs "\\\\"
+                            sb.append("\\\\");
+                            i++;
+                        } else {
+                            // meaningless \, ignore
+                        }
+                    } else {
+                        // trailing \, treat as literal backslash
+                        sb.append("\\\\");
                     }
-                    // look ahead
-                    if (newMysqlPattern.charAt(i + 1) == '.') {
-                        // leave '\.' as it is.
-                        sb.append('\\').append('.');
-                        i++;
-                        break;
-                    }
-                    sb.append('\\').append('\\');
                     break;
                 default:
+                    // escape regex-special characters
+                    if (".[]{}()*+?^$|".indexOf(ch) >= 0) {
+                        sb.append('\\');
+                    }
                     sb.append(ch);
                     break;
             }
         }
-
         return sb.toString();
     }
 
@@ -151,6 +121,18 @@ public class PatternMatcher {
             throw new SemanticException("Bad pattern in SQL: " + e.getMessage());
         }
         return matcher;
+    }
+
+    /**
+     * Escape a literal value so it can be used as a MySQL LIKE pattern that
+     * matches the value exactly. The three LIKE-special characters {@code \},
+     * {@code %} and {@code _} are each prefixed with a backslash.
+     */
+    public static String escapeLikeValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     public static boolean matchPattern(String pattern, String tableName, PatternMatcher matcher,

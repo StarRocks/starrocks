@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
@@ -141,8 +141,8 @@ public class DeltaLakeMetadataTest {
         );
         // addFile schema, here we only care about the partitionValues, so not use all fields
         StructType addFileSchema = new StructType(Lists.newArrayList(
-                new StructField("path", BasePrimitiveType.createPrimitive("string"), true, null),
-                new StructField("partitionValues", mapType, true, null)));
+                new StructField("path", BasePrimitiveType.createPrimitive("string"), true),
+                new StructField("partitionValues", mapType, true)));
         DefaultStructVector addFile = new DefaultStructVector(3, addFileSchema, Optional.empty(), addFileCols);
         // construct a columnar batch which only contains addFile
         ColumnarBatch columnarBatch = new DefaultColumnarBatch(3,
@@ -171,7 +171,7 @@ public class DeltaLakeMetadataTest {
 
         new Expectations() {
             {
-                snapshot.getScanBuilder((Engine) any);
+                snapshot.getScanBuilder();
                 result = scanBuilder;
                 minTimes = 0;
 
@@ -185,7 +185,7 @@ public class DeltaLakeMetadataTest {
             }
         };
         List<String> partitionNames =
-                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
+                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(3, partitionNames.size());
         Assertions.assertEquals("ts=1999", partitionNames.get(0));
         Assertions.assertEquals("ts=2000", partitionNames.get(1));

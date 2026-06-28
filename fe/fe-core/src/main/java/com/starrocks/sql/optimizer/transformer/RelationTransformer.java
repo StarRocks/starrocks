@@ -27,6 +27,7 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
@@ -93,8 +94,10 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -142,7 +145,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
-import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
@@ -589,7 +591,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (distributionInfo.getType() == DistributionInfoType.RANDOM) {
             distributionSpec = DistributionSpec.createAnyDistributionSpec();
         } else if (distributionInfo.getType() == DistributionInfoType.RANGE) {
-            distributionSpec = DistributionSpec.createAnyDistributionSpec();
+            RangeDistributionSpec rangeSpec = DistributionSpecHelper
+                    .buildRangeDistributionSpecSkeleton(olapTable, columnMetaToColRefMap);
+            distributionSpec = rangeSpec != null
+                    ? rangeSpec
+                    : DistributionSpec.createAnyDistributionSpec();
         } else {
             throw new IllegalStateException("Unknown distribution type: " + distributionInfo.getType());
         }
@@ -623,7 +629,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
         }
 
-        boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
 
@@ -671,7 +676,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
-            } else if (!isMVPlanner) {
+            } else {
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -689,12 +694,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setUsePkIndex(node.isUsePkIndex())
                         .setSample(node.getSampleClause())
                         .build();
-            } else {
-                scanOperator = new LogicalBinlogScanOperator(
-                        node.getTable(),
-                        colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap,
-                        Operator.DEFAULT_LIMIT);
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
@@ -1166,6 +1165,10 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
     @Override
     public LogicalPlan visitTableFunction(TableFunctionRelation node, ExpressionMapping context) {
+        if (node.getQueryTable() != null) {
+            return buildJdbcQueryTablePlan(node);
+        }
+
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         TableFunction tableFunction = node.getTableFunction();
 
@@ -1205,8 +1208,50 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 null, List.of());
     }
 
+    private LogicalPlan buildJdbcQueryTablePlan(TableFunctionRelation node) {
+        JDBCTable table = node.getQueryTable();
+        List<Field> relationFields = node.getRelationFields().getAllFields();
+        List<Column> fullSchema = table.getFullSchema();
+        Preconditions.checkState(relationFields.size() == fullSchema.size());
+
+        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder =
+                ImmutableMap.builderWithExpectedSize(fullSchema.size());
+        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder =
+                ImmutableMap.builderWithExpectedSize(fullSchema.size());
+        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder =
+                ImmutableList.builderWithExpectedSize(fullSchema.size());
+
+        int relationId = columnRefFactory.getNextRelationId();
+        for (int i = 0; i < fullSchema.size(); i++) {
+            Column column = fullSchema.get(i);
+            Field field = relationFields.get(i);
+            ColumnRefOperator columnRef = columnRefFactory.create(field.getName(), field.getType(), column.isAllowNull());
+            columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+            columnRefFactory.updateColumnRefToColumns(columnRef, column, table);
+            outputVariablesBuilder.add(columnRef);
+            colRefToColumnMetaMapBuilder.put(columnRef, column);
+            columnMetaToColRefMapBuilder.put(column, columnRef);
+        }
+
+        List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
+        LogicalScanOperator scanOperator = new LogicalJDBCScanOperator(table,
+                colRefToColumnMetaMapBuilder.build(),
+                columnMetaToColRefMapBuilder.build(),
+                Operator.DEFAULT_LIMIT,
+                null,
+                null);
+        return new LogicalPlan(new OptExprBuilder(scanOperator, Collections.emptyList(),
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputVariables)),
+                outputVariables, List.of());
+    }
+
     @Override
     public LogicalPlan visitNormalizedTableFunction(NormalizedTableFunctionRelation node, ExpressionMapping context) {
+        if (node.getRight() instanceof TableFunctionRelation
+                && ((TableFunctionRelation) node.getRight()).getQueryTable() != null) {
+            return visit(node.getRight(), context);
+        }
+
         LogicalPlan plan = visitJoin(node, context);
         // Column prune, only the table function columns should be returned.
         OptExprBuilder rootBuilder = plan.getRootBuilder();
@@ -1396,14 +1441,19 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             commonType = leftType;
         }
 
-        Type[] argTypes = new Type[] {leftType, rightType};
+        ScalarOperator leftCasted = leftType.equals(commonType)
+                ? leftOp : foldCast(new CastOperator(commonType, leftOp, true));
+        ScalarOperator rightCasted = rightType.equals(commonType)
+                ? rightOp : foldCast(new CastOperator(commonType, rightOp, true));
+
+        Type[] argTypes = new Type[] {commonType, commonType};
         com.starrocks.catalog.Function coalesceFunction =
                 com.starrocks.sql.ast.expression.ExprUtils.getBuiltinFunction(
                         FunctionSet.COALESCE, argTypes,
                         com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         return new CallOperator(FunctionSet.COALESCE, commonType,
-                Lists.newArrayList(leftOp, rightOp), coalesceFunction);
+                Lists.newArrayList(leftCasted, rightCasted), coalesceFunction);
     }
 
     /**

@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "column/global_dict/decoder.h"
 #include "common/global_types.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_common.h"
-#include "exec/pipeline/operator.h"
-#include "runtime/global_dict/decoder.h"
-#include "runtime/global_dict/parser.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

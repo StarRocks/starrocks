@@ -23,6 +23,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
@@ -85,7 +86,7 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
     DCHECK_LE(_join_stage, stage) << "current=" << _join_stage << ", advance to " << stage;
     if (_join_stage != stage) {
         _join_stage = stage;
-        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, stage);
+        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, static_cast<int>(stage));
     }
 }
 
@@ -273,11 +274,15 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
+    // A null _curr_build_chunk means the previous round just consumed all build chunks, so use the
+    // first build chunk to decide column nullability.
+    // NOTE: this can still be wrong if column info differs between build chunks.
+    Chunk* ref_build_chunk = _num_build_chunks() > 0 ? _cross_join_context->get_build_chunk(0) : _curr_build_chunk;
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         bool nullable = right_to_nullable | _col_types[i]->is_nullable();
-        if (_curr_build_chunk) {
-            nullable |= _curr_build_chunk->is_column_nullable(slot->id());
+        if (ref_build_chunk) {
+            nullable |= ref_build_chunk->is_column_nullable(slot->id());
         }
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
@@ -330,10 +335,8 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
             }
         }
 
-        // null data
-        for (size_t i = 0; i < num_rows; ++i) {
-            filter_data[i] |= null_data[i];
-        }
+        // null data - use SIMD-optimized OR
+        ColumnHelper::or_two_filters(num_rows, filter_data.data(), null_data.data());
 
         // process other conjucts
         for (size_t i = 1; i < _join_conjuncts.size(); ++i) {
@@ -786,21 +789,22 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chun
     return Status::OK();
 }
 
-void NLJoinProbeOperator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(
-                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
-        }
-
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot NLJoinProbeOperator::exec_stats_snapshot() const {
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.update_pull_rows = true;
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+        snapshot.update_pred_filter_rows = true;
+        snapshot.pred_filter_rows = COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter);
     }
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
+    }
+    return snapshot;
 }
 
 void NLJoinProbeOperatorFactory::_init_row_desc() {

@@ -110,6 +110,7 @@ public class FunctionSet {
     public static final String DAYNAME = "dayname";
     public static final String DAYOFMONTH = "dayofmonth";
     public static final String DAYOFWEEK = "dayofweek";
+    public static final String DAYOFWEEK_ISO = "dayofweek_iso";
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
@@ -141,6 +142,7 @@ public class FunctionSet {
     public static final String LOCALTIMESTAMP = "localtimestamp";
 
     public static final String WEEK = "week";
+    public static final String WEEK_ISO = "week_iso";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -184,6 +186,7 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String BLAKE3 = "blake3";
     public static final String FROM_BINARY = "from_binary";
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
@@ -255,10 +258,14 @@ public class FunctionSet {
     public static final String SPACE = "space";
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
+    public static final String TRIM_STRING = "trim_string";
+    public static final String LTRIM_STRING = "ltrim_string";
+    public static final String RTRIM_STRING = "rtrim_string";
     public static final String UPPER = "upper";
     public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
+    public static final String HTTP_REQUEST = "http_request";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -297,6 +304,7 @@ public class FunctionSet {
     // Utility functions:
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
+    public static final String QUERY_ID = "query_id";
     public static final String UUID = "uuid";
     public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String UUID_V7 = "uuid_v7";
@@ -306,6 +314,10 @@ public class FunctionSet {
     public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
+    // materialize: identity function that acts as an optimization barrier.
+    // Returns the input unchanged but is opaque to the FE optimizer,
+    // preventing constant folding, partition pruning, and other rewrites.
+    public static final String MATERIALIZE = "materialize";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_SORT_KEY = "encode_sort_key";
@@ -448,6 +460,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH32 = "xx_hash32";
+    public static final String XX_HASH64 = "xx_hash64";
     public static final String XX_HASH3_64 = "xx_hash3_64";
     public static final String XX_HASH3_128 = "xx_hash3_128";
 
@@ -785,7 +799,9 @@ public class FunctionSet {
                     .add(UUID_NUMERIC)
                     .add(UUID_V7)
                     .add(UUID_V7_NUMERIC)
+                    .add(QUERY_ID)
                     .add(SLEEP)
+                    .add(HTTP_REQUEST)
                     .build();
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =

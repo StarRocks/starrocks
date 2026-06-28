@@ -105,7 +105,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -557,35 +556,6 @@ public class UtFrameUtils {
                 "Some fragments do not belong to the fragment tree");
     }
 
-    /*
-     * Return analyzed statement and execution plan for MV maintenance
-     */
-    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext,
-                                                                                    String sql)
-            throws DdlException, CloneNotSupportedException {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-
-        List<StatementBase> statements =
-                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
-        connectContext.getDumpInfo().setOriginStmt(sql);
-        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
-        StatementBase statementBase = statements.get(0);
-
-        try {
-            // update session variable by adding optional hints.
-            if (statementBase.isExistQueryScopeHint()) {
-                processQueryScopeHint(statementBase, connectContext);
-            }
-
-            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
-            Assertions.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
-            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
-            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
-        } finally {
-            clearQueryScopeHintContext(connectContext, oldSessionVariable);
-        }
-    }
-
     private interface GetPlanHook<R> {
         R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
     }
@@ -784,6 +754,116 @@ public class UtFrameUtils {
         return ConnectProcessor.computeStatementDigest(statementBase);
     }
 
+    private static void registerReplayIcebergResourceTables(ConnectContext connectContext,
+                                                           StarRocksAssert starRocksAssert,
+                                                           QueryDumpInfo replayDumpInfo) throws Exception {
+        Map<String, String> createTableStmtMap = replayDumpInfo.getCreateTableStmtMap();
+        if (createTableStmtMap.isEmpty()) {
+            return;
+        }
+        // The dump stores iceberg tables as bare db.table in table_meta but references them as
+        // catalog.db.table in the query/view bodies. That combined SQL text is the only record of
+        // which external catalog each dumped db belongs to.
+        StringBuilder sqlText = new StringBuilder(
+                replayDumpInfo.getOriginStmt() == null ? "" : replayDumpInfo.getOriginStmt());
+        for (String view : replayDumpInfo.getCreateViewStmtMap().values()) {
+            sqlText.append('\n').append(view);
+        }
+        String allSql = sqlText.toString();
+
+        Map<String, String> dbToCatalog = new java.util.HashMap<>();
+        for (String key : createTableStmtMap.keySet()) {
+            String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
+            if (dbToCatalog.containsKey(db)) {
+                continue;
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("(\\w+)\\." + java.util.regex.Pattern.quote(db) + "\\.")
+                    .matcher(allSql);
+            if (m.find()) {
+                dbToCatalog.put(db, m.group(1));
+            }
+        }
+        if (dbToCatalog.isEmpty()) {
+            return;
+        }
+
+        Map<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> metaByCatalog =
+                new java.util.LinkedHashMap<>();
+        java.util.List<String> consumed = new java.util.ArrayList<>();
+        for (Map.Entry<String, String> entry : createTableStmtMap.entrySet()) {
+            String key = entry.getKey();
+            String db = key.contains(".") ? key.substring(0, key.indexOf('.')) : key;
+            String table = key.contains(".") ? key.substring(key.indexOf('.') + 1) : key;
+            String catalog = dbToCatalog.get(db);
+            if (catalog == null) {
+                continue;
+            }
+            com.starrocks.sql.ast.CreateTableStmt stmt;
+            try {
+                com.starrocks.sql.ast.StatementBase parsed =
+                        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(entry.getValue(), connectContext);
+                if (!(parsed instanceof com.starrocks.sql.ast.CreateTableStmt)) {
+                    continue;
+                }
+                stmt = (com.starrocks.sql.ast.CreateTableStmt) parsed;
+            } catch (Exception e) {
+                continue;
+            }
+            // Only handle old-style resource-mapping iceberg external tables: CREATE EXTERNAL TABLE ...
+            // ENGINE=ICEBERG ("resource"=...). Other external tables (e.g. ENGINE=HIVE) and native tables
+            // must go through the normal replay create path -- otherwise we would hijack unrelated tables,
+            // drop their CREATE statements from createTableStmtMap, and break other dumps.
+            if (!stmt.isExternal()
+                    || stmt.getEngineName() == null
+                    || !stmt.getEngineName().equalsIgnoreCase("iceberg")
+                    || stmt.getProperties() == null
+                    || !stmt.getProperties().containsKey("resource")) {
+                continue;
+            }
+            List<com.starrocks.catalog.Column> columns = new java.util.ArrayList<>();
+            for (com.starrocks.sql.ast.ColumnDef cd : stmt.getColumnDefs()) {
+                columns.add(new com.starrocks.catalog.Column(
+                        cd.getName(), cd.getType(), cd.isAllowNull(), cd.getComment()));
+            }
+            com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata meta =
+                    metaByCatalog.computeIfAbsent(catalog,
+                            c -> new com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata(c));
+            meta.registerTable(null, db, table, columns, 100L);
+            consumed.add(key);
+        }
+        // Served via the external catalogs below, so drop their internal-catalog CREATE EXTERNAL TABLE
+        // statements -- those would need a live iceberg resource that the dump does not carry.
+        for (String key : consumed) {
+            createTableStmtMap.remove(key);
+        }
+        if (metaByCatalog.isEmpty()) {
+            return;
+        }
+
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        com.starrocks.connector.MockedMetadataMgr mockedMetadataMgr;
+        if (gsm.getMetadataMgr() instanceof com.starrocks.connector.MockedMetadataMgr) {
+            mockedMetadataMgr = (com.starrocks.connector.MockedMetadataMgr) gsm.getMetadataMgr();
+        } else {
+            mockedMetadataMgr = new com.starrocks.connector.MockedMetadataMgr(
+                    gsm.getLocalMetastore(), gsm.getConnectorMgr());
+            gsm.setMetadataMgr(mockedMetadataMgr);
+        }
+        for (Map.Entry<String, com.starrocks.connector.iceberg.ReplayIcebergResourceMetadata> e
+                : metaByCatalog.entrySet()) {
+            String catalog = e.getKey();
+            if (!gsm.getCatalogMgr().catalogExists(catalog)) {
+                Map<String, String> props = new java.util.HashMap<>();
+                props.put("type", "iceberg");
+                props.put("iceberg.catalog.type", "hive");
+                props.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+                gsm.getCatalogMgr().createCatalog("iceberg", catalog, "", props);
+            }
+            mockedMetadataMgr.registerMockedMetadata(catalog, e.getValue());
+        }
+    }
+
     private static String initMockEnv(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -812,6 +892,12 @@ public class UtFrameUtils {
                     replayDumpInfo.getTableStatisticsMap());
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
+
+        // Replay old-style resource-mapping iceberg external tables that the dump only captured as
+        // CREATE EXTERNAL TABLE ... ENGINE=ICEBERG ("resource"=...) statements in table_meta. Register
+        // the referenced iceberg resource and a mock resource-mapping catalog metadata built from the
+        // declared schema so these tables can be created and planned during replay.
+        registerReplayIcebergResourceTables(connectContext, starRocksAssert, replayDumpInfo);
 
         // create table
         int backendId = 10002;
@@ -1491,10 +1577,10 @@ public class UtFrameUtils {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
-                    if (tbl != null) {
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        OlapTable tbl = (OlapTable) table;
                         for (Long partitionId : insertStmt.getTargetPartitionIds()) {
                             Partition partition = tbl.getPartition(partitionId);
                             setPartitionVersion(partition, partition.getDefaultPhysicalPartition().getVisibleVersion() + 1);
@@ -1503,10 +1589,11 @@ public class UtFrameUtils {
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
                     TableName tableName = com.starrocks.catalog.TableName.fromTableRef(delete.getTableRef());
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-                    OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(testDb.getFullName(), tableName.getTbl()));
-                    tbl.setHasDelete();
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(tableName.getDb(), tableName.getTbl());
+                    if (table instanceof OlapTable) {
+                        ((OlapTable) table).setHasDelete();
+                    }
                 }
             }
         };
@@ -1588,8 +1675,11 @@ public class UtFrameUtils {
 
     public static void stopBackgroundSchemaChangeHandler(long timeoutMs) throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+        // This UT helper only stops the background schema-change loop so tests can drive
+        // schema-change jobs manually. Do not call stopGracefully() here: it runs the
+        // demotion cleanup hook and shuts down AlterHandler's executor, which prevents
+        // subsequent manual job progress in schema-change tests.
         schemaChangeHandler.setStop();
-        schemaChangeHandler.interrupt();
         long endTime = System.currentTimeMillis() + timeoutMs;
         while (schemaChangeHandler.isRunning()) {
             if (System.currentTimeMillis() > endTime) {

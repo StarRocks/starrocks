@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Feature Support"
+description: "Reference for file format, data source, and feature support across StarRocks data loading and unloading methods."
 ---
 
 # Feature Support: Data Loading and Unloading
@@ -308,13 +309,28 @@ This document outlines the features of various data loading and unloading method
         <th>EXPORT</th>
     </tr>
     <tr>
-        <td rowspan="2">CSV</td>
+        <td rowspan="5">CSV</td>
         <td>column_separator</td>
         <td rowspan="2">Yes (v3.3+)</td>
         <td rowspan="2">Yes</td>
     </tr>
     <tr>
         <td>line_delimiter [1]</td>
+    </tr>
+    <tr>
+        <td>enclose</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>escape</td>
+        <td>Yes</td>
+        <td>No</td>
+    </tr>
+    <tr>
+        <td>include_header</td>
+        <td>Yes</td>
+        <td>No</td>
     </tr>
 </table>
 

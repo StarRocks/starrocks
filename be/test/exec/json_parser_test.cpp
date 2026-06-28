@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -1246,4 +1247,182 @@ TEST_F(JsonParserTest, test_retrieve_value_from_simdjson_object_repeatedly) {
         ASSERT_EQ(input_value, str_val.value());
     }
 }
+
+TEST_F(JsonParserTest, test_debezium_json_document_stream_parser) {
+    // 1. Standard envelope format (upsert)
+    // 2. Standard envelope format (delete)
+    // 3. Flat format (upsert)
+    // 4. Flat format (delete)
+    std::string input = R"(
+        {"payload": {"before": null, "after": {"id": 1, "name": "a"}, "op": "c"}}
+        {"payload": {"before": {"id": 2, "name": "b"}, "after": null, "op": "d"}}
+        {"before": null, "after": {"id": 3, "name": "c"}, "op": "u"}
+        {"before": {"id": 4, "name": "d"}, "after": null, "op": "d"}
+    )";
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<DebeziumJsonDocumentStreamParser> parser =
+            std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+
+    auto st = parser->parse(input.data(), size, padded_size);
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+
+    // Row 1: upsert, id=1, name=a
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(0, parser->current_op());
+    ASSERT_EQ(1, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("a", row.find_field_unordered("name").get_string().value());
+
+    // Row 2: delete, id=2, name=b
+    ASSERT_OK(parser->advance());
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(1, parser->current_op());
+    ASSERT_EQ(2, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("b", row.find_field_unordered("name").get_string().value());
+
+    // Row 3: upsert, id=3, name=c
+    ASSERT_OK(parser->advance());
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(0, parser->current_op());
+    ASSERT_EQ(3, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("c", row.find_field_unordered("name").get_string().value());
+
+    // Row 4: delete, id=4, name=d
+    ASSERT_OK(parser->advance());
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(1, parser->current_op());
+    ASSERT_EQ(4, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("d", row.find_field_unordered("name").get_string().value());
+
+    ASSERT_TRUE(parser->advance().is_end_of_file());
+}
+
+TEST_F(JsonParserTest, test_debezium_tombstone_skipped) {
+    // Tombstone records (payload: null) must be silently skipped so that mixed
+    // streams containing tombstones and valid events are fully ingested.
+    std::string input = R"({"payload": null} )"
+                        R"({"payload": {"before": null, "after": {"id": 1, "name": "a"}, "op": "c"}} )"
+                        R"({"payload": null} )"
+                        R"({"payload": {"before": {"id": 2, "name": "b"}, "after": null, "op": "d"}} )"
+                        R"({"payload": null})";
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::unique_ptr<DebeziumJsonDocumentStreamParser> parser =
+            std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+
+    ASSERT_OK(parser->parse(input.data(), size, padded_size));
+
+    simdjson::ondemand::object row;
+
+    // Leading tombstone skipped; get_current returns row 1 directly.
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(0, parser->current_op());
+    ASSERT_EQ(1, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("a", row.find_field_unordered("name").get_string().value());
+
+    // Tombstone between rows skipped.
+    ASSERT_OK(parser->advance());
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(1, parser->current_op());
+    ASSERT_EQ(2, row.find_field_unordered("id").get_int64().value());
+    ASSERT_EQ("b", row.find_field_unordered("name").get_string().value());
+
+    // Trailing tombstone: advance to it, then get_current skips it and returns EOF.
+    ASSERT_OK(parser->advance());
+    ASSERT_TRUE(parser->get_current(&row).is_end_of_file());
+}
+
+TEST_F(JsonParserTest, test_debezium_json_document_stream_parser_get_current_twice) {
+    std::string input = R"({"payload": {"before": null, "after": {"id": 1, "name": "a"}, "op": "c"}})";
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+    auto parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+
+    ASSERT_OK(parser->parse(input.data(), size, padded_size));
+
+    simdjson::ondemand::object row;
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(0, parser->current_op());
+    ASSERT_EQ(1, row.find_field_unordered("id").get_int64().value());
+
+    ASSERT_OK(parser->get_current(&row));
+    ASSERT_EQ(0, parser->current_op());
+    ASSERT_EQ("a", row.find_field_unordered("name").get_string().value());
+}
+
+TEST_F(JsonParserTest, test_debezium_json_document_stream_parser_error_cases) {
+    simdjson::ondemand::parser simdjson_parser;
+
+    {
+        std::string input = R"({"payload": {"before": null, "after": {"id": 1}, "op": 1}})";
+        auto size = input.size();
+        input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+        auto padded_size = input.size();
+
+        auto parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+        ASSERT_OK(parser->parse(input.data(), size, padded_size));
+        simdjson::ondemand::object row;
+        auto st = parser->get_current(&row);
+        ASSERT_TRUE(st.is_data_quality_error());
+        std::string message(st.message());
+        ASSERT_NE(nullptr, std::strstr(message.c_str(), "'op' field in Debezium JSON message is not a string"));
+    }
+
+    {
+        std::string input = R"({"payload": {"after": null, "op": "d"}})";
+        auto size = input.size();
+        input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+        auto padded_size = input.size();
+
+        auto parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+        ASSERT_OK(parser->parse(input.data(), size, padded_size));
+        simdjson::ondemand::object row;
+        auto st = parser->get_current(&row);
+        ASSERT_TRUE(st.is_data_quality_error());
+        std::string message(st.message());
+        ASSERT_NE(nullptr, std::strstr(message.c_str(), "Missing 'before' field in Debezium delete message"));
+    }
+
+    {
+        std::string input = R"({"payload": {"before": null, "op": "u"}})";
+        auto size = input.size();
+        input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+        auto padded_size = input.size();
+
+        auto parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+        ASSERT_OK(parser->parse(input.data(), size, padded_size));
+        simdjson::ondemand::object row;
+        auto st = parser->get_current(&row);
+        ASSERT_TRUE(st.is_data_quality_error());
+        std::string message(st.message());
+        ASSERT_NE(nullptr, std::strstr(message.c_str(), "Missing 'after' field in Debezium message"));
+    }
+
+    {
+        std::string input = R"({"payload": "not_an_object"})";
+        auto size = input.size();
+        input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+        auto padded_size = input.size();
+
+        auto parser = std::make_unique<DebeziumJsonDocumentStreamParser>(&simdjson_parser);
+        ASSERT_OK(parser->parse(input.data(), size, padded_size));
+        simdjson::ondemand::object row;
+        auto st = parser->get_current(&row);
+        ASSERT_TRUE(st.is_data_quality_error());
+        std::string message(st.message());
+        ASSERT_NE(nullptr, std::strstr(message.c_str(), "Failed to parse Debezium JSON envelope"));
+    }
+}
+
 } // namespace starrocks

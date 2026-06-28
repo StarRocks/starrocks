@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -32,6 +33,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_COMPRESSIO
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_REPLICATED_STORAGE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENCLOSE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ESCAPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_JSONPATHS;
@@ -295,6 +297,24 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
     @Override
     protected StreamLoadParams buildStripOuterArray(Boolean expected) {
         return buildParams(HTTP_STRIP_OUTER_ARRAY, expected == null ? null : String.valueOf(expected));
+    }
+
+    @Override
+    protected StreamLoadParams buildEnvelope(String value) {
+        return buildParams(HTTP_ENVELOPE, value);
+    }
+
+    @Test
+    public void testGetEnvelopeUnknownValue() {
+        StreamLoadKvParams params = new StreamLoadKvParams(
+                Collections.singletonMap(HTTP_ENVELOPE, "debezimu"));
+        try {
+            params.getEnvelope();
+            fail("Expected StarRocksException for unknown envelope type");
+        } catch (StarRocksException e) {
+            assertTrue(e.getMessage().contains("Unknown envelope type"));
+            assertTrue(e.getMessage().contains("debezimu"));
+        }
     }
 
     private StreamLoadParams buildParams(String key, String value) {

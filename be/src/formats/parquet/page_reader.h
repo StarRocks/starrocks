@@ -20,11 +20,11 @@
 #include <string_view>
 
 #include "base/string/slice.h"
+#include "cache/mem_cache/page_handle.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/parquet_types.h"
-#include "io/core/seekable_input_stream.h"
-#include "storage/rowset/page_handle.h"
+#include "io/seekable_input_stream.h"
 
 namespace starrocks {
 class ObjectCache;

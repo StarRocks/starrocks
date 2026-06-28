@@ -14,10 +14,13 @@
 
 #include "runtime/batch_write/txn_state_cache.h"
 
+#include <gtest/gtest.h>
+
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/config_merge_commit_fwd.h"
+#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
@@ -31,7 +34,7 @@ public:
         _db = "test_db";
         _tbl = "test_tbl";
         _auth = {"test_user", "test_password"};
-        ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
+        ASSERT_OK(ThreadPoolBuilder("IsoBatchWrTest")
                           .set_min_threads(0)
                           .set_max_threads(1)
                           .set_max_queue_size(2048)

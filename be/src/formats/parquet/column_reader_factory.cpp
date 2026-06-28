@@ -326,6 +326,18 @@ bool any_reader_not_null(const std::map<std::string, std::unique_ptr<ColumnReade
 
 } // anonymous namespace
 
+Status VariantShreddedReadHints::add_path(std::string path) {
+    ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(path)));
+    shredded_paths.emplace_back(std::move(path));
+    parsed_shredded_paths.emplace_back(std::move(parsed_path));
+    return Status::OK();
+}
+
+void VariantShreddedReadHints::clear() {
+    shredded_paths.clear();
+    parsed_shredded_paths.clear();
+}
+
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
     // We will only set a complex type in ParquetField
@@ -510,12 +522,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), hints.shredded_paths,
+                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,
-                                                      SlotId slot_id, int64_t num_rows) {
+                                                      SlotId slot_id, int64_t num_rows,
+                                                      GlobalDictReaderKind* out_kind) {
     FAIL_POINT_TRIGGER_EXECUTE(parquet_reader_returns_global_dict_not_match_status, {
         return Status::GlobalDictNotMatch(
                 fmt::format("SlotId: {}, Not dict encoded and not low rows on global dict column. ", slot_id));
@@ -525,7 +538,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
                          ColumnReaderFactory::create(
                                  std::move((down_cast<ListColumnReader*>(raw_reader.get()))->get_element_reader()),
-                                 dict, slot_id, num_rows));
+                                 dict, slot_id, num_rows, out_kind));
         return std::make_unique<ListColumnReader>(raw_reader->get_column_parquet_field(), std::move(child_reader));
     } else {
         RawColumnReader* scalar_reader = dynamic_cast<RawColumnReader*>(raw_reader.get());
@@ -533,8 +546,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader
             return Status::InternalError("Error on reader transform for low cardinality reader");
         }
         if (scalar_reader->column_all_pages_dict_encoded()) {
+            if (out_kind != nullptr) *out_kind = GlobalDictReaderKind::kDictCode;
             return std::make_unique<LowCardColumnReader>(*scalar_reader, dict, slot_id);
         } else if (num_rows <= dict->size()) {
+            if (out_kind != nullptr) *out_kind = GlobalDictReaderKind::kLowRowsEncode;
             return std::make_unique<LowRowsColumnReader>(*scalar_reader, dict, slot_id);
         } else {
             return Status::GlobalDictNotMatch(

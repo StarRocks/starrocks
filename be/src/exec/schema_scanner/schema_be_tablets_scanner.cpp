@@ -14,13 +14,14 @@
 
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 
@@ -110,7 +111,7 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
 #ifndef __APPLE__
     if (!run_mode.has_value() || run_mode.value() == TRunMode::SHARED_DATA) {
         // shared-data
-        auto lake_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto lake_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (lake_manager != nullptr) {
             std::unordered_map<int64_t, int64_t> partition_versions;
             int64_t table_id_offset = 0;

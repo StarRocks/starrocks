@@ -29,6 +29,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
@@ -124,13 +125,7 @@ public class StatisticsCollectionTrigger {
     }
 
     private void process() {
-        if (table instanceof OlapTable) {
-            if (!((OlapTable) table).enableStatisticCollectOnFirstLoad()) {
-                return;
-            }
-        }
-
-        if (!Config.enable_statistic_collect_on_first_load) {
+        if (!enableStatisticCollectOnFirstLoad()) {
             return;
         }
         if (!Config.enable_statistic_collect_on_update && dmlType.equals(DmlType.UPDATE)) {
@@ -170,6 +165,13 @@ public class StatisticsCollectionTrigger {
             executeCollect();
             waitFinish();
         }
+    }
+
+    private boolean enableStatisticCollectOnFirstLoad() {
+        if (table instanceof OlapTable olapTable && olapTable.isSetEnableStatisticCollectOnFirstLoad()) {
+            return olapTable.enableStatisticCollectOnFirstLoad();
+        }
+        return Config.enable_statistic_collect_on_first_load;
     }
 
     private void executeOverWrite() {
@@ -295,7 +297,7 @@ public class StatisticsCollectionTrigger {
                 // statistic collect granularity is logical partition.
                 long physicalPartitionId = entry.getKey();
                 PartitionCommitInfo partitionCommitInfo = entry.getValue();
-                Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
 
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
@@ -309,14 +311,12 @@ public class StatisticsCollectionTrigger {
                 if (dmlType == DmlType.UPDATE) {
                     // For UPDATE, collect on touched partitions regardless of version.
                     partitionIds.add(partitionId);
-                    tabletRows.forEach(
-                            (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                    putTabletRowCounts(partitionTabletRowCounts, partitionId, tabletStats);
                 } else if (dmlType == DmlType.INSERT_INTO) {
                     // For INSERT, only consider the first load of a partition
                     if (partitionCommitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
                         partitionIds.add(partitionId);
-                        tabletRows.forEach(
-                                (tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId, tabletId, rowCount));
+                        putTabletRowCounts(partitionTabletRowCounts, partitionId, tabletStats);
                     }
                 } else {
                     // TODO: support DELETE
@@ -337,6 +337,15 @@ public class StatisticsCollectionTrigger {
         if (analyzeType != SAMPLE) {
             partitionTabletRowCounts.clear();
         }
+    }
+
+    private static void putTabletRowCounts(com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts,
+                                           long partitionId, Map<Long, TabletStatPB> tabletStats) {
+        tabletStats.forEach((tabletId, stat) -> {
+            if (stat != null && stat.numRows != null) {
+                partitionTabletRowCounts.put(partitionId, tabletId, stat.numRows);
+            }
+        });
     }
 
     private void prepareAnalyzeForOverwrite() {

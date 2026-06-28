@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/datacache_action.h"
+#include "http/service/action/datacache_action.h"
 
 #include <event2/http.h>
 #include <event2/http_struct.h>
@@ -22,9 +22,9 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "util/brpc_stub_cache.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_request.h"
 
 namespace starrocks {
 

@@ -37,18 +37,19 @@
 #include <bthread/sys_futex.h>
 
 #include "base/hash/unaligned_access.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"
 #include "types/type_info.h"
 
@@ -402,7 +403,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
 
     _page_zone_maps.resize(reader.num_values());
 
-    MutableColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    MutableColumnPtr column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

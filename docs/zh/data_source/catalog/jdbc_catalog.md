@@ -1,9 +1,11 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 从 v3.0 起支持 JDBC catalog，无导入直接查询 JDBC 数据源及执行转换导入。"
 toc_max_heading_level: 4
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+import JoinPushdown from '../../_assets/commonMarkdown/join_pushdown.mdx'
 
 # JDBC catalog
 
@@ -69,6 +71,16 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | oracle.number.default-scale    | 6           | 当 Oracle `NUMBER` 元数据未明确指定精度和规模时，请设置此参数。有效范围：`0` 至 `38`。                                  |
 | oracle.temporal.to-datetime    | false       | 控制 Oracle `DATE`、`TIMESTAMP` 和 `TIMESTAMP WITH LOCAL TIME ZONE` 的映射。如果设置为 `true`，这些数据类型将映射到 StarRocks 的 `DATETIME` 类型；否则，`DATE` 保持为 `DATE`，而 `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` 将映射到 `VARCHAR(64)`。 |
 | oracle.timestamptz.to-datetime | false       | 控制 Oracle `TIMESTAMP WITH TIME ZONE` 的映射。如果设置为 `true`，则映射为 StarRocks 的 `DATETIME` 类型；否则，则映射为 `VARCHAR(64)`。 |
+
+#### 可选行数缓存属性
+
+StarRocks 会缓存 JDBC 数据源的每张表的行数，以避免在查询规划阶段产生阻塞。这些属性允许您按 Catalog 调整缓存行为。若未设置，则使用全局 FE 配置值。
+
+| **参数**                             | **默认** | **描述**                                                                                                               |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| jdbc_row_count_cache_refresh_sec    | 600      | 后台刷新间隔（秒）。超过此间隔后，立即返回缓存的旧值，同时在后台异步重新加载。                                             |
+| jdbc_row_count_cache_expire_sec     | 1200     | 强制淘汰 TTL（秒）。在此时间窗口内未被访问的缓存条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。               |
+| jdbc_row_count_cache_max_size       | 10000    | 该 Catalog 行数缓存的最大表条目数。                                                                                      |
 
 > **说明**
 >
@@ -216,6 +228,16 @@ DROP Catalog jdbc0;
    ```SQL
    SELECT * FROM <table_name>;
    ```
+
+<JoinPushdown />
+
+## 使用原生 SQL 查询 JDBC 数据
+
+自 v4.1 起，StarRocks 支持通过 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md) 表函数，使用数据库原生 `SELECT` 语句查询 JDBC 数据。
+
+当源数据库需要执行无法通过单张外部表查询表达的 SQL 时，例如源端 Join、预先过滤的子查询或特定数据库方言的 SQL 语法，可以使用 `native_query`。StarRocks 会将透传查询结果作为普通关系暴露出来，您可以继续在 StarRocks 侧执行过滤、Join、聚合和投影。
+
+有关语法、限制和示例，参见 [`native_query`](../../sql-reference/sql-functions/table-functions/native_query.md)。
 
 ## 常见问题
 

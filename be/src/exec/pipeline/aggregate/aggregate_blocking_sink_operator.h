@@ -20,7 +20,8 @@
 
 #include "base/concurrency/race_detect.h"
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
+#include "exec/pipeline/runtime_filter_hub.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {

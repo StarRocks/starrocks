@@ -24,6 +24,9 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
@@ -1475,19 +1478,19 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
-    auto chunk = ChunkHelper::new_chunk(schema, size);
-    auto cols = chunk->mutable_columns();
+    auto chunk = ChunkFactory::new_chunk(schema, size);
+    auto cols = chunk->columns();
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(varlen_keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(i + 1)));
-            cols[2]->append_datum(Datum((int32_t)(i + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(varlen_keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(i + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(i + 2)));
         }
     } else {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
-            cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % size + 2)));
         }
     }
     if (one_delete == nullptr && (size > 0)) {
@@ -1559,19 +1562,23 @@ void build_persistent_index_from_tablet(size_t N) {
         std::vector<uint64_t> persistent_results;
         primary_results.resize(pks.size());
         persistent_results.resize(pks.size());
-        primary_index.get(pks, &primary_results);
+        ASSERT_OK(primary_index.get(pks, &primary_results));
         if (pks.is_binary()) {
-            persistent_index.get(pks.size(), reinterpret_cast<const Slice*>(pks.raw_data()),
-                                 reinterpret_cast<IndexValue*>(persistent_results.data()));
+            Buffer<Slice> slices;
+            ColumnHelper::build_slices(&pks, slices);
+            ASSERT_OK(persistent_index.get(pks.size(), slices.data(),
+                                           reinterpret_cast<IndexValue*>(persistent_results.data())));
         } else {
             size_t key_size = primary_index.key_size();
             ASSERT_TRUE(key_size == sizeof(uint64_t));
+            RawDataVisitor visitor;
+            ASSERT_OK(pks.accept(&visitor));
             std::vector<Slice> col_key_slices;
-            for (size_t i = 0; i < pks.size(); ++i) {
-                col_key_slices.emplace_back(pks.raw_data() + i * key_size, key_size);
+            for (size_t j = 0; j < pks.size(); ++j) {
+                col_key_slices.emplace_back(visitor.result() + j * key_size, key_size);
             }
-            persistent_index.get(pks.size(), col_key_slices.data(),
-                                 reinterpret_cast<IndexValue*>(persistent_results.data()));
+            ASSERT_OK(persistent_index.get(pks.size(), col_key_slices.data(),
+                                           reinterpret_cast<IndexValue*>(persistent_results.data())));
         }
 
         ASSERT_EQ(primary_results.size(), persistent_results.size());
@@ -1596,18 +1603,22 @@ void build_persistent_index_from_tablet(size_t N) {
             std::vector<uint64_t> persistent_results;
             primary_results.resize(pks.size());
             persistent_results.resize(pks.size());
-            primary_index.get(pks, &primary_results);
+            ASSERT_OK(primary_index.get(pks, &primary_results));
             if (pks.is_binary()) {
-                persistent_index.get(pks.size(), reinterpret_cast<const Slice*>(pks.raw_data()),
-                                     reinterpret_cast<IndexValue*>(persistent_results.data()));
+                Buffer<Slice> slices;
+                ColumnHelper::build_slices(&pks, slices);
+                ASSERT_OK(persistent_index.get(pks.size(), slices.data(),
+                                               reinterpret_cast<IndexValue*>(persistent_results.data())));
             } else {
                 size_t key_size = primary_index.key_size();
+                RawDataVisitor visitor;
+                ASSERT_OK(pks.accept(&visitor));
                 std::vector<Slice> col_key_slices;
-                for (size_t i = 0; i < pks.size(); ++i) {
-                    col_key_slices.emplace_back(pks.raw_data() + i * key_size, key_size);
+                for (size_t j = 0; j < pks.size(); ++j) {
+                    col_key_slices.emplace_back(visitor.result() + j * key_size, key_size);
                 }
-                persistent_index.get(pks.size(), col_key_slices.data(),
-                                     reinterpret_cast<IndexValue*>(persistent_results.data()));
+                ASSERT_OK(persistent_index.get(pks.size(), col_key_slices.data(),
+                                               reinterpret_cast<IndexValue*>(persistent_results.data())));
             }
             ASSERT_EQ(primary_results.size(), persistent_results.size());
             for (size_t j = 0; j < primary_results.size(); ++j) {

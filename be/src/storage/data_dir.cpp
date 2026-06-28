@@ -42,6 +42,7 @@
 #include "base/string/string_util.h"
 #include "base/system/errno.h"
 #include "base/time/monotime.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/backend_options.h"
@@ -49,8 +50,8 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
-#include "storage/olap_define.h"
+#include "platform/path_rw.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -59,7 +60,6 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
-#include "storage/utils.h" // for check_dir_existed
 
 using strings::Substitute;
 

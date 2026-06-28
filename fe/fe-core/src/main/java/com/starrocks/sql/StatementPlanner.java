@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -169,6 +170,8 @@ public class StatementPlanner {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
+            } else if (stmt instanceof MergeIntoStmt) {
+                return new MergeIntoPlanner().plan((MergeIntoStmt) stmt, session);
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -254,6 +257,16 @@ public class StatementPlanner {
                     // Only files() or no tables at all: allow deferred lock
                     deferredLock = true;
                 }
+
+                // This external-table-only pre-pass is orthogonal to deferredLock.
+                // Even when the statement still needs the normal locked analyzer path,
+                // we can pre-resolve or pre-refresh external source tables here so slow
+                // connector/filesystem metadata I/O does not remain on the lock critical path.
+                if (Config.enable_experimental_external_table_preparse ||
+                        session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh()) {
+                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement,
+                            session.getSessionVariable().isEnableInsertSelectExternalAutoRefresh());
+                }
             }
 
             if (deferredLock) {
@@ -269,7 +282,8 @@ public class StatementPlanner {
                 // Only pre-resolve external tables when there are internal tables to lock.
                 // This avoids holding meta lock while fetching external metadata.
                 // Check config first (cheapest), then locker state.
-                if (Config.enable_experimental_external_table_preparse && locker != null && !locker.isEmpty()) {
+                if (insertStmt == null && Config.enable_experimental_external_table_preparse
+                        && locker != null && !locker.isEmpty()) {
                     new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
                 }
                 takeLock.run();
@@ -555,6 +569,8 @@ public class StatementPlanner {
             ((DeleteStmt) stmt).setTableRef(tableRef);
         } else if (stmt instanceof UpdateStmt) {
             ((UpdateStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof MergeIntoStmt) {
+            ((MergeIntoStmt) stmt).setTableRef(tableRef);
         }
         String catalogName = tableRef.getCatalogName();
         String dbName = tableRef.getDbName();
@@ -587,6 +603,8 @@ public class StatementPlanner {
             label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
             label = MetaUtils.genDeleteLabel(session.getExecutionId());
+        } else if (stmt instanceof MergeIntoStmt) {
+            label = MetaUtils.genMergeLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException(
                     "Unsupported dml statement " + stmt.getClass().getSimpleName());

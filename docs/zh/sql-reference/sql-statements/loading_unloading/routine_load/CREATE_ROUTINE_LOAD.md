@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入数据到 StarRocks。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -166,7 +167,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必需**：否\
-**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（<code class="language-text">&#124;</code>）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。
+**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（`|`）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：`| "Love StarRocks" |`。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 `|"Love StarRocks"|`。
 
 #### `enclose`     
 
@@ -192,6 +193,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 **必需**：否\
 **描述**：要加载的 JSON 格式数据的根元素。StarRocks 通过 `json_root` 提取根节点的元素进行解析。默认情况下，此参数的值为空，表示将加载所有 JSON 格式数据。有关更多信息，请参见本主题中的 [指定要加载的 JSON 格式数据的根元素](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded)。
+
+#### `envelope`
+
+**必需**：否\
+**描述**：指定 JSON 格式数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 Kafka 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
 
 #### `task_consume_second`
 
@@ -248,7 +254,12 @@ FROM <data_source>
 #### `property.kafka_default_offsets`
 
 **必需**：否\
-**描述**：所有消费者分区的默认起始偏移量。此属性支持的值与 `kafka_offsets` 属性的值相同。
+**描述**：所有消费者分区的默认起始偏移量。此属性支持的值与 `kafka_offsets` 属性的值相同。对于作业已有消费进度后才被发现的分区（例如后续新增到 Kafka 主题的分区），将从此偏移量开始消费；如果未指定此属性，则从 `OFFSET_BEGINNING` 开始消费。
+
+#### `property.kafka_partition_discovery`
+
+**必需**：否\
+**描述**：指定了 `kafka_partitions` 时，Routine Load 作业是否继续自动发现新增的 Kafka 分区。有效值：`true` 和 `false`（默认值）。默认情况下，指定 `kafka_partitions` 后作业只消费列出的分区，主题后续新增的分区不会被消费。如果此属性设置为 `true`，`kafka_partitions` 和 `kafka_offsets` 仅用于指定所列分区的起始偏移量，作业会消费主题的所有分区，包括后续新增的分区。未在 `kafka_partitions` 中列出的分区从 `property.kafka_default_offsets` 指定的偏移量开始消费；如果未指定 `property.kafka_default_offsets`，则从 `OFFSET_BEGINNING` 开始消费。如果希望未列出的分区从最新的偏移量开始消费，请显式设置 `property.kafka_default_offsets` 为 `OFFSET_END`。此属性只能与 `kafka_partitions` 一起使用。
 
 #### `confluent.schema.registry.url`
 

@@ -14,18 +14,19 @@
 
 #include "exprs/dict_query_expr.h"
 
-#include "agent/master_info.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "exec/tablet_info.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
-#include "runtime/client_cache.h"
-#include "storage/chunk_helper.h"
+#include "platform/thrift_rpc_helper.h"
+#include "storage/primitive/schema_helper.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/table_reader.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -67,7 +68,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     }
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, key_chunk->num_rows());
+    ChunkPtr value_chunk = ChunkFactory::new_chunk(_value_schema, key_chunk->num_rows());
     value_chunk->set_slot_id_to_index(_value_slot_id, 0);
 
     Status status = _table_reader->multi_get(*key_chunk, {_dict_query_expr.value_field}, found, *value_chunk);
@@ -141,7 +142,7 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
     for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
         for (const auto& tcolumn : tcolumns) {
             if (tcolumn->name() == _dict_query_expr.key_fields[i]) {
-                auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, *tcolumn));
+                auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(i, *tcolumn));
                 _key_schema.append(f);
             }
         }
@@ -149,7 +150,7 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
 
     for (const auto& tcolumn : tcolumns) {
         if (tcolumn->name() == _dict_query_expr.value_field) {
-            auto f = std::make_shared<Field>(ChunkHelper::convert_field(0, *tcolumn));
+            auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(0, *tcolumn));
             _value_schema.append(f);
             break; /* only single column */
         }

@@ -16,8 +16,8 @@
 
 #include "formats/csv/converter.h"
 #include "formats/file_writer.h"
+#include "formats/io/formatted_output_stream.h"
 #include "gen_cpp/Types_types.h"
-#include "io/formatted_output_stream.h"
 
 namespace starrocks {
 class ColumnEvaluator;
@@ -35,6 +35,10 @@ struct CSVWriterOptions : FileWriterOptions {
     std::string mapkey_delim = ",";
     bool is_hive = false;
     bool include_header = false;
+    // 0 = disabled. When set, all non-NULL fields are wrapped with this char.
+    char enclose = 0;
+    // 0 = disabled. Used together with enclose to escape enclose/escape chars inside fields.
+    char escape = 0;
 
     inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
     inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
@@ -42,13 +46,15 @@ struct CSVWriterOptions : FileWriterOptions {
     inline static std::string MAPKEY_DELIM = "mapkey_delim";
     inline static std::string IS_HIVE = "is_hive";
     inline static std::string INCLUDE_HEADER = "include_header";
+    inline static std::string ENCLOSE = "enclose";
+    inline static std::string ESCAPE = "escape";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
 // TODO(letian-jiang): support escaping
 class CSVFileWriter final : public FileWriter {
 public:
-    CSVFileWriter(std::string location, std::shared_ptr<io::FormattedOutputStream> output_stream,
+    CSVFileWriter(std::string location, std::shared_ptr<FormattedOutputStream> output_stream,
                   std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                   std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action);
@@ -69,7 +75,7 @@ public:
 
 private:
     const std::string _location;
-    std::shared_ptr<io::FormattedOutputStream> _output_stream;
+    std::shared_ptr<FormattedOutputStream> _output_stream;
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
@@ -83,6 +89,16 @@ private:
     std::vector<std::pair<std::unique_ptr<csv::Converter>, std::unique_ptr<csv::Converter>>> _column_converters;
 
     Status _write_header();
+
+    // Write a field value enclosed with enclose char, escaping internal enclose and escape
+    // chars. The converter writes into a temporary in-memory buffer, then this method scans
+    // the buffer and writes escaped content to the real output stream.
+    Status _write_enclosed_field(csv::Converter* converter, const Column& column, size_t row_num,
+                                 const csv::Converter::Options& options);
+
+    // Write a string value enclosed with enclose char, escaping internal enclose and escape
+    // chars. Shared by header and field writing paths.
+    Status _write_enclosed_string(const std::string& value);
 };
 
 class CSVFileWriterFactory : public FileWriterFactory {

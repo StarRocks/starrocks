@@ -18,6 +18,18 @@
 #include <numeric>
 #include <utility>
 
+// Architecture-specific intrinsic headers must be included at file scope
+// (outside any namespace) so their declarations land in the global namespace
+// where the standard expects them; including them under `namespace starrocks`
+// is undefined behaviour across compilers.
+#if defined(__AVX2__)
+#include <immintrin.h>
+#elif defined(__SSE2__)
+#include <emmintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/concurrency/stopwatch.hpp"
@@ -29,7 +41,10 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/util/debug_util.h"
@@ -40,11 +55,11 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/persistent_index_tablet_loader.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -247,12 +262,14 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
         RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
         int32_t offset = 0;
         faststring compressed_body;
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
         for (int32_t i = 0; i < npage(); i++) {
             compressed_body.resize(codec->max_compressed_len(_page_size));
             Slice input((uint8_t*)_pages.data() + i * _page_size, _page_size);
             *uncompressed_size += input.get_size();
             Slice compressed_slice(compressed_body);
-            RETURN_IF_ERROR(codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(codec->compress(input, &compressed_slice, compression_options));
             RETURN_IF_ERROR(wb.append(compressed_slice));
             compressed_pages_off[i] = offset;
             offset += compressed_slice.get_size();
@@ -2395,9 +2412,35 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
     return Status::OK();
 }
 
-#ifdef __SSE2__
+#ifdef __AVX2__
 
-#include <emmintrin.h>
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    auto tests = _mm256_set1_epi8(tag);
+    size_t i = 0;
+
+    // Process 32 bytes at a time with AVX2
+    for (; i + 32 <= ntag; i += 32) {
+        auto tags32 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(tags + i));
+        auto eqs = _mm256_cmpeq_epi8(tags32, tests);
+        auto mask = static_cast<uint32_t>(_mm256_movemask_epi8(eqs));
+        while (mask != 0) {
+            uint32_t match_pos = __builtin_ctz(mask);
+            matched_idxes[nmatched++] = i + match_pos;
+            mask &= (mask - 1);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__SSE2__)
 
 size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
     size_t nmatched = 0;
@@ -2412,6 +2455,46 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
                 matched_idxes[nmatched++] = i + match_pos;
             }
             mask &= (mask - 1);
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    uint8x16_t tests = vdupq_n_u8(tag);
+    size_t i = 0;
+
+    // Process 16 bytes at a time with NEON
+    for (; i + 16 <= ntag; i += 16) {
+        uint8x16_t tags16 = vld1q_u8(tags + i);
+        uint8x16_t eqs = vceqq_u8(tags16, tests);
+
+        // Check low and high 8-byte halves separately
+        uint64_t lo = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 0);
+        uint64_t hi = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 1);
+
+        // Process low half (bytes 0-7)
+        while (lo != 0) {
+            int bit_pos = __builtin_ctzll(lo);
+            matched_idxes[nmatched++] = i + (bit_pos >> 3);
+            lo &= ~(0xFFULL << bit_pos);
+        }
+
+        // Process high half (bytes 8-15)
+        while (hi != 0) {
+            int bit_pos = __builtin_ctzll(hi);
+            matched_idxes[nmatched++] = i + 8 + (bit_pos >> 3);
+            hi &= ~(0xFFULL << bit_pos);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
         }
     }
     return nmatched;
@@ -3489,7 +3572,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {
@@ -3526,17 +3609,21 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                         values.emplace_back(base + rowids[i]);
                     }
                     Status st;
-                    if (pkc->is_binary()) {
-                        st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
+                    // TODO: Refactor the code to remove tmp slice array.
+                    Buffer<Slice> keys;
+                    TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
+                    if (pkc->is_binary() || pkc->is_large_binary()) {
+                        ColumnHelper::build_slices(pkc, keys);
+                        st = insert(pkc->size(), keys.data(), values.data(), false);
                     } else {
-                        std::vector<Slice> keys;
-                        TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
+                        RawBytesVisitor visitor;
+                        RETURN_IF_ERROR(pkc->accept(&visitor));
+                        const auto* fkeys = visitor.result();
+                        for (size_t j = 0; j < pkc->size(); ++j) {
                             keys.emplace_back(fkeys, _key_size);
                             fkeys += _key_size;
                         }
-                        st = insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(), false);
+                        st = insert(pkc->size(), keys.data(), values.data(), false);
                     }
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << loader->tablet_id() << " rowset:" << rowset_id

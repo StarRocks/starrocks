@@ -22,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -36,13 +37,13 @@
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"
@@ -102,6 +103,14 @@ private:
     cctz::time_zone _ctz;
 };
 
+class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
+public:
+    FixedLenByteArrayToUUIDConverter() = default;
+    ~FixedLenByteArrayToUUIDConverter() override = default;
+
+    Status convert(const Column* src, Column* dst) override;
+};
+
 class Int64ToDateTimeConverter final : public ColumnConverter {
 public:
     Int64ToDateTimeConverter() = default;
@@ -118,15 +127,21 @@ private:
     int64_t _scale_to_nano_factor = 0;
 };
 
-template <typename SourceType, typename DestType>
+template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
 void convert_int_to_int(const SourceType* __restrict__ src, DestType* __restrict__ dst, size_t size) {
     for (size_t i = 0; i < size; i++) {
-        dst[i] = DestType(src[i]);
+        if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+            // Reinterpret the source through its unsigned bit pattern before widening so a
+            // high-bit unsigned value is zero-extended instead of sign-extended.
+            dst[i] = DestType(static_cast<std::make_unsigned_t<SourceType>>(src[i]));
+        } else {
+            dst[i] = DestType(src[i]);
+        }
     }
 }
 
 // Support int => int and float => double
-template <typename SourceType, typename DestType>
+template <typename SourceType, typename DestType, bool kSourceUnsigned = false>
 class NumericToNumericConverter final : public ColumnConverter {
 public:
     NumericToNumericConverter() = default;
@@ -151,13 +166,13 @@ public:
 
         size_t size = dst_null_data.size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
-        convert_int_to_int<SourceType, DestType>(src_data.data(), dst_data.data(), size);
+        convert_int_to_int<SourceType, DestType, kSourceUnsigned>(src_data.data(), dst_data.data(), size);
         dst_nullable_column->set_has_null(src_nullable_column->has_null());
         return Status::OK();
     }
 };
 
-template <typename SourceType, LogicalType DestType>
+template <typename SourceType, LogicalType DestType, bool kSourceUnsigned = false>
 class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
@@ -198,7 +213,14 @@ public:
                 has_null = true;
                 continue;
             }
-            DestPrimitiveType value = src_data[i];
+            DestPrimitiveType value;
+            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+                // Reinterpret the source through its unsigned bit pattern so a high-bit
+                // unsigned value is zero-extended instead of sign-extended.
+                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
+            } else {
+                value = src_data[i];
+            }
             if (_scale_type == DecimalScaleType::kScaleUp) {
                 value *= _scale_factor;
             } else if (_scale_type == DecimalScaleType::kScaleDown) {
@@ -357,6 +379,86 @@ private:
     int32_t _type_length = 0;
 };
 
+// UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
+// xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+static constexpr int kUUIDByteLength = 16;
+static constexpr int kUUIDStringLength = 36;
+
+Status FixedLenByteArrayToUUIDConverter::convert(const Column* src, Column* dst) {
+    auto* src_nullable = ColumnHelper::as_raw_column<NullableColumn>(src);
+    auto* dst_nullable = down_cast<NullableColumn*>(dst);
+    auto* src_col = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable->data_column());
+    auto* dst_col = ColumnHelper::as_raw_column<BinaryColumn>(dst_nullable->data_column_raw_ptr());
+
+    const auto& src_null = src_nullable->null_column()->get_data();
+    auto& dst_null = dst_nullable->null_column_raw_ptr()->get_data();
+
+    size_t n = src_col->size();
+    dst_null.resize(n);
+    memcpy(dst_null.data(), src_null.data(), n);
+
+    static constexpr char HEX[] = "0123456789abcdef";
+    char buf[kUUIDStringLength];
+
+    for (size_t i = 0; i < n; i++) {
+        if (src_null[i]) {
+            dst_col->append_default();
+            continue;
+        }
+        Slice s = src_col->get_slice(i);
+        if (UNLIKELY(s.size != kUUIDByteLength)) {
+            return Status::Corruption(strings::Substitute(
+                    "parquet UUID column has unexpected byte length $0, expected $1", s.size, kUUIDByteLength));
+        }
+        const auto* bytes = reinterpret_cast<const uint8_t*>(s.data);
+        int pos = 0;
+        for (int j = 0; j < 4; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 4; j < 6; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 6; j < 8; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 8; j < 10; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        buf[pos++] = '-';
+        for (int j = 10; j < kUUIDByteLength; j++) {
+            buf[pos++] = HEX[bytes[j] >> 4];
+            buf[pos++] = HEX[bytes[j] & 0xf];
+        }
+        dst_col->append(Slice(buf, kUUIDStringLength));
+    }
+    dst_nullable->set_has_null(src_nullable->has_null());
+    return Status::OK();
+}
+
+template <typename DestType>
+static std::unique_ptr<ColumnConverter> make_int32_numeric_converter(bool src_unsigned) {
+    if (src_unsigned) {
+        return std::make_unique<NumericToNumericConverter<int32_t, DestType, true>>();
+    }
+    return std::make_unique<NumericToNumericConverter<int32_t, DestType, false>>();
+}
+
+template <LogicalType DestType>
+static std::unique_ptr<ColumnConverter> make_int32_decimal_converter(bool src_unsigned, int32_t src_scale,
+                                                                     int32_t dst_scale) {
+    if (src_unsigned) {
+        return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, true>>(src_scale, dst_scale);
+    }
+    return std::make_unique<PrimitiveToDecimalConverter<int32_t, DestType, false>>(src_scale, dst_scale);
+}
+
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                                 const std::string& timezone,
                                                 std::unique_ptr<ColumnConverter>* converter) {
@@ -377,21 +479,22 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::INT32: {
+        const bool src_unsigned = is_unsigned_integer(schema_element);
         if (col_type != LogicalType::TYPE_INT) {
             need_convert = true;
         }
         switch (col_type) {
         case LogicalType::TYPE_TINYINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int8_t>>();
+            *converter = make_int32_numeric_converter<int8_t>(src_unsigned);
             break;
         case LogicalType::TYPE_SMALLINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int16_t>>();
+            *converter = make_int32_numeric_converter<int16_t>(src_unsigned);
             break;
         case LogicalType::TYPE_BIGINT:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, int64_t>>();
+            *converter = make_int32_numeric_converter<int64_t>(src_unsigned);
             break;
         case LogicalType::TYPE_DOUBLE:
-            *converter = std::make_unique<NumericToNumericConverter<int32_t, double>>();
+            *converter = make_int32_numeric_converter<double>(src_unsigned);
             break;
         case LogicalType::TYPE_TIME:
             *converter = std::make_unique<Int32ToTimeConverter>();
@@ -407,19 +510,16 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
             // rejection
         case LogicalType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMALV2>>(field.scale, 9);
+            *converter = make_int32_decimal_converter<TYPE_DECIMALV2>(src_unsigned, field.scale, 9);
             break;
         case LogicalType::TYPE_DECIMAL32:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL32>>(field.scale,
-                                                                                                typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL32>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         case LogicalType::TYPE_DECIMAL64:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL64>>(field.scale,
-                                                                                                typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL64>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         case LogicalType::TYPE_DECIMAL128:
-            *converter = std::make_unique<PrimitiveToDecimalConverter<int32_t, TYPE_DECIMAL128>>(field.scale,
-                                                                                                 typeDescriptor.scale);
+            *converter = make_int32_decimal_converter<TYPE_DECIMAL128>(src_unsigned, field.scale, typeDescriptor.scale);
             break;
         default:
             break;
@@ -486,7 +586,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
         int32_t type_length = field.type_length;
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        bool is_uuid = schema_element.__isset.logicalType && schema_element.logicalType.__isset.UUID;
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         switch (col_type) {
@@ -505,6 +607,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         case LogicalType::TYPE_DECIMAL128:
             *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
                                                                                      type_length);
+            break;
+        case LogicalType::TYPE_VARCHAR:
+        case LogicalType::TYPE_CHAR:
+            if (is_uuid) {
+                need_convert = true;
+                *converter = std::make_unique<FixedLenByteArrayToUUIDConverter>();
+            }
             break;
         default:
             break;
@@ -601,8 +710,14 @@ Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
 
     size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
+    // DateValue's storage is a single int32_t (_julian), so we can stride through
+    // dst_data as raw int32 and add the epoch with SIMD.
+    const int32_t* src_ptr = src_data.data();
+    int32_t* dst_ptr = reinterpret_cast<int32_t*>(dst_data.data());
+    const int32_t epoch = date::UNIX_EPOCH_JULIAN;
+    // Compiler auto-vectorises the broadcast-add.
     for (size_t i = 0; i < size; i++) {
-        dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
+        dst_ptr[i] = src_ptr[i] + epoch;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -797,6 +912,14 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 int64_t seconds = src_data[i] / _second_mask;
                 int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+                // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
+                // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
+                // floor split the FE boundary computation uses. Without this, of_epoch_second packs
+                // a negative microsecond into the timestamp and corrupts the value.
+                if (nanoseconds < 0) {
+                    seconds -= 1;
+                    nanoseconds += NANOSECS_PER_SEC;
+                }
 
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;

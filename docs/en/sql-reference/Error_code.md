@@ -1,14 +1,15 @@
 ---
 displayed_sidebar: docs
+description: "Reference for common StarRocks error codes returned for query requests."
 ---
 
 # Error Codes
 
 This section describes the common error codes for query requests.
 
-|Serial number|Error code|Error message|
-| --- | --- | --- |
-|1005| Table creation failed. Returns a specific reason. |
+|Serial number|Error message|
+| ---  | --- |
+|1005| Table creation failed. Returns a specific reason. | 
 |1007| Cannot create a database with the same name.|
 |1008| Cannot delete non-existent database. |
 |1044| Cannot access unauthorized database. |

@@ -10,6 +10,7 @@ import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -548,6 +549,10 @@ public class IcebergScanNodeTest {
 
         Assertions.assertTrue(sinkExtra.getScannedDataFiles().contains(df));
         Assertions.assertTrue(sinkExtra.getAppliedDeleteFiles().contains(del));
+
+        Assertions.assertNull(sinkExtra.getBaseSnapshotId());
+        sinkExtra.setBaseSnapshotId(42L);
+        Assertions.assertEquals(42L, sinkExtra.getBaseSnapshotId());
     }
 
     @Test
@@ -598,6 +603,114 @@ public class IcebergScanNodeTest {
         // 8. Assert
         Assertions.assertTrue(info1.isIs_rewrite());
         Assertions.assertTrue(info2.isIs_rewrite());
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdFromExecPlan() {
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(42L);
+
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(scanNode.getIcebergTable()).thenReturn(target);
+        Mockito.when(scanNode.getBaseSnapshotId()).thenReturn(Optional.of(777L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes()).thenReturn(new ArrayList<>(List.of(scanNode)));
+
+        Assertions.assertEquals(777L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // Empty plan -> null.
+        ExecPlan empty = Mockito.mock(ExecPlan.class);
+        Mockito.when(empty.getScanNodes()).thenReturn(new ArrayList<>());
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(empty, target));
+
+        // Scan over the target but with no plan-time snapshot -> null.
+        IcebergScanNode noSnap = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(noSnap.getIcebergTable()).thenReturn(target);
+        Mockito.when(noSnap.getBaseSnapshotId()).thenReturn(Optional.empty());
+        ExecPlan planNoSnap = Mockito.mock(ExecPlan.class);
+        Mockito.when(planNoSnap.getScanNodes()).thenReturn(new ArrayList<>(List.of(noSnap)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(planNoSnap, target));
+    }
+
+    @Test
+    public void testBuildIcebergFilterExprSkipsNonTargetIcebergScans() {
+        // Symmetric to testExtractBaseSnapshotIdSkipsNonTargetIcebergScans: same fix
+        // applies to buildIcebergFilterExpr, which previously picked the first
+        // IcebergScanNode regardless of which table it scanned. With a non-target
+        // source scan listed first, the helper must still consult only the target's
+        // scan. Verified two ways:
+        //   (1) the result is null because the target's predicate is null
+        //       (legacy code would have produced a non-null filter from the source's
+        //       predicate);
+        //   (2) Mockito.verify confirms the source's predicate getter is never called.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        Table nativeTable = Mockito.mock(Table.class);
+        Schema nativeSchema = Mockito.mock(Schema.class);
+        Mockito.when(target.getNativeTable()).thenReturn(nativeTable);
+        Mockito.when(nativeTable.schema()).thenReturn(nativeSchema);
+
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getIcebergJobPlanningPredicate()).thenReturn(null);
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, target));
+        Mockito.verify(targetScan).getIcebergJobPlanningPredicate();
+        Mockito.verify(sourceScan, Mockito.never()).getIcebergJobPlanningPredicate();
+    }
+
+    @Test
+    public void testExtractBaseSnapshotIdSkipsNonTargetIcebergScans() {
+        // Simulates `UPDATE target SET ... WHERE id IN (SELECT id FROM source_iceberg)`:
+        // the plan contains two IcebergScanNodes (target + source). The helper must
+        // return the TARGET's plan-time snapshot id, not the source's — passing the
+        // source snapshot id into RowDelta.validateFromSnapshot would either be rejected
+        // by Iceberg (snapshot missing from target's history) or validate against an
+        // unrelated window.
+        IcebergTable target = Mockito.mock(IcebergTable.class);
+        Mockito.when(target.getId()).thenReturn(100L);
+        IcebergTable source = Mockito.mock(IcebergTable.class);
+        Mockito.when(source.getId()).thenReturn(200L);
+
+        // Source scan appears FIRST in the plan — the legacy "first IcebergScan wins"
+        // logic would have returned 999L, the wrong snapshot id.
+        IcebergScanNode sourceScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(sourceScan.getIcebergTable()).thenReturn(source);
+        Mockito.when(sourceScan.getBaseSnapshotId()).thenReturn(Optional.of(999L));
+
+        IcebergScanNode targetScan = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(targetScan.getIcebergTable()).thenReturn(target);
+        Mockito.when(targetScan.getBaseSnapshotId()).thenReturn(Optional.of(123L));
+
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan, targetScan)));
+
+        Assertions.assertEquals(123L,
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(execPlan, target));
+
+        // No scan matches the target (e.g. target is referenced only by the sink, not by
+        // any scan) -> null.
+        ExecPlan onlySource = Mockito.mock(ExecPlan.class);
+        Mockito.when(onlySource.getScanNodes())
+                .thenReturn(new ArrayList<>(List.of(sourceScan)));
+        Assertions.assertNull(
+                com.starrocks.sql.IcebergPlannerUtils.extractBaseSnapshotId(onlySource, target));
     }
 
     @Test
@@ -1635,5 +1748,66 @@ public class IcebergScanNodeTest {
         AwsCloudCredential credential = awsConfig.getAwsCloudCredential();
         Assertions.assertEquals("AKIA_SINK_WRAPPED", credential.getAccessKey());
         Assertions.assertEquals("secret_sink_wrapped", credential.getSecretKey());
+    }
+
+    @Test
+    public void testSetupScanRangeLocationsPassesColumnNames(@Mocked GlobalStateMgr globalStateMgr,
+                                                               @Mocked MetadataMgr metadataMgr,
+                                                               @Mocked IcebergTable table,
+                                                               @Mocked Table nativeTable) throws Exception {
+        final GetRemoteFilesParams[] capturedParams = new GetRemoteFilesParams[1];
+        Schema nativeSchema = new Schema(
+                Types.NestedField.optional(1, "event_ts", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "src_ip4", Types.IntegerType.get()));
+
+        new Expectations() {{
+            table.getCatalogName(); result = "iceberg_catalog"; minTimes = 0;
+            table.getCatalogDBName(); result = "test_db"; minTimes = 0;
+            table.getCatalogTableName(); result = "test_tbl"; minTimes = 0;
+            table.getNativeTable(); result = nativeTable; minTimes = 0;
+            nativeTable.schema(); result = nativeSchema; minTimes = 0;
+            globalStateMgr.getMetadataMgr(); result = metadataMgr; minTimes = 0;
+            metadataMgr.getRemoteFiles((com.starrocks.catalog.Table) any, (GetRemoteFilesParams) any);
+            result = new mockit.Delegate() {
+                List<RemoteFileInfo> getRemoteFiles(com.starrocks.catalog.Table tbl,
+                                                     GetRemoteFilesParams params) {
+                    capturedParams[0] = params;
+                    return Collections.emptyList();
+                }
+            };
+            minTimes = 0;
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+
+        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "event_ts", IntegerType.INT, true);
+        slot1.setColumn(new Column("event_ts", IntegerType.INT));
+        slot1.setIsMaterialized(true);
+        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "src_ip4", IntegerType.INT, true);
+        slot2.setColumn(new Column("src_ip4", IntegerType.INT));
+        slot2.setIsMaterialized(true);
+        SlotDescriptor hiddenSlot = new SlotDescriptor(new SlotId(3), IcebergTable.FILE_PATH, IntegerType.INT, true);
+        hiddenSlot.setColumn(new Column(IcebergTable.FILE_PATH, IntegerType.INT));
+        hiddenSlot.setIsMaterialized(true);
+        desc.addSlot(slot1);
+        desc.addSlot(slot2);
+        desc.addSlot(hiddenSlot);
+
+        IcebergScanNode scanNode = new IcebergScanNode(
+                new PlanNodeId(0), desc, "IcebergScanNode",
+                IcebergTableMORParams.EMPTY, IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, null);
+
+        scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(12345L)));
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+
+        scanNode.setupScanRangeLocations(false);
+
+        Assertions.assertNotNull(capturedParams[0], "params should have been captured");
+        List<String> fieldNames = capturedParams[0].getFieldNames();
+        Assertions.assertNotNull(fieldNames, "fieldNames should not be null");
+        Assertions.assertEquals(2, fieldNames.size());
+        Assertions.assertEquals("event_ts", fieldNames.get(0));
+        Assertions.assertEquals("src_ip4", fieldNames.get(1));
     }
 }

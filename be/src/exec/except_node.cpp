@@ -15,8 +15,10 @@
 #include "exec/except_node.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/set/except_build_sink_operator.h"
 #include "exec/pipeline/set/except_context.h"
 #include "exec/pipeline/set/except_output_source_operator.h"
@@ -93,17 +95,18 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     ASSIGN_OR_RETURN(auto ops_with_except_build_sink, child(0)->decompose_to_pipeline(context));
 
     if (_local_partition_by_exprs.empty()) {
-        ops_with_except_build_sink = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
+        ops_with_except_build_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), ops_with_except_build_sink, _child_expr_lists[0]);
     } else {
-        ops_with_except_build_sink = context->maybe_interpolate_local_bucket_shuffle_exchange(
-                runtime_state(), id(), ops_with_except_build_sink, _local_partition_by_exprs[0]);
+        ops_with_except_build_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
+                context, runtime_state(), id(), ops_with_except_build_sink, _local_partition_by_exprs[0]);
     }
 
     ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_except_build_sink.back().get(), context,
+                                               rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
@@ -112,16 +115,18 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     for (size_t i = 1; i < _children.size(); i++) {
         ASSIGN_OR_RETURN(auto ops_with_except_probe_sink, child(i)->decompose_to_pipeline(context));
         if (_local_partition_by_exprs.empty()) {
-            ops_with_except_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
-                    runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
+            ops_with_except_probe_sink = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                    context, runtime_state(), id(), ops_with_except_probe_sink, _child_expr_lists[i]);
         } else {
-            ops_with_except_probe_sink = context->maybe_interpolate_local_bucket_shuffle_exchange(
-                    runtime_state(), id(), ops_with_except_probe_sink, _local_partition_by_exprs[i]);
+            ops_with_except_probe_sink =
+                    ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
+                            context, runtime_state(), id(), ops_with_except_probe_sink, _local_partition_by_exprs[i]);
         }
         ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(ops_with_except_probe_sink.back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, ops_with_except_probe_sink.back().get(), context,
+                                                   rc_rf_probe_collector);
         context->add_pipeline(ops_with_except_probe_sink);
     }
 
@@ -130,7 +135,7 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     auto except_output_source = std::make_shared<ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, except_output_source.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(except_output_source.get(),
                                                 context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));

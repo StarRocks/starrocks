@@ -38,13 +38,22 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.Gson;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -65,6 +74,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  */
 public class ProfileManager implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(ProfileManager.class);
+    // Dedicated profile logger writing to fe.profile.log, whose JSON layout uses the much larger
+    // sys_log_json_profile_max_string_length cap, so large profiles are not truncated (unlike fe.log,
+    // which caps the JSON message field at sys_log_json_max_string_length).
+    private static final Logger PROFILE_LOG = LogManager.getLogger("profile");
+    // Single-line JSON, matching the query profile log written by StmtExecutor.
+    private static final Gson GSON = new Gson();
     private static ProfileManager INSTANCE = null;
     public static final String QUERY_ID             = ProfileKeyDictionary.QUERY_ID;
     public static final String START_TIME           = ProfileKeyDictionary.START_TIME;
@@ -91,6 +106,8 @@ public class ProfileManager implements MemoryTrackable {
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
+        public long startTimeMs = -1;
+        public long endTimeMs = -1;
         private byte[] profileContent;
         public ProfilingExecPlan plan;
 
@@ -133,10 +150,11 @@ public class ProfileManager implements MemoryTrackable {
             }
         }
 
-        public List<String> toRow() {
+        public List<String> toRow(ConnectContext context) {
+            ZoneId sessionZone = getSessionZoneId(context);
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
-            res.add(infoStrings.get(START_TIME));
+            res.add(formatTimestamp(startTimeMs, sessionZone));
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
             String statement = infoStrings.getOrDefault(SQL_STATEMENT, "");
@@ -183,6 +201,8 @@ public class ProfileManager implements MemoryTrackable {
         for (String header : PROFILE_HEADERS) {
             element.infoStrings.put(header, summaryProfile.getInfoString(header));
         }
+        element.startTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(START_TIME));
+        element.endTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(END_TIME));
         try {
             element.setProfileContent(ProfileSerializer.serialize(fullProfile));
         } catch (IOException e) {
@@ -217,7 +237,56 @@ public class ProfileManager implements MemoryTrackable {
 
         LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
+        if (Config.enable_print_load_profile_to_log
+                && "Load".equals(element.infoStrings.get(QUERY_TYPE))) {
+            PROFILE_LOG.info(GSON.toJson(buildLoadQueryDetail(element, profileString)));
+        }
+
         return profileString;
+    }
+
+    // Build a QueryDetail for a load profile so it is logged in the same single-line JSON shape as
+    // the query profile log (StmtExecutor). Numeric execution stats that loads do not expose are left
+    // at their defaults, matching how query profiles serialize unavailable values.
+    private static QueryDetail buildLoadQueryDetail(ProfileElement element, String profileString) {
+        Map<String, String> info = element.infoStrings;
+        QueryDetail detail = new QueryDetail();
+        detail.setQueryId(info.get(QUERY_ID));
+        detail.setQuery(false);
+        detail.setStartTime(element.startTimeMs);
+        detail.setEndTime(element.endTimeMs);
+        if (element.startTimeMs > 0 && element.endTimeMs >= element.startTimeMs) {
+            detail.setLatency(element.endTimeMs - element.startTimeMs);
+        }
+        detail.setDatabase(info.get(DEFAULT_DB));
+        detail.setSql(info.get(SQL_STATEMENT));
+        detail.setUser(info.get(USER));
+        if (info.get(WAREHOUSE_CNGROUP) != null) {
+            detail.setWarehouse(info.get(WAREHOUSE_CNGROUP));
+        }
+        detail.setState(toLoadState(info.get(QUERY_STATE)));
+        detail.setProfile(profileString);
+        return detail;
+    }
+
+    // Map the QUERY_STATE string recorded by the various load paths to a QueryMemState. The state field is
+    // kept so downstream consumers of the profile log (e.g. BYOC / manager) that expect it stay compatible.
+    // Spellings differ: stream/routine load use "Finished"/"Aborted", broker load "Finished"/"Running", and
+    // merge commit the upper-case TaskState name ("FINISHED"/"ABORTED"/"CANCELLED"/...); anything not
+    // recognized as terminal success/cancel/abort maps to RUNNING. This mirrors the profile's own QUERY_STATE
+    // (the same value shown by SHOW PROFILELIST). Caveat: LoadLoadingTask records "Finished" from its finally
+    // block even when a broker load failed, so such a load is reported FINISHED here too; fixing that
+    // precisely belongs in the load task that builds the profile, not in this serializer.
+    private static QueryDetail.QueryMemState toLoadState(String state) {
+        if ("Finished".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.FINISHED;
+        } else if ("Cancelled".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.CANCELLED;
+        } else if ("Aborted".equalsIgnoreCase(state)) {
+            return QueryDetail.QueryMemState.FAILED;
+        } else {
+            return QueryDetail.QueryMemState.RUNNING;
+        }
     }
 
     public boolean hasProfile(String queryId) {
@@ -230,6 +299,7 @@ public class ProfileManager implements MemoryTrackable {
     }
 
     public List<List<String>> getAllQueries() {
+        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
         List<List<String>> result = Lists.newLinkedList();
         readLock.lock();
         try {
@@ -237,7 +307,13 @@ public class ProfileManager implements MemoryTrackable {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
-                    row.add(infoStrings.get(str));
+                    if (START_TIME.equals(str)) {
+                        row.add(formatTimestamp(element.startTimeMs, sessionZone));
+                    } else if (END_TIME.equals(str)) {
+                        row.add(formatTimestamp(element.endTimeMs, sessionZone));
+                    } else {
+                        row.add(infoStrings.get(str));
+                    }
                 }
                 result.add(0, row);
             }
@@ -319,6 +395,63 @@ public class ProfileManager implements MemoryTrackable {
             return Estimator.estimate(profileMap, 10);
         } finally {
             readLock.unlock();
+        }
+    }
+
+    /**
+     * Extracts the session timezone from a {@link ConnectContext}.
+     * Falls back to the default session variable timezone if {@code context} is null.
+     */
+    private static ZoneId getSessionZoneId(ConnectContext context) {
+        String tz;
+        if (context != null && context.getSessionVariable() != null) {
+            tz = context.getSessionVariable().getTimeZone();
+        } else {
+            tz = TimeUtils.getSessionTimeZone();
+        }
+        return TimeUtils.getOrSystemTimeZone(tz).toZoneId();
+    }
+
+    /**
+     * Formats an epoch-millis timestamp in the given session timezone with the offset suffix.
+     * e.g. 1704067200000 with Asia/Shanghai -> "2024-01-01 08:00:00 (+08:00)"
+     */
+    static String formatTimestamp(long epochMs, ZoneId sessionZone) {
+        if (epochMs <= 0) {
+            return FeConstants.NULL_STRING;
+        }
+        Instant instant = Instant.ofEpochMilli(epochMs);
+        ZoneOffset offset = sessionZone.getRules().getOffset(instant);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(sessionZone);
+        return formatter.format(instant) + " (" + offset + ")";
+    }
+
+    private static final DateTimeFormatter STORAGE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * Parses a time string formatted by {@link TimeUtils#longToTimeStringWithTimeZone}
+     * (e.g. "2024-01-01 08:00:00 (+08:00)") back to epoch milliseconds.
+     * Also accepts the bare format "2024-01-01 08:00:00" for backward compatibility.
+     */
+    private static long parseTimeStringToEpochMs(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) {
+            return -1;
+        }
+        try {
+            // Strip timezone suffix " (+08:00)" or " (Z)" if present
+            String timePart = timeStr;
+            ZoneId zone = TimeUtils.DEFAULT_STORAGE_ZONE;
+            int parenIdx = timeStr.indexOf(" (");
+            if (parenIdx > 0) {
+                timePart = timeStr.substring(0, parenIdx);
+                String offsetStr = timeStr.substring(parenIdx + 2, timeStr.length() - 1);
+                zone = ZoneId.of(offsetStr);
+            }
+            LocalDateTime ldt = LocalDateTime.parse(timePart, STORAGE_FORMATTER);
+            return ldt.atZone(zone).toInstant().toEpochMilli();
+        } catch (Exception e) {
+            return -1;
         }
     }
 }

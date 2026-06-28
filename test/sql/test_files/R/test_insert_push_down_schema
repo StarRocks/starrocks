@@ -1,0 +1,220 @@
+-- name: test_insert_push_down_schema
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- prepare parquet file: k2 varchar, k1 int
+insert into files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select "abc" as k2, 1 as k1;
+-- result:
+-- !result
+
+-- target: k1 varchar(10), k3 int (k3 absent from file)
+create table t1 (k1 varchar(10), k3 int);
+-- result:
+-- !result
+
+-- 1: BY NAME, SELECT single missing column k3
+-- k3 added to file schema as nullable int; reads null since absent in physical file
+insert into t1 by name
+properties ("enable_push_down_schema" = "true")
+select k3 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+None	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 2: BY NAME, SELECT *
+-- expands to target columns [k1, k3]; k1 type pushed to varchar(10), k3 added as nullable
+-- extra file column k2 is excluded from the file schema
+insert into t1 by name
+properties ("enable_push_down_schema" = "true")
+select * from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 3: BY NAME, SELECT explicit k1 and missing k3
+-- only k1 and k3 exist in file schema; k2 (present in physical file) not included
+insert into t1 by name
+properties ("enable_push_down_schema" = "true")
+select k1, k3 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 4: BY NAME, SELECT with alias: k1 aliased as k3 -> mapped to target column k3 (int)
+insert into t1 by name
+properties ("enable_push_down_schema" = "true")
+select k1 as k3 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+None	1
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 5: BY NAME, SELECT with function expression
+-- CAST(k1 AS varchar(10)) as k1: inner SlotRef k1 kept in file schema for reading
+-- k3 added as nullable since absent from file
+insert into t1 by name
+properties ("enable_push_down_schema" = "true")
+select cast(k1 as varchar(10)) as k1, k3 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "fill_mismatch_column_with" = "null");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+1	None
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 6: BY POSITION with explicit target columns
+-- k2(file) -> k1(varchar(10) in target), k1(file) -> k3(int in target)
+insert into t1 (k1, k3)
+properties ("enable_push_down_schema" = "true")
+select k2, k1 from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+abc	1
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 7: BY POSITION, SELECT *
+-- file cols [k2, k1] by position map to target cols [k1, k3]
+-- k2 type pushed to varchar(10), k1 type pushed to int
+insert into t1
+properties ("enable_push_down_schema" = "true")
+select * from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+select * from t1;
+-- result:
+abc	1
+-- !result
+
+truncate table t1;
+-- result:
+-- !result
+
+-- 8: BY POSITION, SELECT * with extra file columns excluded
+-- file has 2 cols [k2, k1], target t2 has only 1 col [k1 varchar(10)]
+-- only file col 0 (k2) maps to target k1; file col 1 (k1) is trimmed from the schema
+create table t2 (k1 varchar(10));
+-- result:
+-- !result
+
+insert into t2
+properties ("enable_push_down_schema" = "true")
+select * from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+select * from t2;
+-- result:
+abc
+-- !result
+
+-- 9: invalid property value -> semantic error
+insert into t1
+properties ("enable_push_down_schema" = "tru")
+select * from files(
+    "path" = "s3://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+[REGEX].*Invalid enable_push_down_schema: 'tru'. Expected values should be 'true' or 'false'.*
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

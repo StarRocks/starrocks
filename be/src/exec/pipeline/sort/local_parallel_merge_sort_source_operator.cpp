@@ -17,6 +17,9 @@
 #include <algorithm>
 #include <sstream>
 
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -27,6 +30,11 @@ Status LocalParallelMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     _sort_context->ref();
     _sort_context->attach_source_observer(state, observer());
+    // Subscribe to every partition spiller's source list so flush-all ("partition ready") and restore
+    // completions of any partition wake this INPUT_EMPTY sleeper. In the gathered branch all M source
+    // drivers share one context and each subscribes, so a partition emits M notifies; the observer's atomic
+    // event bitmask coalesces them. N subscriptions per driver, one per spilled partition.
+    _sort_context->subscribe_source_to_spillers(state, observer());
     _merger->bind_profile(_merge_parallel_id, _unique_metrics.get());
     _merger->attach_observer(state, observer());
     return Status::OK();
@@ -38,6 +46,11 @@ void LocalParallelMergeSortSourceOperator::close(RuntimeState* state) {
 }
 
 bool LocalParallelMergeSortSourceOperator::has_output() const {
+    // Report ready on a partition spiller task error so pull_chunk() propagates it; the merger's pending/stage
+    // gates never observe it. See LocalMergeSortSourceOperator::has_output().
+    if (!_sort_context->spiller_task_status().ok()) {
+        return true;
+    }
     if (!_sort_context->is_partition_sort_finished()) {
         return false;
     }
@@ -58,6 +71,8 @@ bool LocalParallelMergeSortSourceOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> LocalParallelMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
+    // Propagate the spiller task error that made has_output() report ready, before pulling from the merger.
+    RETURN_IF_ERROR(_sort_context->spiller_task_status());
     ChunkPtr chunk = _merger->try_get_next(_merge_parallel_id);
 
     if (_merger->is_finished()) {
@@ -68,8 +83,36 @@ StatusOr<ChunkPtr> LocalParallelMergeSortSourceOperator::pull_chunk(RuntimeState
 }
 
 Status LocalParallelMergeSortSourceOperator::set_finished(RuntimeState* state) {
+    auto defer = _sort_context->defer_notify_sink();
     _sort_context->cancel();
     return _sort_context->set_finished();
+}
+
+BlockReason LocalParallelMergeSortSourceOperator::block_reason() const {
+    // Mixed park model. The restore axis is woken by the partition spillers' source list (covered by
+    // prepare()'s subscribe_source_to_spillers) and has two sub-cases: still building -- a sink's flush-all
+    // completion advances is_partition_sort_finished, the callback running on the spiller IO thread -- or the
+    // steady state, where all sinks are done but a spilled partition is not yet restored, so a leaf chunk
+    // provider stays pending (chunks_sorter->has_output() == false) until that partition's restore completion
+    // fires on its spiller source list. Both are exactly !is_partition_sort_finished() || !is_partition_ready().
+    // The merge-path stage-coordination axis -- all sinks done, every partition restored, the merger still
+    // cascading stages -- is woken by the merger's own observable (attach_observer), not a spiller, and the
+    // enum has no WAIT_MERGE, so it stays generic NONE (the merger pip wakes it, as the non-spill parallel
+    // sort already runs). A false WAIT_RESTORE on a drained merge-park is harmless (still in the covered mask);
+    // a false NONE on a restore-park would silently leave the wakeup net unarmed, so name restore whenever
+    // any partition could still send the source a spiller wakeup.
+    // Every return passes through named<R, kCoveredWakeups>(): WAIT_RESTORE must sit in this source's
+    // coverage mask or it does not compile; NONE is the always-legal "not parked" answer.
+    if (_is_finished || is_finished()) {
+        return named<BlockReason::NONE, kCoveredWakeups>();
+    }
+    if (has_output()) {
+        return named<BlockReason::NONE, kCoveredWakeups>();
+    }
+    if (!_sort_context->is_partition_sort_finished() || !_sort_context->is_partition_ready()) {
+        return named<BlockReason::WAIT_RESTORE, kCoveredWakeups>();
+    }
+    return named<BlockReason::NONE, kCoveredWakeups>();
 }
 
 Status LocalParallelMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
@@ -82,13 +125,21 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                                                                 int32_t driver_sequence) {
     auto sort_context = _sort_context_factory->create(driver_sequence);
 
-    auto chunk_provider_factory = [](ChunksSorter* chunks_sorter) {
-        return ([chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
+    auto chunk_provider_factory = [state = _state](ChunksSorter* chunks_sorter) {
+        return ([state, chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
             if (!chunks_sorter->has_output()) {
                 return false;
             }
             if (!only_check_if_has_data) {
-                (void)chunks_sorter->get_next(chunk, eos);
+                auto status = chunks_sorter->get_next(chunk, eos);
+                // Propagate non-EOF errors instead of silently dropping them.
+                // Without this, a spiller restore failure leaves the merger waiting
+                // on a leaf provider that will never become ready, and the query hangs.
+                if (!status.ok() && !status.is_end_of_file()) {
+                    cancel_fragment_context(state->fragment_ctx(), status);
+                    *eos = true;
+                    return false;
+                }
             }
             return true;
         });

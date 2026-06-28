@@ -40,21 +40,23 @@
 #include <memory>
 
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
+#include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
+#include "cache/mem_cache/page_handle.h"
+#include "cache/mem_cache/page_handle_fwd.h"
 #include "column/append_with_mask.h"
 #include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "storage/column_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_handle.h"
-#include "storage/rowset/page_handle_fwd.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

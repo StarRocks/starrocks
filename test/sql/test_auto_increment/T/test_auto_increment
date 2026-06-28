@@ -163,6 +163,7 @@ DROP DATABASE test_schema_change_auto_increment;
 CREATE DATABASE test_table_with_null;
 USE test_table_with_null;
 
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
 
 CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NULL, job2 BIGINT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");

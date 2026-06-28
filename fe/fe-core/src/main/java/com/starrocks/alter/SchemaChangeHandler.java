@@ -48,7 +48,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FlatJsonConfig;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -108,10 +110,12 @@ import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysType;
@@ -132,6 +136,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -147,6 +152,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -172,13 +178,20 @@ public class SchemaChangeHandler extends AlterHandler {
     private AlterJobV2 createOptimizeTableJob(
             OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap)
             throws StarRocksException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                    "OPTIMIZE is not supported on tables with range distribution.");
+        }
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
 
-        // If optimized olap table contains related mvs, set those mv state to inactive.
-        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
+        // Bucket-only optimize changes the physical layout without changing the MV-visible semantics,
+        // so we skip inactivating related MVs in that case.
+        if (shouldInactiveRelatedMaterializedViewsForOptimize(optimizeClause, olapTable)) {
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
+        }
 
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
@@ -191,6 +204,48 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withComputeResource(ConnectContext.get().getCurrentComputeResource());
 
         return jobBuilder.build();
+    }
+
+    private boolean shouldInactiveRelatedMaterializedViewsForOptimize(OptimizeClause optimizeClause, OlapTable olapTable) {
+        return !isBucketCountOnlyOptimize(optimizeClause, olapTable);
+    }
+
+    private boolean isBucketCountOnlyOptimize(OptimizeClause optimizeClause, OlapTable olapTable) {
+        if (optimizeClause.getKeysDesc() != null
+                || optimizeClause.getPartitionDesc() != null
+                || optimizeClause.getSortKeys() != null
+                || optimizeClause.getRange() != null) {
+            return false;
+        }
+
+        DistributionDesc distributionDesc = optimizeClause.getDistributionDesc();
+        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+        if (!(distributionDesc instanceof HashDistributionDesc)
+                || !(defaultDistributionInfo instanceof HashDistributionInfo)) {
+            return false;
+        }
+
+        HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+        if (hashDistributionDesc.getBuckets() <= 0 || optimizeClause.getSourcePartitionIds().isEmpty()) {
+            return false;
+        }
+
+        boolean hasBucketCountChange = false;
+        for (long partitionId : optimizeClause.getSourcePartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null || !(partition.getDistributionInfo() instanceof HashDistributionInfo)) {
+                return false;
+            }
+
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) partition.getDistributionInfo();
+            List<String> originalDistributionColumns = MetaUtils.getColumnNamesByColumnIds(
+                    olapTable.getIdToColumn(), hashDistributionInfo.getDistributionColumns());
+            if (!originalDistributionColumns.equals(hashDistributionDesc.getDistributionColumnNames())) {
+                return false;
+            }
+            hasBucketCountChange |= hashDistributionDesc.getBuckets() != hashDistributionInfo.getBucketNum();
+        }
+        return hasBucketCountChange;
     }
 
     private Column buildColumnForAdd(ColumnDef columnDef, OlapTable table) throws DdlException {
@@ -339,6 +394,8 @@ public class SchemaChangeHandler extends AlterHandler {
          *      Can not drop any key column is has value with REPLACE method
          */
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
+                "DROP COLUMN", dropColName);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
@@ -670,29 +727,81 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    // Returns true when the MODIFY COLUMN clause changes nothing but the column comment, so it can take the
+    // lightweight ModifyColumnComment path instead of spawning a schema change job.
+    private boolean isCommentOnlyModification(ModifyColumnClause alterClause, OlapTable olapTable) {
+        // Repositioning the column, targeting a rollup, or carrying column properties is a real change.
+        if (alterClause.getColPos() != null || alterClause.getRollupName() != null
+                || (alterClause.getProperties() != null && !alterClause.getProperties().isEmpty())) {
+            return false;
+        }
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
+        Column oriColumn = olapTable.getBaseColumn(modColumn.getName());
+        if (oriColumn == null) {
+            // Leave the "column does not exist" error to processModifyColumn.
+            return false;
+        }
+        // The KEY designation is table-level and is not repeated in the MODIFY COLUMN clause, so a rebuilt
+        // column inherits the stored key flag the same way processModifyColumn does.
+        if (!modColumn.isKey()) {
+            modColumn.setIsKey(oriColumn.isKey());
+        }
+        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            // AlterTableClauseAnalyzer force-injects REPLACE on PK value columns (and keeps key columns as
+            // keys), so modColumn always carries an aggregation type here. Mirror the PK branch in
+            // processModifyColumn, which unconditionally realigns the type + implicit flag from the stored
+            // column, so an explicitly-typed clause still compares as comment-only.
+            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
+        } else if (oriColumn.isAggregationTypeImplicit() && modColumn.getAggregationType() == null) {
+            // For DUP/UNIQUE the value column's aggregation (NONE/REPLACE) is implied by the table model and
+            // the user omits it; inherit it as implicit so the comparison matches. If the user *explicitly*
+            // wrote an aggregation method, leave it explicit so the comparison fails and processModifyColumn
+            // raises the proper "Can not assign aggregation method" error instead of being silently dropped
+            // into the lightweight comment path.
+            modColumn.setAggregationType(oriColumn.getAggregationType(), oriColumn.isAggregationTypeImplicit());
+        }
+        return oriColumn.equalsIgnoreComment(modColumn);
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                        Map<Long, LinkedList<Column>> indexMetaIdToSchema) throws DdlException {
+                                        Map<Long, LinkedList<Column>> indexMetaIdToSchema,
+                                        Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames)
+            throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
+        // But fast schema evolution for widening varchar length can be performed in both shared data and share nothing.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
-                throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null) {
+                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
+                if (baseColumn.isKey()) {
+                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
+                    // we will keep it as a key column which is the same as before.
+                    modColumn.setIsKey(baseColumn.isKey());
+                    if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
+                        throw new DdlException(
+                            "Can not modify key column: " + modColumn.getName() +
+                                " for primary key table except for increasing varchar length");
+                    }
+                    if (modColumn.isAllowNull()) {
+                        throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
+                    }
+                }
             }
+
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (indexMeta.getSortKeyIdxes() != null) {
                 for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                     if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
-                        throw new DdlException("Can not modify sort column in primary data model table");
+                        if (!isVarcharLengthIncrease(indexMeta.getSchema().get(sortKeyIdx), modColumn)) {
+                            throw new DdlException(
+                                "Can not modify sort column in primary data model table except for increasing varchar length");
+                        }
                     }
                 }
             }
-            if (modColumn.getAggregationType() != null && modColumn.getAggregationType() != AggregateType.REPLACE) {
-                throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
-                        modColumn.getName());
-            }
-            modColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (modColumn.isKey() && null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
@@ -846,12 +955,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
         List<Column> otherIndexModifiedColumn = new ArrayList<>();
         // check if column being mod
+        List<Long> otherIndexMetaIds = new ArrayList<>();
         if (!modColumn.equals(oriColumn)) {
             // column is mod. we have to mod this column in all indices
 
             // handle other indices
             // 1 find other indices which contain this column
-            List<Long> otherIndexMetaIds = new ArrayList<>();
             for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexMetaIdToSchema().entrySet()) {
                 if (entry.getKey() == indexMetaIdForFindingColumn) {
                     // skip the index we used to find column. it has been handled before
@@ -926,6 +1035,84 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
+        boolean isVarcharLengthIncrease = isVarcharLengthIncrease(oriColumn, modColumn);
+        boolean isOnlyDifferentFromColumnType = hasOnlyTypeChangeForVarcharLengthFastPath(oriColumn, modColumn);
+
+        boolean keyOrderChanged = false;
+        if (modColumn.isKey() && oriColumn.isKey()) {
+            List<String> oldKeyColumns =
+                    olapTable.getBaseSchema().stream().
+                        filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
+            List<String> newKeyColumns =
+                    schemaForFinding.stream().filter(Column::isKey).
+                        map(c -> Column.removeNamePrefix(c.getName())).collect(Collectors.toList());
+            keyOrderChanged = !oldKeyColumns.equals(newKeyColumns);
+        } // sort key need not be considered here, because modify column can not change the order of sort key
+
+        // The fast-schema-evolution path is available when FSE is enabled for this
+        // run mode and the modify does not reorder the key columns.
+        boolean fastSchemaEvolutionEligible =
+                (fastSchemaEvolution || (!RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution()))
+                        && !keyOrderChanged;
+
+        // Range-distribution per-tablet boundaries are stored as tuples in sort-key
+        // space, so a modify that changes the bytes a sort-key column was recorded
+        // under (type change, shrink, reposition, key reorder) invalidates them.
+        // A VARCHAR widen is the exception: it keeps those bytes identical, so it is
+        // range-safe whichever job runs it -- the sync/async fast-schema-evolution
+        // job, or even the heavy createJob shadow-mirror, which copies ranges verbatim.
+        // The fast-schema-evolution conditions below therefore only scope the bypass to
+        // a fast-schema-evolution table (and keep it cheap); they are not a correctness
+        // requirement -- only !keyOrderChanged is, since a key reorder shifts the sort key.
+        if (olapTable.isRangeDistribution()) {
+            // A keyness flip (value <-> key) changes the key column set, which shifts
+            // the key-derived range sort key on AGG/UNIQUE tables and on tables without
+            // an explicit ORDER BY, even when the column itself is not in the sort key.
+            if (oriColumn.isKey() != modColumn.isKey()) {
+                throw new DdlException("MODIFY COLUMN that changes keyness is not supported on tables with " +
+                        "range distribution, because adding to or removing from the key column set shifts the " +
+                        "range sort key on AGG/UNIQUE tables and on tables without explicit ORDER BY. Column: " +
+                        newColName);
+            }
+            boolean fastPathVarcharWiden = columnPos == null
+                    && isOnlyDifferentFromColumnType && isVarcharLengthIncrease
+                    && fastSchemaEvolutionEligible;
+            if (!fastPathVarcharWiden) {
+                rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn, "MODIFY COLUMN", newColName);
+            }
+        }
+
+        alterIndexMetaIdToIncrVarcharLenColNames.putIfAbsent(indexMetaIdForFindingColumn, Sets.newHashSet());
+        for (long otherIndexMetaId : otherIndexMetaIds) {
+            alterIndexMetaIdToIncrVarcharLenColNames.putIfAbsent(otherIndexMetaId, Sets.newHashSet());
+        }
+        if (isOnlyDifferentFromColumnType && isVarcharLengthIncrease) {
+            alterIndexMetaIdToIncrVarcharLenColNames.get(indexMetaIdForFindingColumn).add(
+                    Column.removeNamePrefix(modColumn.getName()));
+            for (long otherIndexMetaId : otherIndexMetaIds) {
+                alterIndexMetaIdToIncrVarcharLenColNames.get(otherIndexMetaId).add(
+                        Column.removeNamePrefix(modColumn.getName()));
+            }
+            // This specified modify column can be perform by fast path for share nothing mode
+            if (fastSchemaEvolutionEligible) {
+                // In this special case, we can use fast schema evolution bypassing the key and index check.
+                return true;
+            }
+        } else {
+            alterIndexMetaIdToIncrVarcharLenColNames.get(indexMetaIdForFindingColumn).remove(
+                    Column.removeNamePrefix(modColumn.getName()));
+            for (long otherIndexMetaId : otherIndexMetaIds) {
+                alterIndexMetaIdToIncrVarcharLenColNames.get(otherIndexMetaId).remove(
+                        Column.removeNamePrefix(modColumn.getName()));
+            }
+        }
+
+        if (keyOrderChanged && KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            // exception for pk order change
+            throw new DdlException("Can not reorder pk keys by modify column");
+        } // non pk key order change will be charged by other rule, not throw exception here
+        // which is meet the previous behavior
+
         // fast schema evolution supports the conversion of scalar types to decimal types, but does not support the conversion
         // of decimal types to other scale types, due to the fact that the precision and scale of the decimal are not recorded
         // in the segment file
@@ -942,6 +1129,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        // Not need for widen varchar length
         if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
             return false;
         }
@@ -950,6 +1138,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // 1. The index can be reused after type conversion, and BE has made necessary changes,
         //    such as casting new type values to old type values before querying the index.
         // 2. The index cannot be reused, and BE has made changes to skip it during queries.
+        // 3. Not need for widen varchar length
         // Currently, BLOOMFILTER and NGRAMBF indexes use rule 2 to support fast schema evolution. BE-side changes
         // for other indexes are not yet ready, so fast schema change is temporarily disabled for them. This feature
         // will be gradually enabled for these indexes once BE support is in place.
@@ -1041,6 +1230,12 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifySortKeyColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexMetaIdToSchema, List<Integer> sortKeyIdxes,
                                             List<Integer> sortKeyUniqueIds) throws DdlException {
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException(
+                "Modifying sort key (ALTER TABLE ... ORDER BY) is not " +
+                "supported on tables with range distribution, because the " +
+                "sort key defines tablet boundaries.");
+        }
         LinkedList<Column> targetIndexSchema = indexMetaIdToSchema.get(olapTable.getIndexMetaIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -1138,6 +1333,9 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
         if (newColumn.getDefaultExpr() != null && newColumn.getDefaultValueType() == Column.DefaultValueType.CONST) {
+            // For current_timestamp/now() this freezes ALTER-time into defaultValue so BE can backfill pre-existing
+            // rows. New rows still resolve through defaultExpr (calculatedDefaultValue checks the expr first), and
+            // metadata display is handled in getMetaDefaultValue.
             long startTime = ConnectContext.get().getStartTime();
             newColumn.setDefaultValue(newColumn.calculatedDefaultValueWithTime(startTime));
         }
@@ -1199,6 +1397,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 newColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
+
+        // Range-distribution guard runs AFTER the keys-type block above,
+        // which may promote a no-aggregate column to KEY on AGG tables
+        // (line ~1276). Checking newColumn.isKey() here sees the final
+        // post-promotion value.
+        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(newColumn));
 
         // hll must be used in agg_keys
         if (newColumn.getType().isHllType() && KeysType.AGG_KEYS != olapTable.getKeysType()) {
@@ -1420,7 +1624,9 @@ public class SchemaChangeHandler extends AlterHandler {
                                           Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                           Map<String, String> propertyMap,
                                           List<Index> indexes,
-                                          Set<String> modifyFieldColumns) throws StarRocksException {
+                                          Set<String> modifyFieldColumns,
+                                          Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames)
+                throws StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1655,13 +1861,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 3. check partition key
-            checkPartitionColumnChange(olapTable, alterSchema, alterIndexMetaId);
+            checkPartitionColumnChange(olapTable, alterSchema, alterIndexMetaId,
+                                       alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 4. check distribution key:
-            checkDistributionColumnChange(olapTable, alterSchema, alterIndexMetaId);
+            checkDistributionColumnChange(olapTable, alterSchema, alterIndexMetaId,
+                                          alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 5. calc short key
-            calculateShortKey(olapTable, alterIndexMetaId, alterSchema, indexIdToProperties.get(alterIndexMetaId), dataBuilder);
+            calculateShortKey(olapTable, alterIndexMetaId, alterSchema, indexIdToProperties.get(alterIndexMetaId), dataBuilder,
+                              alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 6. check the uniqueness of column unique id
             if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
@@ -1683,7 +1892,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void calculateShortKey(OlapTable olapTable, long alterIndexMetaId, List<Column> alterSchema,
-               Map<String, String> indexProperties, SchemaChangeData.Builder dataBuilder) throws DdlException {
+               Map<String, String> indexProperties, SchemaChangeData.Builder dataBuilder,
+               Set<String> incrVarcharLenColNames) throws DdlException {
         List<Integer> sortKeyIdxes = new ArrayList<>();
         List<Integer> sortKeyUniqueIds = new ArrayList<>();
         MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(alterIndexMetaId);
@@ -1727,7 +1937,8 @@ public class SchemaChangeHandler extends AlterHandler {
             for (int i = 0; i < newShortKeyCount; i++) {
                 newShortKeyColumns.add(alterSchema.get(sortKeyIdxes.get(i)));
             }
-            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns,
+                                                          incrVarcharLenColNames);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
             dataBuilder.withSortKeyIdxes(sortKeyIdxes);
@@ -1744,7 +1955,8 @@ public class SchemaChangeHandler extends AlterHandler {
             for (int i = 0; i < newShortKeyCount; i++) {
                 newShortKeyColumns.add(alterSchema.get(i));
             }
-            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns,
+                                                          incrVarcharLenColNames);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
         }
@@ -1775,15 +1987,21 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private boolean isShortKeyChanged(List<Column> originShortKeyColumns, List<Column> newShortKeyColumns) {
+    private boolean isShortKeyChanged(List<Column> originShortKeyColumns, List<Column> newShortKeyColumns,
+                                      Set<String> incrVarcharLenColNames) {
         if (originShortKeyColumns.size() != newShortKeyColumns.size()) {
             return true;
         }
         for (int i = 0; i < originShortKeyColumns.size(); i++) {
             Column originColumn = originShortKeyColumns.get(i);
             Column newColumn = newShortKeyColumns.get(i);
+            if (originColumn.getName().equalsIgnoreCase(Column.removeNamePrefix(newColumn.getName())) &&
+                    incrVarcharLenColNames != null && incrVarcharLenColNames.contains(
+                        Column.removeNamePrefix(originColumn.getName()))) {
+                continue;
+            }
             if (!originColumn.getName().equalsIgnoreCase(newColumn.getName())
-                    || !originColumn.getType().equals(newColumn.getType())) {
+                    || (!originColumn.getType().equals(newColumn.getType()))) {
                 return true;
             }
         }
@@ -1826,7 +2044,8 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId)
+    private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId,
+                                            Set<String> incrVarcharLenColNames)
             throws DdlException {
         // Since partition key and distribution key's schema change can only happen in base index,
         // only check it in base index.There may be some trivial changes between base index and other
@@ -1838,11 +2057,15 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
+            String normalizedColName = Column.removeNamePrefix(colName);
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
             // NOTE: partition column in partition info maybe changed(eg: str2date partition table), use original
             // table schema instead.
             Column refPartitionCol = olapTable.getColumn(partitionCol.getName());
             if (col.isPresent() && !col.get().equals(refPartitionCol)) {
+                if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
+                    continue;
+                }
                 throw new DdlException("Can not modify partition column[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
@@ -1856,7 +2079,8 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for partitionColumns
     }
 
-    private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId)
+    private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId,
+                                               Set<String> incrVarcharLenColNames)
             throws DdlException {
         // Since partition key and distribution key's schema change can only happen in base index,
         // only check it in base index.There may be some trivial changes between base index and other
@@ -1869,8 +2093,17 @@ public class SchemaChangeHandler extends AlterHandler {
                 olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
+            String normalizedColName = Column.removeNamePrefix(colName);
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
             if (col.isPresent() && !col.get().equals(distributionCol)) {
+                if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
+                    if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {
+                        throw new DdlException("Can not modify distribution column[" + colName
+                                + "] for colocate table. index["
+                                + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
+                    }
+                    continue;
+                }
                 throw new DdlException("Can not modify distribution column[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
@@ -1901,11 +2134,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutSeconds(Config.alter_table_timeout_second)
                 .withStartTime(connectContext.getStartTime())
                 .withSortKeyIdxes(sortKeyIdxes)
-                .withSortKeyUniqueIds(sortKeyUniqueIds);
+                .withSortKeyUniqueIds(sortKeyUniqueIds)
+                .withAlterIndexInfo(false, olapTable.getCopiedIndexes());
 
         if (RunMode.isSharedDataMode()) {
             // check warehouse
-            this.computeResource = connectContext != null ?
+            final ComputeResource computeResource = connectContext != null ?
                     connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             if (!warehouseManager.isResourceAvailable(computeResource)) {
@@ -1934,8 +2168,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
+    protected void runAfterLeaseValid() {
+        super.runAfterLeaseValid();
         runAlterJobV2();
     }
 
@@ -1995,6 +2229,51 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
         }
+        // Lake-only ADD/DROP INDEX fast path. The classifier filters the
+        // alter set; on a match we short-circuit into the dedicated Job
+        // (LakeTableAddIndexJob / LakeTableDropIndexJob) that builds IDG
+        // payloads on BE without rewriting segment data. On any unexpected
+        // construction error we fall through to the regular path to stay
+        // safe.
+        if (SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(olapTable, alterClauses)) {
+            AlterJobV2 fastPathJob = tryBuildLakeAddIndexJob(db, olapTable, alterClauses);
+            if (fastPathJob != null) {
+                LOG.info("ADD INDEX fast path selected for table {}", olapTable.getName());
+                return fastPathJob;
+            }
+            LOG.info("ADD INDEX fast path eligible but build failed; falling through to regular path "
+                    + "for table {}", olapTable.getName());
+        } else if (SchemaChangeIndexFastPathClassifier.shouldUseDropIndexFastPath(olapTable, alterClauses)) {
+            AlterJobV2 fastPathJob = tryBuildLakeDropIndexJob(db, olapTable, alterClauses);
+            if (fastPathJob != null) {
+                LOG.info("DROP INDEX fast path selected for table {}", olapTable.getName());
+                return fastPathJob;
+            }
+            LOG.info("DROP INDEX fast path eligible but build failed; falling through to regular path "
+                    + "for table {}", olapTable.getName());
+        } else {
+            // Plain bloom filter fast path — triggered by ALTER TABLE SET
+            // ("bloom_filter_columns" = ...). Only pure-add and pure-drop
+            // cases are accepted; mixed / fpp-change cases fall through to
+            // the legacy segment-rewrite SchemaChangeJobV2.
+            SchemaChangeIndexFastPathClassifier.BloomFilterDelta bfDelta =
+                    SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(olapTable, alterClauses);
+            if (bfDelta != null) {
+                AlterJobV2 fastPathJob = null;
+                if (bfDelta.isPureAdd()) {
+                    fastPathJob = tryBuildLakeAddBloomFilterJob(db, olapTable, bfDelta.added);
+                } else if (bfDelta.isPureDrop()) {
+                    fastPathJob = tryBuildLakeDropBloomFilterJob(db, olapTable, bfDelta.dropped);
+                }
+                if (fastPathJob != null) {
+                    LOG.info("BF fast path selected for table {} (added={}, dropped={})",
+                            olapTable.getName(), bfDelta.added, bfDelta.dropped);
+                    return fastPathJob;
+                }
+                LOG.info("BF fast path eligible but build failed; falling through to regular path "
+                        + "for table {}", olapTable.getName());
+            }
+        }
         boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
         //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {
@@ -2015,6 +2294,7 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
+        Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames = new HashMap<>();
         // NOTE: be very careful with the order of processing alter clauses and early return!!!
         // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
@@ -2061,12 +2341,30 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
+                // A MODIFY COLUMN that only changes the comment does not need a schema change job; route it to
+                // the lightweight ModifyColumnCommentClause path instead, mirroring the explicit
+                // MODIFY COLUMN COMMENT syntax (including its restriction against batching). This is checked
+                // before processModifyColumn so a comment-only change on a primary key column is not rejected
+                // by the key-column validation there.
+                if (isCommentOnlyModification(modifyColumnClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                    }
+                    ColumnDef columnDef = modifyColumnClause.getColumnDef();
+                    ModifyColumnCommentClause commentClause = new ModifyColumnCommentClause(
+                            columnDef.getName(), columnDef.getComment(), modifyColumnClause.getPos());
+                    processModifyColumnComment(commentClause, db, olapTable, indexMetaIdToSchema);
+                    return null;
+                }
+
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());
                 AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
-                fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema);
+                fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
+                                                           alterIndexMetaIdToIncrVarcharLenColNames);
             } else if (alterClause instanceof ModifyColumnCommentClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
                 if (alterClauses.size() > 1) {
@@ -2145,7 +2443,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
-                modifyFieldColumns);
+                modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
         if (schemaChangeData.isShortKeyChanged()) {
             fastSchemaEvolution = false;
         }
@@ -2265,6 +2563,23 @@ public class SchemaChangeHandler extends AlterHandler {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                 LOG.info("updated table: {} lake_compaction_max_parallel from {} to {}",
                         olapTable.getName(), oldMaxParallel, maxParallel);
+                return null;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION)) {
+                // light_weight_tablet_creation is a pure FE property: it gates whether FE
+                // dispatches CreateReplicaTask in CREATE TABLE / ADD PARTITION / schema change /
+                // rollup paths. No CN-side state to flip. Use properties.get() (not
+                // analyzeBooleanProp) so the key remains in the map for alterTableProperties
+                // to dispatch on.
+                boolean newValue = Boolean.parseBoolean(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION));
+                if (newValue == olapTable.isLightWeightTabletCreation()) {
+                    LOG.info("table: {} light_weight_tablet_creation is {}, nothing need to do",
+                            olapTable.getName(), newValue);
+                    return null;
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                LOG.info("updated table: {} light_weight_tablet_creation to {}",
+                        olapTable.getName(), newValue);
                 return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
@@ -2898,9 +3213,309 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
 
-        // alter job v2's cancel must be called outside the database lock
-        if (!schemaChangeJobV2.cancel(reason)) {
-            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
+        // alter job v2's cancel must be called outside the database lock.
+        // When `FORCE` is supplied on the SQL, lake alter jobs bypass their
+        // FINISHED_REWRITING guard (publish-stuck escape hatch). For non-lake /
+        // non-stuck jobs `force=true` is a no-op (cancelImpl(force) defaults
+        // to delegating to the single-arg form).
+        //
+        // Dispatch carefully: SchemaChangeJobV2 (shared-nothing) and
+        // RollupJobV2 only override `cancel(String)` and do pre-monitor work
+        // there (isCancelling + createReplicaLatch release). They do NOT
+        // override the two-arg form, so routing every cancel through
+        // `cancel(reason, force)` would skip that pre-work and a non-force
+        // cancel against a PENDING job could deadlock until task timeout.
+        // Lake jobs have a two-arg override that preserves the same pre-work,
+        // so the force path stays safe.
+        boolean force = cancelAlterTableStmt.isForce();
+        if (force && !Config.enable_admin_skip_committed_txn) {
+            throw new DdlException(
+                    "CANCEL ALTER TABLE ... FORCE is disabled. "
+                            + "Set FE config enable_admin_skip_committed_txn=true to enable it. "
+                            + "This is an operator-only escape hatch for publish-stuck alter jobs; "
+                            + "disable it again immediately after recovery.");
+        }
+        // FORCE is designed for lake (shared-data) publish-stuck recovery only.
+        // Non-lake alter jobs don't have a stuck-publish failure mode, AND the
+        // two-arg cancel(reason, true) path skips the SchemaChangeJobV2 /
+        // RollupJobV2 one-arg cancel(String) override that releases
+        // createReplicaLatch before entering the synchronized block — applying
+        // it to a PENDING shared-nothing alter would hang until task timeout.
+        // Reject up front rather than silently degrade.
+        //
+        // LakeTableIndexFastPathJobBase (lake ADD/DROP INDEX fast path) is the
+        // third lake alter family with a FINISHED_REWRITING publish-stuck mode:
+        // it reserves a commit version and bumps nextVersion at that transition,
+        // so a stuck publish leaves the same version-chain hole the other two
+        // heal on force-cancel. It extends AlterJobV2 directly (not the two bases
+        // above) and has no createReplicaLatch pre-work, so routing it through
+        // the two-arg cancel path is safe. Without it in this allowlist the
+        // fast-path job's force-cancel heal path is unreachable from SQL.
+        if (force && !(schemaChangeJobV2 instanceof LakeTableSchemaChangeJobBase
+                || schemaChangeJobV2 instanceof LakeTableAlterMetaJobBase
+                || schemaChangeJobV2 instanceof LakeTableIndexFastPathJobBase)) {
+            throw new DdlException(
+                    "CANCEL ALTER TABLE ... FORCE is only supported on shared-data (lake) tables. "
+                            + "For shared-nothing tables, use the regular CANCEL ALTER TABLE syntax.");
+        }
+        boolean cancelled = force
+                ? schemaChangeJobV2.cancel(reason, true)
+                : schemaChangeJobV2.cancel(reason);
+        if (!cancelled) {
+            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState()
+                    + (force ? "" : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableAddIndexJob} from a CreateIndexClause-only alter.
+     * Returns null on any unexpected failure so the caller can fall back to the
+     * regular schema-change path (safer than throwing).
+     */
+    private AlterJobV2 tryBuildLakeAddIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
+        boolean stateSet = false;
+        try {
+            List<Index> newIndexes = new ArrayList<>(olapTable.getIndexes());
+            List<com.starrocks.thrift.TOlapTableIndex> thriftIndexes = new ArrayList<>();
+            for (AlterClause clause : alterClauses) {
+                CreateIndexClause c = (CreateIndexClause) clause;
+                // Reuse the existing processAddIndex to validate and
+                // append to newIndexes list. This also assigns an
+                // index_id on OlapTable so BE can key IDG entries.
+                processAddIndex(c, olapTable, newIndexes);
+                // The newly added Index is the last element.
+                Index added = newIndexes.get(newIndexes.size() - 1);
+                thriftIndexes.add(toThriftIndex(added, olapTable));
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, newIndexes, thriftIndexes);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            // Move table to SCHEMA_CHANGE so concurrent alters are blocked.
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            stateSet = true;
+            return job;
+        } catch (Exception e) {
+            if (stateSet) {
+                olapTable.setState(OlapTable.OlapTableState.NORMAL);
+            }
+            LOG.warn("failed to build LakeTableAddIndexJob for table {}: {}", olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableDropIndexJob} from a DropIndexClause-only alter.
+     * Returns null on any unexpected failure so the caller can fall back.
+     */
+    private AlterJobV2 tryBuildLakeDropIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
+        boolean stateSet = false;
+        try {
+            List<Long> dropIds = new ArrayList<>();
+            List<String> dropNames = new ArrayList<>();
+            List<com.starrocks.thrift.TDropIndexInfo> drops = new ArrayList<>();
+            for (AlterClause clause : alterClauses) {
+                DropIndexClause d = (DropIndexClause) clause;
+                // Locate the index by name (analyzer guarantees existence).
+                Index target = null;
+                for (Index ix : olapTable.getIndexes()) {
+                    if (ix.getIndexName().equalsIgnoreCase(d.getIndexName())) {
+                        target = ix;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    LOG.warn("DROP INDEX fast path: index {} not found on table {}",
+                            d.getIndexName(), olapTable.getName());
+                    return null;
+                }
+                dropIds.add(target.getIndexId());
+                dropNames.add(target.getIndexName());
+                // Emit one TDropIndexInfo per (index_id, col_unique_id,
+                // index_type). Multi-column indexes produce multiple
+                // tombstones so BE's IDG tombstone projection matches per
+                // (col_uid, type).
+                if (target.getColumns() != null) {
+                    for (com.starrocks.catalog.ColumnId colId : target.getColumns()) {
+                        com.starrocks.catalog.Column col = olapTable.getColumn(colId);
+                        if (col == null) {
+                            continue;
+                        }
+                        com.starrocks.thrift.TDropIndexInfo info = new com.starrocks.thrift.TDropIndexInfo();
+                        info.setIndex_id(target.getIndexId());
+                        info.setCol_unique_id(col.getUniqueId());
+                        info.setIndex_type(toThriftIndexType(target.getIndexType()));
+                        drops.add(info);
+                    }
+                }
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, dropIds, dropNames, drops);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            stateSet = true;
+            return job;
+        } catch (Exception e) {
+            if (stateSet) {
+                olapTable.setState(OlapTable.OlapTableState.NORMAL);
+            }
+            LOG.warn("failed to build LakeTableDropIndexJob for table {}: {}",
+                    olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableAddIndexJob} whose payload is a batch of
+     * "enable plain bloom filter on these columns" requests. Each added
+     * column is encoded as a synthetic {@link com.starrocks.thrift.TOlapTableIndex}
+     * with {@code index_type=BLOOM_FILTER}; BE's
+     * {@code do_process_add_index_only} routes these through the IDG
+     * builder the same way as NGRAMBF (use_ngram=false).
+     *
+     * <p>The catalog side ({@code applyCatalogMutation}) merges the column
+     * names into {@code OlapTable.bfColumns}; no new {@link Index} object
+     * is appended because plain BF is not an index entry.
+     */
+    private AlterJobV2 tryBuildLakeAddBloomFilterJob(Database db, OlapTable olapTable, Set<String> addedColumns) {
+        boolean stateSet = false;
+        try {
+            List<com.starrocks.thrift.TOlapTableIndex> thriftIndexes = new ArrayList<>();
+            List<String> addBfColumnNames = new ArrayList<>();
+            for (String name : addedColumns) {
+                Column col = olapTable.getColumn(name);
+                if (col == null) {
+                    LOG.warn("BF fast path ADD: column {} not found on table {}",
+                            name, olapTable.getName());
+                    return null;
+                }
+                com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
+                t.setIndex_id(-1);
+                t.setIndex_name("");
+                t.setIndex_type(com.starrocks.thrift.TIndexType.BLOOM_FILTER);
+                t.setColumns(com.google.common.collect.Lists.newArrayList(col.getName()));
+                // Carry the fpp through index_properties so BE's
+                // BloomFilterOptions picks up the right false-positive rate.
+                java.util.Map<String, String> props = new java.util.HashMap<>();
+                double fpp = olapTable.getBfFpp();
+                if (fpp <= 0) {
+                    fpp = com.starrocks.common.FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                }
+                props.put("bloom_filter_fpp", Double.toString(fpp));
+                t.setIndex_properties(props);
+                thriftIndexes.add(t);
+                addBfColumnNames.add(col.getName());
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, new ArrayList<>(), thriftIndexes, addBfColumnNames);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            stateSet = true;
+            return job;
+        } catch (Exception e) {
+            if (stateSet) {
+                olapTable.setState(OlapTable.OlapTableState.NORMAL);
+            }
+            LOG.warn("failed to build LakeTableAddIndexJob (BF) for table {}: {}",
+                    olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableDropIndexJob} whose payload is a batch of
+     * "disable plain bloom filter on these columns" requests. Each dropped
+     * column is encoded as a synthetic {@link com.starrocks.thrift.TDropIndexInfo}
+     * with {@code index_type=BLOOM_FILTER}; BE's
+     * {@code do_process_drop_index_only} writes a metadata-only tombstone
+     * into IDG and the physical .idx payloads are reclaimed by compaction.
+     */
+    private AlterJobV2 tryBuildLakeDropBloomFilterJob(Database db, OlapTable olapTable, Set<String> droppedColumns) {
+        boolean stateSet = false;
+        try {
+            List<com.starrocks.thrift.TDropIndexInfo> drops = new ArrayList<>();
+            List<String> dropBfColumnNames = new ArrayList<>();
+            for (String name : droppedColumns) {
+                Column col = olapTable.getColumn(name);
+                if (col == null) {
+                    LOG.warn("BF fast path DROP: column {} not found on table {}",
+                            name, olapTable.getName());
+                    return null;
+                }
+                com.starrocks.thrift.TDropIndexInfo info = new com.starrocks.thrift.TDropIndexInfo();
+                // No per-column index_id exists for plain BF; use -1 as a
+                // "no Index object" sentinel. BE's apply_drop_index keys on
+                // (col_unique_id, index_type) for BF flavors so this is OK.
+                info.setIndex_id(-1);
+                info.setCol_unique_id(col.getUniqueId());
+                info.setIndex_type(com.starrocks.thrift.TIndexType.BLOOM_FILTER);
+                drops.add(info);
+                dropBfColumnNames.add(col.getName());
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            // 4-list canonical constructor: ids, names, infos, bfColumns.
+            // Plain bloom-filter drop has no per-column Index object, so the
+            // names list stays empty; applyCatalogMutation falls through to
+            // the dropBfColumns path which keys on column-id, not index-id.
+            LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, new ArrayList<>(), new ArrayList<>(), drops,
+                    dropBfColumnNames);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            stateSet = true;
+            return job;
+        } catch (Exception e) {
+            if (stateSet) {
+                olapTable.setState(OlapTable.OlapTableState.NORMAL);
+            }
+            LOG.warn("failed to build LakeTableDropIndexJob (BF) for table {}: {}",
+                    olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Translate a catalog {@link Index} to the thrift payload consumed by
+     * BE's do_process_add_index_only. BE re-resolves column names via the
+     * new tablet schema, so we pass names, not unique ids.
+     */
+    private static com.starrocks.thrift.TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
+        com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
+        t.setIndex_name(ix.getIndexName());
+        t.setIndex_id(ix.getIndexId());
+        t.setIndex_type(toThriftIndexType(ix.getIndexType()));
+        if (ix.getColumns() != null) {
+            List<String> names = new ArrayList<>();
+            for (com.starrocks.catalog.ColumnId colId : ix.getColumns()) {
+                com.starrocks.catalog.Column col = table.getColumn(colId);
+                names.add(col == null ? colId.getId() : col.getName());
+            }
+            t.setColumns(names);
+        }
+        if (ix.getProperties() != null) {
+            t.setIndex_properties(new java.util.HashMap<>(ix.getProperties()));
+        }
+        return t;
+    }
+
+    private static com.starrocks.thrift.TIndexType toThriftIndexType(IndexDef.IndexType t) {
+        switch (t) {
+            case BITMAP:
+                return com.starrocks.thrift.TIndexType.BITMAP;
+            case GIN:
+                return com.starrocks.thrift.TIndexType.GIN;
+            case NGRAMBF:
+                return com.starrocks.thrift.TIndexType.NGRAMBF;
+            case VECTOR:
+                return com.starrocks.thrift.TIndexType.VECTOR;
+            default:
+                throw new IllegalArgumentException("unsupported index type: " + t);
         }
     }
 
@@ -2909,11 +3524,11 @@ public class SchemaChangeHandler extends AlterHandler {
         // Create Index object directly from IndexDef
         IndexDef indexDef = alterClause.getIndexDef();
         Index newIndex;
-        // Only assign meaningful indexId for OlapTable
-        if (olapTable.isOlapTableOrMaterializedView() ||
-                (olapTable.isCloudNativeTableOrMaterializedView() && indexDef.getIndexType() != IndexDef.IndexType.VECTOR)) {
-            long indexId = IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType()) ? 
-                    olapTable.incAndGetMaxIndexId() : -1;
+        // ADD INDEX only reaches here for OlapTable / cloud-native tables (gated earlier in the
+        // ALTER analysis), so we no longer branch on table type: compatible index types (GIN, VECTOR)
+        // require a valid index_id for both, while non-compatible types (BITMAP, NGRAMBF) use -1.
+        if (IndexDef.IndexType.isCompatibleIndex(indexDef.getIndexType())) {
+            long indexId = olapTable.incAndGetMaxIndexId();
             newIndex = new Index(indexId, indexDef.getIndexName(),
                     MetaUtils.getColumnIdsByColumnNames(olapTable, indexDef.getColumns()),
                     indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
@@ -3124,6 +3739,31 @@ public class SchemaChangeHandler extends AlterHandler {
 
                     appendNewKeyColumnsToSortKey(olapTable.getKeysType(), indexSchema,
                             newSortKeyIdxes, newSortKeyUniqueIds);
+                }
+
+                if (newSortKeyIdxes.isEmpty() && currentIndexMeta.getSortKeyIdxes() != null) {
+                    // If the old table metadata does not contain sort key unique ids, fall back to sort key indexes.
+                    // In this case, a schema-only reorder still needs to rebuild sort key indexes for the new schema.
+                    List<Column> oldIndexSchema = currentIndexMeta.getSchema();
+                    boolean useFallbackSortKeyUniqueId = true;
+                    for (Integer oldSortKeyIdx : currentIndexMeta.getSortKeyIdxes()) {
+                        Column oldSortKeyColumn = oldIndexSchema.get(oldSortKeyIdx);
+                        Optional<Column> newSortKeyColumn = indexSchema.stream()
+                                .filter(c -> c.nameEquals(oldSortKeyColumn.getName(), true))
+                                .findFirst();
+                        Preconditions.checkState(newSortKeyColumn.isPresent(),
+                                "Sort key column %s not found in new schema", oldSortKeyColumn.getName());
+                        Column col = newSortKeyColumn.get();
+                        newSortKeyIdxes.add(indexSchema.indexOf(col));
+                        if (useFallbackSortKeyUniqueId && col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                            newSortKeyUniqueIds.add(col.getUniqueId());
+                        } else {
+                            useFallbackSortKeyUniqueId = false;
+                            newSortKeyUniqueIds = null;
+                        }
+                    }
+                    appendNewKeyColumnsToSortKey(olapTable.getKeysType(), indexSchema,
+                            newSortKeyIdxes, useFallbackSortKeyUniqueId ? newSortKeyUniqueIds : null);
                 }
 
                 currentIndexMeta.setSchema(indexSchema);
@@ -3380,5 +4020,86 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isVarcharLengthIncrease(Column oriColumn, Column modColumn) {
+        return oriColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                && modColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                && modColumn.getStrLen() > oriColumn.getStrLen();
+    }
+
+    private static boolean hasOnlyTypeChangeForVarcharLengthFastPath(Column oriColumn, Column modColumn) {
+        if (oriColumn.isGeneratedColumn() || modColumn.isGeneratedColumn()) {
+            return false;
+        }
+
+        return oriColumn.nameEquals(modColumn.getName(), true)
+                && oriColumn.getAggregationType() == modColumn.getAggregationType()
+                && Objects.equals(oriColumn.getAggStateDesc(), modColumn.getAggStateDesc())
+                && oriColumn.isAggregationTypeImplicit() == modColumn.isAggregationTypeImplicit()
+                && oriColumn.isKey() == modColumn.isKey()
+                && oriColumn.isAllowNull() == modColumn.isAllowNull()
+                && oriColumn.isHidden() == modColumn.isHidden();
+    }
+
+    /**
+     * Reject the operation if the named column belongs to the range-
+     * distribution sort-key column set of the given index.
+     *
+     * Range-distribution tablet boundaries are stored as 1:1 copies of the
+     * base values, and any DROP/MODIFY that changes the column set or
+     * type/semantics of those columns invalidates the stored boundary
+     * interpretation — even if no row physically moves.
+     */
+    private static void rejectIfTouchesRangeSortKey(
+            OlapTable olapTable, long indexMetaId,
+            String operation, String columnName) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        List<Column> rangeSortKeyColumns =
+                MetaUtils.getRangeDistributionColumns(olapTable, indexMetaId);
+        boolean isInRangeSortKey = rangeSortKeyColumns.stream()
+                .anyMatch(column -> column.getName().equalsIgnoreCase(columnName));
+        if (isInRangeSortKey) {
+            throw new DdlException(operation +
+                " on a sort-key column is not supported on tables with " +
+                "range distribution, because it would change the column set " +
+                "or type/semantics that the existing range tablet boundary " +
+                "values were recorded under. Column: " + columnName);
+        }
+    }
+
+    /**
+     * Reject ADD COLUMN that would introduce a new key column on a
+     * range-distribution table.
+     *
+     * On AGG/UNIQUE tables new key columns are appended to the range sort
+     * key, and on tables without an explicit ORDER BY the range sort key
+     * is derived from the key columns. Either way, adding a key column
+     * shifts the column set that the existing range tablet boundary
+     * values were recorded under.
+     *
+     * Callers should invoke this AFTER the keys-type block in
+     * addColumnInternal, because that block may promote a no-aggregate
+     * column to KEY on AGG tables. Checking isKey() before promotion
+     * would miss `ALTER TABLE agg_range ADD COLUMN c INT` (no KEY
+     * keyword) and let it corrupt the range sort key.
+     */
+    private static void rejectAddingKeyColumnOnRangeDistribution(
+            OlapTable olapTable, List<Column> columnsToAdd) throws DdlException {
+        if (!olapTable.isRangeDistribution()) {
+            return;
+        }
+        for (Column column : columnsToAdd) {
+            if (column.isKey()) {
+                throw new DdlException(
+                    "ADD COLUMN of a key column is not supported on tables " +
+                    "with range distribution, because new key columns are " +
+                    "appended to the range sort key (AGG/UNIQUE) or derived " +
+                    "sort key (no explicit ORDER BY), invalidating stored " +
+                    "range tablet boundary values. Column: " + column.getName());
+            }
+        }
     }
 }

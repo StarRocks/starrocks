@@ -43,7 +43,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.MachineInfo;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
@@ -84,16 +84,34 @@ import java.util.concurrent.atomic.AtomicReference;
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
  */
-public class HeartbeatMgr extends FrontendDaemon {
+public class HeartbeatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
     private static final AtomicReference<TMasterInfo> MASTER_INFO = new AtomicReference<>();
 
-    private final ExecutorService executor;
+    private final boolean needRegisterMetric;
+    private volatile ExecutorService executor;
 
     public HeartbeatMgr(boolean needRegisterMetric) {
         super("heartbeat-mgr", Config.heartbeat_timeout_second * 1000L);
-        this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
-                Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
+        this.needRegisterMetric = needRegisterMetric;
+    }
+
+    @Override
+    public synchronized void start() {
+        if (executor == null || executor.isShutdown()) {
+            executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
+                    Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);
+        }
+        super.start();
+    }
+
+    @Override
+    protected synchronized void onStopped() {
+        ExecutorService e = executor;
+        if (e != null) {
+            e.shutdownNow();
+            executor = null;
+        }
     }
 
     public void setLeader(int clusterId, String token, long epoch) {
@@ -115,7 +133,7 @@ public class HeartbeatMgr extends FrontendDaemon {
      * 2. collect the heartbeat response from all nodes, and handle them
      */
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         ImmutableMap<Long, Backend> idToBackendRef =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         if (idToBackendRef == null) {
@@ -192,7 +210,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                 if (isChanged) {
                     hbPackage.addHbResponse(response);
                 }
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
+                // Demotion interrupts the worker to make it exit before the drain timeout;
+                // keep draining would make {@link #onJoinTimeout()} fire and terminate the JVM.
+                // Restore the flag so LeaderDaemon.loop observes stop and abandon the rest -
+                // the next leader will re-run heartbeats from scratch.
+                Thread.currentThread().interrupt();
+                LOG.warn("heartbeat drain interrupted, abandoning remaining responses");
+                return;
+            } catch (ExecutionException e) {
                 LOG.warn("got exception when doing heartbeat", e);
             }
         } // end for all results

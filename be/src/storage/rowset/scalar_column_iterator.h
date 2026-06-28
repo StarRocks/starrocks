@@ -34,14 +34,16 @@
 
 #pragma once
 
+#include "cache/mem_cache/page_handle.h"
 #include "column/fixed_length_column.h"
-#include "storage/range.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/ordinal_page_index.h"
-#include "storage/rowset/page_handle.h"
 #include "storage/rowset/parsed_page.h"
 
 namespace starrocks {
+
+class Datum;
 
 // TODO: rename to ScalarColumnIterator
 class ScalarColumnIterator final : public ColumnIterator {
@@ -86,6 +88,8 @@ public:
     Status fetch_all_dict_words(std::vector<Slice>* words) const override;
 
     int dict_lookup(const Slice& word) override;
+
+    void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) override;
 
     Status next_dict_codes(size_t* n, Column* dst) override;
 
@@ -133,6 +137,9 @@ private:
 
     template <LogicalType Type>
     int _do_dict_lookup(const Slice& word);
+
+    template <LogicalType Type>
+    void _do_dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes);
 
     template <LogicalType Type>
     Status _do_next_dict_codes(size_t* n, Column* dst);
@@ -198,6 +205,16 @@ private:
     int64_t _element_ordinal = 0;
 
     UInt32Column _array_size;
+
+    // Cached IDG probe result from init(). `_reader` alone only sees the
+    // segment-footer-embedded bloom filter, so for fast-path-built bloom
+    // filters (sidecar .idx file, no footer payload) we need supplemental
+    // bits to surface via has_{original,ngram}_bloom_filter_index() to
+    // BloomFilterSupportChecker and to the short-circuit in
+    // get_row_ranges_by_bloom_filter. At most one flavor can be present per
+    // column at a time, matching the footer constraint.
+    bool _has_idg_ngram_bf = false;
+    bool _has_idg_original_bf = false;
 };
 
 } // namespace starrocks

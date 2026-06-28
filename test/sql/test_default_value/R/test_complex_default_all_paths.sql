@@ -85,6 +85,45 @@ SELECT * FROM nested_complex ORDER BY id;
 1	[[1,2],[3,4,5]]	{1:["a","b"],2:["c","d"]}	{"id":999,"scores":[100,200],"tags":{"k1":1,"k2":2}}
 2	[[1,2],[3,4,5]]	{1:["a","b"],2:["c","d"]}	{"id":999,"scores":[100,200],"tags":{"k1":1,"k2":2}}
 -- !result
+CREATE TABLE type_cast_defaults (
+    id INT NOT NULL
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+INSERT INTO type_cast_defaults (id) VALUES (1), (2);
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN m_bigint MAP<BIGINT, BIGINT>
+  DEFAULT map<smallint, smallint>{1: 2, 3: 4};
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN m_int MAP<INT, INT>
+  DEFAULT map<tinyint, tinyint>{10: 20, 30: 40};
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN m_int_double MAP<INT, DOUBLE>
+  DEFAULT map<int, float>{1: 1.5, 2: 2.5};
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN m_mixed MAP<BIGINT, DOUBLE>
+  DEFAULT map<smallint, float>{1: 1.5, 2: 2.5};
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN a_bigint ARRAY<BIGINT>
+  DEFAULT array<int>[100, 200, 300];
+-- result:
+-- !result
+ALTER TABLE type_cast_defaults ADD COLUMN a_double ARRAY<DOUBLE>
+  DEFAULT array<float>[1.5, 2.5, 3.5];
+-- result:
+-- !result
+SELECT * FROM type_cast_defaults ORDER BY id;
+-- result:
+1	{1:2,3:4}	{10:20,30:40}	{1:1.5,2:2.5}	{1:1.5,2:2.5}	[100,200,300]	[1.5,2.5,3.5]
+2	{1:2,3:4}	{10:20,30:40}	{1:1.5,2:2.5}	{1:1.5,2:2.5}	[100,200,300]	[1.5,2.5,3.5]
+-- !result
 CREATE TABLE map_struct_order (
     id INT NOT NULL
 ) DUPLICATE KEY(id)

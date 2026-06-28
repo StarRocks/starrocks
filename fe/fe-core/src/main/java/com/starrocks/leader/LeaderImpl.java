@@ -84,6 +84,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -412,6 +413,7 @@ public class LeaderImpl {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
+                createReplicaTask.markSendSucceeded();
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
@@ -479,8 +481,11 @@ public class LeaderImpl {
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
+                // Only this single known table's indexMeta is touched, so take a table-scoped
+                // intensive READ lock instead of a full DB lock. This matches the send path
+                // (ReportHandler) and lets DDL/ALTER on unrelated tables in the same DB proceed.
                 Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
@@ -491,7 +496,7 @@ public class LeaderImpl {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 }
             }
         } finally {
@@ -713,10 +718,11 @@ public class LeaderImpl {
                     long partitionId = tabletInfo.getPartition_id();
                     PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
                     if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                        long rowCount = tabletInfo.getRow_count();
                         long tabletId = tabletInfo.getTablet_id();
-                        Map<Long, Long> tableIdToRowCount = commitInfo.getTabletIdToRowCountForPartitionFirstLoad();
-                        tableIdToRowCount.put(tabletId, rowCount);
+                        TabletStatPB stat = new TabletStatPB();
+                        stat.numRows = tabletInfo.getRow_count();
+                        stat.dataSize = tabletInfo.getData_size();
+                        commitInfo.getTabletStats().put(tabletId, stat);
                     }
                 }
             }
@@ -776,8 +782,11 @@ public class LeaderImpl {
                 return;
             }
 
+            // Setting a single replica's path hash is table-local; scope the WRITE to that table
+            // instead of taking a full DB WRITE that would block every other table in the DB.
+            long tableId = tabletMeta.getTableId();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica =
@@ -785,7 +794,7 @@ public class LeaderImpl {
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -864,7 +873,18 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        try {
+            return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        } catch (IllegalStateException e) {
+            // Leader-lease fence fired inside ReportHandler: demotion raced the isLeader() check
+            // above. Translate to the same non-master status so the BE re-resolves the current
+            // leader rather than retrying on this FE.
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master: " +
+                    (Strings.isNullOrEmpty(e.getMessage()) ? "leader lease invalidated" : e.getMessage())));
+            result.setStatus(status);
+            return result;
+        }
     }
 
     private void finishAlterTask(AgentTask task) {

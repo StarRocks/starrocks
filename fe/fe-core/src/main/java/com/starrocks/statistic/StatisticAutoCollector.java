@@ -20,7 +20,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class StatisticAutoCollector extends FrontendDaemon {
+public class StatisticAutoCollector extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor STATISTIC_EXECUTOR = new StatisticExecutor();
@@ -50,7 +50,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // update interval
         if (getInterval() != Config.statistic_collect_interval_sec * 1000) {
             setInterval(Config.statistic_collect_interval_sec * 1000);
@@ -166,9 +166,12 @@ public class StatisticAutoCollector extends FrontendDaemon {
     }
 
     private static boolean checkoutAnalyzeTime(LocalTime now) {
+        String startTimeStr = stripQuotes(Config.statistic_auto_analyze_start_time);
+        String endTimeStr = stripQuotes(Config.statistic_auto_analyze_end_time);
+
         try {
-            LocalTime start = LocalTime.parse(Config.statistic_auto_analyze_start_time, DateUtils.TIME_FORMATTER);
-            LocalTime end = LocalTime.parse(Config.statistic_auto_analyze_end_time, DateUtils.TIME_FORMATTER);
+            LocalTime start = LocalTime.parse(startTimeStr, DateUtils.TIME_FORMATTER);
+            LocalTime end = LocalTime.parse(endTimeStr, DateUtils.TIME_FORMATTER);
 
             if (start.isAfter(end) && (now.isAfter(start) || now.isBefore(end))) {
                 return true;
@@ -179,10 +182,13 @@ public class StatisticAutoCollector extends FrontendDaemon {
             }
         } catch (DateTimeParseException e) {
             LOG.warn("Parse analyze start/end time format fail : " + e.getMessage());
-
             // If the time format configuration is incorrect,
             // processing can be run at any time without affecting the normal process
             return true;
         }
+    }
+
+    private static String stripQuotes(String str) {
+        return str != null ? str.replaceAll("[\"']", "") : str;
     }
 }

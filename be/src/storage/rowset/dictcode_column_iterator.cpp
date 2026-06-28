@@ -81,9 +81,12 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
         word_nulls->resize(0);
         word_nulls->append(null_data);
         if (codes.has_null()) {
-            // assign code 0 if input data is null
+            // assign code 0 if input data is null; gcc/clang auto-vectorize this on the
+            // -mavx2 x86 and armv8-a NEON builds, so no hand-written intrinsics are needed
+            auto* dst = res_data.data();
+            const auto* nulls = null_data.data();
             for (size_t i = 0; i < size; ++i) {
-                res_data[i] = null_data[i] == 0 ? res_data[i] : 0;
+                dst[i] = nulls[i] == 0 ? dst[i] : 0;
             }
         }
     }

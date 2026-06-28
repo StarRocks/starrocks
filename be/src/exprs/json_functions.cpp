@@ -40,15 +40,14 @@
 #include "exprs/column_ref.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -95,52 +94,6 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
             parsed_paths->emplace_back(col, idx, true);
         }
     }
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
-        return Status::OK();
-    }
-
-    if (!context->is_notnull_constant_column(1)) {
-        return Status::OK();
-    }
-
-    ColumnPtr path = context->get_constant_column(1);
-    auto path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path);
-    std::string path_str(path_value.data, path_value.size);
-    // Must remove or replace the escape sequence.
-    path_str.erase(std::remove(path_str.begin(), path_str.end(), '\\'), path_str.end());
-    if (path_str.empty()) {
-        return Status::OK();
-    }
-
-    std::vector<std::string> path_exprs;
-    try {
-        boost::tokenizer<boost::escaped_list_separator<char>> tok(path_str,
-                                                                  boost::escaped_list_separator<char>("\\", ".", "\""));
-        path_exprs.assign(tok.begin(), tok.end());
-    } catch (const boost::escaped_list_error& e) {
-        return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
-    }
-    auto* parsed_paths = new std::vector<SimpleJsonPath>();
-    RETURN_IF_ERROR(_get_parsed_paths(path_exprs, parsed_paths));
-
-    context->set_function_state(scope, parsed_paths);
-    VLOG(10) << "prepare json path. size: " << parsed_paths->size();
-    return Status::OK();
-}
-
-Status JsonFunctions::json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
-        if (parsed_paths != nullptr) {
-            delete parsed_paths;
-            VLOG(10) << "close json path";
-        }
-    }
-
     return Status::OK();
 }
 
@@ -337,6 +290,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));
@@ -405,6 +361,9 @@ StatusOr<ColumnPtr> _string_json(FunctionContext* context, const Columns& column
             JsonValue json_value;
             auto st = JsonValue::parse(raw, &json_value);
             if (!st.ok()) {
+                if (context != nullptr && context->allow_throw_exception()) {
+                    return st;
+                }
                 result.append_null();
             } else {
                 result.append(std::move(json_value));

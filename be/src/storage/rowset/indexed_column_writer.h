@@ -44,7 +44,7 @@
 #include "gutil/macros.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/page_pointer.h"
 
 namespace starrocks {

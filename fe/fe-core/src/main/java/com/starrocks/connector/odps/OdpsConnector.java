@@ -21,7 +21,9 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.CatalogNameType;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,6 +31,7 @@ public class OdpsConnector implements Connector {
 
     private static final Logger LOG = LogManager.getLogger(OdpsConnector.class);
     private final String catalogName;
+    private final CatalogNameType catalogNameType;
     private final Odps odps;
     private final OdpsProperties properties;
     private final AliyunCloudCredential aliyunCloudCredential;
@@ -37,10 +40,25 @@ public class OdpsConnector implements Connector {
 
     public OdpsConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
+        this.catalogNameType = new CatalogNameType(catalogName, "odps");
         this.properties = new OdpsProperties(context.getProperties());
         this.odps = initOdps();
         aliyunCloudCredential = new AliyunCloudCredential(properties.get(OdpsProperties.ACCESS_ID),
                 properties.get(OdpsProperties.ACCESS_KEY), properties.get(OdpsProperties.ENDPOINT));
+        onCreate();
+    }
+
+    private void onCreate() {
+        OdpsMetadata odpsMetadata = (OdpsMetadata) getMetadata();
+        odpsMetadata.getCacheUpdateProcessor().ifPresent(processor ->
+                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCacheUpdateProcessor(catalogNameType, processor));
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                .unRegisterCacheUpdateProcessor(catalogNameType);
     }
 
     private Odps initOdps() {

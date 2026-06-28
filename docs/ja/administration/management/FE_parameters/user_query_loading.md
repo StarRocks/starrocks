@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
 ---
 
@@ -206,7 +207,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 可変: はい
 - 説明: マテリアライズドビュー (MV) の高速スキーマ進化 (FSE) の動作を制御します。有効な値は次のとおりです: `strict` (デフォルト) - `isSupportFastSchemaEvolutionInDanger` が true の場合にのみ FSE を許可し、影響を受けるパーティションエントリをバージョンマップからクリアします。 `force` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可し、影響を受けるパーティションエントリをクリアしてリフレッシュ時に再計算をトリガーします。 `force_no_clear` - `isSupportFastSchemaEvolutionInDanger` が false の場合でも FSE を許可しますが、パーティションエントリはクリアしません。
-- 導入バージョン: v3.4.0
+- 導入バージョン: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -761,7 +762,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `statistic_cache_thread_pool_size`
 
-- デフォルト：10
+- デフォルト：5
 - タイプ：Int
 - 単位：-
 - 変更可能：No
@@ -802,6 +803,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：統計情報のキャッシュが更新される間隔。
+- 導入時期：-
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：統計情報ジャーナルのリプレイ時に、Follower（および再起動リカバリ）が Connector（外部テーブル）統計情報キャッシュをどのようにリフレッシュするかを制御します。`true` の場合、ジャーナルに永続化されたテーブル UUID でキャッシュを無効化し、次回クエリ時に遅延ロードします。これにより、リプレイ中の外部テーブルメタデータ解決（`MetadataMgr.getTable`）を回避できます。この解決は Hive Metastore やオブジェクトストレージが遅い場合にジャーナルリプレイスレッドをブロックする可能性があります。`false`（デフォルト）の場合は従来の積極的なリフレッシュを使用し、既存の動作を維持します。この UUID が永続化される前に書き込まれた統計情報ジャーナルは、この設定に関係なく常に積極的なリフレッシュにフォールバックします。
+
+### `statistics_large_string_column_merge_threshold`
+
+- デフォルト：0
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：デフォルトでは無効（`0`）。正の値を設定すると、統計情報の収集中、宣言長がこのしきい値を超える文字列カラム (`VARCHAR` / `CHAR`) の統計情報を収集するために、専用の SQL が単独で生成され、他のカラムとはまとめて収集されません。サンプリング統計と全量統計のいずれもこの方針に従います。これは単一統計 SQL の Exchange 段階のメモリピークを抑え、長い文字列カラムが他のカラムと併合された際に集約オペレーターの状態をさらに増幅させることを防ぐためです。`0` のままにすると、すべてのカラムは従来の併合バッチ収集経路で収集されます。なお、`STRING` は内部的に最大長の `VARCHAR` として表現されるため、この設定を正のしきい値で有効化すると、`STRING` カラムも単独の SQL に分離される可能性があります。
 - 導入時期：-
 
 ### `task_check_interval_second`
@@ -1169,6 +1188,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：準備されたトランザクションのデフォルトのタイムアウト期間。
+- 導入時期：-
+
+### `rejected_records_retained_days`
+
+- デフォルト：7
+- タイプ：Int
+- 単位：Days
+- 変更可能：Yes
+- 説明：内部システムテーブル `_statistics_.rejected_records` に保持する日次パーティション数。値は `TableKeeper` に渡され（最小 1 にクランプされます）、各 keeper ティックでターゲットテーブルの `partition_live_number` プロパティに反映されます。拒否された行の履歴をデフォルトの 1 週間より長く保持したい場合（監査または長めの再取り込みウィンドウ用）や、ストレージ予算が厳しい場合にこの値を調整します。この値は新しい日次パーティションと keeper の TTL 調整にのみ影響し、すでに削除されたパーティションを復元することはありません。
 - 導入時期：-
 
 ### `routine_load_task_consume_second`

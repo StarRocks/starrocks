@@ -15,64 +15,25 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
+#include "compute_env/spill/spiller.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/sort_exec_exprs.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.h"
 #include "exprs/expr_context.h"
+#include "exprs/sort_exec_exprs.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
-
-struct DataSegment {
-    static const uint8_t SMALLER_THAN_MIN_OF_SEGMENT = 2;
-    static const uint8_t INCLUDE_IN_SEGMENT = 1;
-    static const uint8_t LARGER_THAN_MAX_OF_SEGMENT = 0;
-
-    ChunkPtr chunk;
-    Columns order_by_columns;
-
-    DataSegment() : chunk(std::make_shared<Chunk>()) {}
-
-    DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
-
-    int64_t mem_usage() const { return chunk->memory_usage(); }
-
-    void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
-
-    void clear() {
-        chunk.reset(std::make_unique<Chunk>().release());
-        order_by_columns.clear();
-    }
-
-    // Return value:
-    //  < 0: current row precedes the row in the other chunk;
-    // == 0: current row is equal to the row in the other chunk;
-    //  > 0: current row succeeds the row in the other chunk;
-    int compare_at(size_t index_in_chunk, const DataSegment& other, size_t index_in_other_chunk,
-                   const std::vector<int>& sort_order_flag, const std::vector<int>& null_first_flag) const {
-        size_t col_number = order_by_columns.size();
-        for (size_t col_index = 0; col_index < col_number; ++col_index) {
-            const auto& left_col = order_by_columns[col_index];
-            const auto& right_col = other.order_by_columns[col_index];
-            int c = left_col->compare_at(index_in_chunk, index_in_other_chunk, *right_col, null_first_flag[col_index]);
-            if (c != 0) {
-                return c * sort_order_flag[col_index];
-            }
-        }
-        return 0;
-    }
-};
-using DataSegments = std::vector<DataSegment>;
 
 class SortedRuns;
 class ChunksSorter;

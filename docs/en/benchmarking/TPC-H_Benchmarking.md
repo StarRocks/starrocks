@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "TPC-H benchmark on 100 GB dataset: StarRocks native storage is 8.9x faster than Trino; StarRocks Hive external tables are 2x faster than Trino (22 queries)."
 ---
 
 # TPC-H Benchmark

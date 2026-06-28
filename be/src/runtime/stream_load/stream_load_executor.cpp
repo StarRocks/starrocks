@@ -38,24 +38,21 @@
 
 #include <string_view>
 
-#include "agent/master_info.h"
+#include "base/auth/auth_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
-#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "common/utils.h"
+#include "common/system/master_info.h"
+#include "common/util/thrift_client_cache.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "gen_cpp/FrontendService.h"
-#include "runtime/client_cache.h"
+#include "gutil/walltime.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/message_body_sink.h"
-#include "runtime/plan_fragment_executor.h"
-#include "runtime/starrocks_metrics.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "storage/non_retryable_load_errors.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -71,105 +68,10 @@ static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, s
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
                                    int64_t deadline);
-
-Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
-    if (process_exit_in_progress()) {
-        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
-    }
-
-    StarRocksMetrics::instance()->txn_exec_plan_total.increment(1);
-// submit this params
-#ifndef BE_TEST
-    ctx->ref();
-    ctx->start_write_data_nanos = MonotonicNanos();
-    LOG(INFO) << "begin to execute job. label=" << ctx->label << ", txn_id: " << ctx->txn_id
-              << ", query_id=" << print_id(ctx->put_result.params.params.query_id);
-    // Once this is added into FragmentMgr, the fragment will be counted during graceful exit.
-    auto st = _exec_env->fragment_mgr()->exec_plan_fragment(
-            ctx->put_result.params,
-            [ctx](PlanFragmentExecutor* executor) {
-                ctx->runtime_profile = executor->runtime_state()->runtime_profile_ptr();
-                ctx->query_mem_tracker = executor->runtime_state()->query_mem_tracker_ptr();
-                ctx->instance_mem_tracker = executor->runtime_state()->instance_mem_tracker_ptr();
-            },
-            [ctx](PlanFragmentExecutor* executor) {
-                ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
-                ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
-                Status status = executor->status();
-                if (status.ok()) {
-                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_sink() +
-                                             executor->runtime_state()->num_rows_load_filtered() +
-                                             executor->runtime_state()->num_rows_load_unselected();
-                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink();
-                    ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
-                    ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
-                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_sink();
-
-                    int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
-                    if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
-                        // NOTE: Do not modify the error message here, for historical
-                        // reasons,
-                        // some users may rely on this error message.
-                        status = Status::InternalError("too many filtered rows");
-                    }
-
-                    if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
-                        StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
-                    }
-                } else {
-                    LOG(WARNING) << "fragment execute failed"
-                                 << ", query_id=" << UniqueId(ctx->put_result.params.params.query_id)
-                                 << ", err_msg=" << status.message() << ", " << ctx->brief();
-                    // cancel body_sink, make sender known it
-                    if (ctx->body_sink != nullptr) {
-                        ctx->body_sink->cancel(status);
-                    }
-
-                    switch (ctx->load_src_type) {
-                    // reset the stream load ctx's kafka commit offset
-                    case TLoadSourceType::KAFKA:
-                        ctx->kafka_info->reset_offset();
-                        break;
-                    case TLoadSourceType::PULSAR:
-                        ctx->pulsar_info->clear_backlog();
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                ctx->write_data_cost_nanos = MonotonicNanos() - ctx->start_write_data_nanos;
-                ctx->promise.set_value(status);
-
-                if (!executor->runtime_state()->get_error_log_file_path().empty()) {
-                    ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
-                }
-
-                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
-                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
-                                                            executor->runtime_state()->get_rejected_record_file_path());
-                }
-
-                if (ctx->unref()) {
-                    delete ctx;
-                }
-            });
-    if (!st.ok()) {
-        if (ctx->unref()) {
-            delete ctx;
-        }
-        return st;
-    }
-#else
-    Status status;
-    TEST_SYNC_POINT_CALLBACK("StreamLoadExecutor::execute_plan_fragment:1", &status);
-    ctx->promise.set_value(status);
-#endif
-    return Status::OK();
-}
+static void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env);
 
 Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_begin_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_begin_request_total.increment(1);
 
     TLoadTxnBeginRequest request;
     set_request_auth(&request, ctx->auth);
@@ -206,14 +108,14 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
         return status;
     }
     ctx->txn_id = result.txnId;
-    ctx->need_rollback = true;
+    set_need_rollback(ctx, _exec_env);
     ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
 }
 
 Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -225,11 +127,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
 
     // set attachment if has
@@ -245,10 +143,10 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
         Status st(result.status);
         if (st.ok()) {
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
             return st;
         } else if (st.is_publish_timeout()) {
-            ctx->need_rollback = false;
+            ctx->clear_need_rollback();
             bool visible =
                     wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
             return visible ? Status::OK() : st;
@@ -258,7 +156,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
             std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
         } else if (st.is_time_out()) {
             if (++retry > 1) {
-                ctx->need_rollback = true;
+                set_need_rollback(ctx, _exec_env);
                 return st;
             }
             LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
@@ -266,7 +164,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
                 rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
             }
         } else {
-            ctx->need_rollback = true;
+            set_need_rollback(ctx, _exec_env);
             return st;
         }
     }
@@ -299,7 +197,7 @@ StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::str
     auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->getLoadTxnStatus(result, request); },
-            config::txn_commit_rpc_timeout_ms);
+            config::stream_load_thrift_rpc_timeout_ms);
     if (!st.ok()) {
         return st;
     } else {
@@ -330,7 +228,7 @@ bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::stri
 }
 
 Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_commit_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_commit_request_total.increment(1);
 
     TLoadTxnCommitRequest request;
     set_request_auth(&request, ctx->auth);
@@ -342,11 +240,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
-    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
-    if (ctx->timeout_second != -1) {
-        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
-        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
-    }
+    int32_t rpc_timeout_ms = ctx->calc_put_and_commit_rpc_timeout_ms();
     request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
     if (ctx->prepared_timeout_second != -1) {
         request.__set_prepared_timeout_second(ctx->prepared_timeout_second);
@@ -379,12 +273,12 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
         return status;
     }
     // commit success, set need_rollback to false
-    ctx->need_rollback = false;
+    ctx->clear_need_rollback();
     return Status::OK();
 }
 
 Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
-    StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
+    StreamLoadMetrics::instance()->txn_rollback_request_total.increment(1);
 
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnRollbackRequest request;
@@ -519,6 +413,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         return true;
     }
     return false;
+}
+
+void set_need_rollback(StreamLoadContext* ctx, ExecEnv* exec_env) {
+    ctx->set_need_rollback([exec_env](StreamLoadContext* rollback_ctx) {
+        return exec_env->stream_load_executor()->rollback_txn(rollback_ctx);
+    });
 }
 
 } // namespace starrocks

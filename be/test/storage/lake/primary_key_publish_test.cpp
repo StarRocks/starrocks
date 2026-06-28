@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <random>
 
@@ -20,6 +21,7 @@
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -32,7 +34,7 @@
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
@@ -50,6 +52,7 @@
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "testutil/chunk_assert.h"
 
@@ -98,7 +101,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
-        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
+        StorageEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -150,9 +153,9 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -171,7 +174,8 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_primary_key";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestGroupPath = "test_lake_primary_key_" + std::to_string(getpid());
     constexpr static const int kChunkSize = 12;
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -215,7 +219,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segments(f.path);
+        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -237,7 +241,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(k0.size(), read_chunk_ptr->num_rows());
 
@@ -469,7 +473,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
-    config::skip_pk_preload = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
@@ -497,7 +500,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _update_mgr->mem_tracker()->set_limit(old_limit);
-    config::skip_pk_preload = false;
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
@@ -1028,49 +1030,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
-    config::skip_pk_preload = false;
-    SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->LoadDependency(
-            {{"UpdateManager::preload_update_state:return", "transactions::abort_txn:enter"}});
-
-    auto tablet_id = _tablet_metadata->id();
-    auto txn_id = next_id();
-    std::thread t1([&]() {
-        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
-        auto tablet_id = _tablet_metadata->id();
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_tablet_schema->id())
-                                                   .set_profile(&_dummy_runtime_profile)
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-    });
-
-    std::thread t2([&]() {
-        AbortTxnRequest request;
-        request.add_tablet_ids(tablet_id);
-        request.add_txn_ids(txn_id);
-        request.set_skip_cleanup(false);
-        AbortTxnResponse response;
-        auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
-        lake_service.abort_txn(nullptr, &request, &response, nullptr);
-    });
-
-    t1.join();
-    t2.join();
-    ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::skip_pk_preload = true;
-}
-
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
     auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, false);
@@ -1440,15 +1399,15 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 0);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).del_files_size(), 0);
-    EXPECT_EQ(new_tablet_metadata->rowsets(2).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(2).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_rows(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).del_files_size(), 1);
@@ -1477,7 +1436,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
     }
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 4);
-    EXPECT_EQ(new_tablet_metadata->rowsets(3).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(3).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_rows(), kChunkSize / 2);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).del_files_size(), 0);
@@ -1562,7 +1521,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
@@ -1591,11 +1550,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
     }
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).del_files_size(), 0);
@@ -1712,7 +1671,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segment_metas_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
     EXPECT_EQ(0, read_rows(tablet_id, version));
 
@@ -2203,7 +2162,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     if (config::enable_pk_index_parallel_execution) {
-        ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
+        ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait();
     }
     // reset configs
     config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
@@ -2317,8 +2276,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_sstable_meta) {
             uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
             ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
 
-            rowset_meta->add_segments(segment_name);
-            rowset_meta->add_segment_size(seg_size);
+            auto* sm = rowset_meta->add_segment_metas();
+            sm->set_filename(segment_name);
+            sm->set_size(seg_size);
         }
 
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
@@ -2458,8 +2418,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
             uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
             ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
 
-            rowset_meta->add_segments(segment_name);
-            rowset_meta->add_segment_size(seg_size);
+            auto* sm = rowset_meta->add_segment_metas();
+            sm->set_filename(segment_name);
+            sm->set_size(seg_size);
         }
 
         ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
@@ -2497,37 +2458,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
     EXPECT_TRUE(found_delvec_file) << "Expected delvec file to be in orphan_files";
     EXPECT_TRUE(found_dcg_file1) << "Expected dcg file 1 to be in orphan_files";
     EXPECT_TRUE(found_dcg_file2) << "Expected dcg file 2 to be in orphan_files";
-}
-
-TEST_P(LakePrimaryKeyPublishTest, test_preload_update_state_slow_log) {
-    // Set slow log threshold to 0 so any preload triggers the slow log path
-    auto saved_slow_log_ms = config::lake_publish_version_slow_log_ms;
-    config::lake_publish_version_slow_log_ms = 0;
-    config::skip_pk_preload = false;
-    DeferOp defer([&] {
-        config::lake_publish_version_slow_log_ms = saved_slow_log_ms;
-        config::skip_pk_preload = true;
-    });
-
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
-    auto tablet_id = _tablet_metadata->id();
-    auto txn_id = next_id();
-    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                               .set_tablet_manager(_tablet_mgr.get())
-                                               .set_tablet_id(tablet_id)
-                                               .set_txn_id(txn_id)
-                                               .set_partition_id(_partition_id)
-                                               .set_mem_tracker(_mem_tracker.get())
-                                               .set_schema_id(_tablet_schema->id())
-                                               .set_profile(&_dummy_runtime_profile)
-                                               .build());
-    ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish_with_txnlog());
-    delta_writer->close();
-
-    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
-    ASSERT_TRUE(read(tablet_id, 2).ok());
 }
 
 // Test that persistent index rebuild skips rows already covered by SSTables.

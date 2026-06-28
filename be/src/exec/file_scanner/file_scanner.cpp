@@ -14,13 +14,19 @@
 
 #include "exec/file_scanner/file_scanner.h"
 
+#include <algorithm>
+#include <cctype>
 #include <memory>
 
+#include "base/compression/compression_utils.h"
+#include "base/compression/stream_decompressor.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
@@ -28,16 +34,13 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs.h"
-#include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
+#include "platform/fs_broker.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 
@@ -238,8 +241,8 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                         error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                                   << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
-                        RuntimeStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
-                                                                           error_msg.str(), "");
+                        LoadPathStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
+                                                                            error_msg.str(), "");
                     }
 
                     // avoid print too many debug log
@@ -249,7 +252,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     std::stringstream error_msg;
                     error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    RuntimeStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
+                    LoadPathStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
                 }
             }
         }
@@ -265,8 +268,15 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
                                            const TBrokerScanRangeParams& params,
                                            std::shared_ptr<SequentialFile>* file) {
     CompressionTypePB compression = CompressionTypePB::DEFAULT_COMPRESSION;
-    if (range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+    // JSON stream load (FILE_STREAM) decompresses internally via CompressedStreamLoadPipeReader
+    // in JsonReader::_read_file_stream(). Wrapping the pipe in a CompressedInputStream here would
+    // both double-decompress and break the down_cast<StreamLoadPipeInputStream*> in
+    // _read_file_stream() (the stream becomes a CompressedInputStream), causing a crash.
+    if (range_desc.file_type == TFileType::FILE_STREAM && range_desc.format_type == TFileFormatType::FORMAT_JSON) {
         compression = CompressionTypePB::NO_COMPRESSION;
+    } else if (range_desc.__isset.compression_type) {
+        // Prefer explicit compression type if provided by FE
+        compression = CompressionUtils::to_compression_pb(range_desc.compression_type);
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
         compression = CompressionTypePB::NO_COMPRESSION;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_GZ) {
@@ -279,6 +289,26 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         compression = CompressionTypePB::DEFLATE;
     } else if (range_desc.format_type == TFileFormatType::FORMAT_CSV_ZSTD) {
         compression = CompressionTypePB::ZSTD;
+    } else if (range_desc.format_type == TFileFormatType::FORMAT_JSON) {
+        // Try to infer compression from file suffix for JSON if not explicitly set
+        // Extract extension after last '.' in the filename part
+        std::string path = range_desc.path;
+        // get filename after last '/'
+        size_t slash = path.find_last_of('/');
+        std::string filename = (slash == std::string::npos) ? path : path.substr(slash + 1);
+        size_t dot = filename.find_last_of('.');
+        if (dot != std::string::npos && dot + 1 < filename.size()) {
+            std::string ext = filename.substr(dot + 1);
+            // normalize to lower case
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+            compression = CompressionUtils::to_compression_pb(ext);
+            if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
+                // Treat unknown as no compression
+                compression = CompressionTypePB::NO_COMPRESSION;
+            }
+        } else {
+            compression = CompressionTypePB::NO_COMPRESSION;
+        }
     } else if (range_desc.format_type == TFileFormatType::FORMAT_AVRO) {
         compression = CompressionTypePB::NO_COMPRESSION;
     } else {
@@ -292,7 +322,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         break;
     }
     case TFileType::FILE_STREAM: {
-        auto pipe = _state->exec_env()->load_stream_mgr()->get(range_desc.load_id);
+        auto* query_execution_services = _state->query_execution_services();
+        auto pipe = query_execution_services->runtime->load_stream_mgr->get(range_desc.load_id);
         if (pipe == nullptr) {
             std::stringstream ss("Invalid or outdated load id ");
             range_desc.load_id.printTo(ss);
@@ -318,7 +349,7 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         }
     }
     }
-    if (compression == CompressionTypePB::NO_COMPRESSION) {
+    if (compression == CompressionTypePB::NO_COMPRESSION || compression == CompressionTypePB::DEFAULT_COMPRESSION) {
         *file = src_file;
         return Status::OK();
     }
@@ -375,18 +406,20 @@ void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& i
     std::map<std::string, size_t> merged_schema_index;
     for (const auto& schema : input) {
         for (const auto& slot : schema) {
-            auto itr = merged_schema_index.find(slot.col_name());
+            auto col = std::string(slot.col_name());
+            auto itr = merged_schema_index.find(col);
             if (itr == merged_schema_index.end()) {
-                merged_schema.emplace_back(
-                        std::make_shared<SlotDescriptor>(merged_schema.size(), slot.col_name(), slot.type()));
-                merged_schema_index.insert({slot.col_name(), merged_schema.size() - 1});
+                merged_schema.emplace_back(std::make_shared<SlotDescriptor>(merged_schema.size(),
+                                                                            std::string(slot.col_name()), slot.type()));
+                merged_schema_index.emplace(std::string(slot.col_name()), merged_schema.size() - 1);
             } else {
                 const auto& merged_type = merged_schema[itr->second]->type();
                 const auto& slot_type = slot.type();
                 // handle conflicted types.
                 if (merged_type != slot_type) {
-                    merged_schema[itr->second] = std::make_shared<SlotDescriptor>(
-                            slot.id(), slot.col_name(), TypeDescriptor::promote_types(merged_type, slot_type));
+                    merged_schema[itr->second] =
+                            std::make_shared<SlotDescriptor>(slot.id(), std::string(slot.col_name()),
+                                                             TypeDescriptor::promote_types(merged_type, slot_type));
                 }
             }
         }
@@ -394,7 +427,7 @@ void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& i
 
     for (size_t i = 0; i < merged_schema.size(); ++i) {
         const auto& schema = merged_schema[i];
-        output->emplace_back(i, schema->col_name(), schema->type());
+        output->emplace_back(i, std::string(schema->col_name()), schema->type());
     }
 }
 
@@ -493,7 +526,7 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
         // Column names are case insensitive.
         // Check duplicated column names.
         for (const auto& slot : schema) {
-            auto name = slot.col_name();
+            std::string name(slot.col_name());
             auto lowercase_name = boost::algorithm::to_lower_copy(name);
 
             auto itr = unique_names.find(lowercase_name);

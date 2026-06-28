@@ -22,15 +22,14 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/cpu_info.h"
-#include "exec/hash_join_node.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_key_constructor.h"
+#include "exprs/column_ref.h"
 #include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 #include "types/logical_type_infra.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -140,9 +139,12 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
-    for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {
-        has_tail_zero |= bytes[offsets[i] - 1] == 0;
-    }
+    offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        for (size_t i = offsets_buf.size() - 1; i > 0 && offset_data[i] > 0; i--) {
+            has_tail_zero |= bytes[offset_data[i] - 1] == 0;
+        }
+    });
     if (has_tail_zero) {
         return 0;
     }
@@ -287,12 +289,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
 
     const uint64_t row_count = table_items->row_count;
     const uint64_t bucket_size = JoinHashMapHelper::calc_bucket_size(table_items->row_count + 1);
-    static const size_t HALF_L3_CACHE_SIZE = [] {
-        static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-        const auto& cache_sizes = CpuInfo::get_cache_sizes();
-        const auto l3_cache = cache_sizes[CpuInfo::L3_CACHE] ? cache_sizes[CpuInfo::L3_CACHE] : DEFAULT_L3_CACHE_SIZE;
-        return l3_cache / 2;
-    }();
+    static const size_t HALF_L3_CACHE_SIZE = CpuInfo::get_l3_cache_size() / 2;
     static const size_t L2_CACHE_SIZE = CpuInfo::get_l2_cache_size();
 
     if ((table_items->join_type == TJoinOp::LEFT_ANTI_JOIN || table_items->join_type == TJoinOp::LEFT_SEMI_JOIN) &&

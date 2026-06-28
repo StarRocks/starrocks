@@ -19,25 +19,28 @@
 #include <shared_mutex>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "base/bthreads/single_flight.h"
 #include "common/statusor.h"
 #include "compaction_task_context.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
+#include "platform/store_path.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/base_rowset.h"
 
 namespace starrocks {
 struct FileInfo;
-struct TabletBasicInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
+class TGetTabletMetadataResponse;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -66,9 +69,10 @@ public:
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
-                           int64_t cache_capacity);
+                           int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
 
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity);
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+                           const StorePathRegistry* store_path_registry = nullptr);
 
     ~TabletManager();
 
@@ -176,6 +180,13 @@ public:
 #endif
 #endif // USE_STAROS
 
+    // Pick a tablet id from `candidates` that is already known to this worker's staros
+    // shard cache (so that later location_provider calls can resolve it without issuing
+    // a get-shard-info RPC to StarMgr). Falls back to the first candidate when none is
+    // local or when USE_STAROS is not enabled. Callers must ensure `candidates` is not
+    // empty.
+    int64_t pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates);
+
     Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
@@ -221,6 +232,7 @@ public:
     std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const;
 
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+    const StorePathRegistry* store_path_registry() const { return _store_path_registry; }
 
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
@@ -293,6 +305,13 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+    StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
+    // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
+    StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
+    // Parse (table_id, partition_id, index_id) from StarOS shard properties. Exposed for unit tests.
+    static Status parse_shard_properties(int64_t tablet_id,
+                                         const std::unordered_map<std::string, std::string>& properties,
+                                         int64_t* table_id, int64_t* partition_id, int64_t* index_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
@@ -305,6 +324,7 @@ private:
 
 private:
     std::shared_ptr<LocationProvider> _location_provider;
+    const StorePathRegistry* _store_path_registry = nullptr;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr = nullptr;

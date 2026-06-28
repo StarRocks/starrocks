@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks."
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -114,7 +115,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **Required**: No\
 **Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **Required**: No\
 **Description**:  The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. 
@@ -167,7 +168,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **Required**: No\
-**Description**:  Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. 
+**Description**:  Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (`|`) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: `| "Love StarRocks "|`. If you set `trim_space` to `true`, StarRocks processes the preceding field values as `|"Love StarRocks"|`. 
 
 #### `enclose`     
 
@@ -192,7 +193,12 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `json_root`
 
 **Required**: No\
-**Description**:  The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. 
+**Description**:  The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic.
+
+#### `envelope`
+
+**Required**: No\
+**Description**: Specifies the CDC envelope format of the JSON-formatted data. Valid value: `debezium`. Default: not set (no envelope wrapping). When set to `debezium`, StarRocks parses each Kafka message as a Debezium CDC event. The message must contain an `op` field (`c`=create, `u`=update, `d`=delete, `r`=snapshot read) and an `after` field (for c/u/r) or `before` field (for d) holding the actual row data. Tombstone messages where `payload` is `null` are silently skipped. Can only be specified when `format` is `json`. Cannot be used together with `json_root` or `strip_outer_array`.
 
 #### `task_consume_second`
 
@@ -250,7 +256,12 @@ The properties of the data source.
 #### `property.kafka_default_offsets`
 
 **Required**: No\
-**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.
+**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property. Partitions that are discovered after the job already has consuming progress (for example, partitions added to the Kafka topic later) start from this offset, or from `OFFSET_BEGINNING` if this property is not specified.
+
+#### `property.kafka_partition_discovery`
+
+**Required**: No\
+**Description**: Whether the Routine Load job keeps discovering new Kafka partitions even if `kafka_partitions` is specified. Valid values: `true` and `false` (default). By default, specifying `kafka_partitions` pins the consumed partitions to that list, and partitions added to the topic later are not consumed. If this property is set to `true`, `kafka_partitions` and `kafka_offsets` only specify the starting offsets of the listed partitions, and the job consumes all partitions of the topic, including partitions added later. A partition that is not listed in `kafka_partitions` starts from the offset specified in `property.kafka_default_offsets`, or from `OFFSET_BEGINNING` if `property.kafka_default_offsets` is not specified. To start the unlisted partitions from the latest offset instead, explicitly set `property.kafka_default_offsets` to `OFFSET_END`. This property can only be used together with `kafka_partitions`.
 
 #### `confluent.schema.registry.url`
 

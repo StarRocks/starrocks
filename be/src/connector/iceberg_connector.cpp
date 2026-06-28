@@ -16,6 +16,7 @@
 
 #include "iceberg_chunk_sink.h"
 #include "iceberg_delete_sink.h"
+#include "iceberg_row_delta_sink.h"
 
 namespace starrocks::connector {
 
@@ -25,6 +26,10 @@ std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_data_sink_p
 
 std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_delete_sink_provider() const {
     return std::make_unique<connector::IcebergDeleteSinkProvider>();
+}
+
+std::unique_ptr<ConnectorChunkSinkProvider> IcebergConnector::create_row_delta_sink_provider() const {
+    return std::make_unique<IcebergRowDeltaSinkProvider>();
 }
 
 } // namespace starrocks::connector

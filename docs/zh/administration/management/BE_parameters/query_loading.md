@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BE configuration parameters for query execution and data loading."
 sidebar_label: "查询引擎和导入导出"
 keywords: ['Canshu']
 ---
@@ -30,11 +31,38 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ---
 
-当前主题包含以下类型的 FE 配置：
+当前主题包含以下类型的 BE 配置：
 - [查询引擎](#查询引擎)
 - [导入导出](#导入导出)
 
 ## 查询引擎
+
+### agg_hash_map_prefetch_dist
+
+- 默认值：16
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：聚合哈希表/哈希集探测循环的软件预取距离（以行数为单位）。在构建聚合哈希表时，该循环会预取当前处理行前方指定行数范围内的桶，从而在处理大型表时隐藏内存延迟。将其设置为 `0` 将禁用软件预取。该值每处理一个 Chunk 读取一次，因此更改将在下一个 Chunk 生效。默认值 16 是针对驻留 L3 缓存的表的经验设定；对于驻留 DRAM 的工作负载应提高该值，对于驻留缓存的工作负载则应降低该值。预取还受 `agg_prefetch_l2_ratio` 控制：无论该距离如何，只要哈希表仍能驻留 L2 缓存中，就不会发出预取请求。
+- 引入版本：-
+
+### agg_prefetch_l2_ratio
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 引入版本：-
+
+### clear_udf_cache_when_start
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否在 BE 启动时清除所有本地缓存的用户函数库。启用后，BE 将在 UserFunctionCache 初始化时删除 UDF 目录下的 `.jar`/`.py` 文件，并在首次使用时重新下载，会增加网络流量和首次使用延迟。禁用（默认）时，BE 直接加载已有缓存文件。
+- 引入版本：v4.0.0
 
 ### dictionary_speculate_min_chunk_size
 
@@ -101,6 +129,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
+- 引入版本：-
+
+### enable_spill_sort_events
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：为发生落盘的排序算子启用 pipeline 事件调度器，替代轮询自旋（poll-spinning）。
 - 引入版本：-
 
 ### enable_string_prefix_zonemap
@@ -258,7 +295,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### json_flat_sparsity_factor
 
-- 默认值：0.9
+- 默认值：0.3
 - 类型：Double
 - 单位：
 - 是否动态：是
@@ -273,6 +310,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
 - 引入版本：v4.0
+
+### late_materialization_ratio
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：控制 SegmentIterator 延迟物化策略的整数比率，取值范围 [0-1000]。`0` 禁用延迟物化；`1000` 强制所有读取使用延迟物化；1–999 时根据谓词过滤率动态决策，值越大越倾向使用延迟物化。当 Segment 包含复杂 Metric 类型时，改用 `metric_late_materialization_ratio`。启用 `lake_io_opts.cache_file_only` 时延迟物化自动禁用。
+- 引入版本：v3.2.0
 
 ### max_hdfs_file_handle
 
@@ -309,6 +355,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：查询最多拆分的 Scan Key 数目。
 - 引入版本：-
+
+### metric_late_materialization_ratio
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：当读取包含复杂 Metric 列时，控制延迟物化行访问策略的比率，取值范围 [0-1000]。`0` 禁用延迟物化；`1000` 强制所有适用读取使用延迟物化；1–999 时根据选择率动态决策。存在复杂 Metric 类型时，此参数优先于 `late_materialization_ratio`。`cache_file_only` I/O 模式下延迟物化始终禁用。
+- 引入版本：v3.2.0
 
 ### min_file_descriptor_number
 
@@ -400,6 +455,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
 - 引入版本：-
 
+### pipeline_enable_large_column_checker
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 Pipeline 执行框架中启用大列检测。启用后，如果中间列在 Pipeline 执行或 Spill 序列化过程中达到 Chunk 容量限制，查询将报容量超限错误。
+- 引入版本：v4.0.0
+
 ### pipeline_poller_timeout_guard_ms
 
 - 默认值：-1
@@ -453,6 +517,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
+
+### enable_lock_free_scan_task_queue
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 `ScanExecutor` 是否使用 `LockFreeWorkGroupScanTaskQueue` 来调度 OLAP scan 和 connector scan 任务。开启后，扫描任务会通过“每个 workgroup 的无锁队列 + workgroup 级协调器”进行调度，相比原先基于互斥锁的 `WorkGroupScanTaskQueue` 可以降低竞争开销。排障或回滚时，可将该参数设置为 `false` 以切回旧的 scan task queue 实现。
+- 引入版本：v4.1.0
 
 ### pk_index_parallel_get_threadpool_size
 
@@ -562,6 +635,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：启用 `enable_string_prefix_zonemap` 时用于字符串 Zonemap 最小值/最大值的前缀长度。
 - 引入版本：-
 
+### jvm_call_thread_pool_size
+
+- 默认值：1
+- 类型：Int
+- 单位：Threads
+- 是否动态：否
+- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 清理任务与 Java UDF 执行竞争。
+- 引入版本：-
+
 ### udf_thread_pool_size
 
 - 默认值：1
@@ -578,6 +660,59 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Percent
 - 是否动态：否
 - 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 引入版本：v3.2.0
+
+### enable_vector_adaptive_search
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：HNSW 向量索引自适应 `ef_search` 缩放的总开关。开启时，BE 会根据 segment 行数为每个 segment 调整有效 `ef_search`，从而在 compaction 合并大 segment 后无需手动调参即可保持召回率。设置为 `false` 时关闭自适应缩放，按用户指定的 `ef_search` 原值执行。
+- 引入版本：-
+### vector_query_cache_capacity
+
+- 默认值：`20%`
+- 类型：String
+- 单位：字节，支持单位后缀（`K`/`M`/`G`/`T`）或 BE `mem_limit` 的百分比（`%`）
+- 是否动态：是
+- 描述：SR 端向量索引缓存的总容量，在同一个 LRU 中同时管理 HNSW 整索引条目和 IVF-PQ 每个 list 的 block 条目（当 `enable_vector_index_block_cache=true` 时）。BE 启动时和每次通过 HTTP `/api/update_config` 更新时均生效。接受绝对字节（如 `4294967296`）、带单位数值（`4G`、`512M`）或相对于 BE 进程内存限额的百分比（如 `20%`）。**v4.2.0 行为变更：** 旧版本只接受绝对字节数（默认 512MB）；升级时如不显式覆盖该配置，cache 大小将变为 BE 内存的 20%。
+- 引入版本：v3.4.0
+
+### vector_adaptive_ef_alpha
+
+- 默认值：1.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 的增长斜率。缩放系数为 `1 + alpha * log2(segment_rows / vector_adaptive_ef_baseline_rows)`。值越大召回提升越多但 CPU 开销越高；值越小则相反。仅在 `enable_vector_adaptive_search=true` 且 `segment_rows > vector_adaptive_ef_baseline_rows` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_baseline_rows
+
+- 默认值：300000
+- 类型：Int
+- 单位：Rows
+- 是否动态：是
+- 描述：自适应 `ef_search` 不进行缩放的 segment 行数基线。低于该阈值的 segment 使用用户指定的 `ef_search`；高于该阈值的 segment 会得到放大的有效 `ef_search`，用以补偿较大 HNSW 图的搜索深度。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_adaptive_ef_cap
+
+- 默认值：8.0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：自适应 `ef_search` 倍率上限。即使 segment 极大也将放大倍率限制在该上限内，避免 CPU 与延迟在极端情况下失控。仅在 `enable_vector_adaptive_search=true` 时生效。
+- 引入版本：-
+
+### vector_chunk_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：Rows
+- 是否动态：否
+- 描述：向量化执行中每个 Chunk（批次）的行数，贯穿执行引擎和存储层。影响算子吞吐量、内存占用、Spill/Sort 缓冲区大小及 I/O 启发式策略。增大可提升宽表/CPU 密集型场景的效率，但会提高峰值内存并增加小结果集查询的延迟。除非分析显示批大小是瓶颈，否则建议保持默认值。
 - 引入版本：v3.2.0
 
 ## 导入导出
@@ -602,7 +737,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### partial_update_memory_limit_per_worker
 
-- 默认值：1073741824
+- 默认值：2147483648
 - 类型：Int
 - 单位：Bytes
 - 是否动态：是
@@ -678,6 +813,69 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Hours
 - 是否动态：是
 - 描述：导入数据信息保留的时长。
+- 引入版本：-
+
+### enable_rejected_record_sync
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：拒绝记录同步守护线程的特性开关。启用后，BE 常驻的 `RejectedRecordSyncDaemon` 会扫描 `RejectedRecordWriter` 产生的分片级 JSON Lines 文件，并通过 merge-commit Stream Load 批量回写到 `_statistics_.rejected_records` 系统表。在分阶段上线期间默认关闭：升级到含该守护线程的版本后，只有在运维显式开启后集群才会开始向新系统表写入数据。
+- 引入版本：-
+
+### rejected_record_sync_interval_sec
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：`RejectedRecordSyncDaemon` 的扫描周期。未找到新文件的 tick 为 no-op。减小该值可降低拒绝行在 `_statistics_.rejected_records` 中可查询的延迟，增大该值可减轻文件系统压力。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_rows
+
+- 默认值：10000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：单次 merge-commit Stream Load 批次的行数上限。在守护线程拼装文件内容的过程中按行强制执行，因此一个超大单文件也会被拆分；超出上限的回写量会在连续 tick 间拆分。该上限用于限制 Stream Load 事务规模，避免一次过大的 flush 反压影响无关的 load。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_bytes
+
+- 默认值：33554432（32 MiB）
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：守护线程每次 POST 拼装的 Stream Load payload 字节上限。与 `rejected_record_sync_max_batch_rows` 同时生效，确保即使列很宽或 `error_message` 很长的 load 也不会在内存里组装出 GB 级 payload。当上限在文件中途被触发时，守护线程会提交当前批次并开启新的 payload；该文件保留到其全部行都已发送为止。建议不超过 FE 的 `streaming_load_max_mb`，以避免 FE 侧拒收。
+- 引入版本：-
+
+### rejected_record_sync_max_backoff_sec
+
+- 默认值：600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：当 `post_to_stream_load` 持续失败时 tick 间隔的上限。守护线程每次失败后将休眠时间翻倍（`rejected_record_sync_interval_sec << 连续失败次数`），直到达到该上限；一次成功后立即回到基础间隔。避免长时间 FE 宕机时每 `rejected_record_sync_interval_sec` 秒都产生一条 WARN 日志 + 一次 `_sync_failures` 计数。`Uninitialized` 状态（"master FE 尚未就绪"）不计入失败连续数。
+- 引入版本：-
+
+### rejected_record_local_retention_hours
+
+- 默认值：24
+- 类型：Int
+- 单位：小时
+- 是否动态：是
+- 描述：本地 JSON Lines 文件被守护线程回收前的最长保留时间。作为兜底上限：同步失败通常每个 tick 都会重试，但在 FE 不可达、系统表被删除、鉴权异常等配置异常场景下，该配置可防止文件无限堆积占满存储路径。
+- 引入版本：-
+
+### rejected_record_sync_post_timeout_sec
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：守护线程向 FE 发起 Stream Load PUT 请求时的单次超时时间。merge-commit 批次可能因为多个 BE 并发请求被合并到同一事务而在 FE 提交队列短暂等待，因此该值故意设置得比默认查询超时更宽松。
 - 引入版本：-
 
 ### load_process_max_memory_limit_bytes
@@ -784,7 +982,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：Publish Version 线程池的最小线程数，空闲时可收缩到该值。0 表示不设固定下限。
 - 引入版本：-
 
@@ -862,16 +1060,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_channel_rpc_thread_pool_num
 
-- 默认值：64
+- 默认值：-1
 - 类型：Int
 - 单位：Threads
-- 是否动态：否
+- 是否动态：是
 - 描述：异步处理 load channel Open RPC 的线程池大小。过小可能导致提交失败，过大增加线程开销。
 - 引入版本：v3.5.0
 
 ### load_channel_rpc_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：1024000
 - 类型：Int
 - 单位：-
 - 是否动态：否
@@ -889,7 +1087,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### streaming_load_thread_pool_idle_time_ms
 
-- 默认值：600000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -904,6 +1102,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：streaming load 线程池的最小线程数。空闲时可收缩到该值，0 表示不设固定下限。
 - 引入版本：-
+### es_http_timeout_ms
+
+- 默认值：5000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：ESScanReader 在执行 Elasticsearch Scroll 请求时，ES 网络客户端的 HTTP 连接超时时间。在网络较慢或查询量较大时可适当调大，以避免过早超时；调小则可以更快感知 ES 节点无响应。与控制 Scroll 上下文存活时间的 `es_scroll_keepalive` 配合使用。
+- 引入版本：v3.2.0
+
 ### es_index_max_result_window
 
 - 默认值：10000
@@ -911,6 +1118,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：限制 StarRocks 在单个批次中从 Elasticsearch 请求的最大文档数。StarRocks 在为 ES reader 构建 `KEY_BATCH_SIZE` 时将 ES 请求批大小设置为 min(`es_index_max_result_window`, `chunk_size`)。如果 ES 请求超过 Elasticsearch 索引设置 `index.max_result_window`，Elasticsearch 会返回 HTTP 400 (Bad Request)。在扫描大型索引时调整此值，或在 Elasticsearch 端增加 ES `index.max_result_window` 以允许更大的单次请求。
+- 引入版本：v3.2.0
+
+### ignore_load_tablet_failure
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：设置为 `false` 时，任何 Tablet Header 加载失败（非 NotFound 和非 AlreadyExist 的错误）均视为致命错误，BE 进程将调用 LOG(FATAL) 停止。设置为 `true` 时，BE 在启动时跳过加载失败的 Tablet，并继续加载其他 Tablet。注意：此参数不抑制 RocksDB 元数据扫描本身的致命错误，这类错误始终会导致进程退出。
 - 引入版本：v3.2.0
 
 ### load_channel_abort_clean_up_delay_seconds
@@ -933,7 +1149,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_rpc_timeout_profile_threshold_ms
 
-- 默认值：30000
+- 默认值：60000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -942,7 +1158,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_diagnose_send_rpc_timeout_ms
 
-- 默认值：10000
+- 默认值：2000
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -960,7 +1176,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_fp_tablets_channel_add_chunk_block_ms
 
-- 默认值：10000
+- 默认值：-1
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：否
@@ -969,7 +1185,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_num_max
 
-- 默认值：16
+- 默认值：128
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
@@ -978,7 +1194,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### load_segment_thread_pool_queue_size
 
-- 默认值：2048
+- 默认值：10240
 - 类型：Int
 - 单位：-
 - 是否动态：否

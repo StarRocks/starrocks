@@ -35,21 +35,23 @@
 #pragma once
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
 
 namespace pipeline {
-class MorselQueue;
-using MorselQueuePtr = std::unique_ptr<MorselQueue>;
-class MorselQueueFactory;
-using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
+class MorselQueueBuilder;
+using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
 } // namespace pipeline
 
 class TScanRange;
@@ -88,7 +90,7 @@ public:
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
             int pipeline_dop, bool in_colocate_exec_group, bool enable_tablet_internal_parallel,
             TTabletInternalParallelMode::type tablet_internal_parallel_mode, bool enable_shared_scan = false);
-    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+    virtual StatusOr<pipeline::MorselQueueBuilderPtr> convert_scan_range_to_morsel_queue_builder(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges);
@@ -154,6 +156,13 @@ public:
 
     std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
 
+    // Set once at fragment setup (FragmentExecutor tree walk): true when a row-reducing operator
+    // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
+    // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
+    // routes to the exact brute-force path -- a segment-level k-limit would otherwise under-return.
+    void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
+    bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -169,6 +178,7 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    bool _filtered_above_iterator = false;
     int64_t _mem_limit = 0;
     int32_t _io_tasks_per_scan_operator = 0;
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_label: "Authentication, Query, and Loading"
+description: "FE configuration parameters for authentication, query execution, and data loading."
 ---
 
 # FE Configuration - Authentication, Query, and Loading
@@ -89,6 +90,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Timeout in milliseconds applied to the BRPC TalkTimeoutController before sending a plan fragment. `BackendServiceClient.sendPlanFragmentAsync` sets this value prior to calling the backend `execPlanFragmentAsync`. It governs how long BRPC will wait when borrowing an idle connection from the connection pool and while performing the send; if exceeded, the RPC will fail and may trigger the method's retry logic. Set this lower to fail fast under contention, or raise it to tolerate transient pool exhaustion or slow networks. Be cautious: very large values can delay failure detection and block request threads.
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
+
+### `connector_row_size_estimate_bytes`
+
+- Default: 256
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The estimated average row size in bytes used by the optimizer to estimate row counts for external file tables (FILES() and ENGINE=file tables) when the storage format is unknown or the column schema is not available. The row count is estimated as `total_file_bytes / connector_row_size_estimate_bytes`. A smaller value produces a higher row count estimate and may affect join ordering decisions.
+- Introduced in: v3.4
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
@@ -206,7 +216,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: Yes
 - Description: Controls the behavior of Materialized View (MV) Fast Schema Evolution (FSE). Valid values are: `strict` (default) - only allow FSE when `isSupportFastSchemaEvolutionInDanger` is true and clear affected partition entries from the version map; `force` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false and clear affected partition entries to trigger recomputation on refresh; `force_no_clear` - allow FSE even when `isSupportFastSchemaEvolutionInDanger` is false but do not clear partition entries.
-- Introduced in: v3.4.0
+- Introduced in: v4.1.0
 
 ### `enable_auto_collect_array_ndv`
 
@@ -530,6 +540,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
 - Introduced in: -
 
+### `enable_non_primary_key_delete_warning`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When set to `true`, a successful `DELETE` against a non-Primary-Key OLAP table (Duplicate Key, Aggregate, Unique Key) returns an informational notice in the MySQL OK packet's `info` field, reminding the user that `DELETE` writes delete predicates and incurs merge-on-read cost until base compaction runs, and recommending `ALTER TABLE ... TRUNCATE PARTITION` for bulk partition removal. Set to `false` to suppress the notice. The notice does not change DELETE semantics or affect execution; it only adds an info string visible to the client. See [DELETE](../../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) for context.
+- Introduced in: -
+
 ### `max_create_table_timeout_second`
 
 - Default: 600
@@ -761,7 +780,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `statistic_cache_thread_pool_size`
 
-- Default: 10
+- Default: 5
 - Type: Int
 - Unit: -
 - Is mutable: No
@@ -802,6 +821,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The interval at which the cache of statistical information is updated.
+- Introduced in: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how followers (and restart recovery) refresh the connector (external table) statistics cache when replaying statistics journals. When set to `true`, the cache is invalidated by the table UUID persisted in the journal and reloaded lazily on the next query, which avoids resolving external table metadata (`MetadataMgr.getTable`) during replay — such resolution may block the journal replayer on the Hive Metastore or object storage. When set to `false` (default), the legacy eager refresh is used, preserving existing behavior. Statistics journals written before this UUID was persisted always fall back to eager refresh regardless of this setting.
+
+### `statistics_large_string_column_merge_threshold`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Disabled by default (`0`). When set to a positive value, a dedicated SQL is generated during statistics collection to collect the statistics of string columns (`VARCHAR` / `CHAR`) whose declared length exceeds this threshold, instead of merging them with other columns. Both sampled and full statistics collection follow this strategy. The purpose is to bound the Exchange-stage memory peak of a single statistics SQL and prevent long string columns from further amplifying the aggregate operator state when merged with other columns. Keep it at `0` to collect all columns through the original merged-batch path. Note that `STRING` is represented internally as a maximum-length `VARCHAR`, so enabling this option with a positive threshold may also isolate `STRING` columns.
 - Introduced in: -
 
 ### `task_check_interval_second`
@@ -1063,6 +1100,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`.
 - Introduced in: -
 
+### `max_load_initial_open_partition_number`
+
+- Default: 4096
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: The upper bound on how many partitions a load can open up front. The value is used as a cap in two scenarios: (1) for LIST-partitioned tables (which open all partitions by default) and (2) for RANGE-partitioned tables loaded via INSERT / Broker Load / Spark Load (which also open all partitions by default). Stream Load and Routine Load on RANGE-partitioned tables ignore this cap and keep the conservative latest-32 default. The per-table property `load_initial_open_partition_number` overrides this value, bypasses this cap, and is the highest-priority setting. From v4.0 onwards, the default value is increased from 32 to 4096.
+- Introduced in: -
+
 ### `max_load_timeout_second`
 
 - Default: 259200
@@ -1169,6 +1215,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: Seconds
 - Is mutable: Yes
 - Description: The default timeout duration for a prepared transaction.
+- Introduced in: -
+
+### `rejected_records_retained_days`
+
+- Default: 7
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Number of daily partitions to keep in the internal `_statistics_.rejected_records` system table. The value is passed to `TableKeeper` (clamped to a minimum of 1) and reconciled into the target table's `partition_live_number` property on every keeper tick. Adjust this value when you need rejected row history beyond the default week (for audit or longer replay windows) or when storage budgets are tight. The value only affects new daily partitions and the keeper's TTL reconciliation; it does not retroactively restore already-dropped partitions.
 - Introduced in: -
 
 ### `routine_load_task_consume_second`

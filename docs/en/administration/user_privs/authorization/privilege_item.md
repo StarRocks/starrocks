@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 20
 sidebar_label: "Privilege Items"
+description: "Privileges granted to a user or role determine which operations the user or role can perform on certain objects."
 ---
 
 # Privileges supported by StarRocks
@@ -125,9 +126,9 @@ This section describes privileges that are available on different objects.
 
 | Privilege | Description                                                                         |
 | --------- | ----------------------------------------------------------------------------------- |
-| ALTER     | Alters the credential properties, comment, or status (enabled) of a storage volume. |
+| ALTER     | Alters the credential properties, comment, or status (enabled) of a storage volume, and sets a storage volume as the default storage volume. |
 | DROP      | Drops a storage volume.                                                             |
-| USAGE     | Describes a storage volume and sets a storage volume as the default storage volume. |
+| USAGE     | Describes a storage volume.                                                          |
 | ALL       | Has all the above privileges on a storage volume.                                   |
 
 <PrivWarehouse />

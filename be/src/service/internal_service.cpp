@@ -43,9 +43,6 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/agent_server.h"
-#include "agent/publish_version.h"
-#include "agent/task_worker_pool.h"
 #include "base/brpc/brpc.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
@@ -54,54 +51,64 @@
 #include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
-#include "column/stream_chunk.h"
+#include "cache/disk_cache/block_cache.h"
+#include "column/arrow/record_batch_converter.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/constexpr.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
+#include "compute_env/result/buffer_control_block.h"
+#include "compute_env/result/result_buffer_mgr.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/lookup_request.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/MVMaintenance_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+#include "orchestration/fragment_executor.h"
+#include "orchestration/fragment_mgr.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/routine_load_task_executor.h"
+#include "orchestration/runtime_filter_worker.h"
 #include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/buffer_control_block.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
-#include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/load_channel_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
-#include "runtime/runtime_filter_worker.h"
-#include "storage/dictionary_cache_manager.h"
+#include "runtime/time_guard.h"
+#include "service/service_metrics.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
-#include "util/arrow/row_batch.h"
-#include "util/time_guard.h"
 
 namespace starrocks {
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
+
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
+                                                      orchestration::OrchestrationEnv* orchestration_env)
+        : _exec_env(exec_env), _orchestration_env(orchestration_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -123,7 +130,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
     auto task = [=]() { this->_transmit_chunk(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_chunk task failed").to_protobuf(response->mutable_status());
     }
@@ -244,7 +251,7 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
     };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_chunk_via_http task failed")
                 .to_protobuf(response->mutable_status());
@@ -257,7 +264,7 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
     auto task = [=]() { this->_transmit_runtime_filter(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit transmit_runtime_filter task failed")
                 .to_protobuf(response->mutable_status());
@@ -272,7 +279,11 @@ void PInternalServiceImplBase<T>::_transmit_runtime_filter(google::protobuf::Rpc
               << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
               << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
     ClosureGuard closure_guard(done);
-    _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
+    if (_orchestration_env == nullptr || _orchestration_env->runtime_filter_worker() == nullptr) {
+        Status::InternalError("runtime filter worker is not initialized").to_protobuf(response->mutable_status());
+        return;
+    }
+    _orchestration_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
     st.to_protobuf(response->mutable_status());
 }
@@ -292,7 +303,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_plan_fragment(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_plan_fragment task failed").to_protobuf(response->mutable_status());
     }
@@ -324,7 +335,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
     auto task = [=]() { this->_exec_batch_plan_fragments(cntl_base, request, response, done); };
-    if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().pipeline_prepare_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit exec_batch_plan_fragments failed").to_protobuf(response->mutable_status());
     }
@@ -354,6 +365,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             return;
         }
     }
+    if (Status status = reject_legacy_stream_pipeline(*t_batch_requests); !status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
 
     bool is_pipeline = t_batch_requests->common_param.__isset.is_pipeline && t_batch_requests->common_param.is_pipeline;
     if (!is_pipeline) {
@@ -380,7 +395,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
 
     // prepare query context and desc table first
-    pipeline::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
         status.to_protobuf(response->mutable_status());
@@ -391,18 +406,19 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
-    std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
-            std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+    std::shared_ptr<std::vector<orchestration::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
-            auto& unique_requests = t_batch_requests->unique_param_per_instance;
-            auto& req = unique_requests[i];
-            auto& fragment_executor = fragment_executors->at(i);
-            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
-        });
+        submitted = _exec_env->execution_services().pipeline_prepare_pool->try_offer(
+                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
+                    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+                    auto& req = unique_requests[i];
+                    auto& fragment_executor = fragment_executors->at(i);
+                    ms->set_value(fragment_executor.prepare(exec_env, req, req));
+                });
         if (!submitted) {
             failed_idx = i;
             break;
@@ -458,9 +474,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     }
 
     // prepare_global_state is success when reach here, so we must count down once
-    pipeline::QueryContext* query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id).get();
+    auto query_context = _exec_env->query_context_mgr()->get(common_request.params.query_id);
     if (query_context != nullptr) {
-        query_context->count_down_fragments();
+        query_context->count_down_fragment();
     }
 
     status.to_protobuf(response->mutable_status());
@@ -535,6 +551,25 @@ static void copy_result_from_thrift_to_protobuf(const TExecPlanFragmentResult& t
     }
 }
 
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params) {
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+    return Status::OK();
+}
+
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params) {
+    if (params.__isset.common_param) {
+        RETURN_IF_ERROR(reject_legacy_stream_pipeline(params.common_param));
+    }
+    if (params.__isset.unique_param_per_instance) {
+        for (const auto& unique_param : params.unique_param_per_instance) {
+            RETURN_IF_ERROR(reject_legacy_stream_pipeline(unique_param));
+        }
+    }
+    return Status::OK();
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
                                                           const PLoadReplicaStatusRequest* request,
@@ -556,10 +591,11 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    RETURN_IF_ERROR(reject_legacy_stream_pipeline(t_request));
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -597,8 +633,9 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
-    pipeline::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
@@ -609,7 +646,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request) {
-    return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+    return _orchestration_env->fragment_mgr()->exec_plan_fragment(t_request);
 }
 
 inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReason reason) {
@@ -643,7 +682,7 @@ void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcCont
                                                        PCancelPlanFragmentResult* result,
                                                        google::protobuf::Closure* done) {
     auto task = [=]() { this->_cancel_plan_fragment(cntl_base, request, result, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit cancel_plan_fragment task failed").to_protobuf(result->mutable_status());
     }
@@ -711,14 +750,18 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
+                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(reason_string), true);
             }
         }
     } else {
         if (request->has_cancel_reason()) {
-            st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            st = _exec_env->fragment_mgr()->cancel(tid);
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
             LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
@@ -732,7 +775,7 @@ void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cn
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
     auto task = [=]() { this->_fetch_data(cntl_base, request, result, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().query_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(result->mutable_status());
     }
@@ -752,7 +795,7 @@ void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcControlle
                                                   const PFetchDataCacheRequest* request,
                                                   PFetchDataCacheResponse* response, google::protobuf::Closure* done) {
     auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
-    if (!_exec_env->datacache_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->execution_services().datacache_rpc_pool->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(response->mutable_status());
     }
@@ -855,10 +898,10 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
         this->_get_info_impl(request, response, done, timeout_ms);
     };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get kafka info: " << st << " ,timeout: " << timeout_ms
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(
                 fmt::format("too busy to get kafka info, please check the kafka broker status, timeout ms: {}",
@@ -887,10 +930,13 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     std::string group_id;
     MonotonicStopWatch watch;
     watch.start();
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                               &partition_ids, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_meta(request->kafka_meta_request(), &partition_ids,
+                                                                  timeout_ms, &group_id);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -900,8 +946,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     } else if (request->has_kafka_offset_request()) {
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_offset(request->kafka_offset_request(), &beginning_offsets,
+                                                                    &latest_offsets, timeout_ms, &group_id);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -921,8 +967,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                 break;
             }
 
-            st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, left_ms, &group_id);
+            st = routine_load_task_executor->get_kafka_partition_offset(offset_req, &beginning_offsets, &latest_offsets,
+                                                                        left_ms, &group_id);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -955,10 +1001,10 @@ void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcControlle
         this->_get_pulsar_info_impl(request, response, done, timeout_ms);
     };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get pulsar info: " << st << " ,timeout: " << timeout_ms
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable(fmt::format("too busy to get pulsar info, please check the pulsar status, "
                                                "timeout ms: {}",
@@ -980,10 +1026,13 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
         return;
     }
 
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
+
     if (request->has_pulsar_meta_request()) {
         std::vector<std::string> partitions;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_meta(request->pulsar_meta_request(),
-                                                                                       &partitions);
+        Status st = routine_load_task_executor->get_pulsar_partition_meta(request->pulsar_meta_request(), &partitions);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
             for (const std::string& p : partitions) {
@@ -995,8 +1044,8 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     }
     if (request->has_pulsar_backlog_request()) {
         std::vector<int64_t> backlog_nums;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
-                request->pulsar_backlog_request(), &backlog_nums);
+        Status st = routine_load_task_executor->get_pulsar_partition_backlog(request->pulsar_backlog_request(),
+                                                                             &backlog_nums);
         if (st.ok()) {
             auto result = response->mutable_pulsar_backlog_result();
             for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1010,8 +1059,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     if (request->has_pulsar_backlog_batch_request()) {
         for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
-            Status st =
-                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            Status st = routine_load_task_executor->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
             auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1035,10 +1083,10 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
                                                   google::protobuf::Closure* done) {
     auto task = [=]() { this->_get_file_schema(controller, request, response, done); };
 
-    auto st = _exec_env->load_rpc_pool()->submit_func(std::move(task));
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
     if (!st.ok()) {
         LOG(WARNING) << "get file schema: " << st
-                     << ", thread pool size: " << _exec_env->load_rpc_pool()->num_threads();
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("too busy to get file schema").to_protobuf(response->mutable_status());
     }
@@ -1051,9 +1099,10 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     PProcessDictionaryCacheRequestType request_type = request->type();
+    auto* dictionary_cache_manager = _exec_env->compute_env()->dictionary_cache_manager();
     switch (request_type) {
     case PProcessDictionaryCacheRequestType::BEGIN: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        auto st = dictionary_cache_manager->begin(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1063,7 +1112,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::REFRESH: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        auto st = dictionary_cache_manager->refresh(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1073,7 +1122,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::COMMIT: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        auto st = dictionary_cache_manager->commit(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1083,12 +1132,12 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::CLEAR: {
-        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        dictionary_cache_manager->clear(request->dict_id(), request->is_cancel());
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }
     case PProcessDictionaryCacheRequestType::STATISTIC: {
-        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        dictionary_cache_manager->get_info(request->dict_id(), *response);
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }
@@ -1171,182 +1220,15 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
                                                              PMVMaintenanceTaskResult* response,
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    auto* cntl = static_cast<brpc::Controller*>(controller);
-    Status st = _submit_mv_maintenance_task(cntl);
+    (void)controller;
+    (void)request;
+
+    Status st = Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
     if (!st.ok()) {
         LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller* cntl) {
-    auto ser_request = cntl->request_attachment().to_string();
-    TMVMaintenanceTasks t_request;
-    {
-        const auto* buf = (const uint8_t*)ser_request.data();
-        uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
-    }
-    LOG(INFO) << "[MV] mv maintenance task, query_id=" << t_request.query_id << ", mv_task_type:" << t_request.task_type
-              << ", db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name
-              << ", job_id=" << t_request.job_id << ", task_id=" << t_request.task_id
-              << ", signature=" << t_request.signature;
-    VLOG(2) << "[MV] mv maintenance task, plan=" << apache::thrift::ThriftDebugString(t_request);
-
-    auto mv_task_type = t_request.task_type;
-    const TUniqueId& query_id = t_request.query_id;
-
-    // Check the existence of job
-    auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
-    if (mv_task_type != MVTaskType::START_MAINTENANCE && !query_ctx) {
-        std::string msg = fmt::format("execute maintenance task failed, query id not found:", print_id(query_id));
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
-    }
-
-    switch (mv_task_type) {
-    case MVTaskType::START_MAINTENANCE: {
-        if (query_ctx) {
-            std::string msg = fmt::format("MV Job already existed: {}", print_id(query_id));
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
-        }
-        RETURN_IF_ERROR(_mv_start_maintenance(t_request));
-        break;
-    }
-    case MVTaskType::START_EPOCH: {
-        RETURN_IF_ERROR(_mv_start_epoch(query_ctx, t_request));
-        break;
-    }
-    case MVTaskType::COMMIT_EPOCH: {
-        RETURN_IF_ERROR(_mv_commit_epoch(query_ctx, t_request));
-
-        auto& commit_epoch = t_request.commit_epoch;
-        auto& version_info = commit_epoch.partition_version_infos;
-        if (VLOG_ROW_IS_ON) {
-            std::stringstream version_str;
-            version_str << " version_info=[";
-            for (auto& part : version_info) {
-                version_str << part;
-            }
-            version_str << "]";
-            VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
-        }
-
-        break;
-    }
-    // TODO(murphy)
-    // case MVTaskType: {
-    //     break;
-    // }
-    case MVTaskType::STOP_MAINTENANCE: {
-        // Find the fragment context for the specific MV job
-        TUniqueId query_id;
-        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
-        if (!existing_query_ctx) {
-            return Status::InternalError(fmt::format("MV Job has been cancelled: {}.", print_id(query_id)));
-        }
-        auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
-        RETURN_IF_ERROR(stream_epoch_manager->set_finished(_exec_env, existing_query_ctx.get()));
-        break;
-    }
-    default:
-        return Status::NotSupported(fmt::format("Unsupported MVTaskType: {}", mv_task_type));
-    }
-    return Status::OK();
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.start_maintenance, Status::InternalError("must be start_maintenance task"));
-    auto& start_maintenance = task.start_maintenance;
-    auto& fragments = start_maintenance.fragments;
-    for (const auto& fragment : fragments) {
-        pipeline::FragmentExecutor fragment_executor;
-        RETURN_IF_ERROR(fragment_executor.prepare(_exec_env, fragment, fragment));
-        RETURN_IF_ERROR(fragment_executor.execute(_exec_env));
-    }
-
-    // Prepare EpochManager
-    const TUniqueId& query_id = task.query_id;
-    auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
-    if (!existing_query_ctx) {
-        LOG(WARNING) << "start maintenance failed, query id not found:" << print_id(query_id);
-        return Status::InternalError(fmt::format("MV Job has not been prepared: {}.", print_id(query_id)));
-    }
-    std::vector<pipeline::FragmentContext*> fragment_ctxs;
-    for (auto& fragment : fragments) {
-        auto fragment_instance_id = fragment.params.fragment_instance_id;
-        auto&& fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
-        if (!fragment_ctx) {
-            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
-                         << print_id(fragment_instance_id);
-            return Status::InternalError(
-                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
-        }
-        fragment_ctxs.push_back(fragment_ctx.get());
-    }
-    auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    auto maintenance_task = MVMaintenanceTaskInfo::from_maintenance_task(task);
-    RETURN_IF_ERROR(stream_epoch_manager->prepare(maintenance_task, fragment_ctxs));
-    return Status::OK();
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.start_epoch, Status::InternalError("must be start_epoch task"));
-    auto& start_epoch_task = task.start_epoch;
-    auto stream_epoch_manager = query_ctx->stream_epoch_manager();
-    EpochInfo epoch_info = EpochInfo::from_start_epoch_task(start_epoch_task);
-    pipeline::ScanRangeInfo scan_info = pipeline::ScanRangeInfo::from_start_epoch_start(start_epoch_task);
-
-    std::vector<pipeline::FragmentContext*> fragment_ctxs;
-    for (auto& [fragment_instance_id, node_to_scan_ranges] : start_epoch_task.per_node_scan_ranges) {
-        // Find the fragment_ctx by fragment_instance_id;
-        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id);
-        if (!fragment_ctx) {
-            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
-                         << print_id(fragment_instance_id);
-            return Status::InternalError(
-                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
-        }
-        fragment_ctxs.push_back(fragment_ctx.get());
-    }
-
-    // Update state in the runtime state.
-    return stream_epoch_manager->start_epoch(_exec_env, query_ctx.get(), fragment_ctxs, epoch_info, scan_info);
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVMaintenanceTasks& task) {
-    return Status::NotSupported("TODO");
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                     const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.commit_epoch, Status::InternalError("must be commit_epoch task"));
-    auto& commit_epoch_task = task.commit_epoch;
-    auto* agent_server = ExecEnv::GetInstance()->agent_server();
-    auto token =
-            agent_server->get_thread_pool(TTaskType::PUBLISH_VERSION)->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-
-    std::unordered_set<DataDir*> affected_dirs;
-    TFinishTaskRequest finish_task_request;
-    finish_task_request.__set_backend(BackendOptions::get_localBackend());
-    finish_task_request.__set_report_version(curr_report_version());
-    TPublishVersionRequest publish_version_req;
-    publish_version_req.partition_version_infos = commit_epoch_task.partition_version_infos;
-    publish_version_req.transaction_id = commit_epoch_task.transaction_id;
-
-    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
-    StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
-    return Status::OK();
 }
 
 template <typename T>
@@ -1466,7 +1348,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
 
-    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    ServiceMetrics::instance()->short_circuit_request_total.increment(1);
     MonotonicStopWatch watch;
     watch.start();
 
@@ -1479,7 +1361,7 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     auto st = _exec_short_circuit(cntl, request, response);
     st.to_protobuf(response->mutable_status());
     uint64_t elapsed_time_ns = watch.elapsed_time();
-    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
+    ServiceMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template <typename T>

@@ -24,6 +24,7 @@
 #include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -45,6 +46,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -103,7 +105,7 @@ public:
 protected:
     void SetUp() override {
         clear_and_init_test_dir();
-        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
+        StorageEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -129,9 +131,9 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;
@@ -827,7 +829,7 @@ public:
 protected:
     void SetUp() override {
         clear_and_init_test_dir();
-        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
+        StorageEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -848,9 +850,9 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto ret = ChunkHelper::new_chunk(*_schema, 128);
+        auto ret = ChunkFactory::new_chunk(*_schema, 128);
         while (true) {
-            auto tmp = ChunkHelper::new_chunk(*_schema, 128);
+            auto tmp = ChunkFactory::new_chunk(*_schema, 128);
             auto st = reader->get_next(tmp.get());
             if (st.is_end_of_file()) {
                 break;

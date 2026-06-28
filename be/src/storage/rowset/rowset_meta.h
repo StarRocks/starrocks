@@ -149,6 +149,10 @@ public:
 
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
+    void set_merge_condition(const std::string& merge_condition) {
+        _rowset_meta_pb->mutable_txn_meta()->set_merge_condition(merge_condition);
+    }
+
     bool empty() const { return _rowset_meta_pb->empty(); }
 
     PUniqueId load_id() const { return _rowset_meta_pb->load_id(); }

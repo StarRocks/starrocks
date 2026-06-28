@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -22,11 +23,14 @@
 #include "base/testutil/sync_point.h"
 #include "common/config_storage_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
-#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
@@ -45,20 +49,21 @@ public:
         dummy_wg = std::make_shared<workgroup::WorkGroup>(
                 "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0,
                 1.0, workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);
-        dummy_wg->init(parent);
+        dummy_wg->init(parent, create_query_shared_driver_queue(
+                                       PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
         dummy_wg->set_shared_executors(ExecEnv::GetInstance()->workgroup_manager()->shared_executors());
 
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
-        ASSERT_OK(dummy_dir_mgr->init(path));
+        ASSERT_OK(dummy_dir_mgr->init(path, {config::storage_root_path}));
 
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_fragment_ctx.set_workgroup(dummy_wg);
         dummy_query_ctx = std::make_shared<QueryContext>();
 
-        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx);
+        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx, &dummy_fragment_ctx.fragment_runtime_state());
         dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());
-        dummy_runtime_state.set_query_ctx(dummy_query_ctx.get());
+        dummy_query_ctx->attach_to_runtime_state(&dummy_runtime_state);
     }
     void TearDown() override {}
 
@@ -86,7 +91,7 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
-    size_t _next_value = 0;
+    uint64_t _next_value = 0;
     size_t _chunk_size;
 };
 

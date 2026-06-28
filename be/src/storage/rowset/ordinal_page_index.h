@@ -39,15 +39,15 @@
 #include <string>
 
 #include "base/coding.h"
+#include "base/concurrency/once.h"
 #include "base/string/slice.h"
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "storage/rowset/common.h"
+#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
-#include "util/once.h"
 
 namespace starrocks {
 

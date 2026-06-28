@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Kafka トピックからメッセージを継続的にストリーミングするための Routine Load ジョブの作成および管理方法。"
 keywords: ['Routine Load']
 ---
 
@@ -406,10 +407,10 @@ FROM KAFKA
 
 | Avro           | StarRocks                                                    |
 | -------------- | ------------------------------------------------------------ |
-| record         | RECORD 全体またはそのサブフィールドを JSON として StarRocks にロードします。 |
+| record         | STRUCT、または RECORD 全体やそのサブフィールドを JSON として StarRocks にロードします。 |
 | enums          | STRING                                                       |
 | arrays         | ARRAY                                                        |
-| maps           | JSON                                                         |
+| maps           | MAP または JSON                                                         |
 | union(T, null) | NULLABLE(T)                                                  |
 | fixed          | STRING                                                       |
 

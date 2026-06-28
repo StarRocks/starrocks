@@ -23,6 +23,7 @@
 #include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/strings/util.h"
+#include "storage/primitive/lake_file_name.h"
 
 namespace starrocks::lake {
 
@@ -34,58 +35,6 @@ constexpr static const int64 kInitialVersion = 1;
 
 constexpr static const char* const kGCFileName = "GC.json";
 
-inline bool is_segment(std::string_view file_name) {
-    return HasSuffixString(file_name, ".dat");
-}
-
-inline bool is_del(std::string_view file_name) {
-    return HasSuffixString(file_name, ".del");
-}
-
-inline bool is_delvec(std::string_view file_name) {
-    return HasSuffixString(file_name, ".delvec");
-}
-
-inline bool is_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".log");
-}
-
-inline bool is_txn_slog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".slog");
-}
-
-inline bool is_txn_vlog(std::string_view file_name) {
-    return HasSuffixString(file_name, ".vlog");
-}
-
-inline bool is_tablet_metadata(std::string_view file_name) {
-    return HasSuffixString(file_name, ".meta");
-}
-
-inline bool is_tablet_initial_metadata(std::string_view file_name) {
-    return HasPrefixString(file_name, "0000000000000000_");
-}
-
-inline bool is_tablet_metadata_lock(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lock");
-}
-
-inline bool is_sst(std::string_view file_name) {
-    return HasSuffixString(file_name, ".sst");
-}
-
-inline bool is_cols(std::string_view file_name) {
-    return HasSuffixString(file_name, ".cols");
-}
-
-// Check if file is a Lake Compaction Rows Mapper file
-// WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
-// for correct cleanup behavior. Remote lcrm files must not be deleted immediately
-// after use since they may be accessed by multiple nodes during parallel pk execution.
-inline bool is_lcrm(std::string_view file_name) {
-    return HasSuffixString(file_name, ".lcrm");
-}
-
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
@@ -96,6 +45,13 @@ inline std::string tablet_initial_metadata_filename() {
 
 inline std::string gen_delvec_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.delvec", txn_id, generate_uuid_string());
+}
+
+// Generate a filename for an Index Delta Group payload file.
+// FORMAT: {txn_id}_{uuid}.idx — txn_id for traceability, uuid for uniqueness
+// across retries of the same alter txn.
+inline std::string gen_idx_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.idx", txn_id, generate_uuid_string());
 }
 
 // Generate filename for Lake Compaction Rows Mapper file (.lcrm)
@@ -130,10 +86,6 @@ inline std::string combined_txn_log_filename(int64_t txn_id) {
     return fmt::format("{:016X}.logs", txn_id);
 }
 
-inline bool is_combined_txn_log(std::string_view file_name) {
-    return HasSuffixString(file_name, ".logs");
-}
-
 inline int64_t parse_combined_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
     CHECK_EQ(21, file_name.size());
@@ -149,6 +101,38 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
 
 inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+// Generate vector index filename from segment filename.
+// e.g. "0123_abcd.dat" + index_id 123 -> "0123_abcd_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t index_id) {
+    if (segment_filename.ends_with(".dat")) {
+        return fmt::format("{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), index_id);
+    }
+    return fmt::format("{}_{}.vi", segment_filename, index_id);
+}
+
+// Compute the vector-index file path that sits next to a segment file in shared-data
+// layout: split |segment_path| into directory + basename, compute the .vi filename
+// from the basename, then re-join under the original directory.
+//
+//   "data/000_abcd.dat"  + 0  -> "data/000_abcd_0.vi"
+//   "/foo/bar/seg.dat"   + 5  -> "/foo/bar/seg_5.vi"
+//   "seg.dat"            + 7  -> "seg_7.vi"            (no directory part)
+//   "/seg.dat"           + 1  -> "seg_1.vi"            (root-only directory)
+inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t index_id) {
+    const size_t last_slash = segment_path.find_last_of('/');
+    std::string_view basename =
+            (last_slash == std::string_view::npos) ? segment_path : segment_path.substr(last_slash + 1);
+    std::string vi_filename = gen_vector_index_filename(basename, index_id);
+    if (last_slash == std::string_view::npos) {
+        return vi_filename;
+    }
+    std::string_view dir = segment_path.substr(0, last_slash);
+    if (dir.empty()) {
+        return vi_filename;
+    }
+    return fmt::format("{}/{}", dir, vi_filename);
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
@@ -180,7 +164,8 @@ inline std::string extract_uuid_from(std::string_view file_name) {
     }
 
     // check extension
-    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols") {
+    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols" &&
+        extension != ".idx") {
         return {};
     }
 
@@ -203,8 +188,8 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
         return std::string(old_file_name);
     }
 
-    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name)) &&
-        !is_cols(old_file_name)) {
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
+                 !is_cols(old_file_name) && !is_idx(old_file_name))) {
         // not a valid file
         return {};
     }

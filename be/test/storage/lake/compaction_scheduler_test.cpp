@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/test_util.h"
@@ -326,8 +327,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(1024 * 1024); // 1MB each
-        rowset->add_segments(fmt::format("segment_{}.dat", i));
-        rowset->add_segment_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -370,8 +372,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_fallback) {
         rowset->set_overlapped(true);
         rowset->set_num_rows(100);
         rowset->set_data_size(1024 * 1024);
-        rowset->add_segments(fmt::format("segment_{}.dat", i));
-        rowset->add_segment_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
     }
 
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
@@ -414,8 +417,9 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
             rowset->set_overlapped(true);
             rowset->set_num_rows(100);
             rowset->set_data_size(1024 * 1024);
-            rowset->add_segments(fmt::format("segment_{}.dat", i));
-            rowset->add_segment_size(1024 * 1024);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+            segment_meta->set_size(1024 * 1024);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));

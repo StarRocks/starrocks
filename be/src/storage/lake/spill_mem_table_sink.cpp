@@ -17,20 +17,21 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/runtime_profile.h"
-#include "exec/spill/options.h"
-#include "exec/spill/serde.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller_factory.h"
-#include "runtime/exec_env.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/serde.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller_factory.h"
+#include "runtime/current_thread.h"
+#include "runtime/env/global_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
+#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/merge_iterator.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::lake {
@@ -86,15 +87,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     // where parallel merge benefits outweigh task coordination overhead.
     if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
         config::enable_load_spill_parallel_merge) {
-        // Disable auto-flush to manually control segment finalization timing
-        _writer->set_auto_flush(false);
-
-        // For PK tables in bulk load, eagerly build primary key index during merge
-        // instead of waiting until commit. This parallelizes expensive index construction.
-        _writer->try_enable_pk_index_eager_build();
-
-        // Lazy initialization: create thread pool token only when first needed
-        _pipeline_merge_context->create_thread_pool_token();
+        _pipeline_merge_context->init_parallel_merge();
         if (!_pipeline_merge_context->token()) {
             // Thread pool exhausted - cannot submit merge tasks now
             // Skip eager merge for this flush

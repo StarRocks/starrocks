@@ -62,13 +62,13 @@ public class DeltaUtils {
         SnapshotImpl snapshotImpl = snapshot.getSnapshot();
         String path = snapshot.getPath();
 
-        StructType deltaSchema = snapshotImpl.getSchema(deltaLakeEngine);
+        StructType deltaSchema = snapshotImpl.getSchema();
         if (deltaSchema == null) {
             throw new IllegalArgumentException(String.format("Unable to find Schema information in Delta log for " +
                     "%s.%s.%s", catalog, dbName, tblName));
         }
 
-        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshotImpl.getMetadata().getConfiguration());
+        String columnMappingMode = ColumnMapping.getColumnMappingMode(snapshotImpl.getMetadata().getConfiguration()).value;
         List<Column> fullSchema = Lists.newArrayList();
         for (StructField field : deltaSchema.fields()) {
             DataType dataType = field.getDataType();
@@ -83,7 +83,7 @@ public class DeltaUtils {
             fullSchema.add(column);
         }
 
-        return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName, fullSchema,
+        return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), catalog, dbName, tblName, fullSchema,
                 loadPartitionColumnNames(snapshotImpl), snapshotImpl, deltaLakeEngine, snapshot.getMetastoreTable());
     }
 
@@ -107,11 +107,11 @@ public class DeltaUtils {
         int columnUniqueId = COLUMN_UNIQUE_ID_INIT_VALUE;
         String physicalName = "";
 
-        if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+        if (columnMappingMode.equalsIgnoreCase(ColumnMapping.ColumnMappingMode.ID.value) &&
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
             columnUniqueId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
         }
-        if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+        if (columnMappingMode.equalsIgnoreCase(ColumnMapping.ColumnMappingMode.NAME.value) &&
                 field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
             physicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
         }

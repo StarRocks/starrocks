@@ -21,8 +21,11 @@
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/sort/local_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/local_parallel_merge_sort_source_operator.h"
 #include "exec/pipeline/sort/local_partition_topn_context.h"
@@ -167,25 +170,27 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
     using namespace pipeline;
 
     ASSIGN_OR_RETURN(auto ops_sink_with_sort, _children[0]->decompose_to_pipeline(context));
-    ops_sink_with_sort = context->maybe_interpolate_grouped_exchange(_id, ops_sink_with_sort);
+    ops_sink_with_sort =
+            ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(context, _id, ops_sink_with_sort);
 
     int64_t partition_limit = _limit;
 
     if (is_partition_topn) {
         partition_limit = _tnode.sort_node.partition_limit;
         if (_tnode.sort_node.__isset.pre_agg_insert_local_shuffle && _tnode.sort_node.pre_agg_insert_local_shuffle) {
-            ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
-                    runtime_state(), id(), ops_sink_with_sort, _local_partition_exprs);
+            ops_sink_with_sort = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                    context, runtime_state(), id(), ops_sink_with_sort, _local_partition_exprs);
         }
     } else if (need_merge) {
         if (enable_parallel_merge) {
-            ops_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state(), id(), ops_sink_with_sort, context->degree_of_parallelism(), is_partition_skewed);
+            ops_sink_with_sort = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), ops_sink_with_sort, context->degree_of_parallelism(),
+                    is_partition_skewed);
         }
     } else if (!is_per_pipeline) {
         // prepend local shuffle to PartitionSortSinkOperator
-        ops_sink_with_sort = context->maybe_interpolate_local_shuffle_exchange(
-                runtime_state(), id(), ops_sink_with_sort, _analytic_partition_exprs);
+        ops_sink_with_sort = ::starrocks::pipeline::builder::maybe_interpolate_local_shuffle_exchange(
+                context, runtime_state(), id(), ops_sink_with_sort, _analytic_partition_exprs);
     }
 
     // define a runtime filter holder
@@ -201,7 +206,8 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
 
     // spill process operator
     if constexpr (std::is_same_v<SpillablePartitionSortSinkOperatorFactory, SinkFactory>) {
-        context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
+        ::starrocks::pipeline::builder::interpolate_spill_process(context, id(), spill_channel_factory,
+                                                                  degree_of_parallelism);
     }
 
     bool has_outer_join_child = _tnode.sort_node.__isset.has_outer_join_child && _tnode.sort_node.has_outer_join_child;
@@ -235,7 +241,7 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
             _early_materialized_slots, spill_channel_factory);
 
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
     SourceOperatorFactoryPtr source_operator;
@@ -267,8 +273,8 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
         if (enable_parallel_merge) {
             // This particular source will be executed in a concurrent way, and finally we need to gather them into one
             // stream to satisfied the ordering property
-            operators_source_with_sort = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state(), id(), operators_source_with_sort);
+            operators_source_with_sort = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state(), id(), operators_source_with_sort);
         }
     }
 

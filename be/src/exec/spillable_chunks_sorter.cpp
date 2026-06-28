@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/chunks_sorter_full_sort.h"
-#include "exec/spill/executor.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -97,15 +97,7 @@ Status SpillableChunksSorter<TChunksSorter>::do_done(RuntimeState* state) {
 template <DerivedFromChunksSorter TChunksSorter>
 void SpillableChunksSorter<TChunksSorter>::cancel() {
     if (_spiller->spilled()) {
-        if (_spill_channel->has_task()) {
-            std::function<StatusOr<ChunkPtr>()> cancel_task = [this]() -> StatusOr<ChunkPtr> {
-                _spiller->cancel();
-                return Status::EndOfFile("eos");
-            };
-            _spill_channel->add_spill_task(std::move(cancel_task));
-        } else {
-            _spiller->cancel();
-        }
+        _spiller->cancel();
     }
 }
 

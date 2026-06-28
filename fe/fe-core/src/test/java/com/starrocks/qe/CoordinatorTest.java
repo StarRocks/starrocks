@@ -21,8 +21,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.planner.AggregateInfo;
-import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
@@ -32,33 +30,25 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
-import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.system.Backend;
-import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
-import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,9 +58,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -197,109 +185,114 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testBinlogScan() throws Exception {
-        PlanFragmentId fragmentId = new PlanFragmentId(0);
-        PlanNodeId planNodeId = new PlanNodeId(1);
-        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(2));
+    public void testTimeoutHintUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ctx.setMetadataContext(true);
 
-        OlapTable olapTable = getOlapTable("t0");
-        List<Long> olapTableTabletIds =
-                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getLatestBaseIndex()
-                                .getTabletIdsInOrder().stream())
-                        .collect(Collectors.toList());
-        Assertions.assertFalse(olapTableTabletIds.isEmpty());
-        tupleDesc.setTable(olapTable);
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
 
-        new MockUp<BinlogScanNode>() {
-
-            @Mock
-            TBinlogOffset getBinlogOffset(long tabletId) {
-                TBinlogOffset offset = new TBinlogOffset();
-                offset.setTablet_id(1);
-                offset.setLsn(2);
-                offset.setVersion(3);
-                return offset;
-            }
-        };
-
-        BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
-        binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats();
-
-        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
-        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
-                StatisticUtils.buildConnectContext());
-        prepare.computeFragmentInstances();
-
-        FragmentScanRangeAssignment scanRangeMap =
-                prepare.getFragmentScanRangeAssignment(fragmentId);
-        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().get(0);
-        Assertions.assertFalse(scanRangeMap.isEmpty());
-        Long expectedWorkerId = backend.getId();
-        Assertions.assertTrue(scanRangeMap.containsKey(expectedWorkerId));
-        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedWorkerId);
-        Assertions.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
-        List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
-        List<Long> tabletIds =
-                ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
-                        .collect(Collectors.toList());
-        Assertions.assertEquals(olapTableTabletIds, tabletIds);
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
     }
 
     @Test
-    public void testStreamAgg() throws Exception {
-        new MockUp<BinlogScanNode>() {
-
-            @Mock
-            TBinlogOffset getBinlogOffset(long tabletId) {
-                TBinlogOffset offset = new TBinlogOffset();
-                offset.setTablet_id(1);
-                offset.setLsn(2);
-                offset.setVersion(3);
-                return offset;
+    public void testTimeoutHintUsesInsertTimeoutForLoad() {
+        // In practice INSERT/CTAS timeouts are intercepted FE-side in StmtExecutor (which renders a richer
+        // hint including the load timeout property). This test covers the fallback when BE returns TIMEOUT
+        // before that polling fires: dealStatusToTryRetry must still name insert_timeout, not query_timeout.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        new Expectations(executor) {
+            {
+                executor.isExecLoadType();
+                result = true;
+                minTimes = 0;
             }
         };
+        ctx.setExecutor(executor);
 
-        PlanFragmentId fragmentId = new PlanFragmentId(0);
-        TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
-        scanTuple.setTable(getOlapTable("t0"));
-        TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
-        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", IntegerType.INT, false);
-        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", IntegerType.INT, false);
-        aggTuple.addSlot(groupBySlot);
-        aggTuple.addSlot(aggFuncSlot);
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(300);
 
-        // Build scan node
-        List<PlanFragment> fragments = new ArrayList<>();
-        BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
-        binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats();
-        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
-
-        // Build agg node
-        AggregateInfo aggInfo = new AggregateInfo(new ArrayList<>(), new ArrayList<>(), AggregateInfo.AggPhase.SECOND);
-        aggInfo.setOutputTupleDesc(aggTuple);
-        StreamAggNode aggNode = new StreamAggNode(new PlanNodeId(2), binlogScan, aggInfo);
-
-        // Build fragment
-        PlanFragment fragment = new PlanFragment(fragmentId, aggNode, DataPartition.RANDOM);
-        fragments.add(fragment);
-
-        // Build topology
-        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(fragments, scanNodes,
-                StatisticUtils.buildConnectContext());
-        prepare.computeFragmentInstances();
-
-        // Assert
-        Map<PlanFragmentId, ExecutionFragment> fragmentParams = prepare.getExecutionDAG().getIdToFragment();
-        fragmentParams.forEach((k, v) -> System.err.println("Fragment " + k + " : " + v));
-        Assertions.assertTrue(fragmentParams.containsKey(fragmentId));
-        ExecutionFragment fragmentParam = fragmentParams.get(fragmentId);
-        FragmentScanRangeAssignment scanRangeAssignment = fragmentParam.getScanRangeAssignment();
-        List<FragmentInstance> instances = fragmentParam.getInstances();
-        Assertions.assertFalse(fragmentParams.isEmpty());
-        Assertions.assertEquals(1, scanRangeAssignment.size());
-        Assertions.assertEquals(1, instances.size());
-
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains(SessionVariable.INSERT_TIMEOUT));
+        Assertions.assertFalse(ex.getMessage().contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
     }
+
+    private static java.lang.reflect.Method handleErrorExecutionMethod() throws NoSuchMethodException {
+        java.lang.reflect.Method m = DefaultCoordinator.class.getDeclaredMethod(
+                "handleErrorExecution", Status.class,
+                com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.class, Throwable.class);
+        m.setAccessible(true);
+        return m;
+    }
+
+    @Test
+    public void testHandleErrorExecutionSuppressesCancelAfterEos() throws Exception {
+        // After the receiver got EOS (returnedAllResults=true), an in-flight stage-2 deploy that races
+        // with our QUERY_FINISHED cancel returns CANCELLED on the BE. Those are not real errors and must
+        // not surface as "[reason=INTERNAL_ERROR] [msg=null]" to the client.
+        // Covers DefaultCoordinator.handleErrorExecution guard at line ~766.
+        Deencapsulation.setField(coordinator, "returnedAllResults", true);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+
+        for (String beMsg : new String[] {"Query terminates prematurely", "QueryFinished", "Cancelled"}) {
+            ctx.getState().reset();
+            Status cancelled = new Status(TStatusCode.CANCELLED, beMsg);
+            Assertions.assertDoesNotThrow(
+                    () -> handle.invoke(coordinator, cancelled, null, null),
+                    "handleErrorExecution must swallow post-EOS cancel: " + beMsg);
+            Assertions.assertTrue(
+                    ctx.getState().getErrorMessage() == null || ctx.getState().getErrorMessage().isEmpty(),
+                    "post-EOS cancel must not set client error, msg was: " + ctx.getState().getErrorMessage());
+        }
+    }
+
+    @Test
+    public void testHandleErrorExecutionStillThrowsBeforeEos() throws Exception {
+        // Sanity: when EOS has not been delivered, a non-internal CANCELLED still falls through to the
+        // default branch and surfaces — i.e. the new guard must not swallow real pre-EOS errors.
+        Deencapsulation.setField(coordinator, "returnedAllResults", false);
+        java.lang.reflect.Method handle = handleErrorExecutionMethod();
+        Status cancelled = new Status(TStatusCode.CANCELLED, "some real cancel reason");
+        java.lang.reflect.InvocationTargetException ite = Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> handle.invoke(coordinator, cancelled, null, null));
+        Assertions.assertInstanceOf(StarRocksException.class, ite.getCause());
+    }
+
+    @Test
+    public void testClearExternalResourcesOnlyOnce() {
+        AtomicInteger clearCount = new AtomicInteger();
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        ScanNode scanNode = new ScanNode(new PlanNodeId(0), desc, "counting-scan") {
+            @Override
+            public void clear() {
+                clearCount.incrementAndGet();
+            }
+
+            @Override
+            public java.util.List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+                return Collections.emptyList();
+            }
+
+            @Override
+            protected void toThrift(TPlanNode msg) {
+            }
+        };
+        DefaultCoordinator coordinatorWithScan = new DefaultCoordinator.Factory().createQueryScheduler(
+                ctx, Lists.newArrayList(), Collections.singletonList(scanNode), new TDescriptorTable(), null);
+
+        coordinatorWithScan.clearExternalResources();
+        coordinatorWithScan.clearExternalResources();
+
+        Assertions.assertEquals(1, clearCount.get());
+    }
+
 }

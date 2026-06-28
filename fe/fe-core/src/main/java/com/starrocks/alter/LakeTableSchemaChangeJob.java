@@ -47,12 +47,16 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -93,6 +97,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -267,7 +272,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         indexMetaIdToSchema.put(shadowIdxMetaId, shadowIdxSchema);
     }
 
-    // REQUIRE: has acquired the exclusive lock of database
+    // REQUIRE: has acquired the exclusive (WRITE) lock of the table
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -398,9 +403,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        boolean lightWeight;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            lightWeight = table.isLightWeightTabletCreation();
 
             // disable tablet creation optimaization to avoid overwriting files with the same name.
             if (table.isFileBundling()) {
@@ -417,7 +424,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            // Light-weight tablet creation skips CreateReplicaTask; the shadow tablet's
+            // version 1 metadata is materialized on demand by the CN-side fallback when
+            // the first read or publish hits it.
+            Set<Long> shadowPhysicalPartitionIds = lightWeight
+                    ? Collections.<Long>emptySet()
+                    : physicalPartitionIndexMap.rowKeySet();
+            for (long physicalPartitionId : shadowPhysicalPartitionIds) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
                 TStorageMedium storageMedium = table.getPartitionInfo()
@@ -496,12 +509,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             throw new AlterCancelException(e.getMessage());
         }
 
-        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                             waitingCreatingReplica, isCancelling);
+        if (!lightWeight) {
+            sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
+                                 waitingCreatingReplica, isCancelling);
+        }
 
         // Add shadow indexes to table.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
             watershedGtid = getNextGtid();
@@ -550,8 +565,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
 
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -612,7 +628,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         col.getName(), col.getType(), col.isAllowNull()));
                             }
 
-                            TableName tableName = new TableName(db.getFullName(), table.getName());
+                            TableName tableName = new TableName(database.getFullName(), table.getName());
 
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
@@ -630,7 +646,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             if (ConnectContext.get() == null) {
                                 LOG.warn("Connect Context is null when add/modify generated column");
                             } else {
-                                ConnectContext.get().setDatabase(db.getFullName());
+                                ConnectContext.get().setDatabase(database.getFullName());
                             }
 
                             RewriteAliasVisitor visitor =
@@ -735,8 +751,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -775,8 +791,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Replace the current index with shadow index.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -803,8 +819,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     // Note: throws AlterCancelException iff the database or table has been dropped.
     boolean readyToPublishVersion() throws AlterCancelException {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             isFileBundling = table.isFileBundling();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -855,8 +871,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // For indexes whose schema have not changed, we still need to upgrade the version
                 List<MaterializedIndex> originMaterializedIndices;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
-                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                    OlapTable table = getTableOrThrow(db, tableId);
+                try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                    OlapTable table = getTableOrThrow();
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                 }
@@ -874,7 +890,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (isFileBundling) {
-                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
+                            vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
             return true;
@@ -882,6 +901,68 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             LOG.error("Fail to publish version for schema change job {}: {}", jobId, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * No-op publish for the FORCE-cancel escape hatch. Sends a publish_version
+     * RPC with TxnInfoPB.no_op_publish=true ONLY for the partition's regular
+     * (visible, non-shadow) indices at the alter's reserved commitVersion. BE
+     * short-circuits the txn-log apply path and writes a no-op metadata file
+     * (V-1 content tagged with version V), so the partition version chain
+     * advances past the cancelled alter without including any of its changes.
+     *
+     * <p>We deliberately skip the shadow indices here: they're about to be
+     * dropped by removeShadowIndex() inside persistStateChange, so publishing
+     * them would just produce metadata files that are orphans the moment the
+     * cancel commits. The visible (regular) indices are what subsequent loads'
+     * publish chains depend on, so those are the ones whose version must
+     * advance.
+     *
+     * <p>Returns false if any RPC fails or throws; caller leaves the job at
+     * FINISHED_REWRITING so the operator can retry CANCEL ALTER ... FORCE.
+     */
+    protected boolean lakePublishVersionWithSkip(String reason) {
+        // Heavy schema change publishes the partition's VISIBLE (original)
+        // indices and deliberately SKIPS its shadow indices: the shadows are
+        // about to be dropped by removeShadowIndex() inside persistStateChange,
+        // so publishing them would just produce orphan metadata. The visible
+        // indices are what subsequent loads' publish chains depend on.
+        //
+        // Dispatch must key off the table's CURRENT file_bundling format read
+        // fresh here, NOT the cached isFileBundling field: that field is not
+        // serialized and is only populated by readyToPublishVersion() in the
+        // normal publish path. After an FE restart/leader change a replayed job
+        // sits in FINISHED_REWRITING with isFileBundling=false; if the operator
+        // force-cancels before the publish daemon runs, the cached field would
+        // wrongly route a file_bundling table to per-tablet publish. This
+        // mirrors the alter-meta force path and lakePublishVersion().
+        boolean useAggregatePublish = false;
+        Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            List<Tablet> regularTablets = new ArrayList<>();
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                // Use the null-returning getTable() (not getTableOrThrow) so a
+                // concurrent db/table drop is a benign skip rather than a
+                // checked AlterCancelException — there is nothing to advance if
+                // the table is gone.
+                OlapTable table = getTable();
+                if (table == null) {
+                    continue;
+                }
+                useAggregatePublish = table.isFileBundling();
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null) {
+                    // partition gone (concurrent drop); nothing to advance, skip.
+                    continue;
+                }
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    regularTablets.addAll(index.getTablets());
+                }
+            }
+            tabletsByPartition.put(physicalPartitionId, regularTablets);
+        }
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish);
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
@@ -927,13 +1008,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     boolean tableHasBeenDropped() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db == null || db.getTable(tableId) == null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            return getTable() == null;
         }
     }
 
     // Update each Partition's nextVersion.
-    // The caller must have acquired the database's exclusive lock.
+    // The caller must have acquired the table's exclusive (WRITE) lock.
     void updateNextVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -978,10 +1059,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
+            // FORCE-cancel audit marker. Must be copied here so the
+            // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
+            // sees the persisted value when replaying onto an in-memory job
+            // loaded from a pre-cancel image. Without this copy the bump is
+            // silently skipped on recovery — defeating the whole replay fix.
+            this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -997,6 +1084,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 table.onReload();
                 visualiseShadowIndex(table);
             } else if (jobState == JobState.CANCELLED) {
+                // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
+                // and the live path bumped partition.VisibleVersion to match.
+                // Replay must do the same; otherwise an FE recovering from a
+                // pre-cancel image keeps VisibleVersion=commitVersion-1 and
+                // subsequent load publishes compute base from the wrong version,
+                // re-applying the cancelled alter's txn_log on top.
+                if (forceSkippedAtCommitted) {
+                    advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                }
                 removeShadowIndex(table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
@@ -1139,18 +1235,19 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
-    public final boolean cancel(String errMsg) {
+    public final boolean cancel(String errMsg, boolean force) {
+        // Pre-monitor work: signal the running thread to stop and release the
+        // createReplicaLatch (PENDING phase). Must happen OUTSIDE the synchronized
+        // block in super.cancel() — otherwise if run() currently holds the monitor
+        // while waiting on the latch, cancel would deadlock until task timeout.
+        // Applies to both the regular cancel path and the FORCE escape hatch.
         isCancelling.set(true);
         try {
-            // If waitingCreatingReplica == false, we will assume that
-            // cancel thread will get the object lock very quickly.
             if (waitingCreatingReplica.get()) {
                 Preconditions.checkState(createReplicaLatch != null);
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
-            synchronized (this) {
-                return cancelInternal(errMsg);
-            }
+            return super.cancel(errMsg, force);
         } finally {
             isCancelling.set(false);
         }
@@ -1158,13 +1255,45 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     @Override
     protected boolean cancelImpl(String errMsg) {
+        return cancelImpl(errMsg, false);
+    }
+
+    @Override
+    protected boolean cancelImpl(String errMsg, boolean force) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
         }
 
-        // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
-        if (jobState == JobState.FINISHED_REWRITING && tableExists()) {
+        // Cancel a job of state `FINISHED_REWRITING` only when the database or
+        // table has been dropped, OR when an operator explicitly opts in via
+        // ADMIN SKIP COMMITTED TRANSACTION (force=true). The escape hatch is
+        // needed to unblock a heavy schema change whose publish RPC is
+        // permanently stuck. removeShadowIndex() inside persistStateChange
+        // below already drops the shadow tablets, which is what unblocks the
+        // publish_log_version path (FE stops scheduling vtxn copies once the
+        // shadow index is gone).
+        if (jobState == JobState.FINISHED_REWRITING && tableExists() && !force) {
             return false;
+        }
+
+        // Force-cancel from FINISHED_REWRITING: advance the partition version
+        // chain past the alter's reserved commit version BEFORE cancel cleanup
+        // (which sets OlapTable.state back to NORMAL) — otherwise new loads
+        // race in while the version chain is still broken and queue up forever
+        // waiting for the cancelled alter's missing tablet_metadata_<V>.
+        // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
+        boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
+        if (advanceVersionForForce) {
+            if (!lakePublishVersionWithSkip(errMsg)) {
+                return false;
+            }
+            // Mark the job force-skipped ONLY now that the no-op publish has
+            // actually advanced the partition version on BE. Set before the
+            // persistStateChange below so copyForPersist snapshots it into the
+            // edit log, and so replay knows to re-apply the VisibleVersion bump.
+            // A force-cancel that did NOT reach FINISHED_REWRITING never gets
+            // here, so the marker stays false and replay won't bump versions.
+            forceSkippedAtCommitted = true;
         }
 
         if (schemaChangeBatchTask != null) {
@@ -1175,9 +1304,18 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.finishedTimeMs = System.currentTimeMillis();
 
         persistStateChange(this, JobState.CANCELLED, () -> {
-            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+                OlapTable table = getTable();
                 if (table != null) {
+                    if (advanceVersionForForce) {
+                        // We just no-op published tablet_metadata at commitVersion
+                        // on BE. FE-side partition.VisibleVersion must follow so
+                        // subsequent loads' publish base matches the BE state.
+                        // Shared with the meta-alter path and replay via the
+                        // AlterJobV2 helper so all lake alter types and both the
+                        // live and replay paths bump identically.
+                        advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                    }
                     removeShadowIndex(table);
                 }
             }

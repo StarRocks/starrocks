@@ -1,0 +1,187 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <cstdint>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "column/column.h" // Column
+#include "common/column_id.h"
+#include "common/logging.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "storage/primitive/range.h"
+#include "storage/primitive/zone_map_detail.h"
+#include "types/datum.h"
+#include "types/type_info.h"
+
+namespace roaring {
+class Roaring;
+} // namespace roaring
+
+namespace starrocks {
+
+class BitmapIndexIterator;
+class BloomFilter;
+class InvertedIndexIterator;
+class ObjectPool;
+struct NgramBloomFilterReaderOptions;
+
+enum class PredicateType {
+    kUnknown = 0,
+    kEQ = 1,
+    kNE = 2,
+    kGT = 3,
+    kGE = 4,
+    kLT = 5,
+    kLE = 6,
+    kInList = 7,
+    kNotInList = 8,
+    kIsNull = 9,
+    kNotNull = 10,
+    kAnd = 11,
+    kOr = 12,
+    kExpr = 13,
+    kTrue = 14,
+    kMap = 15,
+    kPlaceHolder = 16,
+    kGinFallback = 17,
+};
+
+// ColumnPredicate represents a predicate that can only be applied to a column.
+class ColumnPredicate {
+public:
+    explicit ColumnPredicate(TypeInfoPtr type_info, ColumnId column_id)
+            : _type_info(std::move(type_info)), _column_id(column_id) {}
+
+    virtual ~ColumnPredicate() = default;
+
+    uint32_t column_id() const { return _column_id; }
+
+    Status evaluate(const Column* column, uint8_t* selection) const {
+        return evaluate(column, selection, 0, column->size());
+    }
+
+    Status evaluate_and(const Column* column, uint8_t* selection) const {
+        return evaluate_and(column, selection, 0, column->size());
+    }
+
+    Status evaluate_or(const Column* column, uint8_t* selection) const {
+        return evaluate_or(column, selection, 0, column->size());
+    }
+
+    virtual Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+
+    virtual Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+
+    virtual Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const = 0;
+
+    virtual StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const {
+        CHECK(false) << "not supported";
+        return 0;
+    }
+
+    virtual bool filter(const BloomFilter& bf) const { return true; }
+
+    // Return false to filter out a data page.
+    virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
+
+    virtual bool support_original_bloom_filter() const { return false; }
+
+    // return true means this predicate can support ngram bloom filter, don't consider gram number(N)
+    // in ngram_bloom_filter(), if gram number is not equal(only happended in ngram_search right now)
+    // it will return true directly. This design is becasue gram number is hard to get in ScalarColumnIterator
+    // and not all predicate need gram size to determin whether support ngram bloom filter
+    virtual bool support_ngram_bloom_filter() const { return false; }
+
+    // Return false to filter out a data page.
+    virtual bool original_bloom_filter(const BloomFilter* bf) const { return true; }
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) const {
+        return true;
+    }
+
+    virtual bool support_bitmap_filter() const { return false; }
+
+    virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
+        return Status::Cancelled("not implemented");
+    }
+
+    virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                       roaring::Roaring* row_bitmap) const {
+        return Status::Cancelled("not implemented");
+    }
+
+    // Indicate whether or not the evaluate can be vectorized.
+    // If this function return true, evaluate function will be vectorized and can achieve
+    // good performance.
+    // If this function return false, prefer using evaluate_branless to get a better performance
+    virtual bool can_vectorized() const = 0;
+
+    // Indicate if this predicate uses ExprContext*. The predicates of this kind has one major limitation
+    // that it does not support `evaluate` range. In another word, `from` must be zero.
+    bool is_expr_predicate() const { return _is_expr_predicate; }
+
+    bool is_index_filter_only() const { return _is_index_filter_only; }
+
+    void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
+
+    virtual PredicateType type() const = 0;
+
+    // Constant value in the predicate. And this constant value might be adjusted according to schema.
+    // For example, if column type is char(20), then this constant value might be zero-padded to 20 chars.
+    virtual Datum value() const { return {}; }
+
+    // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
+    virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }
+
+    virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                              ObjectPool* obj_pool) const = 0;
+
+    virtual std::string debug_string() const {
+        std::stringstream ss;
+        ss << "(column_id=" << _column_id << ")";
+        return ss.str();
+    }
+
+    // Padding the operand value with zeros('\0') for index filter.
+    //
+    // When `CHAR` values are stored, for some historical reason, they ar right-padded with
+    // '\0' to the specified length. When `CHAR` values are retrieved, in vectorized engine,
+    // trailing zeros are removed, except for index column. So, when a CHAR column has either
+    // bitmap index or bloom filter, the predicate operand should be right-padded with '\0'.
+    virtual bool padding_zeros(size_t column_length) { return false; }
+    const TypeInfo* type_info() const { return _type_info.get(); }
+    TypeInfoPtr type_info_ptr() const { return _type_info; }
+
+protected:
+    constexpr static const char* kMsgTooManyItems = "too many bitmap filter items";
+    constexpr static const char* kMsgLowCardinality = "low bitmap index cardinality";
+
+    TypeInfoPtr _type_info;
+    ColumnId _column_id;
+    // Whether this predicate only used to filter index, not filter chunk row
+    bool _is_index_filter_only = false;
+    // If this predicate uses ExprContext*
+    bool _is_expr_predicate = false;
+};
+
+using PredicateList = std::vector<const ColumnPredicate*>;
+
+} // namespace starrocks

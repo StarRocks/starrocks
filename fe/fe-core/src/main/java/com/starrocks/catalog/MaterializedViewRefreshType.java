@@ -16,7 +16,6 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -35,8 +34,6 @@ public enum MaterializedViewRefreshType {
             newRefreshType = MaterializedViewRefreshType.SYNC;
         } else if (refreshSchemeDesc instanceof ManualRefreshSchemeDesc) {
             newRefreshType = MaterializedViewRefreshType.MANUAL;
-        } else if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-            newRefreshType = MaterializedViewRefreshType.INCREMENTAL;
         } else {
             throw new DdlException("Unsupported refresh scheme type");
         }

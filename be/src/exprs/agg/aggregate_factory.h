@@ -19,6 +19,14 @@
 
 namespace starrocks {
 
+class AggStateDesc;
+
+using NonBuiltinAggregateFunctionProvider = const AggregateFunction* (*)(TFunctionBinaryType::type binary_type,
+                                                                         bool is_window_function,
+                                                                         bool is_input_nullable);
+
+void set_non_builtin_aggregate_function_provider(NonBuiltinAggregateFunctionProvider provider);
+
 const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
                                                 bool is_null,
                                                 TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
@@ -32,4 +40,6 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
 const AggregateFunction* get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
                                                 const std::vector<TypeDescriptor>& arg_types, bool is_input_nullable,
                                                 TFunctionBinaryType::type binary_type, int func_version = 1);
+
+const AggregateFunction* get_aggregate_function(const AggStateDesc& agg_state_desc);
 } // namespace starrocks

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 
 #include <gtest/gtest.h>
 
@@ -28,16 +28,16 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/sorting/sort_helper.h"
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/merge_path.h"
-#include "exec/sorting/sort_helper.h"
-#include "exec/sorting/sort_permute.h"
+#include "compute_env/sorting/merge.h"
+#include "compute_env/sorting/merge_path.h"
+#include "compute_env/sorting/sort_cursor.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "runtime/chunk_cursor.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"

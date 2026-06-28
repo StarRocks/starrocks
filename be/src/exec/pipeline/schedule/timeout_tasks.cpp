@@ -16,19 +16,22 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/schedule/common.h"
-#include "runtime/logconfig.h"
-#include "util/stack_util.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/schedule/common.h"
+#include "platform/query_timeout_hook.h"
 
 namespace starrocks::pipeline {
 void CheckFragmentTimeout::Run() {
-    auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-    size_t expire_seconds = query_ctx->get_query_expire_seconds();
+    auto* query_runtime_state = _fragment_ctx->runtime_state()->query_runtime_state();
+    size_t expire_seconds = query_runtime_state->get_query_expire_seconds();
     TRACE_SCHEDULE_LOG << "fragment_instance_id:" << print_id(_fragment_ctx->fragment_instance_id());
-    auto query_id = query_ctx->query_id();
+    auto query_id = query_runtime_state->query_id();
     hook_on_query_timeout(query_id, expire_seconds);
-    _fragment_ctx->cancel(Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", expire_seconds)));
+    cancel_fragment_context(_fragment_ctx,
+                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", expire_seconds)));
 
     _fragment_ctx->iterate_drivers([](const DriverPtr& driver) {
         driver->set_need_check_reschedule(true);
@@ -37,14 +40,6 @@ void CheckFragmentTimeout::Run() {
             driver->observer()->cancel_trigger();
         }
     });
-}
-
-void RFScanWaitTimeout::Run() {
-    if (_all_rf_timeout) {
-        _timeout.notify_runtime_filter_timeout();
-    } else {
-        _timeout.notify_source_observers();
-    }
 }
 
 } // namespace starrocks::pipeline

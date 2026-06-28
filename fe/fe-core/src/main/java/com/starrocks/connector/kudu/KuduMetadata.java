@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -178,7 +179,7 @@ public class KuduMetadata implements ConnectorMetadata {
         if (!schemaEmulationEnabled) {
             if (DEFAULT_SCHEMA.equals(dbName)) {
                 return databases.computeIfAbsent(DEFAULT_SCHEMA,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             return null;
         }
@@ -189,7 +190,7 @@ public class KuduMetadata implements ConnectorMetadata {
                 return schemaTable != null && dbName.equals(schemaTable.first);
             })) {
                 return databases.computeIfAbsent(dbName,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             LOG.error("Kudu database {}.{} done not exist.", catalogName, dbName);
             return null;
@@ -309,7 +310,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
@@ -326,8 +328,9 @@ public class KuduMetadata implements ConnectorMetadata {
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
             } catch (RpcRemoteException e) {
                 if (isGetTableStatisticsUnsupported(e)) {
-                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
-                    rowCount = 1;
+                    LOG.warn("GetTableStatistics method not supported. Fallback to default row count {}.",
+                            Config.default_statistics_output_row_count);
+                    rowCount = Config.default_statistics_output_row_count;
                 } else {
                     throw new RuntimeException("RPC error while getting table statistics", e);
                 }

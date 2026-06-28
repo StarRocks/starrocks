@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "HyperLogLog アルゴリズムに基づく近似 count distinct 計算。"
 ---
 
 # HLL (HyperLogLog)

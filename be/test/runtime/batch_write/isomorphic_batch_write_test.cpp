@@ -22,11 +22,11 @@
 #include "common/config_merge_commit_fwd.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/time_bounded_stream_load_pipe.h"
 #include "gen_cpp/FrontendService.h"
-#include "http/http_common.h"
+#include "http/core/http_common.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/time_bounded_stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -38,7 +38,7 @@ public:
         config::merge_commit_trace_log_enable = true;
         _exec_env = ExecEnv::GetInstance();
         std::unique_ptr<ThreadPool> thread_pool;
-        ASSERT_OK(ThreadPoolBuilder("IsomorphicBatchWriteTest")
+        ASSERT_OK(ThreadPoolBuilder("IsoBatchWrTest")
                           .set_min_threads(0)
                           .set_max_threads(1)
                           .set_max_queue_size(2048)
@@ -65,7 +65,7 @@ public:
 
     StreamLoadContext* build_pipe_context(const std::string& label, int64_t txn_id, const BatchWriteId& batch_write_id,
                                           std::shared_ptr<TimeBoundedStreamLoadPipe> pipe) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;
@@ -79,7 +79,7 @@ public:
     }
 
     StreamLoadContext* build_data_context(const BatchWriteId& batch_write_id, const std::string& data) {
-        StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+        StreamLoadContext* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
         ctx->ref();
         ctx->db = batch_write_id.db;
         ctx->table = batch_write_id.table;

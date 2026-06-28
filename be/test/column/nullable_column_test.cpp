@@ -22,7 +22,7 @@
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "exec/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 
 namespace starrocks {
 
@@ -396,7 +396,7 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     column->append_datum({});
     column->append_datum((int32_t)4);
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(2);
     offsets.emplace_back(4);

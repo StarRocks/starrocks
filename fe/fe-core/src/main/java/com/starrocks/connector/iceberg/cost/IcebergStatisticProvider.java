@@ -94,6 +94,18 @@ public class IcebergStatisticProvider {
 
         statisticsBuilder.setOutputRowCount(cardinality);
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        return statisticsBuilder.build();
+    }
+
+    // Build row-count-only statistics from a pre-computed cardinality (e.g. manifest-pruned row count),
+    // without enumerating DataFiles. Column statistics are left UNKNOWN here; NDV estimation is handled
+    // separately by the column-statistics path.
+    public Statistics buildRowCountStatistics(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, long rowCount) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        statisticsBuilder.setOutputRowCount(Math.max(rowCount, 1));
+        statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
         return statisticsBuilder.build();
     }
 
@@ -138,6 +150,7 @@ public class IcebergStatisticProvider {
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
             statisticsBuilder.addColumnStatistics(buildColumnStatistics(
                     nativeTable, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
+            statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         } else {
             // empty table
             statisticsBuilder.setOutputRowCount(1);
@@ -309,11 +322,106 @@ public class IcebergStatisticProvider {
             builder.setDistinctValuesCount(Math.max(Math.min(ndv, icebergStats.getRecordCount()), 1));
             builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
         } else {
-            builder.setDistinctValuesCount(1);
-            builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
+            double estimatedNdv = estimateNdvFallback(fieldId, icebergStats);
+            builder.setDistinctValuesCount(estimatedNdv);
+            builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
         }
 
         return builder.build();
+    }
+
+    // Estimate NDV when Puffin stats are unavailable.
+    // Uses min/max range when present (zero extra IO — already in IcebergFileStats),
+    // falls back to column-size heuristic, then type-fraction as last resort.
+    private double estimateNdvFallback(Integer fieldId, IcebergFileStats icebergStats) {
+        long rowCount = icebergStats.getRecordCount();
+        if (rowCount <= 0) {
+            return 1.0;
+        }
+
+        // Tier 1: range-based for integer/date/timestamp types.
+        // min/max come from IcebergFileStats if column stats were computed — no new IO.
+        Optional<Double> minVal = icebergStats.getMinValue(fieldId);
+        Optional<Double> maxVal = icebergStats.getMaxValue(fieldId);
+        if (minVal.isPresent() && maxVal.isPresent() && isRangeEstimableType(fieldId, icebergStats)) {
+            double diff = maxVal.get() - minVal.get();
+            // Guard against overflow: very wide BIGINT ranges may exceed Long.MAX_VALUE as a double
+            long range = (diff >= (double) Long.MAX_VALUE) ? Long.MAX_VALUE : Math.max(0L, (long) diff) + 1;
+            double rangeNdv = Math.min(rowCount, range);
+            // Take min with size-based to stay conservative when range >> actual NDV
+            double sizeNdv = estimateSizeBasedNdv(fieldId, icebergStats, rowCount);
+            return Math.max(1.0, Math.min(rangeNdv, sizeNdv));
+        }
+
+        return estimateSizeBasedNdv(fieldId, icebergStats, rowCount);
+    }
+
+    private double estimateSizeBasedNdv(Integer fieldId, IcebergFileStats icebergStats, long rowCount) {
+        // Tier 2: column physical size / min-bytes-per-distinct-value
+        Map<Integer, Long> columnSizes = icebergStats.getColumnSizes();
+        long columnSizeRcnt = icebergStats.getColumnSizeRecordCount(fieldId);
+        if (columnSizes != null && columnSizes.containsKey(fieldId) && columnSizeRcnt > 0) {
+            long colSizeBytes = columnSizes.get(fieldId);
+            int minBytesPerValue = minBytesPerDistinctValue(fieldId, icebergStats);
+            double sizeNdv = (double) colSizeBytes / minBytesPerValue;
+            return Math.max(1.0, Math.min(rowCount, sizeNdv));
+        }
+        // Tier 3: type-fraction last resort
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        Type.PrimitiveType type = typeMapping != null ? typeMapping.get(fieldId) : null;
+        if (type instanceof Types.BooleanType) {
+            return Math.min(2.0, rowCount);  // BOOLEAN has at most 2 distinct values
+        }
+        double fraction = typeNdvFraction(fieldId, icebergStats);
+        return Math.max(1.0, Math.min(rowCount, rowCount * fraction));
+    }
+
+    private boolean isRangeEstimableType(Integer fieldId, IcebergFileStats icebergStats) {
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        if (typeMapping == null) {
+            return false;
+        }
+        Type.PrimitiveType type = typeMapping.get(fieldId);
+        return type instanceof Types.BooleanType
+                || type instanceof Types.IntegerType
+                || type instanceof Types.LongType
+                || type instanceof Types.DateType
+                || type instanceof Types.TimestampType
+                || type instanceof Types.TimeType;
+    }
+
+    private int minBytesPerDistinctValue(Integer fieldId, IcebergFileStats icebergStats) {
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        if (typeMapping == null) {
+            return 4;
+        }
+        Type.PrimitiveType type = typeMapping.get(fieldId);
+        if (type instanceof Types.BooleanType) {
+            return 1;
+        } else if (type instanceof Types.IntegerType || type instanceof Types.FloatType
+                || type instanceof Types.DateType) {
+            return 4;
+        } else if (type instanceof Types.LongType || type instanceof Types.DoubleType
+                || type instanceof Types.TimestampType || type instanceof Types.TimeType) {
+            return 8;
+        } else {
+            return 4; // STRING/BINARY: assume dictionary encoding ~4 bytes per index
+        }
+    }
+
+    private double typeNdvFraction(Integer fieldId, IcebergFileStats icebergStats) {
+        Map<Integer, Type.PrimitiveType> typeMapping = icebergStats.getIdToTypeMapping();
+        if (typeMapping == null) {
+            return 0.3;
+        }
+        Type.PrimitiveType type = typeMapping.get(fieldId);
+        if (type instanceof Types.BooleanType) {
+            return 0.01;
+        } else if (type instanceof Types.IntegerType || type instanceof Types.LongType) {
+            return 0.3;
+        } else {
+            return 0.5;
+        }
     }
 
     public void updateColumnSizes(IcebergFileStats icebergFileStats, Map<Integer, Long> addedColumnSizes,

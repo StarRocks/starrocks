@@ -24,9 +24,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -39,6 +42,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,19 +78,27 @@ public class ShowMaterializedViewStatus {
     private String queryRewriteStatus;
     private long taskId;
     private String taskName;
+    private long lastRefreshTime;
+    private long lastFreshnessConfirmedAt;
+    private String baseTableRefreshVersionTimes = "{}";
+    private String warehouse;
+    private String refreshMode;
+    private String refreshTrigger;
+    private String refreshPolicy;
+    private String resourceGroup;
+    private String queryRewriteStatusReason;
     private List<TaskRunStatus> lastJobTaskRunStatus;
 
     /**
      * RefreshJobStatus represents a batch of batch TaskRunStatus because a fresh may trigger more than one task runs.
      */
-    public class RefreshJobStatus {
+    public static class RefreshJobStatus {
         private String taskOwner;
         private String jobId;
         private Constants.TaskRunState refreshState;
         private long mvRefreshStartTime;
         private long mvRefreshProcessTime;
         private long mvRefreshEndTime;
-        private long totalProcessDuration;
         private boolean isForce;
         private List<String> refreshedPartitionStarts;
         private List<String> refreshedPartitionEnds;
@@ -122,14 +134,6 @@ public class ShowMaterializedViewStatus {
 
         public void setMvRefreshEndTime(long mvRefreshEndTime) {
             this.mvRefreshEndTime = mvRefreshEndTime;
-        }
-
-        public long getTotalProcessDuration() {
-            return totalProcessDuration;
-        }
-
-        public void setTotalProcessDuration(long totalProcessDuration) {
-            this.totalProcessDuration = totalProcessDuration;
         }
 
         public boolean isForce() {
@@ -231,13 +235,11 @@ public class ShowMaterializedViewStatus {
         @Override
         public String toString() {
             return "RefreshJobStatus{" +
-                    "taskId=" + taskId +
-                    ", taskName='" + taskName + '\'' +
-                    ", taskOwner='" + taskOwner + '\'' +
+                    "taskOwner='" + taskOwner + '\'' +
                     ", refreshState=" + refreshState +
                     ", mvRefreshStartTime=" + mvRefreshStartTime +
+                    ", mvRefreshProcessTime=" + mvRefreshProcessTime +
                     ", mvRefreshEndTime=" + mvRefreshEndTime +
-                    ", totalProcessDuration=" + totalProcessDuration +
                     ", isForce=" + isForce +
                     ", refreshedPartitionStarts=" + refreshedPartitionStarts +
                     ", refreshedPartitionEnds=" + refreshedPartitionEnds +
@@ -254,7 +256,7 @@ public class ShowMaterializedViewStatus {
     /**
      * To avoid changing show materialized view's result schema, use this to keep extra message.
      */
-    class ExtraMessage {
+    static class ExtraMessage {
         @SerializedName("queryIds")
         private List<String> queryIds;
         @SerializedName("isManual")
@@ -331,7 +333,8 @@ public class ShowMaterializedViewStatus {
         if (refreshScheme == null) {
             status.setRefreshType("UNKNOWN");
         } else {
-            status.setRefreshType(String.valueOf(mv.getRefreshScheme().getType()));
+            MaterializedViewRefreshType type = refreshScheme.getType();
+            status.setRefreshType(type == MaterializedViewRefreshType.SYNC ? "SYNC" : "ASYNC");
         }
         // is_active
         status.setActive(mv.isActive());
@@ -344,8 +347,9 @@ public class ShowMaterializedViewStatus {
         status.setRows(mv.getRowCount());
         // materialized view ddl
         status.setText(mv.getMaterializedViewDdlStmt(true));
-        // rewrite status
-        status.setQueryRewriteStatus(mv.getQueryRewriteStatus());
+        // Compute once: the status/reason getters each re-run the heavy validation and can diverge.
+        MVPlanValidationResult rewriteResult = mv.getMvPlanValidationResult();
+        status.setQueryRewriteStatus(rewriteResult.getStatus().name());
         // task_name
         final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId()));
@@ -353,6 +357,19 @@ public class ShowMaterializedViewStatus {
             status.setTaskId(task.getId());
             status.setTaskName(task.getName());
         }
+        if (refreshScheme != null) {
+            status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
+            status.setLastFreshnessConfirmedAt(refreshScheme.getLastFreshnessConfirmedAt());
+        }
+        status.setBaseTableRefreshVersionTimes(mv.getBaseTableRefreshVersionTimesJson());
+        boolean syncRefresh = refreshScheme != null
+                && refreshScheme.getType() == MaterializedViewRefreshType.SYNC;
+        status.setWarehouse(syncRefresh || !RunMode.isSharedDataMode() ? "" : mv.getWarehouseName());
+        status.setRefreshMode(syncRefresh || mv.getRefreshMode() == null ? null : mv.getRefreshMode().name());
+        status.setRefreshTrigger(mv.getRefreshTriggerString());
+        status.setRefreshPolicy(mv.getRefreshPolicyString());
+        status.setResourceGroup(mv.getResourceGroupString());
+        status.setQueryRewriteStatusReason(rewriteResult.getReasonCode().name());
         status.setLastJobTaskRunStatus(taskTaskStatusJob);
         return status;
     }
@@ -361,7 +378,7 @@ public class ShowMaterializedViewStatus {
         ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(indexMeta.getIndexMetaId(), dbName,
                 olapTable.getIndexNameByMetaId(indexMeta.getIndexMetaId()));
         // refresh_type
-        status.setRefreshType("ROLLUP");
+        status.setRefreshType("SYNC");
         // is_active
         status.setActive(true);
         // partition type
@@ -384,6 +401,11 @@ public class ShowMaterializedViewStatus {
         } else {
             status.setRows(0L);
         }
+        status.setWarehouse("");
+        status.setRefreshMode(null);
+        status.setRefreshTrigger("NONE");
+        status.setRefreshPolicy("NONE");
+        status.setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
         return status;
     }
 
@@ -483,6 +505,78 @@ public class ShowMaterializedViewStatus {
         this.taskName = taskName;
     }
 
+    public long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    public void setLastRefreshTime(long lastRefreshTime) {
+        this.lastRefreshTime = lastRefreshTime;
+    }
+
+    public long getLastFreshnessConfirmedAt() {
+        return lastFreshnessConfirmedAt;
+    }
+
+    public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+        this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+    }
+
+    public String getBaseTableRefreshVersionTimes() {
+        return baseTableRefreshVersionTimes;
+    }
+
+    public void setBaseTableRefreshVersionTimes(String baseTableRefreshVersionTimes) {
+        this.baseTableRefreshVersionTimes = baseTableRefreshVersionTimes;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getRefreshMode() {
+        return refreshMode;
+    }
+
+    public void setRefreshMode(String refreshMode) {
+        this.refreshMode = refreshMode;
+    }
+
+    public String getRefreshTrigger() {
+        return refreshTrigger;
+    }
+
+    public void setRefreshTrigger(String refreshTrigger) {
+        this.refreshTrigger = refreshTrigger;
+    }
+
+    public String getRefreshPolicy() {
+        return refreshPolicy;
+    }
+
+    public void setRefreshPolicy(String refreshPolicy) {
+        this.refreshPolicy = refreshPolicy;
+    }
+
+    public String getResourceGroup() {
+        return resourceGroup;
+    }
+
+    public void setResourceGroup(String resourceGroup) {
+        this.resourceGroup = resourceGroup;
+    }
+
+    public String getQueryRewriteStatusReason() {
+        return queryRewriteStatusReason;
+    }
+
+    public void setQueryRewriteStatusReason(String queryRewriteStatusReason) {
+        this.queryRewriteStatusReason = queryRewriteStatusReason;
+    }
+
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
         if (lastJobTaskRunStatus != null) {
             // sort by process start time
@@ -491,21 +585,41 @@ public class ShowMaterializedViewStatus {
         }
     }
 
-    private List<String> applyTaskRunStatusWith(Function<TaskRunStatus, String> func) {
-        return lastJobTaskRunStatus.stream()
+    private static List<String> applyTaskRunStatusWith(List<TaskRunStatus> batch, Function<TaskRunStatus, String> func) {
+        return batch.stream()
                 .map(x -> func.apply(x))
                 .map(x -> Optional.ofNullable(x).orElse("NULL"))
                 .collect(Collectors.toList());
     }
 
+    // A run rehydrated from archived history may carry a null extra message (older FE versions, or a JSON
+    // "null"); fall back to an empty one so one legacy run cannot NPE the whole roll-up.
+    private static MVTaskRunExtraMessage extraOf(TaskRunStatus run) {
+        MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
+        return extra != null ? extra : new MVTaskRunExtraMessage();
+    }
+
     public RefreshJobStatus getRefreshJobStatus() {
+        return fromTaskRuns(this.lastJobTaskRunStatus);
+    }
+
+    /**
+     * Rolls up a batch of task runs into one job status. The input list is not mutated; ordering is
+     * established on a defensive copy because callers other than setLastJobTaskRunStatus pass unsorted runs.
+     */
+    public static RefreshJobStatus fromTaskRuns(List<TaskRunStatus> batch) {
         RefreshJobStatus status = new RefreshJobStatus();
-        if (lastJobTaskRunStatus == null || lastJobTaskRunStatus.isEmpty()) {
+        if (batch == null || batch.isEmpty()) {
             return status;
         }
 
-        TaskRunStatus firstTaskRunStatus = lastJobTaskRunStatus.get(0);
-        TaskRunStatus lastTaskRunStatus = lastJobTaskRunStatus.get(lastJobTaskRunStatus.size() - 1);
+        List<TaskRunStatus> sorted = new ArrayList<>(batch);
+        // Order by createTime, not processStartTime: a pending/legacy follow-up run has processStartTime 0
+        // and would otherwise sort before the real first run, skewing the first/last picks (SUBMIT_TIME, state).
+        sorted.sort(Comparator.comparingLong(TaskRunStatus::getCreateTime));
+
+        TaskRunStatus firstTaskRunStatus = sorted.get(0);
+        TaskRunStatus lastTaskRunStatus = sorted.get(sorted.size() - 1);
 
         // Task creator
         Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(firstTaskRunStatus.getTaskName());
@@ -519,7 +633,7 @@ public class ShowMaterializedViewStatus {
 
         // extra message
         ExtraMessage extraMessage = new ExtraMessage();
-        List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
+        List<String> queryIds = applyTaskRunStatusWith(sorted, x -> x.getQueryId());
         // queryIds
         extraMessage.setQueryIds(queryIds);
         extraMessage.setLastTaskRunState(lastTaskRunStatus.getState());
@@ -548,29 +662,29 @@ public class ShowMaterializedViewStatus {
         status.setRefreshState(lastTaskRunStatus.getLastRefreshState());
 
         // is force
-        MVTaskRunExtraMessage mvTaskRunExtraMessage = lastTaskRunStatus.getMvTaskRunExtraMessage();
+        MVTaskRunExtraMessage mvTaskRunExtraMessage = extraOf(lastTaskRunStatus);
         status.setForce(mvTaskRunExtraMessage.isForceRefresh());
 
         // getPartitionStart
-        List<String> refreshedPartitionStarts = applyTaskRunStatusWith(x ->
-                x.getMvTaskRunExtraMessage().getPartitionStart());
+        List<String> refreshedPartitionStarts = applyTaskRunStatusWith(sorted, x ->
+                extraOf(x).getPartitionStart());
         status.setRefreshedPartitionStarts(refreshedPartitionStarts);
 
         // getPartitionEnd
-        List<String> refreshedPartitionEnds = applyTaskRunStatusWith(x ->
-                x.getMvTaskRunExtraMessage().getPartitionEnd());
+        List<String> refreshedPartitionEnds = applyTaskRunStatusWith(sorted, x ->
+                extraOf(x).getPartitionEnd());
         status.setRefreshedPartitionEnds(refreshedPartitionEnds);
 
         // getBasePartitionsToRefreshMapString
-        List<Map<String, Set<String>>> refreshedBasePartitionsToRefreshMaps = lastJobTaskRunStatus.stream()
-                .map(x -> x.getMvTaskRunExtraMessage().getBasePartitionsToRefreshMap())
+        List<Map<String, Set<String>>> refreshedBasePartitionsToRefreshMaps = sorted.stream()
+                .map(x -> extraOf(x).getBasePartitionsToRefreshMap())
                 .map(x -> Optional.ofNullable(x).orElse(Maps.newHashMap()))
                 .collect(Collectors.toList());
         status.setRefreshedBasePartitionsToRefreshMaps(refreshedBasePartitionsToRefreshMaps);
 
         // getMvPartitionsToRefreshString
-        List<Set<String>> refreshedMvPartitionsToRefreshs = lastJobTaskRunStatus.stream()
-                .map(x -> x.getMvTaskRunExtraMessage().getMvPartitionsToRefresh())
+        List<Set<String>> refreshedMvPartitionsToRefreshs = sorted.stream()
+                .map(x -> extraOf(x).getMvPartitionsToRefresh())
                 .map(x -> Optional.ofNullable(x).orElse(Sets.newHashSet()))
                 .collect(Collectors.toList());
         status.setRefreshedMvPartitionsToRefreshs(refreshedMvPartitionsToRefreshs);
@@ -579,17 +693,33 @@ public class ShowMaterializedViewStatus {
         if (lastTaskRunStatus.isRefreshFinished()) {
             status.setRefreshFinished(true);
 
-            long mvRefreshFinishTime = lastTaskRunStatus.getFinishTime();
+            // Normally the tail run's finishTime is the job end. But a pending follow-up aborted by
+            // clearUnfinishedTaskRun() is marked FAILED without a finishTime (0); only then fall back to the
+            // batch's max finish so the completed sub-runs' elapsed work is not lost.
+            long tailFinishTime = lastTaskRunStatus.getFinishTime();
+            long mvRefreshFinishTime = tailFinishTime > 0
+                    ? tailFinishTime
+                    : sorted.stream().mapToLong(TaskRunStatus::getFinishTime).max().orElse(tailFinishTime);
             status.setMvRefreshEndTime(mvRefreshFinishTime);
 
-            long totalProcessDuration = lastJobTaskRunStatus.stream()
-                    .map(TaskRunStatus::calculateRefreshProcessDuration)
-                    .collect(Collectors.summingLong(Long::longValue));
-            status.setTotalProcessDuration(totalProcessDuration);
             status.setErrorCode(String.valueOf(lastTaskRunStatus.getErrorCode()));
             status.setErrorMsg(Strings.nullToEmpty(lastTaskRunStatus.getErrorMessage()));
         }
         return status;
+    }
+
+    /**
+     * Wall-clock duration (ms) of a refresh job: the last run's finish minus the first run's process start,
+     * falling back to the submit time when the process start is unknown (0), clamped to 0 to tolerate clock skew.
+     * Shared with materialized_view_refresh_jobs.DURATION_TIME so both surfaces report the same elapsed time.
+     */
+    public static long getRefreshJobWallClockDurationMs(RefreshJobStatus job) {
+        if (!job.isRefreshFinished()) {
+            return 0L;
+        }
+        long startBasis = job.getMvRefreshProcessTime() > 0
+                ? job.getMvRefreshProcessTime() : job.getMvRefreshStartTime();
+        return Math.max(0L, job.getMvRefreshEndTime() - startBasis);
     }
 
     public String getQueryRewriteStatus() {
@@ -642,7 +772,7 @@ public class ShowMaterializedViewStatus {
         // only updated when refresh is finished
         if (refreshJobStatus.isRefreshFinished()) {
             status.setLast_refresh_finished_time(TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
-            status.setLast_refresh_duration(formatDuration(refreshJobStatus.getTotalProcessDuration()));
+            status.setLast_refresh_duration(formatDuration(getRefreshJobWallClockDurationMs(refreshJobStatus)));
             status.setLast_refresh_error_code(refreshJobStatus.getErrorCode());
             status.setLast_refresh_error_message(refreshJobStatus.getErrorMsg());
         }
@@ -658,6 +788,20 @@ public class ShowMaterializedViewStatus {
         status.setQuery_rewrite_status(queryRewriteStatus);
         // creator
         status.setCreator(refreshJobStatus.getTaskOwner());
+        // last refresh time (data version timestamp used for staleness check)
+        if (lastRefreshTime > 0) {
+            status.setLast_refresh_time(TimeUtils.longToTimeString(lastRefreshTime));
+        }
+        status.setWarehouse(Strings.nullToEmpty(this.warehouse));
+        status.setRefresh_mode(Strings.nullToEmpty(this.refreshMode));
+        status.setRefresh_trigger(Strings.nullToEmpty(this.refreshTrigger));
+        status.setRefresh_policy(Strings.nullToEmpty(this.refreshPolicy));
+        status.setResource_group(Strings.nullToEmpty(this.resourceGroup));
+        status.setQuery_rewrite_status_reason(Strings.nullToEmpty(this.queryRewriteStatusReason));
+        if (lastFreshnessConfirmedAt > 0) {
+            status.setLast_freshness_confirmed_at(TimeUtils.longToTimeString(lastFreshnessConfirmedAt));
+        }
+        status.setBase_table_refresh_version_times(Strings.nullToEmpty(baseTableRefreshVersionTimes));
 
         return status;
     }
@@ -696,7 +840,7 @@ public class ShowMaterializedViewStatus {
         // process finish time
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshEndTime()));
         // process duration
-        addField(resultRow, formatDuration(refreshJobStatus.getTotalProcessDuration()));
+        addField(resultRow, formatDuration(getRefreshJobWallClockDurationMs(refreshJobStatus)));
         // last refresh state
         addField(resultRow, refreshJobStatus.getRefreshState());
         // whether it's force refresh
@@ -731,6 +875,16 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, TimeUtils.longToTimeString(refreshJobStatus.getMvRefreshProcessTime()));
         // last refresh job id
         addField(resultRow, refreshJobStatus.getJobId());
+        // last refresh time (data version timestamp used for staleness check)
+        addField(resultRow, lastRefreshTime > 0 ? TimeUtils.longToTimeString(lastRefreshTime) : "");
+        addField(resultRow, Strings.nullToEmpty(warehouse));
+        addField(resultRow, Strings.nullToEmpty(refreshMode));
+        addField(resultRow, Strings.nullToEmpty(refreshTrigger));
+        addField(resultRow, Strings.nullToEmpty(refreshPolicy));
+        addField(resultRow, Strings.nullToEmpty(resourceGroup));
+        addField(resultRow, Strings.nullToEmpty(queryRewriteStatusReason));
+        addField(resultRow, lastFreshnessConfirmedAt > 0 ? TimeUtils.longToTimeString(lastFreshnessConfirmedAt) : "");
+        addField(resultRow, Strings.nullToEmpty(baseTableRefreshVersionTimes));
 
         return resultRow;
     }

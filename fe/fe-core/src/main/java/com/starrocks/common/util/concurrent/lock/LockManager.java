@@ -17,6 +17,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.concurrent.SlowLockLogDecision;
 import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,9 +28,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class LockManager {
     private static final Logger LOG = LogManager.getLogger(LockManager.class);
+
+    // GLOBAL slow-lock log throttle gates (one set across all rids, so a hot rid cannot drown out
+    // signal from other rids). The three tiers are decided once per event by SlowLockLogDecision:
+    //   LAST_STACK_PRINT_MS  -> L1 (full info + stacks), Config.slow_lock_log_l1_stack_interval_ms
+    //   LAST_EVENT_LOG_MS    -> L2 (full info, no stacks), Config.slow_lock_log_l2_info_interval_ms
+    //   LAST_BRIEF_MS   -> L3 (plain-text brief), Config.slow_lock_log_l3_brief_interval_ms
+    // Stack capture (Thread.getStackTrace) triggers a JVM safepoint that is expensive when
+    // slow-lock events fire frequently, which is why L1 is throttled most strictly. All gates
+    // init to GATE_INIT_SENTINEL so the first event always wins regardless of nanoTime origin.
+    private static final AtomicLong LAST_STACK_PRINT_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    private static final AtomicLong LAST_EVENT_LOG_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
+    private static final AtomicLong LAST_BRIEF_MS = new AtomicLong(SlowLockLogDecision.GATE_INIT_SENTINEL);
 
     private final int lockTablesSize;
     private final Object[] lockTableMutexes;
@@ -243,7 +258,7 @@ public class LockManager {
             throws LockInterruptException, DeadlockException {
         DeadLockChecker dc = null;
         while (true) {
-            boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) < 0;
+            boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
             if (lockTimeOut && dc != null) {
                 if (removeFromWaiterList(rid, currentLocker, lockType)) {
                     /* Failure to acquire lock within the timeout ms */
@@ -393,6 +408,7 @@ public class LockManager {
         List<LockHolder> owners;
         List<LockHolder> waiters;
 
+        // Snapshot first, decide second.
         synchronized (lockTableMutexes[lockTableIdx]) {
             Map<Long, Lock> lockTable = lockTables[lockTableIdx];
             Lock lock = lockTable.get(rid);
@@ -400,17 +416,47 @@ public class LockManager {
             waiters = lock.cloneWaiters();
         }
 
+        // Record the held-time metric for EVERY slow-lock detection, before and independent of the
+        // log-tier decision below. Otherwise throttled (L3/suppressed) events would be dropped from
+        // this histogram while HISTO_SLOW_LOCK_WAIT_TIME_MS (recorded per detection in
+        // lockAcquireSlowPath) still counts them — leaving the two metrics with mismatched sample
+        // sets. (max held time among current owners; 0 if there is no owner.)
+        long maxHeldForTimeMs = 0;
+        for (LockHolder owner : owners) {
+            maxHeldForTimeMs = Math.max(maxHeldForTimeMs, nowMs - owner.getLockAcquireTimeMs());
+        }
+        MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
+
+        // One tier decision per event (the only place the GLOBAL gates are consumed). hasHolder is
+        // !owners.isEmpty() and gates only L1 (the owner stack): an empty-owners snapshot still
+        // emits an L2 line carrying the waiter queue (the signal when waiters are stuck with no
+        // holder), it just skips the L1 stack capture. nowMs (System.currentTimeMillis) is kept for
+        // user-facing timestamps; the gates use a monotonic clock so wall-clock adjustments cannot
+        // stretch or short-circuit the intervals.
+        long monoNowMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime());
+        SlowLockLogDecision decision = SlowLockLogDecision.decide(
+                !owners.isEmpty(), LAST_STACK_PRINT_MS, LAST_EVENT_LOG_MS, LAST_BRIEF_MS, monoNowMs);
+        if (!decision.shouldLog()) {
+            return;
+        }
+        if (decision.isBrief()) {
+            // Floor tier: leave evidence cheaply — no JSON, no stacks. (The held-time metric was
+            // already recorded above, independent of the tier.)
+            LOG.warn("LockManager detects slow lock (throttled detail): rid={}, owners={}, waiters={}",
+                    rid, owners.size(), waiters.size());
+            return;
+        }
+        boolean stackEnabled = Config.slow_lock_print_stack;
+        boolean captureStack = decision.captureStack;
+
         JsonObject ownerInfo = new JsonObject();
         ownerInfo.addProperty("rid", rid);
 
-        // Track the maximum lock held time among all owners for this slow lock event
-        long maxHeldForTimeMs = 0;
         //owner
         JsonArray ownerArray = new JsonArray();
         for (LockHolder owner : owners) {
             Locker locker = owner.getLocker();
             long heldForTimeMs = nowMs - owner.getLockAcquireTimeMs();
-            maxHeldForTimeMs = Math.max(maxHeldForTimeMs, heldForTimeMs);
 
             JsonObject readerInfo = new JsonObject();
             readerInfo.addProperty("id", owner.getLocker().getThreadId());
@@ -421,17 +467,26 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             readerInfo.addProperty("waitTime", owner.getLockAcquireTimeMs() - locker.getLockRequestTimeMs());
-            if (Config.slow_lock_print_stack) {
+            if (captureStack) {
                 readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
                         locker.getLockerThread(), 0, Short.MAX_VALUE));
+            } else if (stackEnabled) {
+                readerInfo.addProperty("stack", "throttled");
             }
             ownerArray.add(readerInfo);
         }
         ownerInfo.add("owners", ownerArray);
 
         //waiter
+        // Cap the per-event waiter list to bound Gson serialization and log-line cost under
+        // extreme contention; remaining waiters are summarized as a single trailer entry.
+        int waiterCap = Config.slow_lock_max_waiter_count_to_log;
         JsonArray waiterArray = new JsonArray();
+        int waiterIdx = 0;
         for (LockHolder waiter : waiters) {
+            if (waiterCap > 0 && waiterIdx >= waiterCap) {
+                break;
+            }
             Locker locker = waiter.getLocker();
 
             JsonObject readerInfo = new JsonObject();
@@ -443,10 +498,15 @@ public class LockManager {
                 readerInfo.addProperty("queryId", locker.getQueryId().toString());
             }
             waiterArray.add(readerInfo);
+            waiterIdx++;
+        }
+        if (waiterCap > 0 && waiters.size() > waiterCap) {
+            JsonObject omitted = new JsonObject();
+            omitted.addProperty("omitted", "remain " + (waiters.size() - waiterCap) + " waiters omitted");
+            waiterArray.add(omitted);
         }
         ownerInfo.add("waiter", waiterArray);
 
-        MetricRepo.HISTO_SLOW_LOCK_HELD_TIME_MS.update(maxHeldForTimeMs);
         LOG.warn("LockManager detects slow lock : {}", ownerInfo.toString());
     }
 

@@ -20,6 +20,7 @@
 #include <type_traits>
 
 #include "base/string/slice.h"
+#include "column/adaptive_offsets.h"
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/container_resource.h"
@@ -57,6 +58,21 @@ private:
     bool _is_large = false;
 };
 
+// Serialize the |idx|-th binary value as [uint32_t length][bytes] into |pos| and return the
+// number of bytes written. This is the single definition of the binary serialize wire format:
+// the per-element serialize() and the batch serializers all encode through it, each dispatching
+// the offsets width once at its own boundary.
+template <typename Offset>
+ALWAYS_INLINE uint32_t serialize_binary_element(const Offset* __restrict offsets, size_t idx,
+                                                const uint8_t* __restrict base, uint8_t* pos) {
+    // max size of one string is 2^32, so use uint32_t not Offset
+    const auto offset = offsets[idx];
+    const auto binary_size = static_cast<uint32_t>(offsets[idx + 1] - offset);
+    strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
+    strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
+    return sizeof(uint32_t) + binary_size;
+}
+
 template <typename T>
 class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
     friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
@@ -64,8 +80,15 @@ class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryCol
 public:
     using ValueType = Slice;
 
-    using Offset = T;
-    using Offsets = Buffer<T>;
+    /*
+     * Use AdaptiveOffsets instead of Buffer<T> to store offsets, which can automatically promote to uint64_t
+     * when the offset value exceeds UINT32_MAX.
+     * For the compatibility reason, we still reserve the binaryColumn/LargeBinaryColumn interface for the callers,
+     * But we will re-implement them using the newly added AdaptiveOffsets.
+     *
+     * Important NOTE: Even upgrade offset from Buffer<T> -> AdaptiveOffsets, max size of single element is still 2^32 !!!!
+    */
+    using Offsets = AdaptiveOffsets;
     using Byte = uint8_t;
     using Bytes = raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
 
@@ -77,7 +100,7 @@ public:
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase() { _offsets.emplace_back(0); }
     // Default value is empty string
-    explicit BinaryColumnBase(size_t size) : _offsets(size + 1, 0) {}
+    explicit BinaryColumnBase(size_t size) { _offsets.resize(size + 1, 0); }
     BinaryColumnBase(Bytes bytes, Offsets offsets) : _bytes(std::move(bytes)), _offsets(std::move(offsets)) {
         if (_offsets.empty()) {
             _offsets.emplace_back(0);
@@ -127,20 +150,6 @@ public:
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
     bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
-    const uint8_t* raw_data() const override {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return reinterpret_cast<const uint8_t*>(_slices.data());
-    }
-
-    uint8_t* mutable_raw_data() override {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return reinterpret_cast<uint8_t*>(_slices.data());
-    }
-
     size_t size() const override { return _offsets.size() - 1; }
 
     size_t capacity() const override { return _offsets.capacity() - 1; }
@@ -148,20 +157,34 @@ public:
     size_t type_size() const override { return sizeof(Slice); }
 
     size_t byte_size() const override {
-        size_t data_size = _resource.empty() ? _bytes.size() : _offsets.back();
-        return data_size * sizeof(uint8_t) + _offsets.size() * sizeof(Offset);
+        if (LIKELY(_resource.empty())) {
+            if (LIKELY(!_offsets.is_large())) {
+                const auto& offsets = _offsets.small_storage();
+                return _bytes.size() + offsets.size() * sizeof(uint32_t);
+            }
+            const auto& offsets = _offsets.large_storage();
+            return _bytes.size() + offsets.size() * sizeof(uint64_t);
+        }
+
+        return _offsets.visit_storage([&](const auto& offsets) -> size_t {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+            return offsets.back() + offsets.size() * sizeof(OffsetValue);
+        });
     }
 
     size_t byte_size(size_t from, size_t size) const override {
         DCHECK_LE(from + size, this->size()) << "Range error";
-        return (_offsets[from + size] - _offsets[from]) + size * sizeof(Offset);
+        return (_offsets[from + size] - _offsets[from]) + size * _offsets.element_size();
     }
 
     size_t byte_size(size_t idx) const override { return _offsets[idx + 1] - _offsets[idx] + sizeof(uint32_t); }
 
     Slice get_slice(size_t idx) const {
         const uint8_t* base = _data_base();
-        return Slice(base + _offsets[idx], _offsets[idx + 1] - _offsets[idx]);
+        return _offsets.visit_storage([&](const auto& offsets) -> Slice {
+            const auto offset = offsets[idx];
+            return Slice(base + offset, offsets[idx + 1] - offset);
+        });
     }
 
     const char* get_string_begin() const { return reinterpret_cast<const char*>(_data_base()); }
@@ -179,7 +202,6 @@ public:
         // affect the performance.
         // _bytes.reserve(n * 4);
         _offsets.reserve(n + 1);
-        _slices_cache = false;
     }
 
     // If you know the size of the Byte array in advance, you can call this method,
@@ -187,29 +209,21 @@ public:
     void reserve(size_t n, size_t byte_size) {
         _offsets.reserve(n + 1);
         _bytes.reserve(byte_size);
-        _slices_cache = false;
     }
 
     void resize(size_t n) override {
         _offsets.resize(n + 1, _offsets.back());
         _bytes.resize(_offsets.back());
-        _slices_cache = false;
     }
 
     void assign(size_t n, size_t idx) override;
 
     void remove_first_n_values(size_t count) override;
 
-    // No complain about the overloaded-virtual for this function
-    DIAGNOSTIC_PUSH
-    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
+    using Column::append;
     void append(const Slice& str);
-    DIAGNOSTIC_POP
 
-    void append_datum(const Datum& datum) override {
-        append(datum.get_slice());
-        _slices_cache = false;
-    }
+    void append_datum(const Datum& datum) override { append(datum.get_slice()); }
 
     void append(const Column& src, size_t offset, size_t count) override;
 
@@ -222,7 +236,6 @@ public:
     void append_string(const std::string& str) {
         _bytes.insert(_bytes.end(), str.data(), str.data() + str.size());
         _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
     }
 
     bool append_strings(const Slice* data, size_t size) override;
@@ -240,15 +253,9 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
-    void append_default() override {
-        _offsets.emplace_back(_bytes.size());
-        _slices_cache = false;
-    }
+    void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
-    void append_default(size_t count) override {
-        _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
-        _slices_cache = false;
-    }
+    void append_default(size_t count) override { _offsets.append_empty_values(count); }
 
     StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
@@ -259,15 +266,10 @@ public:
     uint32_t max_one_element_serialize_size() const override;
 
     ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
-        // max size of one string is 2^32, so use uint32_t not T
-        auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-        T offset = _offsets[idx];
         const uint8_t* base = _data_base();
-
-        strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-        strings::memcpy_inlined(pos + sizeof(uint32_t), base + offset, binary_size);
-
-        return sizeof(uint32_t) + binary_size;
+        return _offsets.visit_storage([&](const auto& offsets) -> uint32_t {
+            return serialize_binary_element(offsets.data(), idx, base, pos);
+        });
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
@@ -305,7 +307,6 @@ public:
         return p;
     }
 
-    MutableColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
@@ -313,6 +314,12 @@ public:
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
+
+    // Mark this column as holding BINARY / VARBINARY (rather than VARCHAR/CHAR) data.
+    // When set, put_mysql_row_buffer uses push_binary inside nested types so that
+    // raw bytes are encoded as hex/base64 instead of being emitted verbatim.
+    void set_is_binary_type(bool v) { _is_binary_type = v; }
+    bool is_binary_type() const { return _is_binary_type; }
 
     std::string get_name() const override {
         static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
@@ -351,7 +358,7 @@ public:
         return ImmBytes(_bytes.data(), _bytes.size());
     }
 
-    const uint8_t* continuous_data() const override { return _data_base(); }
+    const uint8_t* raw_bytes() const { return _data_base(); }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
@@ -360,7 +367,7 @@ public:
 
     size_t container_memory_usage() const override {
         size_t bytes_memory = _resource.empty() ? _bytes.capacity() : 0;
-        return bytes_memory + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
+        return bytes_memory + _offsets.memory_usage();
     }
 
     size_t reference_memory_usage(size_t from, size_t size) const override { return 0; }
@@ -371,8 +378,6 @@ public:
         swap(this->_delete_state, r._delete_state);
         swap(_bytes, r._bytes);
         swap(_offsets, r._offsets);
-        swap(_slices, r._slices);
-        swap(_slices_cache, r._slices_cache);
         swap(_resource, r._resource);
     }
 
@@ -381,15 +386,10 @@ public:
         // TODO(zhuming): shrink size if needed.
         _bytes.clear();
         _offsets.resize(1, 0);
-        _slices.clear();
-        _slices_cache = false;
         _resource.reset();
     }
 
-    void invalidate_slice_cache() {
-        _slices_cache = false;
-        _german_strings_cache = false;
-    }
+    void invalidate_slice_cache() { _german_strings_cache = false; }
 
     std::string debug_item(size_t idx) const override;
 
@@ -414,10 +414,10 @@ public:
     void build_slices(Container& slices) const;
 
 private:
-    template <typename SrcOffset>
-    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+    void _append_binary_impl(const Offsets& src_offsets, const uint8_t* src_base, size_t offset, size_t count);
+    void _append_selective_general(const BinaryColumnBase<T>& src_column, const uint32_t* indexes, uint32_t size,
+                                   size_t prev_num_offsets, uint64_t dst_begin);
 
-    void _build_slices() const;
     void _build_german_strings() const;
     void _ensure_materialized();
     ALWAYS_INLINE const uint8_t* _data_base() const {
@@ -429,10 +429,13 @@ private:
     Offsets _offsets;
     ContainerResource _resource;
 
-    mutable Container _slices;
-    mutable bool _slices_cache = false;
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
+
+    // True when this column holds BINARY / VARBINARY data.  Causes put_mysql_row_buffer to
+    // use push_binary (hex/base64 encoding) instead of push_string when inside a
+    // nested type context.
+    bool _is_binary_type = false;
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

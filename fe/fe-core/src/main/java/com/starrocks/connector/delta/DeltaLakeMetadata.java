@@ -25,8 +25,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -115,7 +115,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
@@ -155,11 +156,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getCatalogDBName();
         String tableName = deltaLakeTable.getCatalogTableName();
-        Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
 
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                .setTableVersionRange(TvrTableSnapshot.of(snapshot.getVersion(engine)))
+                .setTableVersionRange(TvrTableSnapshot.of(snapshot.getVersion()))
                 .setPredicate(predicate)
                 .setLimit(limit)
                 .build();
@@ -221,8 +221,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
         Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(scalarOperators, deltaLakeContext);
 
-        ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
-        ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
+        ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
+        ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
         return new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;

@@ -51,16 +51,6 @@ public:
 
     bool is_array_view() const override { return true; }
 
-    const uint8_t* raw_data() const override {
-        DCHECK(false) << "ArrayViewColumn::raw_data() is not supported";
-        throw std::runtime_error("ArrayViewColumn::raw_data() is not supported");
-    }
-
-    uint8_t* mutable_raw_data() override {
-        DCHECK(false) << "ArrayViewColumn::mutable_raw_data() is not supported";
-        throw std::runtime_error("ArrayViewColumn::mutable_raw_data() is not supported");
-    }
-
     size_t size() const override { return _offsets->size(); }
     size_t capacity() const override { return _offsets->capacity() + _lengths->capacity(); }
 

@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
@@ -81,6 +82,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -93,6 +95,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -139,12 +142,15 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -413,6 +419,16 @@ public class AnalyzerUtils {
             getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
+            if (node.getQueryStatement() != null) {
+                return visit(node.getQueryStatement());
+            }
             return null;
         }
 
@@ -726,6 +742,8 @@ public class AnalyzerUtils {
 
     private static class TableCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Table> tables;
+        private final Deque<Set<String>> cteNameScopes = new ArrayDeque<>();
+        private final Deque<Boolean> recursiveCteScopes = new ArrayDeque<>();
 
         public TableCollector() {
             this.tables = Maps.newHashMap();
@@ -740,6 +758,36 @@ public class AnalyzerUtils {
         @Override
         public Void visitQueryStatement(QueryStatement statement, Void context) {
             return visit(statement.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSelect(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(node.isHasRecursiveCTE());
+            try {
+                return super.visitSelect(node, context);
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSetOp(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(node.isHasRecursiveCTE());
+            try {
+                return super.visitSetOp(node, context);
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
         }
 
         // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -769,10 +817,93 @@ public class AnalyzerUtils {
         }
 
         @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            Table table = node.getTable();
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
+            return super.visitMergeIntoStatement(node, context);
+        }
+
+        @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (isUnresolvedCteReference(node)) {
+                return null;
+            }
             Table table = node.getTable();
             tables.put(node.getName(), table);
             return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            if (node.isRecursive() && !node.isAnchor()) {
+                // An analyzed recursive member consumes the current CTE through a non-anchor CTERelation.
+                // Do not expand its definition again, or the collector will revisit the same recursive member.
+                return null;
+            }
+            if (cteNameScopes.isEmpty()) {
+                return super.visitCTE(node, context);
+            }
+            if (isInRecursiveCteScope() && node.getCteQueryStatement().getQueryRelation()
+                    instanceof UnionRelation unionRelation) {
+                visitRecursiveCteDefinition(node, unionRelation, context);
+            } else {
+                visit(node.getCteQueryStatement(), context);
+            }
+            addCteName(cteNameScopes.peek(), node);
+            return null;
+        }
+
+        private void visitRecursiveCteDefinition(CTERelation cteRelation, SetOperationRelation setOperationRelation,
+                                                 Void context) {
+            List<QueryRelation> relations = setOperationRelation.getRelations();
+            if (relations.isEmpty()) {
+                return;
+            }
+            // Mirror QueryAnalyzer.tryProcessRecursiveCte: the first set-op child is the anchor.
+            // The current CTE name is not visible there, so a same-named table must still be collected.
+            visit(relations.get(0), context);
+
+            // Only recursive members can see the current CTE name. Keep that visibility in a temporary
+            // scope so unresolved self-references are skipped without hiding anchor base tables.
+            Set<String> recursiveNames = new HashSet<>();
+            addCteName(recursiveNames, cteRelation);
+            cteNameScopes.push(recursiveNames);
+            try {
+                for (int i = 1; i < relations.size(); i++) {
+                    visit(relations.get(i), context);
+                }
+            } finally {
+                cteNameScopes.pop();
+            }
+        }
+
+        private boolean isInRecursiveCteScope() {
+            return !recursiveCteScopes.isEmpty() && recursiveCteScopes.peek();
+        }
+
+        private void addCteName(Set<String> names, CTERelation cteRelation) {
+            if (!Strings.isNullOrEmpty(cteRelation.getName())) {
+                names.add(cteRelation.getName());
+            }
+        }
+
+        private boolean isUnresolvedCteReference(TableRelation node) {
+            if (node.getTable() != null || cteNameScopes.isEmpty()) {
+                return false;
+            }
+            TableName tableName = node.getName();
+            if (tableName == null || !Strings.isNullOrEmpty(tableName.getCatalog()) ||
+                    !Strings.isNullOrEmpty(tableName.getDb()) || Strings.isNullOrEmpty(tableName.getTbl())) {
+                return false;
+            }
+            String tableNameWithoutDb = tableName.getTbl();
+            for (Set<String> cteNames : cteNameScopes) {
+                if (cteNames.contains(tableNameWithoutDb)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -806,6 +937,25 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+    public static void prohibitTimeTravelQuery(StatementBase statementBase, String operation) {
+        for (TableRelation tableRelation : collectTableRelations(statementBase)) {
+            if (tableRelation.getQueryPeriod() == null && Strings.isNullOrEmpty(tableRelation.getQueryPeriodString())) {
+                continue;
+            }
+
+            String tableName = tableRelation.getResolveTableName() != null
+                    ? tableRelation.getResolveTableName().toSql()
+                    : tableRelation.getName().toSql();
+            String queryPeriod = Strings.nullToEmpty(tableRelation.getQueryPeriodString()).trim();
+            if (queryPeriod.isEmpty()) {
+                throw new SemanticException("Do not support %s with time travel clause on table %s",
+                        operation, tableName);
+            }
+            throw new SemanticException("Do not support %s with time travel clause `%s` on table %s",
+                    operation, queryPeriod, tableName);
+        }
+    }
+
     public static List<ViewRelation> collectViewRelations(StatementBase statementBase) {
         List<ViewRelation> viewRelations = Lists.newArrayList();
         new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
@@ -813,9 +963,33 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
+        if (parseNode == null) {
+            return Collections.emptyMap();
+        }
+        Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
+    }
+
+    public static List<String> collectAllTableAndViewRelationNamesForAudit(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
+        for (TableName tableName : allTableAndViewRelations.keySet()) {
+            relationNames.add(formatTableNameForAudit(tableName));
+        }
+        return relationNames;
+    }
+
+    static String formatTableNameForAudit(TableName tableName) {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (tableName.getCatalog() != null) {
+            stringBuilder.append(tableName.getCatalog()).append(".");
+        }
+        if (tableName.getDb() != null) {
+            stringBuilder.append(tableName.getDb()).append(".");
+        }
+        stringBuilder.append(tableName.getTbl());
+        return stringBuilder.toString();
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
@@ -888,6 +1062,31 @@ public class AnalyzerUtils {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
+    }
+
+    public static Map<TableName, Table> collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        collectAllConnectorTableAndViewWithViewDefinition(queryStatement, tables);
+        return tables;
+    }
+
+    private static void collectAllConnectorTableAndViewWithViewDefinition(
+            QueryStatement queryStatement, Map<TableName, Table> tables) {
+        Map<TableName, Table> tableNameTableMap = collectAllConnectorTableAndView(queryStatement);
+        for (Map.Entry<TableName, Table> entry : tableNameTableMap.entrySet()) {
+            Table table = entry.getValue();
+            if (table == null || table.isView()) {
+                continue;
+            }
+            tables.put(entry.getKey(), table);
+        }
+
+        Set<ViewRelation> viewRelationSet = Sets.newHashSet(collectViewRelations(queryStatement));
+        for (ViewRelation viewRelation : viewRelationSet) {
+            collectAllConnectorTableAndViewWithViewDefinition(viewRelation.getQueryStatement(), tables);
+            tables.put(viewRelation.getName(), viewRelation.getView());
+        }
     }
 
     private static class TableAndViewCollector extends TableCollector {
@@ -1283,11 +1482,16 @@ public class AnalyzerUtils {
         return transformTableColumnType(srcType, true);
     }
 
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+        return transformTableColumnType(srcType, convertDouble, Config.transform_type_prefer_string_for_varchar);
+    }
+
     // For char and varchar types, use the inferred length if the length can be inferred,
-    // otherwise (include null type) use the longest varchar value.
+    // otherwise (include null type) use the longest varchar value. When preferStringForVarchar
+    // is true, every fixed-length varchar/char is widened to the OLAP max varchar length instead.
     // For double and float types, since they may be selected as key columns,
     // the key column must be an exact value, so we unified into a default decimal type.
-    public static Type transformTableColumnType(Type srcType, boolean convertDouble) {
+    public static Type transformTableColumnType(Type srcType, boolean convertDouble, boolean preferStringForVarchar) {
         Type newType = srcType;
         if (srcType.isScalarType()) {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
@@ -1296,8 +1500,8 @@ public class AnalyzerUtils {
                 int len = TypeFactory.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
-                    if (Config.transform_type_prefer_string_for_varchar) {
-                        // always use max varchar length for varchar type if transform_type_prefer_string_for_varchar is set.
+                    if (preferStringForVarchar) {
+                        // always use max varchar length for char/varchar types if preferStringForVarchar is set.
                         len = TypeFactory.getOlapMaxVarcharLength();
                     } else {
                         if (scalarType.getLength() > 0) {
@@ -1322,14 +1526,18 @@ public class AnalyzerUtils {
                 newType = TypeFactory.createType(srcType.getPrimitiveType());
             }
         } else if (srcType.isArrayType()) {
-            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(), convertDouble));
+            newType = new ArrayType(transformTableColumnType(((ArrayType) srcType).getItemType(),
+                    convertDouble, preferStringForVarchar));
         } else if (srcType.isMapType()) {
-            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(), convertDouble),
-                    transformTableColumnType(((MapType) srcType).getValueType(), convertDouble));
+            newType = new MapType(transformTableColumnType(((MapType) srcType).getKeyType(),
+                    convertDouble, preferStringForVarchar),
+                    transformTableColumnType(((MapType) srcType).getValueType(),
+                            convertDouble, preferStringForVarchar));
         } else if (srcType.isStructType()) {
             StructType structType = (StructType) srcType;
             List<StructField> mappingFields = structType.getFields().stream()
-                    .map(x -> new StructField(x.getName(), transformTableColumnType(x.getType(), convertDouble),
+                    .map(x -> new StructField(x.getName(),
+                            transformTableColumnType(x.getType(), convertDouble, preferStringForVarchar),
                             x.getComment()))
                     .collect(Collectors.toList());
             newType = new StructType(mappingFields, structType.isNamed());

@@ -51,7 +51,6 @@
 #include <utility>
 #include <vector>
 
-#include "agent/status.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/container/lru_cache.h"
 #include "base/time/time.h"
@@ -62,7 +61,7 @@
 #include "gen_cpp/MasterService_types.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet.h"

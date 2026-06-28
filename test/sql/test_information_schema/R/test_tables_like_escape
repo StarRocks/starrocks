@@ -19,3 +19,60 @@ a_a
 drop database if exists db_${uuid0};
 -- result:
 -- !result
+
+-- name: test_table_name_escape_underscore_and_backslash
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `a\_a` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `a_a` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `aba` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `a\ba` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a_a';
+-- result:
+a_a
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a\_a';
+-- result:
+a\_a
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a\\_a';
+-- result:
+a\_a
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a_a' order by table_name;
+-- result:
+a_a
+aba
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\_a';
+-- result:
+a_a
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\_a';
+-- result:
+a_a
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\\\_a' order by table_name;
+-- result:
+a\_a
+a\ba
+-- !result
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\\\\\_a';
+-- result:
+a\_a
+-- !result
+drop database if exists db_${uuid0};
+-- result:
+-- !result

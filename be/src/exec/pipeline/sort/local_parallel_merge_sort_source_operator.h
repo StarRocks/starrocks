@@ -18,12 +18,15 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "compute_env/sorting/merge_path.h"
+#include "exec/pipeline/primitives/block_reason.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "exec/sort_exec_exprs.h"
-#include "exec/sorting/merge_path.h"
+#include "exprs/sort_exec_exprs.h"
 
 namespace starrocks::pipeline {
+class ScanMorsel;
+using Morsel = ScanMorsel;
 class SortContext;
 
 // +---------------------------+               +--------------------------------------+
@@ -66,6 +69,18 @@ public:
 
     bool is_finished() const override;
 
+    // Mixed park model: the restore axis (still building, or a spilled partition not yet restored so a leaf
+    // chunk provider is pending) is woken by the partition spillers' source list that
+    // subscribe_source_to_spillers covers -> WAIT_RESTORE; the merge-path stage-coordination axis is woken by
+    // the merger's own observable, not a spiller (no WAIT_MERGE in the enum) -> NONE. covered_wakeups()
+    // declares only the spiller-covered reason; block_reason() names restore whenever a partition could still
+    // send the source a spiller wakeup. Note: this source is is_mutable(), so it parks LOCAL_WAITING (busy
+    // local-queue re-poll) and is promoted to INPUT_EMPTY -- where the park-time check reads this net -- only
+    // after the local-wait timeout; the net therefore arms on restore-parks that outlast the spin.
+    BlockReason block_reason() const override;
+    static constexpr uint32_t kCoveredWakeups = block_reason_bit(BlockReason::WAIT_RESTORE);
+    uint32_t covered_wakeups() const override { return kCoveredWakeups; }
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void add_morsel(Morsel* morsel) {}
@@ -78,6 +93,8 @@ private:
     const int32_t _merge_parallel_id;
     bool _is_finished = false;
 };
+
+static_assert(LocalParallelMergeSortSourceOperator::kCoveredWakeups & block_reason_bit(BlockReason::WAIT_RESTORE));
 
 class LocalParallelMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:

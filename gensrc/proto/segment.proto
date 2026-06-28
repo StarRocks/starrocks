@@ -55,6 +55,11 @@ enum EncodingTypePB {
     DICT_ENCODING = 5;
     BIT_SHUFFLE = 6;
     FOR_ENCODING = 7; // Frame-Of-Reference
+    // Like PLAIN_ENCODING for string/varchar, but the page's offset trailer stores per-value
+    // deltas (string lengths) instead of absolute offsets. Recorded as a distinct column
+    // encoding so that a BE which does not understand it fails to open the segment (via
+    // EncodingInfo::get) rather than silently misreading the offsets.
+    PLAIN_ENCODING_DELTA_OFFSET = 8;
 }
 
 enum PageTypePB {
@@ -267,6 +272,32 @@ message ColumnIndexMetaPB {
     optional BitmapIndexPB bitmap_index = 9;
     optional BloomFilterIndexPB bloom_filter_index = 10;
     optional BuiltinInvertedIndexPB builtin_inverted_index = 11;
+}
+
+// Footer layout for a standalone .idx file (Index Delta Group payload).
+//
+// File format:
+//   [ index blob 0 ]
+//   [ index blob 1 ]
+//   ...
+//   [ IndexFileFooterPB (serialized) ]
+//   [ footer_length: uint32 little-endian ]
+//   [ MAGIC: uint32 ]
+//
+// Each column_indexes entry has offset/size within the file implicitly
+// recorded in its ColumnIndexMeta (ordinal_index / bitmap_index /
+// bloom_filter_index point to page/data positions relative to the file).
+message IndexFileFooterPB {
+    message ColumnIndex {
+        optional int32 col_unique_id = 1;
+        optional IndexType index_type = 2;
+        // Reuses existing ColumnIndexMetaPB so the same reader code can
+        // interpret blobs from .idx files or from segment footer.
+        optional ColumnIndexMetaPB index_meta = 3;
+    }
+    repeated ColumnIndex column_indexes = 1;
+    // Format version; readers must fail closed on unknown versions.
+    optional uint32 version = 2 [default = 1];
 }
 
 message OrdinalIndexPB {

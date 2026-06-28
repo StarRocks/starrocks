@@ -215,9 +215,9 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
         // Test default value
         assertFalse(sessionVariable.isMVPlanner());
         
-        // Test setter
+        // Deprecated compatibility flag should remain inert.
         sessionVariable.setMVPlanner(true);
-        assertTrue(sessionVariable.isMVPlanner());
+        assertFalse(sessionVariable.isMVPlanner());
         
         // Test reset
         sessionVariable.setMVPlanner(false);

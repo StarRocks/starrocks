@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Configure and use Data Cache in StarRocks to cache data blocks from remote storage (object storage, HDFS) on local disk, accelerating queries in shared-data clusters."
 toc_max_heading_level: 2
 sidebar_position: 20
 ---
@@ -50,6 +51,15 @@ v3.4.0 以降、StarRocks は共有データクラスタ内の external catalog 
   SHOW BACKENDS;
   SHOW COMPUTE NODES;
   ```
+
+## クエリが Data Cache にヒットしたかどうかの確認
+
+Query Profile 内の以下のメトリクスを分析することで、クエリが Data Cache にヒットしたかどうかを確認できます。
+
+- `CompressedBytesReadRemote`: システムがリモートストレージシステムから読み込んだデータのサイズ。
+- `IOTimeRemote`: システムがリモートストレージシステムからデータを読み取るのに費やした I/O 時間。
+
+これらの値がゼロでない場合、クエリがデータキャッシュをヒットせず、システムがリモートストレージシステムからデータを読み取らなければならなかったことを意味します。
 
 ## Data Cache の監視
 

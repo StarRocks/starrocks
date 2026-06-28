@@ -19,30 +19,31 @@
 #include <regex>
 
 #include "base/url_coding.h"
+#include "common/greplog.h"
 #include "common/logging.h"
+#include "common/stack_util.h"
 #include "common/vlog_cntl.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
-#include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
-#include "http/action/compaction_action.h"
 #include "io/io_profiler.h"
+#include "platform/key_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/prof/heap_prof.h"
-#include "service/greplog.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/vacuum.h"
+#include "storage/manual_compaction.h"
 #include "storage/primary_key_dump.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
-#include "util/stack_util.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -296,7 +297,7 @@ public:
     }
 
     static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
-        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         RETURN_IF(nullptr == tablet_manager, "");
         auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
         RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
@@ -347,7 +348,7 @@ public:
      * @return
      */
     static Status do_compaction(int64_t tablet_id, const string& type) {
-        return CompactionAction::do_compaction(tablet_id, type, "");
+        return run_manual_compaction(tablet_id, type, "");
     }
 
     static std::string set_error_state(int64_t tablet_id) {

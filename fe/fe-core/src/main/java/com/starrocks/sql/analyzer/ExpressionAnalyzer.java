@@ -552,14 +552,35 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
-                Type originalType = node.getType();
-                if (originalType == AnyMapType.ANY_MAP) {
-                    Type keyType = getKeyCommonType(node);
-                    if (!keyType.isValidMapKeyType()) {
-                        throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
+                try {
+                    Type originalType = node.getType();
+                    Type keyType;
+                    Type valueType;
+                    if (originalType == AnyMapType.ANY_MAP) {
+                        keyType = getKeyCommonType(node);
+                        if (!keyType.isValidMapKeyType()) {
+                            throw new SemanticException("Map key doesn't support type: " + keyType, node.getPos());
+                        }
+                        valueType = getValueCommonType(node);
+                    } else {
+                        MapType mapType = (MapType) originalType;
+                        keyType = mapType.getKeyType();
+                        valueType = mapType.getValueType();
                     }
-                    Type valueType = getValueCommonType(node);
+
+                    for (int i = 0; i < node.getChildren().size(); i++) {
+                        Type desired = (i % 2 == 0) ? keyType : valueType;
+                        Expr child = node.getChildren().get(i);
+                        if (!child.getType().matchesType(desired)) {
+                            ExprCastFunction.castChild(node, desired, i);
+                        }
+                    }
+
                     node.setType(new MapType(keyType, valueType));
+                } catch (SemanticException e) {
+                    throw e;
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
                 }
             } else {
                 node.setType(new MapType(NullType.NULL, NullType.NULL));

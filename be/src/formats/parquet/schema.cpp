@@ -15,9 +15,9 @@
 #include "formats/parquet/schema.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
-#include <memory>
 #include <sstream>
-#include <utility>
+#include <string>
+#include <string_view>
 
 #include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
@@ -429,8 +429,11 @@ std::string SchemaDescriptor::debug_string() const {
     return ss.str();
 }
 
-const int32_t SchemaDescriptor::get_field_idx_by_column_name(const std::string& column_name) const {
-    const auto& format_name = _case_sensitive ? column_name : boost::algorithm::to_lower_copy(column_name);
+const int32_t SchemaDescriptor::get_field_idx_by_column_name(std::string_view column_name) const {
+    std::string format_name{column_name};
+    if (!_case_sensitive) {
+        format_name = boost::algorithm::to_lower_copy(format_name);
+    }
     auto it = _formatted_column_name_2_field_idx.find(format_name);
     if (it == _formatted_column_name_2_field_idx.end()) return -1;
     return it->second;
@@ -450,7 +453,7 @@ const ParquetField* SchemaDescriptor::get_stored_column_by_field_id(int32_t fiel
     return &_fields[idx];
 }
 
-const ParquetField* SchemaDescriptor::get_stored_column_by_column_name(const std::string& column_name) const {
+const ParquetField* SchemaDescriptor::get_stored_column_by_column_name(std::string_view column_name) const {
     int idx = get_field_idx_by_column_name(column_name);
     if (idx == -1) return nullptr;
     return &(_fields[idx]);

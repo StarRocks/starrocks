@@ -35,6 +35,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -369,7 +370,10 @@ public class InsertOverwriteJobRunner {
 
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
-        // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
+        // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt.
+        // The re-plan creates a fresh ColumnRefFactory; lambda-argument -> ColumnRefOperator caches
+        // live on the factory (see ColumnRefFactory.computeLambdaArgRefIfAbsent), so stale ids from
+        // the first plan cannot leak into the second.
         try (var guard = context.bindScope()) {
             // For dynamic overwrite, set the txnId to insertStmt so that StatementPlanner.beginTransaction()
             // will skip creating a new transaction and reuse the one we created in prepare().
@@ -730,16 +734,19 @@ public class InsertOverwriteJobRunner {
                         for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
                             long physicalPartitionId = entry.getKey();
                             PartitionCommitInfo partitionCommitInfo = entry.getValue();
-                            Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
+                            Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
 
                             PhysicalPartition physicalPartition = targetTable.getPhysicalPartition(physicalPartitionId);
                             if (physicalPartition != null) {
                                 Partition partition = targetTable.getPartition(physicalPartition.getParentId());
-                                if (partition != null && !tabletRows.isEmpty() &&
+                                if (partition != null && !tabletStats.isEmpty() &&
                                         stats.getTargetPartitionIds().contains(partition.getId())) {
                                     long partitionId = partition.getId();
-                                    tabletRows.forEach((tabletId, rowCount) -> partitionTabletRowCounts.put(partitionId,
-                                            tabletId, rowCount));
+                                    tabletStats.forEach((tabletId, stat) -> {
+                                        if (stat != null && stat.numRows != null) {
+                                            partitionTabletRowCounts.put(partitionId, tabletId, stat.numRows);
+                                        }
+                                    });
                                 }
                             }
                         }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "同じグループ化基準の統計結果を区別するために使用されます。"
 ---
 
 # grouping_id

@@ -24,7 +24,7 @@ set(STARROCKS_LIBS
     ${WL_START_GROUP}
     Base
     Common
-    Column
+    ChunkCore
     ColumnCore
     Connector
     Exec
@@ -34,21 +34,21 @@ set(STARROCKS_LIBS
     FSCore
     Formats
     Gutil
+    HttpCore
     IO
+    Platform
     Serde
     Storage
-    Rowset
     Runtime
     RuntimeCore
-    TypesCore
     Types
     Util
     Script
     StarRocksGen
-    Webserver
-    TestUtil
+    HttpService
     Cache
     ${WL_END_GROUP}
+    FormatOrc
 )
 
 add_library(hdfs_so SHARED IMPORTED GLOBAL)

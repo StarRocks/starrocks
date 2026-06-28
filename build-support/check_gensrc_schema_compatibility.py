@@ -361,7 +361,7 @@ def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schem
                     )
                 )
                 continue
-            if before.cardinality != after.cardinality:
+            if before.cardinality != after.cardinality and not _is_allowed_cardinality_relaxation(before, after):
                 issues.append(
                     Violation(
                         path=repo_path,
@@ -823,6 +823,12 @@ def _parse_proto_field_line(path: str, container: str, syntax: str | None, raw_l
         line=line_number,
         syntax=syntax,
     )
+
+
+def _is_allowed_cardinality_relaxation(before: FieldDecl, after: FieldDecl) -> bool:
+    # Relaxing an existing field from required to optional is wire-compatible and
+    # brings the schema in line with the repo-wide "no required" rule.
+    return before.cardinality == "required" and after.cardinality == "optional"
 
 
 def _new_field_rule(field: FieldDecl, container: ContainerDecl) -> str | None:

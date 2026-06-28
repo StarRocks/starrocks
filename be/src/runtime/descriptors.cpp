@@ -19,19 +19,24 @@
 #include <ios>
 #include <sstream>
 
+#include "base/format.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "runtime/arena_allocator.h"
+#include "runtime/descriptors_ext.h"
+#include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 const int RowDescriptor::INVALID_IDX = -1;
-SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type, std::pmr::memory_resource* mr)
         : _id(id),
           _type(std::move(type)),
           _parent(0),
-          _col_name(std::move(name)),
+          _col_name(name, mr),
           _col_unique_id(-1),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
@@ -40,13 +45,13 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _is_nullable(true),
           _is_virtual(false) {}
 
-SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
+SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),
           _parent(tdesc.parent),
-          _col_name(tdesc.colName),
+          _col_name(tdesc.colName, mr),
           _col_unique_id(tdesc.col_unique_id),
-          _col_physical_name(tdesc.col_physical_name),
+          _col_physical_name(tdesc.col_physical_name, mr),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
@@ -56,11 +61,11 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
                                : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)),
           _is_virtual(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
 
-SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
+SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr)
         : _id(pdesc.id()),
           _type(TypeDescriptor::from_protobuf(pdesc.slot_type())),
           _parent(pdesc.parent()),
-          _col_name(pdesc.col_name()),
+          _col_name(pdesc.col_name(), mr),
           _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
@@ -79,7 +84,7 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_byte_offset(0);
     pslot->set_null_indicator_byte(0);
     pslot->set_null_indicator_bit(_is_nullable ? 0 : -1);
-    pslot->set_col_name(_col_name);
+    pslot->set_col_name(_col_name.data(), _col_name.size());
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
     pslot->set_is_nullable(_is_nullable);
@@ -93,12 +98,28 @@ std::string SlotDescriptor::debug_string() const {
     return out.str();
 }
 
-TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)
-        : _name(tdesc.tableName), _database(tdesc.dbName), _id(tdesc.id) {}
+TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : _name(tdesc.tableName, mr), _database(tdesc.dbName, mr), _id(tdesc.id) {}
 
 std::string TableDescriptor::debug_string() const {
     std::stringstream out;
     out << "#name=" << _name;
+    return out.str();
+}
+
+MySQLTableDescriptor::MySQLTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr),
+          _mysql_db(tdesc.mysqlTable.db, mr),
+          _mysql_table(tdesc.mysqlTable.table, mr),
+          _host(tdesc.mysqlTable.host, mr),
+          _port(tdesc.mysqlTable.port, mr),
+          _user(tdesc.mysqlTable.user, mr),
+          _passwd(tdesc.mysqlTable.passwd, mr) {}
+
+std::string MySQLTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "MySQLTable(" << TableDescriptor::debug_string() << " _db" << _mysql_db << " table=" << _mysql_table
+        << " host=" << _host << " port=" << _port << " user=" << _user << " passwd=" << _passwd;
     return out.str();
 }
 
@@ -276,17 +297,6 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     }
 }
 
-SlotDescriptor* DescriptorTbl::get_slot_descriptor_with_column(SlotId id) const {
-    // TODO: is there some boost function to do exactly this?
-    auto i = _slot_with_column_name_map.find(id);
-
-    if (i == _slot_with_column_name_map.end()) {
-        return nullptr;
-    } else {
-        return i->second;
-    }
-}
-
 // return all registered tuple descriptors
 void DescriptorTbl::get_tuple_descs(std::vector<TupleDescriptor*>* descs) const {
     descs->clear();
@@ -351,4 +361,136 @@ RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDesc
     return desc;
 }
 
+Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
+                             DescriptorTbl** tbl, int32_t chunk_size) {
+    // Only use fragment MemPool when pool is the fragment-level ObjectPool.
+    // When pool is query-level (e.g. _query_ctx->object_pool()), descriptors may
+    // outlive the fragment, so they must be heap-allocated to avoid use-after-free.
+    MemPool* mp = (state != nullptr && pool == state->obj_pool()) ? state->fragment_mem_pool() : nullptr;
+
+    // Build a pmr memory_resource backed by the MemPool (when available).
+    // The MemPoolResource is itself arena-allocated so it outlives the pmr
+    // containers that reference it (MemPool deallocation is a no-op).
+    std::pmr::memory_resource* mr = std::pmr::get_default_resource();
+    if (mp != nullptr) {
+        mr = new (mp->allocate_aligned(sizeof(MemPoolResource), alignof(MemPoolResource))) MemPoolResource(mp);
+    }
+
+// Placement-new T into fragment MemPool; fall back to heap when unavailable.
+#define ALLOC_DESC(T, ...)                                                                      \
+    (mp != nullptr ? pool->emplace<T>(mp->allocate_aligned(sizeof(T), alignof(T)), __VA_ARGS__) \
+                   : pool->add(new T(__VA_ARGS__)))
+
+    if (mp != nullptr) {
+        *tbl = pool->emplace<DescriptorTbl>(mp->allocate_aligned(sizeof(DescriptorTbl), alignof(DescriptorTbl)), mr);
+    } else {
+        *tbl = pool->add(new DescriptorTbl());
+    }
+
+    // deserialize table descriptors first, they are being referenced by tuple descriptors
+    for (const auto& tdesc : thrift_tbl.tableDescriptors) {
+        TableDescriptor* desc = nullptr;
+
+        switch (tdesc.tableType) {
+        case TTableType::MYSQL_TABLE:
+            desc = ALLOC_DESC(MySQLTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::OLAP_TABLE:
+        case TTableType::MATERIALIZED_VIEW:
+            desc = ALLOC_DESC(OlapTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::SCHEMA_TABLE:
+            desc = ALLOC_DESC(SchemaTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::BROKER_TABLE:
+            desc = ALLOC_DESC(BrokerTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::ES_TABLE:
+            desc = ALLOC_DESC(EsTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::HDFS_TABLE:
+            desc = ALLOC_DESC(HdfsTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::FILE_TABLE:
+            desc = ALLOC_DESC(FileTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::ICEBERG_TABLE: {
+            auto* iceberg_desc = ALLOC_DESC(IcebergTableDescriptor, tdesc, pool, mr);
+            RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
+            desc = iceberg_desc;
+            break;
+        }
+        case TTableType::DELTALAKE_TABLE:
+            desc = ALLOC_DESC(DeltaLakeTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::HUDI_TABLE:
+            desc = ALLOC_DESC(HudiTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::PAIMON_TABLE:
+            desc = ALLOC_DESC(PaimonTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::JDBC_TABLE:
+            desc = ALLOC_DESC(JDBCTableDescriptor, tdesc, mr);
+            break;
+        case TTableType::ODPS_TABLE:
+            desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
+        case TTableType::ICEBERG_REFS_TABLE:
+        case TTableType::ICEBERG_HISTORY_TABLE:
+        case TTableType::ICEBERG_METADATA_LOG_ENTRIES_TABLE:
+        case TTableType::ICEBERG_SNAPSHOTS_TABLE:
+        case TTableType::ICEBERG_MANIFESTS_TABLE:
+        case TTableType::ICEBERG_FILES_TABLE:
+        case TTableType::ICEBERG_PARTITIONS_TABLE:
+        case TTableType::ICEBERG_PROPERTIES_TABLE:
+            desc = ALLOC_DESC(IcebergMetadataTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::KUDU_TABLE:
+            desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool, mr);
+            break;
+        default:
+            DCHECK(false) << "invalid table type: " << tdesc.tableType;
+        }
+
+        (*tbl)->_tbl_desc_map[tdesc.id] = desc;
+    }
+
+    for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
+        TupleDescriptor* desc = ALLOC_DESC(TupleDescriptor, tdesc);
+
+        // fix up table pointer
+        if (tdesc.__isset.tableId) {
+            desc->_table_desc = (*tbl)->get_table_descriptor(tdesc.tableId);
+            DCHECK(desc->_table_desc != nullptr);
+        }
+
+        (*tbl)->_tuple_desc_map[tdesc.id] = desc;
+    }
+
+    for (const auto& tdesc : thrift_tbl.slotDescriptors) {
+        SlotDescriptor* slot_d = ALLOC_DESC(SlotDescriptor, tdesc, mr);
+        (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
+        // link to parent
+        auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
+
+        if (entry == (*tbl)->_tuple_desc_map.end()) {
+            return Status::InternalError("unknown tid in slot descriptor msg");
+        }
+
+        entry->second->add_slot(slot_d);
+    }
+
+#undef ALLOC_DESC
+
+    return Status::OK();
+}
+
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::RowPositionDescriptor::Type>::format(const starrocks::RowPositionDescriptor::Type value,
+                                                                    format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>>::format(
+            starrocks::enum_to_underlying_type(value), ctx);
+}

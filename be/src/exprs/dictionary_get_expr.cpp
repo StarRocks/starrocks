@@ -17,10 +17,12 @@
 #include <fmt/format.h>
 
 #include "base/simd/simd.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "storage/chunk_helper.h"
-#include "storage/storage_engine.h"
+#include "compute_env/compute_env.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -83,16 +85,20 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
 Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
     _runtime_state = state;
+    if (state == nullptr || state->exec_env() == nullptr || state->exec_env()->compute_env() == nullptr ||
+        state->exec_env()->compute_env()->dictionary_cache_manager() == nullptr) {
+        return Status::InternalError("open dictionary expression failed, missing compute dictionary cache manager");
+    }
+    auto* dictionary_cache_manager = state->exec_env()->compute_env()->dictionary_cache_manager();
 
-    _schema = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_schema_by_id(
-            _dictionary_get_expr.dict_id);
+    _schema = dictionary_cache_manager->get_dictionary_schema_by_id(_dictionary_get_expr.dict_id);
     if (_schema == nullptr) {
         return Status::InternalError(
                 fmt::format("open dictionary expression failed, there is no cache for dictionary: {}",
                             _dictionary_get_expr.dict_id));
     }
-    auto res = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_by_version(
-            _dictionary_get_expr.dict_id, _dictionary_get_expr.txn_id);
+    auto res = dictionary_cache_manager->get_dictionary_by_version(_dictionary_get_expr.dict_id,
+                                                                   _dictionary_get_expr.txn_id);
     if (!res.ok()) {
         return Status::InternalError(fmt::format("open dictionary expression failed {}", res.status().message()));
     }
@@ -102,11 +108,11 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     // init key / value chunk and struct column template for evaluation
     std::vector<ColumnId> key_cids(_dictionary_get_expr.key_size);
     std::iota(key_cids.begin(), key_cids.end(), 0);
-    _key_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), key_cids), 0);
+    _key_chunk = ChunkFactory::new_chunk(Schema(_schema.get(), key_cids), 0);
 
     std::vector<ColumnId> value_cids(_schema->fields().size() - _dictionary_get_expr.key_size);
     std::iota(value_cids.begin(), value_cids.end(), _dictionary_get_expr.key_size);
-    _value_chunk = ChunkHelper::new_chunk(Schema(_schema.get(), value_cids), 0);
+    _value_chunk = ChunkFactory::new_chunk(Schema(_schema.get(), value_cids), 0);
 
     DCHECK(_key_chunk != nullptr);
     DCHECK(_value_chunk != nullptr);

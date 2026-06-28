@@ -35,13 +35,17 @@ THRIFT_CPP_ARGS = -I ${CURDIR} -I ${BUILD_DIR}/thrift/ --allow-64bit-consts --ge
 ${BUILD_DIR}/gen_cpp:
 	mkdir -p $@
 
-# Only regenerate when the thrift content changes, not when timestamps differ.
-# We record a content hash in a stamp file and compare it on subsequent runs.
+# Only regenerate when the effective thrift codegen inputs change, not when
+# timestamps differ. We record a stamp hash derived from the thrift content,
+# thrift compiler version and generator arguments.
 # Use sha256sum if available, otherwise fall back to shasum (macOS).
 # If generated outputs were removed, force regeneration even with a matching hash.
 define THRIFT_STAMP_RECIPE
 @set -e; \
-checksum="$$( (command -v sha256sum >/dev/null 2>&1 && sha256sum "$<" || shasum -a 256 "$<") | awk '{print $$1}')"; \
+source_checksum="$$( (command -v sha256sum >/dev/null 2>&1 && sha256sum "$<" || shasum -a 256 "$<") | awk '{print $$1}')"; \
+thrift_version="$$( ${THRIFT} -version 2>/dev/null || echo unknown )"; \
+checksum="$$(printf '%s\n%s\n%s\n' "$$source_checksum" "$$thrift_version" '${THRIFT_CPP_ARGS}' | \
+	(command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256) | awk '{print $$1}')"; \
 if [ -f "$@" ] && [ "$$(cat "$@")" = "$$checksum" ]; then \
 	missing=0; \
 	check_file() { [ -f "$$1" ] || missing=1; }; \

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "STREAM LOAD allows you to load data from a local file system or a streaming data source."
 ---
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
@@ -74,6 +75,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array: true | false"
 -H "json_root: <json_path>"
+-H "envelope: debezium"
 -H "ignore_json_size: true | false"
 -H "compression: <compression_algorithm> | Content-Encoding: <compression_algorithm>"
 ```
@@ -92,14 +94,40 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 #### CSV parameters
 
-| Parameter        | Required | Description                                                  |
-| ---------------- | -------- | ------------------------------------------------------------ |
-| column_separator | No       | The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>- For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter.<br />- If the data file uses consecutive non-printable characters (for example, `\r\n`) as the column separator, you must set this parameter as `\\x0D0A`. |
-| row_delimiter    | No       | The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`.<br />**NOTE**<br />If the data file uses consecutive non-printable characters (for example, `\r\n`) as the row delimiter, you must set this parameter as `\\x0D0A`. |
-| skip_header      | No       | Specifies whether to skip the first few rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br />In some CSV-formatted data files, the first few rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable the system to skip the first few rows of the data file during data loading. For example, if you set this parameter to `1`, the system skips the first row of the data file during data loading.<br />The first few rows at the beginning in the data file must be separated by using the row separator that you specify in the load command. |
-| trim_space       | No       | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable the system to remove such unnecessary spaces during data loading.<br />Note that the system does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br />If you set `trim_space` to `true`, the system processes the preceding field values as follows:<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
-| enclose          | No       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. The system can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
-| escape           | No       | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
+##### `column_separator`
+Required: No
+
+Description: The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>- For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter.<br />- If the data file uses consecutive non-printable characters (for example, `\r\n`) as the column separator, you must set this parameter as `\\x0D0A`.
+
+##### `row_delimiter`
+
+Required: No
+
+Description: The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`.<br />**NOTE**<br />If the data file uses consecutive non-printable characters (for example, `\r\n`) as the row delimiter, you must set this parameter as `\\x0D0A`.
+
+##### `skip_header`
+
+Required: No
+
+Description: Specifies whether to skip the first few rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br />In some CSV-formatted data files, the first few rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable the system to skip the first few rows of the data file during data loading. For example, if you set this parameter to `1`, the system skips the first row of the data file during data loading.<br />The first few rows at the beginning in the data file must be separated by using the row separator that you specify in the load command.
+
+
+##### `trim_space`
+
+Required: No
+Description: Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable the system to remove such unnecessary spaces during data loading.<br />Note that the system does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (`|`) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br />`|"Love StarRocks"|` <br />`|" Love StarRocks "|` <br />`| "Love StarRocks" |` <br />If you set `trim_space` to `true`, the system processes the preceding field values as follows:<br />`|"Love StarRocks"|` <br />`|" Love StarRocks "|` <br />`|"Love StarRocks"|`
+
+##### `enclose`
+
+Required: No
+
+Description: Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br />All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. The system can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br />If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
+
+##### `escape`
+
+Required: No
+
+Description: Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br />**NOTE**<br />The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br />Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, the system parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, the system parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul>
 
 :::note
 - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
@@ -114,6 +142,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | jsonpaths         | No       | The names of the keys that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is in JSON format. See [Configure column mapping for JSON data loading](#configure-column-mapping-for-json-data-loading).           |
 | strip_outer_array | No       | Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.<br/>In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so the system removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, the system parses the entire JSON data file into one array and loads the array as a single data record.<br/>For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate table rows. |
 | json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic. |
+| envelope          | No       | Specifies the CDC envelope format of the JSON data. Valid value: `debezium`. Default: not set (no envelope wrapping). When set to `debezium`, StarRocks parses each JSON message as a Debezium CDC event. The message must contain an `op` field (`c`=create, `u`=update, `d`=delete, `r`=snapshot read) and an `after` field (for c/u/r) or `before` field (for d) holding the actual row data. Tombstone messages where `payload` is `null` are silently skipped. Cannot be used together with `json_root` or `strip_outer_array`. |
 | ignore_json_size  | No       | Specifies whether to check the size of the JSON body in the HTTP request.<br/>**NOTE**<br/>By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct the system not to check the JSON body size. |
 | compression, Content-Encoding | NO | The encoding algorithm that is applied to the data during transmission. Supported algorithms include GZIP, BZIP2, LZ4_FRAME, and ZSTD. Example: `curl --location-trusted -u root:  -v '<table_url>' \-X PUT  -H "expect:100-continue" \-H 'format: json' -H 'compression: lz4_frame'   -T ./b.json.lz4`. |
 

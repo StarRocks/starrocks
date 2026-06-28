@@ -62,6 +62,7 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
@@ -85,6 +86,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -121,6 +123,20 @@ public final class MetricRepo {
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
+    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME = "plan_advisor_guide_generated_total";
+    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC =
+            "total generated plan advisor guides";
+    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME = "plan_advisor_guide_applied_total";
+    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC =
+            "total applied plan advisor guides";
+    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME =
+            "plan_advisor_optimization_duration_ms_total";
+    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC =
+            "total execution time saved by plan advisor in milliseconds";
+
+    private static final String SPM_BASELINE_COUNT_METRIC_NAME = "spm_baseline_count";
+    private static final String SPM_REWRITE_TOTAL_METRIC_NAME = "spm_rewrite_total";
+    private static final String SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME = "spm_capture_candidate_total";
 
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
@@ -129,6 +145,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
+    public static LongCounterMetric COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -138,6 +155,39 @@ public final class MetricRepo {
 
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_REWRITE_TOTAL =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric(SPM_REWRITE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            "total SPM rewrite attempts by result"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_QUERY_REWRITE =
+            new MetricWithLabelGroup<>("state",
+                    () -> new LongCounterMetric("mv_global_query_rewrite_queries_total", MetricUnit.REQUESTS,
+                            "queries by materialized view rewrite outcome (HIT/NO_HIT/DISABLED)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_jobs_total", MetricUnit.REQUESTS,
+                            "total materialized view refresh jobs across all materialized views by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_SUCCESS_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_success_jobs_total", MetricUnit.REQUESTS,
+                            "total successful materialized view refresh jobs by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_MV_GLOBAL_REFRESH_FAILED_JOBS =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("mv_global_refresh_failed_jobs_total", MetricUnit.REQUESTS,
+                            "total failed materialized view refresh jobs by warehouse"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            "total SPM auto-capture candidate processing results"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL =
+            new MetricWithLabelGroup<>("operator_type",
+                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL =
+            new MetricWithLabelGroup<>("operator_type",
+                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC));
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
             new MetricWithLabelGroup<>("time_travel_type",
@@ -294,6 +344,37 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
 
+    // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
+    // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
+    // sampler/tier/boundaries counters are wired by the production PreSplitPipeline
+    // implementation that ships with the load-integration commits.
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED;
+    public static LongCounterMetric COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL;
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_PRE_CREATE =
+            new MetricWithLabelGroup<>("result",
+                    () -> new LongCounterMetric("tablet_pre_split_pre_create",
+                            MetricUnit.REQUESTS,
+                            "total multi-partition pre-create attempts by result "
+                                    + "(succeeded|failed|already_exists)"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_sampler_failed",
+                            MetricUnit.REQUESTS, "total sampler failures by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_TIER_USED =
+            new MetricWithLabelGroup<>("tier",
+                    () -> new LongCounterMetric("tablet_pre_split_tier_used",
+                            MetricUnit.REQUESTS, "total Sample-Based Tablet Pre-Split invocations by tier"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED =
+            new MetricWithLabelGroup<>("reason",
+                    () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
+                            MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+
     public static Histogram HISTO_QUERY_LATENCY;
 
     // Per-catalog-type query latency histograms
@@ -354,6 +435,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P95;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
+    public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -497,6 +579,17 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
 
+        GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
+                SPM_BASELINE_COUNT_METRIC_NAME,
+                MetricUnit.NOUNIT,
+                "current number of global SPM baselines") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getSqlPlanStorage().getBaselineCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SPM_BASELINE_COUNT);
+
         // meta log total count
         GaugeMetric<Long> metaLogCount = new GaugeMetric<Long>(
                 "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
@@ -507,6 +600,53 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
+
+        GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
+                "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
+                "epoch millis of the last finished automated cluster snapshot, 0 if none") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getLastSuccessTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotLastSuccessTime);
+
+        GaugeMetric<Long> snapshotConsecutiveFailures = new GaugeMetric<Long>(
+                "cluster_snapshot_consecutive_failures", MetricUnit.NOUNIT,
+                "consecutive failed automated cluster snapshot jobs since the last success") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getConsecutiveFailureCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(snapshotConsecutiveFailures);
+
+        GaugeMetric<Long> recycleBinPartitionNum = new GaugeMetric<Long>(
+                "recycle_bin_partition_num", MetricUnit.NOUNIT, "number of partitions in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecyclePartitionNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinPartitionNum);
+
+        GaugeMetric<Long> recycleBinTableNum = new GaugeMetric<Long>(
+                "recycle_bin_table_num", MetricUnit.NOUNIT, "number of tables in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinTableNum);
+
+        GaugeMetric<Long> recycleBinDatabaseNum = new GaugeMetric<Long>(
+                "recycle_bin_database_num", MetricUnit.NOUNIT, "number of databases in the catalog recycle bin") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleDatabaseNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(recycleBinDatabaseNum);
 
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
@@ -708,6 +848,11 @@ public final class MetricRepo {
         COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
                 MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
+        COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL = new LongCounterMetric(
+                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME,
+                MetricUnit.MILLISECONDS,
+                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
@@ -863,6 +1008,33 @@ public final class MetricRepo {
         COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
 
+        COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
+                "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
+                "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP);
+
+        COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT = new LongCounterMetric(
+                "tablet_pre_split_load_abort", MetricUnit.REQUESTS,
+                "total load transactions aborted because of Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_LOAD_ABORT);
+
+        COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS = new LongCounterMetric(
+                "tablet_pre_split_sampler_invocations", MetricUnit.REQUESTS,
+                "total sampler invocations driven by Sample-Based Tablet Pre-Split");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_SAMPLER_INVOCATIONS);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED = new LongCounterMetric(
+                "tablet_pre_split_partitions_capped", MetricUnit.REQUESTS,
+                "total predicted partitions dropped by the Sample-Based Tablet Pre-Split per-load cap "
+                        + "(tablet_pre_split_max_partitions_per_load)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_CAPPED);
+
+        COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = new LongCounterMetric(
+                "tablet_pre_split_partitions_total", MetricUnit.REQUESTS,
+                "total target partitions counted by the Sample-Based Tablet Pre-Split "
+                        + "multi-partition coordinator (one increment per PartitionSamples entry)");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL);
+
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
@@ -878,6 +1050,12 @@ public final class MetricRepo {
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_reshard_job", "duration", "ms"));
+        HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "pre_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
+        HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
 
         // init system metrics
         initSystemMetrics();
@@ -1056,6 +1234,36 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends
+
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
+        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+
+        for (Long cnId : infoService.getComputeNodeIds(false)) {
+            ComputeNode cn = infoService.getComputeNode(cnId);
+            if (cn == null) {
+                continue;
+            }
+
+            // tablet number of each compute node
+            Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
+                    MetricUnit.NOUNIT, "tablet number") {
+                @Override
+                public Long getValueLeader() {
+                    ComputeNode cn = infoService.getComputeNode(cnId);
+                    if (cn == null) {
+                        return 0L;
+                    }
+                    String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
+                    return starOsAgent.getWorkerTabletNum(workerAddr);
+                }
+            };
+            tabletNum.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(cn.getHost(), cn.getHeartbeatPort())));
+            STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
+
+        } // end for compute nodes
     }
 
     public static void updateMemoryUsageMetrics() {
@@ -1235,6 +1443,13 @@ public final class MetricRepo {
         if (requestParams.isCollectMVMetrics()) {
             MaterializedViewMetricsRegistry.collectMaterializedViewMetrics(visitor, requestParams.isMinifyMVMetrics());
         }
+
+        // global MV count: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalMvCount(visitor);
+        // global MV refresh gauges: low-cardinality, always emitted (not gated by the per-MV metrics auth above)
+        MaterializedViewMetricsRegistry.collectGlobalGauges(visitor);
+        // global MV refresh duration histogram: low-cardinality, always emitted (not gated like per-MV histograms)
+        MaterializedViewMetricsRegistry.collectGlobalDurationHistograms(visitor);
 
         // histogram
         SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
@@ -1472,6 +1687,18 @@ public final class MetricRepo {
             };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(txnNum);
+
+            LeaderAwareGaugeMetric<Long> maxCommittedPendingPublish = new LeaderAwareGaugeMetricLong(
+                    "txn_max_committed_pending_publish_ms", MetricUnit.MILLISECONDS,
+                    "max time in milliseconds that a transaction has been sitting in committed status "
+                            + "pending publish to visible") {
+                @Override
+                public Long getValueLeader() {
+                    return mgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis());
+                }
+            };
+            maxCommittedPendingPublish.addLabel(new MetricLabel("db", db.getFullName()));
+            visitor.visit(maxCommittedPendingPublish);
         }
     }
 

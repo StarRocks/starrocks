@@ -15,9 +15,9 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
-#include "exec/tablet_info.h"
+#include "exec/pipeline/operator_factory.h"
 #include "runtime/lookup_stream_mgr.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks::pipeline {
 
