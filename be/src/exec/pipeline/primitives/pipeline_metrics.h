@@ -146,10 +146,8 @@ public:
 
     void register_all_metrics(MetricRegistry* registry);
     void register_pipe_prepare_pool_queue_len_hook(std::function<int64_t()> value_fn);
-    void register_pipe_drivers_hook(std::function<int64_t()> value_fn);
 
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_drivers, MetricUnit::NOUNIT);
 
 private:
     struct PendingIntGaugeHook {
