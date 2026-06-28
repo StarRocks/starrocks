@@ -1236,6 +1236,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 
+    @ConfField(mutable = true, comment = "In shared-data mode, balance per-tablet load-primary compute " +
+            "nodes across alive nodes when the natural (StarOS shard owner) assignment is skewed, e.g. a " +
+            "freshly presplit/reshard RANGE table whose new shards all live on one worker. Prevents the " +
+            "whole load write phase (delta-writer/flush/spill-merge) from concentrating on one node.")
+    public static boolean lake_balance_load_primary_compute_nodes = true;
+
     @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
             "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
     public static int lake_create_tablet_max_retries = 1;

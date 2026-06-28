@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -1034,6 +1035,62 @@ public class OlapTableSink extends DataSink {
         return -1L;
     }
 
+    /**
+     * Balance the per-tablet load-primary compute nodes across the alive compute nodes.
+     *
+     * <p>In shared-data mode the write node need not be the tablet's StarOS shard owner — segment data
+     * is persisted to object storage, so any alive compute node can serve as the load primary. The
+     * natural assignment ({@code naturalNodes}, one shard owner per tablet) can be heavily skewed for
+     * freshly created shards (e.g. a presplit/reshard RANGE table whose new shards all live on one
+     * worker), which would funnel every tablet's delta-writer, memtable flush and spill merge onto a
+     * single node during a load. When the natural assignment is more skewed than an even spread, this
+     * reassigns the primaries round-robin over the alive nodes so the write phase is parallelized.
+     * Already-balanced assignments (e.g. HASH bucketing) are returned unchanged.
+     *
+     * <p>Disabled (returns {@code naturalNodes}) when
+     * {@code Config.lake_balance_load_primary_compute_nodes} is false.
+     */
+    @VisibleForTesting
+    static List<Long> balanceCloudNativeLoadPrimaries(List<Long> naturalNodes, List<ComputeNode> aliveNodes) {
+        if (!Config.lake_balance_load_primary_compute_nodes) {
+            return naturalNodes;
+        }
+        int n = naturalNodes.size();
+        if (aliveNodes == null || aliveNodes.size() <= 1 || n == 0) {
+            return naturalNodes;
+        }
+        // Deterministic node order so the assignment is stable across FE restarts / replays.
+        List<Long> nodeIds = new ArrayList<>();
+        for (ComputeNode node : aliveNodes) {
+            nodeIds.add(node.getId());
+        }
+        Collections.sort(nodeIds);
+        int k = nodeIds.size();
+
+        // Skew check: keep the natural assignment unless some node owns more tablets than an even
+        // spread (ceil(n/k)) would give it.
+        Map<Long, Integer> perNode = new HashMap<>();
+        for (Long id : naturalNodes) {
+            perNode.merge(id, 1, Integer::sum);
+        }
+        int idealMax = (n + k - 1) / k;
+        int observedMax = 0;
+        for (int c : perNode.values()) {
+            observedMax = Math.max(observedMax, c);
+        }
+        if (observedMax <= idealMax) {
+            return naturalNodes;
+        }
+
+        List<Long> balanced = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            balanced.add(nodeIds.get(i % k));
+        }
+        LOG.info("rebalanced {} cloud-native load primaries from skewed natural assignment "
+                + "(max {} per node) to round-robin over {} alive nodes", n, observedMax, k);
+        return balanced;
+    }
+
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
                                                          TransactionState txnState) throws StarRocksException {
@@ -1079,6 +1136,11 @@ public class OlapTableSink extends DataSink {
                 }
             }
         }
+        // For cloud-native (shared-data) tables we collect each tablet's natural load-primary
+        // compute node first, then balance them across the alive nodes below (see
+        // balanceCloudNativeLoadPrimaries) before populating locationParam.
+        List<Long> cloudNativeTabletIds = new ArrayList<>();
+        List<Long> cloudNativePrimaryNodes = new ArrayList<>();
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
@@ -1101,7 +1163,8 @@ public class OlapTableSink extends DataSink {
                             computeNodeId = warehouseManager
                                     .getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         }
-                        locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
+                        cloudNativeTabletIds.add(tablet.getId());
+                        cloudNativePrimaryNodes.add(computeNodeId);
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
@@ -1140,6 +1203,20 @@ public class OlapTableSink extends DataSink {
                         }
                     }
                 }
+            }
+        }
+
+        // Shared-data: each tablet's natural load primary is its StarOS shard owner. Freshly created
+        // shards (e.g. presplit/reshard of a RANGE-distributed table) can all land on one worker, which
+        // then runs every tablet's delta-writer / memtable-flush / spill-merge during a load while the
+        // other compute nodes sit idle. Balance the load primaries across the alive nodes when the
+        // natural assignment is skewed; balanced assignments (the common HASH case) are left untouched.
+        if (!cloudNativeTabletIds.isEmpty()) {
+            List<Long> balancedNodes = balanceCloudNativeLoadPrimaries(
+                    cloudNativePrimaryNodes, warehouseManager.getAliveComputeNodes(computeResource));
+            for (int i = 0; i < cloudNativeTabletIds.size(); i++) {
+                locationParam.addToTablets(new TTabletLocation(
+                        cloudNativeTabletIds.get(i), Lists.newArrayList(balancedNodes.get(i))));
             }
         }
 
