@@ -1118,10 +1118,10 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 }
                 // i now points to ';', loop will increment it
             } else {
-                // Primitive array: [Z [B [S [I [J [F [D
+                // Primitive array (e.g. [Z [B [S [I [J [F [D) or multi-dimensional primitive array (e.g. [[J [[I)
                 // Multi-dimensional primitive arrays (num_dims > 1) are unsupported; leave elem_type as TYPE_UNKNOWN.
                 elem_is_box = false;
-                switch (num_dims == 1 ? sign[i] : '\0') {
+                switch (sign[i]) {
                 case 'Z':
                     elem_type = TYPE_BOOLEAN;
                     break;
@@ -1145,6 +1145,9 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                     break;
                 default:
                     break;
+                }
+                if (num_dims > 1) {
+                    elem_type = TYPE_UNKNOWN;
                 }
             }
 

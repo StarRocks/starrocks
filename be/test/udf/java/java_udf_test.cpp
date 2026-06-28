@@ -465,6 +465,7 @@ TEST(GetUdafMethodDescTest, PrimitiveBooleanArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_BOOLEAN); // param boolean[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveByteArray) {
@@ -475,6 +476,7 @@ TEST(GetUdafMethodDescTest, PrimitiveByteArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_TINYINT); // param byte[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveShortArray) {
@@ -485,6 +487,7 @@ TEST(GetUdafMethodDescTest, PrimitiveShortArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN);  // return V
     EXPECT_EQ(desc[1].type, TYPE_SMALLINT); // param short[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
@@ -497,6 +500,7 @@ TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
     EXPECT_EQ(desc[1].type, TYPE_INT);     // param int
     EXPECT_EQ(desc[2].type, TYPE_INT);     // param int[]
     EXPECT_EQ(desc[2].is_array, true);
+    EXPECT_EQ(desc[2].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveLongArray) {
@@ -507,6 +511,7 @@ TEST(GetUdafMethodDescTest, PrimitiveLongArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_BIGINT);  // param long[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveFloatArray) {
@@ -517,6 +522,7 @@ TEST(GetUdafMethodDescTest, PrimitiveFloatArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_FLOAT);   // param float[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 TEST(GetUdafMethodDescTest, PrimitiveDoubleArray) {
@@ -527,6 +533,7 @@ TEST(GetUdafMethodDescTest, PrimitiveDoubleArray) {
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
     EXPECT_EQ(desc[1].type, TYPE_DOUBLE);  // param double[]
     EXPECT_EQ(desc[1].is_array, true);
+    EXPECT_EQ(desc[1].is_box, false);
 }
 
 // Test: Multi-dimensional primitive array — [[J (long[][])
