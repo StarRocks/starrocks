@@ -70,7 +70,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
@@ -208,19 +207,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         return (pool == nullptr) ? 0U : pool->get_queue_size();
     });
 
-    const int64_t max_executor_threads = global_env->max_executor_threads();
-    ComputeEnvOptions compute_env_options;
-    compute_env_options.max_num_pipeline_drivers =
-            max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
-    compute_env_options.metrics = process_metrics;
-    RETURN_IF_ERROR(_compute_env->init(compute_env_options));
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(store_paths.size());
+    for (const auto& store_path : store_paths) {
+        compute_store_paths.emplace_back(store_path.path);
+    }
 
-    ComputeEnvWorkGroupOptions workgroup_options;
-    workgroup_options.max_executor_threads = max_executor_threads;
-    workgroup_options.metrics = process_metrics;
-    workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
-    workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-    RETURN_IF_ERROR(_compute_env->init_workgroup(workgroup_options));
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.global_env = global_env;
+    compute_env_options.metrics = process_metrics;
+    compute_env_options.store_paths = std::move(compute_store_paths);
+    compute_env_options.as_cn = as_cn;
+    compute_env_options.query_cache_capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    RETURN_IF_ERROR(_compute_env->init(compute_env_options));
 
     _stream_load_executor = new StreamLoadExecutor(this);
     _transaction_mgr = new TransactionMgr(this);
@@ -242,19 +243,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-    RETURN_IF_ERROR(_compute_env->start_result_mgr());
-
-    // it means acting as compute node while store_path is empty. some threads are not needed for that case.
-    std::vector<std::string> load_store_paths;
-    load_store_paths.reserve(store_paths.size());
-    for (const auto& store_path : store_paths) {
-        load_store_paths.emplace_back(store_path.path);
-    }
-    Status status = _compute_env->init_load_path(std::move(load_store_paths), store_paths.empty() && as_cn);
-    if (!status.ok()) {
-        LOG(ERROR) << "load path mgr init failed." << status.message();
-        exit(-1);
-    }
 
     StorageEnvOptions storage_env_options;
     storage_env_options.store_path_registry = platform_env->store_path_registry();
@@ -270,16 +258,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(storage_env_options), "init StorageEnv failed");
 
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
-
-    auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
-    RETURN_IF_ERROR(_compute_env->init_query_cache(capacity));
-
-    RETURN_IF_ERROR(_compute_env->init_spill(StorageEngine::instance()->get_store_paths(), process_metrics));
     StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
-    status = jit_engine->init();
+    Status status = jit_engine->init();
     if (!status.ok()) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
@@ -330,12 +313,6 @@ void ExecEnv::stop() {
     std::vector<std::pair<std::string, int64_t>> component_times;
     auto* global_env = _global_env;
     DCHECK(global_env != nullptr);
-
-    if (_compute_env != nullptr && _compute_env->load_stream_mgr() != nullptr) {
-        start = MonotonicMillis();
-        _compute_env->stop_stream_load_pipes();
-        component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
-    }
 
     if (_compute_env != nullptr) {
         start = MonotonicMillis();
@@ -424,12 +401,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("load_rpc_pool", MonotonicMillis() - start);
     }
 
-    if (workgroup_manager() != nullptr) {
-        start = MonotonicMillis();
-        _compute_env->stop_workgroup();
-        component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
-    }
-
     if (global_env->thread_pool()) {
         start = MonotonicMillis();
         global_env->thread_pool()->shutdown();
@@ -440,12 +411,6 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _query_context_mgr->clear();
         component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
-    }
-
-    if (_compute_env != nullptr && _compute_env->result_mgr() != nullptr) {
-        start = MonotonicMillis();
-        _compute_env->stop_result_mgr();
-        component_times.emplace_back("result_mgr", MonotonicMillis() - start);
     }
 
     if (_batch_write_mgr) {
@@ -485,14 +450,8 @@ void ExecEnv::destroy() {
         _compute_env->destroy_profile_report_worker();
     }
     SAFE_DELETE(_transaction_mgr);
-    if (_compute_env != nullptr) {
-        _compute_env->destroy_stream_context_mgr();
-    }
     SAFE_DELETE(_stream_load_executor);
     SAFE_DELETE(_connector_sink_spill_executor);
-    if (_compute_env != nullptr) {
-        _compute_env->destroy_load_path();
-    }
     SAFE_DELETE(_query_context_mgr);
     // Query/workgroup teardown can release FragmentContext state that still uses
     // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.

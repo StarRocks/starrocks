@@ -28,6 +28,7 @@ namespace starrocks {
 class BaseLoadPathMgr;
 class DataStreamMgr;
 class DictionaryCacheManager;
+class GlobalEnv;
 class LoadStreamMgr;
 class MetricRegistry;
 class ProfileReportWorker;
@@ -52,13 +53,11 @@ using CacheManagerRawPtr = CacheManager*;
 } // namespace query_cache
 
 struct ComputeEnvOptions {
-    int max_num_pipeline_drivers = 0;
+    GlobalEnv* global_env = nullptr;
     MetricRegistry* metrics = nullptr;
-};
-
-struct ComputeEnvWorkGroupOptions {
-    int64_t max_executor_threads = 0;
-    MetricRegistry* metrics = nullptr;
+    std::vector<std::string> store_paths;
+    bool as_cn = false;
+    size_t query_cache_capacity = 0;
     workgroup::WorkGroupManager::DriverQueueFactory driver_queue_factory;
     workgroup::DriverExecutorFactory driver_executor_factory;
 };
@@ -72,20 +71,10 @@ public:
     ComputeEnv& operator=(const ComputeEnv&) = delete;
 
     Status init(const ComputeEnvOptions& options);
-    Status init_workgroup(const ComputeEnvWorkGroupOptions& options);
-    Status init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr);
-    Status init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
-    Status init_query_cache(size_t capacity);
     Status init_profile_report_worker(ProfileReportWorkerOptions options);
     void stop();
-    void stop_stream_load_pipes();
-    void stop_workgroup();
     void stop_profile_report_worker();
-    Status start_result_mgr();
-    void stop_result_mgr();
-    void destroy_stream_context_mgr();
     void destroy_profile_report_worker();
-    void destroy_load_path();
     void destroy();
 
     pipeline::DriverLimiter* driver_limiter() const { return _driver_limiter.get(); }
@@ -104,6 +93,17 @@ public:
     DictionaryCacheManager* dictionary_cache_manager() const { return _dictionary_cache_manager.get(); }
 
 private:
+    Status _init_workgroup(const ComputeEnvOptions& options, int64_t max_executor_threads);
+    Status _init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr);
+    Status _init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
+    Status _init_query_cache(size_t capacity);
+    Status _start_result_mgr();
+    void _stop_stream_load_pipes();
+    void _stop_workgroup();
+    void _stop_result_mgr();
+    void _destroy_stream_context_mgr();
+    void _destroy_load_path();
+
     std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
     std::unique_ptr<pipeline::DriverLimiter> _driver_limiter;
     std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
