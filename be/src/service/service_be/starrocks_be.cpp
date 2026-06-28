@@ -52,6 +52,7 @@
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
+#include "compute_env/compute_env.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -87,6 +88,35 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     EXIT_IF_ERROR(StorageEngine::open(options, &engine));
 
     return engine;
+}
+
+StorageEnvOptions make_storage_env_options(GlobalEnv* global_env, PlatformEnv* platform_env) {
+    DCHECK(global_env != nullptr);
+    DCHECK(platform_env != nullptr);
+
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = global_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+#endif
+    return storage_env_options;
+}
+
+Status init_storage_env(GlobalEnv* global_env, PlatformEnv* platform_env, ExecEnv* exec_env) {
+    DCHECK(exec_env != nullptr);
+
+    RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(make_storage_env_options(global_env, platform_env)),
+                              "init StorageEnv failed");
+    if (exec_env->compute_env() != nullptr) {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
+    }
+    return Status::OK();
 }
 
 extern void shutdown_tracer();
@@ -154,6 +184,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
+
+    EXIT_IF_ERROR(init_storage_env(global_env, platform_env, exec_env));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage env init successfully";
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
     EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
@@ -387,8 +420,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     data_workflows_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
 
+    StorageEnv::GetInstance()->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env stop successfully";
+
     exec_env->stop();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env stop successfully";
 
     storage_engine->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
@@ -422,6 +458,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     orchestration_env->destroy();
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
+
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
 
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
