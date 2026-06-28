@@ -163,7 +163,7 @@ private:
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
     std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
 
-    // Memory held by the SR-owned VectorIndexCache
+    // Memory held by the StorageEnv-owned VectorIndexCache
     std::shared_ptr<MemTracker> _vector_index_mem_tracker;
 
     // The memory used for compaction
