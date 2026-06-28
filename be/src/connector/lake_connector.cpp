@@ -46,7 +46,6 @@
 #include "platform/key_cache.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
@@ -58,17 +57,15 @@
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
 
 namespace {
 
-lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
-    const auto* query_execution_services = state->query_execution_services();
-    return query_execution_services != nullptr && query_execution_services->lake != nullptr
-                   ? query_execution_services->lake->lake_tablet_manager
-                   : nullptr;
+lake::TabletManager* lake_tablet_manager() {
+    return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
 } // namespace
@@ -1294,7 +1291,7 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
     if (_tablet_manager == nullptr) {
-        _tablet_manager = lake_tablet_manager(state);
+        _tablet_manager = lake_tablet_manager();
     }
     RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {

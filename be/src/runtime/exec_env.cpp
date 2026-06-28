@@ -121,10 +121,6 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.broker_mgr = platform_env->broker_mgr();
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
-    auto* storage_env = StorageEnv::GetInstance();
-    _lake_services.lake_tablet_manager = storage_env->lake_tablet_manager();
-    _lake_services.lake_update_manager = storage_env->lake_update_manager();
-    _lake_services.lake_replication_txn_manager = storage_env->lake_replication_txn_manager();
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
@@ -157,14 +153,12 @@ void ExecEnv::_refresh_service_contexts() {
 
     _query_execution_services.execution = &_execution_services;
     _query_execution_services.rpc = &_rpc_services;
-    _query_execution_services.lake = &_lake_services;
     _query_execution_services.runtime = &_runtime_services;
     _query_execution_services.process_metrics =
             _process_metrics_registry == nullptr ? nullptr : _process_metrics_registry->root_registry();
 
     _admin_services.execution = &_execution_services;
     _admin_services.rpc = &_rpc_services;
-    _admin_services.lake = &_lake_services;
     _admin_services.runtime = &_runtime_services;
     _admin_services.agent = &_agent_services;
 }
