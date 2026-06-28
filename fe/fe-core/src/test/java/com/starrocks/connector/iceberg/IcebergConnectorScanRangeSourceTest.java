@@ -34,6 +34,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -898,6 +899,112 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 Assertions.assertEquals(0, keyExprsSize,
                         "VoidTransform field must NOT contribute to partition_key_exprs");
             }
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    @Test
+    public void testCacheKeyShouldUseEffectiveIdentityKey() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            PartitionSpec specBothIdentity =
+                    PartitionSpec.builderFor(SCHEMA_F).identity("k1").identity("dt").build();
+            TestTables.TestTable v1Table = create(SCHEMA_F, specBothIdentity, "ti_reuse", 1);
+            Assertions.assertEquals(1, v1Table.operations().current().formatVersion());
+
+            PartitionKey oldKey = new PartitionKey(specBothIdentity, SCHEMA_F);
+            oldKey.set(0, null); // k1 = NULL
+            oldKey.set(1, null); // dt = NULL
+            DataFile oldFile = DataFiles.builder(specBothIdentity)
+                    .withPath("/path/to/old-before-drop.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartition(oldKey)
+                    .withRecordCount(2)
+                    .build();
+            v1Table.newFastAppend().appendFile(oldFile).commit();
+
+            // Drop the identity partition field "k1". For V1 this rewrites it to VoidTransform,
+            // i.e. new spec = [void(k1), identity(dt)]. VoidTransform always writes NULL for k1.
+            v1Table.updateSpec().removeField("k1").commit();
+            PartitionSpec newSpec = v1Table.spec();
+            Assertions.assertNotEquals(specBothIdentity.specId(), newSpec.specId(),
+                    "drop should produce a new spec id");
+            Assertions.assertTrue(newSpec.fields().stream()
+                            .anyMatch(f -> f.name().equals("k1") && !f.transform().isIdentity()),
+                    "after V1 drop, k1 should still be present but with VoidTransform");
+
+            // New file under the new spec, partition struct = (void=NULL, dt=NULL).
+            PartitionKey newKey = new PartitionKey(newSpec, SCHEMA_F);
+            newKey.set(0, null); // void(k1) = NULL (mandatory)
+            newKey.set(1, null); // dt = NULL (same value as old file)
+            DataFile newFile = DataFiles.builder(newSpec)
+                    .withPath("/path/to/new-after-drop.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartition(newKey)
+                    .withRecordCount(2)
+                    .build();
+            v1Table.newFastAppend().appendFile(newFile).commit();
+
+            // Build the tuple descriptor with both partition columns materialised.
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(201));
+            SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTuple);
+            k1Slot.setType(INT);
+            k1Slot.setColumn(new Column("k1", INT));
+            localTuple.addSlot(k1Slot);
+            SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
+            dtSlot.setType(INT);
+            dtSlot.setColumn(new Column("dt", INT));
+            localTuple.addSlot(dtSlot);
+
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_reuse", "iceberg_catalog",
+                    "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
+
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            List<FileScanTask> allTasks = Lists.newArrayList(v1Table.newScan().planFiles());
+            FileScanTask oldTask = allTasks.stream()
+                    .filter(t -> t.file().path().toString().endsWith("old-before-drop.parquet"))
+                    .findFirst().orElseThrow();
+            FileScanTask newTask = allTasks.stream()
+                    .filter(t -> t.file().path().toString().endsWith("new-after-drop.parquet"))
+                    .findFirst().orElseThrow();
+            // Sanity check: the two files come from different specs.
+            Assertions.assertNotEquals(oldTask.spec().specId(), newTask.spec().specId(),
+                    "old and new file must use different specs to reproduce the bug");
+
+            long oldPid = scanRangeSource.addPartition(oldTask);
+            long newPid = scanRangeSource.addPartition(newTask);
+
+            Assertions.assertNotEquals(oldPid, newPid,
+                    "Files from different specs must NOT share a partition id, even when their "
+                            + "raw Iceberg partition structs happen to be equal.");
+
+            THdfsScanRange oldRange = scanRangeSource.buildScanRange(oldTask, oldTask.file(), oldPid);
+            THdfsScanRange newRange = scanRangeSource.buildScanRange(newTask, newTask.file(), newPid);
+
+            int oldKeyExprs = oldRange.getPartition_value().getPartition_key_exprs().size();
+            int oldIdentitySlotIds = oldRange.getIdentity_partition_slot_ids() == null
+                    ? 0 : oldRange.getIdentity_partition_slot_ids().size();
+            int newKeyExprs = newRange.getPartition_value().getPartition_key_exprs().size();
+            int newIdentitySlotIds = newRange.getIdentity_partition_slot_ids() == null
+                    ? 0 : newRange.getIdentity_partition_slot_ids().size();
+
+            Assertions.assertEquals(2, oldKeyExprs);
+            Assertions.assertEquals(2, oldIdentitySlotIds);
+            Assertions.assertEquals(1, newKeyExprs);
+            Assertions.assertEquals(1, newIdentitySlotIds);
+            Assertions.assertEquals(newKeyExprs, newIdentitySlotIds,
+                    "partition_key_exprs.size() and identity_partition_slot_ids.size() must match — "
+                            + "otherwise BE's _init_partition_values goes out of sync.");
         } finally {
             if (prevCtx == null) {
                 ConnectContext.remove();
