@@ -104,7 +104,8 @@ public class IcebergGlueCatalog implements IcebergCatalog {
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
-                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                    throw StarRocksConnectorException.fromExternalException(
+                            String.format("Invalid location URI: %s", value), e);
                 }
             } else {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
@@ -121,7 +122,7 @@ public class IcebergGlueCatalog implements IcebergCatalog {
             database = getDB(context, dbName);
         } catch (Exception e) {
             LOG.error("Failed to access database {}", dbName, e);
-            throw new MetaNotFoundException("Failed to access database " + dbName);
+            throw StarRocksConnectorException.fromExternalException("Failed to access database " + dbName, e);
         }
 
         if (database == null) {
@@ -217,7 +218,8 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         } catch (Exception e) {
             LOG.error("Failed to register table {}.{} with metadata file location {}", 
                     dbName, tableName, metadataFileLocation, e);
-            throw new StarRocksConnectorException("Failed to register table: " + e.getMessage(), e);
+            throw StarRocksConnectorException.fromExternalException(
+                    String.format("Failed to register table %s.%s", dbName, tableName), e);
         }
     }
 

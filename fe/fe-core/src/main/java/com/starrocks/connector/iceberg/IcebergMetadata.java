@@ -1115,7 +1115,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 partitionKeys.add(createPartitionKeyWithType(values, srTypes, table.getType()));
             } catch (Exception e) {
                 LOG.error("create partition key failed.", e);
-                throw new StarRocksConnectorException(e.getMessage());
+                throw StarRocksConnectorException.fromExternalException("create partition key failed", e);
             }
         }
 

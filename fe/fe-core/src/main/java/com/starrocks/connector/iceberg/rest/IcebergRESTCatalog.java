@@ -128,8 +128,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate.initialize(name, restCatalogProperties);
         } catch (Exception re) {
             LOG.error("Failed to rest load catalog", re);
-            throw new StarRocksConnectorException("Failed to load rest catalog",
-                    new RuntimeException("Failed to load rest catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to load rest catalog", re);
         }
     }
 
@@ -159,8 +158,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return delegate.loadTable(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
         } catch (RESTException re) {
             LOG.error("Failed to load table using REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
-            throw new StarRocksConnectorException("Failed to load table using REST Catalog",
-                    new RuntimeException("Failed to load table using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to load table using REST Catalog", re);
         }
     }
 
@@ -170,8 +168,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return delegate.tableExists(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
         } catch (RESTException re) {
             LOG.error("Failed to check tableExists REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
-            throw new StarRocksConnectorException("Failed to check tableExists using REST Catalog",
-                    new RuntimeException("Failed to check tableExists using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to check tableExists using REST Catalog", re);
         }
     }
 
@@ -186,8 +183,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         } catch (RESTException re) {
             LOG.error("Failed to list databases using REST Catalog ", re);
-            throw new StarRocksConnectorException("Failed to list all databases using REST Catalog",
-                    new RuntimeException("Failed to list all databases using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to list all databases using REST Catalog", re);
         }
     }
 
@@ -221,8 +217,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate.createNamespace(buildContext(context), convertDbNameToNamespace(dbName), properties);
         } catch (RESTException re) {
             LOG.error("Failed to list create namespace using REST Catalog, for dbName {}", dbName, re);
-            throw new StarRocksConnectorException("Failed to create namespace using REST Catalog",
-                    new RuntimeException("Failed to create namespace using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to create namespace using REST Catalog", re);
         }
     }
 
@@ -248,8 +243,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             delegate.dropNamespace(buildContext(context), convertDbNameToNamespace(dbName));
         } catch (RESTException re) {
             LOG.error("Failed to drop database using REST Catalog, for dbName {}", dbName, re);
-            throw new StarRocksConnectorException("Failed to drop database using REST Catalog",
-                    new RuntimeException("Failed to drop database using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to drop database using REST Catalog", re);
         }
     }
 
@@ -260,8 +254,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
         } catch (RESTException re) {
             LOG.error("Failed to get database using REST Catalog, for dbName {}", dbName, re);
-            throw new StarRocksConnectorException("Failed to get database using REST Catalog",
-                    new RuntimeException("Failed to get database using REST Catalog exception:" + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to get database using REST Catalog", re);
         }
     }
 
@@ -275,8 +268,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             LOG.error("Failed to list tables using REST Catalog, for dbName {}", dbName, re);
             // creating a new RuntimeException with the custom message, as in the upstream code, it picks the `exception.getCause().getMessage()`
             // and keeping the re, so that Stacktrace will have the upstream exception.
-            throw new StarRocksConnectorException("Failed to list tables using REST Catalog",
-                    new RuntimeException("Failed to list tables using REST Catalog, exception:" + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to list tables using REST Catalog", re);
         }
 
         List<TableIdentifier> viewIdentifiers = new ArrayList<>();
@@ -289,8 +281,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                         ns, ICEBERG_CUSTOM_PROPERTIES_PREFIX + KEY_VIEW_ENDPOINTS_ENABLED, e);
             } catch (RESTException re) {
                 LOG.error("Failed to list views using REST Catalog, for dbName {}", dbName, re);
-                throw new StarRocksConnectorException("Failed to list views using REST Catalog",
-                        new RuntimeException("Failed to list views using REST Catalog, exception: " + re.getMessage(), re));
+                throw StarRocksConnectorException.fromExternalException("Failed to list views using REST Catalog", re);
             }
         } else {
             LOG.debug("View endpoints are disabled for catalog, skipping view list operations");
@@ -327,8 +318,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         } catch (RESTException re) {
             LOG.error("Failed to create table using REST Catalog, for dbName {} schema {} tableName {}",
                     dbName, schema, tableName, re);
-            throw new StarRocksConnectorException("Failed to create table using REST catalog",
-                    new RuntimeException("Failed to create table using REST catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to create table using REST catalog", re);
         }
 
         return nativeTable != null;
@@ -341,8 +331,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
                     TableIdentifier.of(convertDbNameToNamespace(dbName), tableName));
         } catch (RESTException re) {
             LOG.error("Failed to drop table using REST Catalog, for dbName {} tableName {}", dbName, tableName, re);
-            throw new StarRocksConnectorException("Failed to drop table using REST Catalog",
-                    new RuntimeException("Failed to drop table using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to drop table using REST Catalog", re);
         }
     }
 
@@ -356,8 +345,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         } catch (RESTException re) {
             LOG.error("Failed to rename table using REST Catalog, for dbName {} tableName {} newTblName {}",
                     dbName, tblName, newTblName, re);
-            throw new StarRocksConnectorException("Failed to rename table using REST Catalog",
-                    new RuntimeException("Failed to rename table using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to rename table using REST Catalog", re);
         }
     }
 
@@ -377,8 +365,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return delegate.loadView(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
         } catch (RESTException re) {
             LOG.error("Failed to load view using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
-            throw new StarRocksConnectorException("Failed to load view using REST Catalog",
-                    new RuntimeException("Failed to load view using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to load view using REST Catalog", re);
         }
     }
 
@@ -388,8 +375,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return delegate.dropView(buildContext(context), TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
         } catch (RESTException re) {
             LOG.error("Failed to drop view using REST Catalog, for dbName {} viewName {}", dbName, viewName, re);
-            throw new StarRocksConnectorException("Failed to drop view using REST Catalog",
-                    new RuntimeException("Failed to drop view using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to drop view using REST Catalog", re);
         }
     }
 
@@ -421,8 +407,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         } catch (RESTException re) {
             LOG.error("Failed to register table using REST Catalog, for dbName {} tableName {} metadataFileLocation {}",
                     dbName, tableName, metadataFileLocation, re);
-            throw new StarRocksConnectorException("Failed to register table using REST Catalog",
-                    new RuntimeException("Failed to register table using REST Catalog, exception: " + re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException("Failed to register table using REST Catalog", re);
         }
     }
 
@@ -436,10 +421,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(buildContext(context), ns));
         } catch (RESTException re) {
             LOG.error("Failed to load table metadata using REST Catalog, for namespace {}", ns, re);
-            throw new StarRocksConnectorException("Failed to load table metadata using REST Catalog/defaultTableLocation",
-                    new RuntimeException(
-                            "Failed to load table metadata using REST Catalog/defaultTableLocation, exception: " +
-                                    re.getMessage(), re));
+            throw StarRocksConnectorException.fromExternalException(
+                    "Failed to load table metadata using REST Catalog", re);
         }
     }
 

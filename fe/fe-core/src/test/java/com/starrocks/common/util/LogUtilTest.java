@@ -46,13 +46,27 @@ public class LogUtilTest {
 
     @Test
     public void testGetUnwoundExceptionMessage() {
-        String output = null;
-        try {
-            System.out.println("hello");
-            throw new RuntimeException("hello");
-        } catch (Throwable e) {
-            output = LogUtil.getUnwoundExceptionMessage(e);
-        }
-        System.out.println(output);
+        // single exception: class name + message
+        RuntimeException e = new RuntimeException("hello");
+        String output = LogUtil.getUnwoundExceptionMessage(e);
+        Assertions.assertEquals("RuntimeException: hello", output);
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageNested() {
+        // nested chain: all layers shown, class names included
+        RuntimeException inner = new RuntimeException("inner cause");
+        RuntimeException outer = new RuntimeException("outer msg", inner);
+        String output = LogUtil.getUnwoundExceptionMessage(outer);
+        Assertions.assertTrue(output.contains("RuntimeException: outer msg"));
+        Assertions.assertTrue(output.contains("RuntimeException: inner cause"));
+    }
+
+    @Test
+    public void testGetUnwoundExceptionMessageNullMessage() {
+        // exception with null message: class name only, no NPE
+        RuntimeException e = new RuntimeException((String) null);
+        String output = LogUtil.getUnwoundExceptionMessage(e);
+        Assertions.assertEquals("RuntimeException", output);
     }
 }

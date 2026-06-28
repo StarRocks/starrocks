@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.exception;
 
+import com.starrocks.common.util.LogUtil;
+
 import static java.lang.String.format;
 
 public class StarRocksConnectorException extends RuntimeException {
@@ -42,6 +44,12 @@ public class StarRocksConnectorException extends RuntimeException {
         if (!test) {
             throw new StarRocksConnectorException(message, args);
         }
+    }
+
+    // Use this factory when wrapping an external exception (metastore, catalog, filesystem).
+    // It unfolds the full cause chain so auth and connectivity errors are visible to the user.
+    public static StarRocksConnectorException fromExternalException(String context, Throwable cause) {
+        return new StarRocksConnectorException(context + ", msg: " + LogUtil.getUnwoundExceptionMessage(cause), cause);
     }
 
 }

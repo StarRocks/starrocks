@@ -230,7 +230,11 @@ public class LogUtil {
         List<Throwable> result = unwindException(e, maxDepth);
         StringBuilder sb = new StringBuilder();
         for (Throwable t : result) {
-            sb.append(t.getMessage());
+            String msg = t.getMessage();
+            sb.append(t.getClass().getSimpleName());
+            if (msg != null && !msg.isEmpty()) {
+                sb.append(": ").append(msg);
+            }
             sb.append("\n");
         }
         sb.deleteCharAt(sb.length() - 1);
