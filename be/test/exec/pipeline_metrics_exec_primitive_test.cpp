@@ -42,14 +42,12 @@ TEST(PipelineMetricsTest, RegisterAllMetricsIncludesDriverOverloaded) {
 TEST(PipelineMetricsTest, RegisterGaugeHooksBeforeInstall) {
     PipelineExecutorMetrics metrics;
     metrics.register_pipe_prepare_pool_queue_len_hook([] { return 4; });
-    metrics.register_pipe_drivers_hook([] { return 5; });
 
     MetricRegistry registry("test_registry");
     metrics.register_all_metrics(&registry);
     registry.trigger_hook();
 
     assert_metric_value(&registry, "pipe_prepare_pool_queue_len", "4");
-    assert_metric_value(&registry, "pipe_drivers", "5");
 }
 
 } // namespace starrocks::pipeline

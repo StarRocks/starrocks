@@ -56,6 +56,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     static auto* metrics = new MetricRegistry("exec_env_test");
     ASSERT_OK(platform_env->init(PlatformEnvOptions{.metrics = metrics}));
+    ASSERT_OK(global_env->init_execution_thread_pools(metrics));
 
     EXPECT_EQ(env.runtime_services().lookup_dispatcher_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
@@ -65,20 +66,19 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
 
-    ComputeEnvOptions compute_env_options;
-    compute_env_options.max_num_pipeline_drivers = 2;
-    ASSERT_OK(env.compute_env()->init(compute_env_options));
-    ComputeEnvWorkGroupOptions workgroup_options;
-    workgroup_options.max_executor_threads = 2;
-    workgroup_options.metrics = metrics;
-    workgroup_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
-    workgroup_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-    ASSERT_OK(env.compute_env()->init_workgroup(workgroup_options));
     std::error_code ec;
     std::filesystem::create_directories(config::spill_local_storage_dir, ec);
     ASSERT_FALSE(ec) << ec.message();
-    ASSERT_OK(env.compute_env()->init_spill({config::storage_root_path}, metrics));
-    ASSERT_OK(env.compute_env()->init_load_path({}, true));
+
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.global_env = global_env;
+    compute_env_options.metrics = metrics;
+    compute_env_options.as_cn = true;
+    compute_env_options.query_cache_capacity = 4 * 1024 * 1024;
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    ASSERT_OK(env.compute_env()->init(compute_env_options));
+
     ProfileReportWorkerOptions profile_report_worker_options;
     profile_report_worker_options.start_worker_thread = false;
     profile_report_worker_options.report_non_pipeline_fragments = [](const std::vector<TUniqueId>&) {
@@ -148,7 +148,6 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.admin_services().runtime, &env.runtime_services());
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
 
-    env.compute_env()->stop_workgroup();
     env.compute_env()->destroy();
 }
 
