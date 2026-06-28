@@ -45,6 +45,7 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -237,24 +238,21 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
-#ifndef __APPLE__
-// Re-registers the hooks with a null exec_env to verify the
-// `vector_query_cache_capacity` callback short-circuits to InternalError instead
-// of dereferencing exec_env. The override of SetUp's registration is OK because
-// TearDown's TEST_reset() restores a clean registry for the next test.
-TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
-    ConfigUpdateRegistry::instance()->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance(), _load_channel_mgr.get());
-    ConfigUpdateRegistry::instance()->set_ready();
-
+#ifdef WITH_TENANN
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_uninitialized_cache_returns_internal_error) {
+    auto* storage_env = StorageEnv::GetInstance();
+    storage_env->destroy_vector_index_cache();
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
     EXPECT_FALSE(st.ok()) << st.to_string();
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+
+    ASSERT_OK(storage_env->init_vector_index_cache(GlobalEnv::GetInstance()->process_mem_limit(),
+                                                   GlobalEnv::GetInstance()->vector_index_mem_tracker()));
 }
 
 TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
-    auto* cache = ExecEnv::GetInstance()->vector_index_cache();
-    ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
+    auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(cache, nullptr) << "test_main must initialize StorageEnv with vector_index_cache";
     const std::string saved = config::vector_query_cache_capacity;
 
     // Absolute bytes.

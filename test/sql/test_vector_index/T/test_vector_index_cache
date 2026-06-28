@@ -2,7 +2,7 @@
 
 -- Exercise the SR-owned VectorIndexCache integration:
 --   * vector_query_cache_capacity config callback (config_update_hooks.cpp happy path)
---   * BE startup VectorIndexCache construction (exec_env.cpp)
+--   * BE startup VectorIndexCache construction (storage_env.cpp)
 --   * Cold-load via TenANNReader::init_searcher loader (warm-cache probe in
 --     VectorIndexReaderFactory + GetOrCreate + AttachIndexRef)
 --   * Warm-cache repeat search (Lookup short-circuit in factory)

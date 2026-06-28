@@ -115,7 +115,7 @@ bool VectorIndexCache::GetOrCreate(const tenann::CacheKey& key, const IndexLoade
 }
 
 // Deleter captures _cache as a raw pointer; handles MUST be released before
-// ExecEnv::destroy() — _wait_for_fragments_finish() is the drain boundary.
+// StorageEnv::destroy_vector_index_cache() runs after query/vector users drain.
 tenann::IndexCacheHandle VectorIndexCache::_wrap(Entry* entry, tenann::IndexRef ref) {
     Cache* cache = &_cache;
     return tenann::IndexCacheHandle(

@@ -77,7 +77,7 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     auto* cache = tenann::GetGlobalIndexCache();
     if (cache == nullptr) {
         return Status::InternalError(
-                "VectorIndexCache not injected. ExecEnv::init must call tenann::SetGlobalIndexCache.");
+                "VectorIndexCache not injected. StorageEnv must initialize the TenANN global index cache.");
     }
 
     auto meta_copy = meta;

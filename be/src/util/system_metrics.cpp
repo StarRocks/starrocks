@@ -19,6 +19,7 @@
 
 #include "cache/datacache.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/storage_env.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
@@ -291,7 +292,7 @@ void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry
 }
 
 void SystemMetrics::_update_vector_index_cache_metrics() {
-    auto* index_cache = ExecEnv::GetInstance()->vector_index_cache();
+    auto* index_cache = StorageEnv::GetInstance()->vector_index_cache();
     if (UNLIKELY(index_cache == nullptr)) {
         return;
     }
