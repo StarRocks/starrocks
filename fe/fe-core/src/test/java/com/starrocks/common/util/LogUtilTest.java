@@ -69,4 +69,15 @@ public class LogUtilTest {
         String output = LogUtil.getUnwoundExceptionMessage(e);
         Assertions.assertEquals("RuntimeException", output);
     }
+
+    @Test
+    public void testGetUnwoundExceptionMessageCircularReference() throws Exception {
+        // Simulate a self-referential cause chain (safety guard: parent == e breaks the loop)
+        RuntimeException e = new RuntimeException("circular");
+        java.lang.reflect.Field causeField = Throwable.class.getDeclaredField("cause");
+        causeField.setAccessible(true);
+        causeField.set(e, e);
+        String output = LogUtil.getUnwoundExceptionMessage(e);
+        Assertions.assertEquals("RuntimeException: circular", output);
+    }
 }

@@ -48,6 +48,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
@@ -592,5 +593,163 @@ public class IcebergRESTCatalogTest {
         assertTrue(sessionContextOauth2.credentials() == null || sessionContextOauth2.credentials().isEmpty(),
                 "When security=OAUTH2, user's OIDC token should NOT be passed to REST Catalog. " +
                         "Catalog should use its own configured oauth2.credential instead");
+    }
+
+    @Test
+    public void testRESTExceptionPropagation(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        // getTable - line 161
+        new Expectations() {
+            {
+                restCatalog.loadTable((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to load table using REST Catalog",
+                () -> icebergRESTCatalog.getTable(connectContext, "db", "tbl"));
+
+        // tableExists - line 171
+        new Expectations() {
+            {
+                restCatalog.tableExists((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to check tableExists using REST Catalog",
+                () -> icebergRESTCatalog.tableExists(connectContext, "db", "tbl"));
+
+        // listAllDatabases - line 186
+        new Expectations() {
+            {
+                restCatalog.listNamespaces((SessionContext) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to list all databases using REST Catalog",
+                () -> icebergRESTCatalog.listAllDatabases(connectContext));
+
+        // createDB (createNamespace) - line 220
+        new Expectations() {
+            {
+                restCatalog.createNamespace((SessionContext) any, (Namespace) any, (Map<String, String>) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to create namespace using REST Catalog",
+                () -> icebergRESTCatalog.createDB(connectContext, "db", Maps.newHashMap()));
+
+        // getDB - line 257
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to get database using REST Catalog",
+                () -> icebergRESTCatalog.getDB(connectContext, "db"));
+
+        // dropDB (dropNamespace) - line 246
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = ImmutableMap.of("location", "s3://bucket/path");
+                minTimes = 0;
+
+                restCatalog.dropNamespace((SessionContext) any, (Namespace) any);
+                result = new RESTException("access denied");
+                minTimes = 0;
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to drop database using REST Catalog",
+                () -> icebergRESTCatalog.dropDB(connectContext, "db"));
+
+        // listTables - line 271
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list tables using REST Catalog",
+                () -> icebergRESTCatalog.listTables(connectContext, "db"));
+
+        // listViews exception (listTables succeeds) - line 284
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of();
+
+                restCatalog.listViews((SessionContext) any, (Namespace) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to list views using REST Catalog",
+                () -> icebergRESTCatalog.listTables(connectContext, "db"));
+
+        // createTable - line 321
+        new Expectations() {
+            {
+                restCatalog.buildTable((SessionContext) any, (TableIdentifier) any, (Schema) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to create table using REST catalog",
+                () -> icebergRESTCatalog.createTable(connectContext, "db", "tbl", null, null, null, null,
+                        Maps.newHashMap()));
+
+        // dropTable - line 334
+        new Expectations() {
+            {
+                restCatalog.dropTable((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to drop table using REST Catalog",
+                () -> icebergRESTCatalog.dropTable(connectContext, "db", "tbl", false));
+
+        // renameTable - line 348
+        new Expectations() {
+            {
+                restCatalog.renameTable((SessionContext) any, (TableIdentifier) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to rename table using REST Catalog",
+                () -> icebergRESTCatalog.renameTable(connectContext, "db", "tbl", "tbl2"));
+
+        // getView - line 368
+        new Expectations() {
+            {
+                restCatalog.loadView((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to load view using REST Catalog",
+                () -> icebergRESTCatalog.getView(connectContext, "db", "view"));
+
+        // dropView - line 378
+        new Expectations() {
+            {
+                restCatalog.dropView((SessionContext) any, (TableIdentifier) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class, "Failed to drop view using REST Catalog",
+                () -> icebergRESTCatalog.dropView(connectContext, "db", "view"));
+
+        // loadNamespaceMetadata - line 424
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionContext) any, (Namespace) any);
+                result = new RESTException("access denied");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to load table metadata using REST Catalog",
+                () -> icebergRESTCatalog.loadNamespaceMetadata(connectContext, Namespace.of("db")));
     }
 }
