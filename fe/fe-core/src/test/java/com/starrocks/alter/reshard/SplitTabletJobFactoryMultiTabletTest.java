@@ -241,7 +241,8 @@ public class SplitTabletJobFactoryMultiTabletTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 createShardsCalled.set(true);
             }
         };
@@ -256,6 +257,8 @@ public class SplitTabletJobFactoryMultiTabletTest {
                 "factory must not invoke StarOSAgent.createShardsForSplit (parity with forExternalBoundaries)");
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, job.getJobState(),
                 "multi-tablet factory must return a PENDING job (no shard allocation yet)");
+        Assertions.assertTrue(((SplitTabletJob) job).isSpreadNewShards(),
+                "multi-tablet pre-split must spread new shards across compute nodes");
     }
 
     @Test
