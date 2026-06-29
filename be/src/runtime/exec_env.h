@@ -187,8 +187,6 @@ private:
     RuntimeFilterQueryLifecycle* _runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
-    std::unique_ptr<ThreadPool> _snapshot_file_syncer_thread_pool = nullptr;
-
     AgentServer* _agent_server = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;

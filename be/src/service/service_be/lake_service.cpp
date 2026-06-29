@@ -220,8 +220,12 @@ std::string get_txn_ids_string(const PublishVersionRequest* request) {
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr)
-        : _env(env), _tablet_mgr(tablet_mgr), _load_channel_mgr(load_channel_mgr) {}
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr,
+                                 ThreadPool* snapshot_file_syncer_thread_pool)
+        : _env(env),
+          _tablet_mgr(tablet_mgr),
+          _load_channel_mgr(load_channel_mgr),
+          _snapshot_file_syncer_thread_pool(snapshot_file_syncer_thread_pool) {}
 
 LakeServiceImpl::~LakeServiceImpl() = default;
 
@@ -2266,7 +2270,7 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
             << ", dest_tablet_id: " << request->dest_tablet_id();
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    auto thread_pool = _env->lake_services().snapshot_file_syncer_thread_pool;
+    auto thread_pool = _snapshot_file_syncer_thread_pool;
     if (UNLIKELY(thread_pool == nullptr)) {
         LOG(ERROR) << "upload cluster snapshot files thread pool is null";
         cntl->SetFailed("upload cluster snapshot files thread pool is null");

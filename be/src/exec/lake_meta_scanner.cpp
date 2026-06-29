@@ -20,17 +20,14 @@
 #include "exec/runtime/fragment_runtime_state.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/runtime_state.h"
-#include "runtime/service_contexts.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
 namespace {
 
-lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
-    const auto* query_execution_services = state->query_execution_services();
-    return query_execution_services != nullptr && query_execution_services->lake != nullptr
-                   ? query_execution_services->lake->lake_tablet_manager
-                   : nullptr;
+lake::TabletManager* lake_tablet_manager() {
+    return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
 } // namespace
@@ -53,7 +50,7 @@ Status LakeMetaScanner::_real_init() {
     reader_params.tablet_id = _tablet_id;
     reader_params.version = Version(0, _version);
     reader_params.runtime_state = _runtime_state;
-    reader_params.tablet_manager = lake_tablet_manager(_runtime_state);
+    reader_params.tablet_manager = lake_tablet_manager();
     RETURN_IF(reader_params.tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     reader_params.chunk_size = _runtime_state->chunk_size();
     reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;

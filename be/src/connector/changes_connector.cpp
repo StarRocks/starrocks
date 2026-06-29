@@ -28,7 +28,6 @@
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
@@ -36,6 +35,7 @@
 #include "storage/primitive/empty_iterator.h"
 #include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
@@ -117,11 +117,8 @@ private:
     const std::vector<ChangesMetaSlot>* _meta_slots;
 };
 
-lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
-    const auto* query_execution_services = state->query_execution_services();
-    return query_execution_services != nullptr && query_execution_services->lake != nullptr
-                   ? query_execution_services->lake->lake_tablet_manager
-                   : nullptr;
+lake::TabletManager* lake_tablet_manager() {
+    return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
 } // namespace
@@ -184,7 +181,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
         }
     }
 
-    auto* tablet_mgr = lake_tablet_manager(_runtime_state);
+    auto* tablet_mgr = lake_tablet_manager();
     if (tablet_mgr == nullptr) {
         return Status::InternalError("lake tablet manager not available");
     }
@@ -248,7 +245,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
         return Status::OK();
     }
 
-    auto* tablet_mgr = lake_tablet_manager(_runtime_state);
+    auto* tablet_mgr = lake_tablet_manager();
     DCHECK(tablet_mgr != nullptr);
     DCHECK(_head_metadata != nullptr);
     // A rowset can reappear in multiple ancestor snapshots; dedup so each
@@ -296,7 +293,7 @@ Status ChangesDataSource::_do_metadata_traversal() {
 
 void ChangesDataSource::_scan_metadata_for_changes_rowsets(const TabletMetadataPtr& meta,
                                                            std::unordered_set<uint32_t>& seen_rowset_ids) {
-    auto* tablet_mgr = lake_tablet_manager(_runtime_state);
+    auto* tablet_mgr = lake_tablet_manager();
 
     for (int rowset_index = 0; rowset_index < meta->rowsets_size(); ++rowset_index) {
         const auto& r = meta->rowsets(rowset_index);
@@ -360,7 +357,7 @@ Status ChangesDataSource::_read_next_chunk(ChunkPtr* chunk) {
 Status ChangesDataSource::_init_read_schema() {
     DCHECK(_head_metadata != nullptr);
 
-    auto* tablet_mgr = lake_tablet_manager(_runtime_state);
+    auto* tablet_mgr = lake_tablet_manager();
     const auto& t_schema_key = _provider->_changes_scan_node.schema_key;
     TableSchemaKeyPB schema_key_pb;
     schema_key_pb.set_db_id(t_schema_key.db_id);

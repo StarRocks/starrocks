@@ -25,6 +25,7 @@ namespace starrocks {
 
 class ExecEnv;
 class LoadChannelMgr;
+class ThreadPool;
 
 namespace lake {
 class TabletManager;
@@ -32,7 +33,8 @@ class TabletManager;
 
 class LakeServiceImpl : public ::starrocks::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr);
+    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr,
+                             ThreadPool* snapshot_file_syncer_thread_pool);
 
     ~LakeServiceImpl() override;
 
@@ -146,6 +148,7 @@ private:
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
     LoadChannelMgr* _load_channel_mgr;
+    ThreadPool* _snapshot_file_syncer_thread_pool;
 
     // Tablets currently being built by this CN. Used to dedup repeated
     // build_vector_index RPCs for the same tablet (e.g. after FE re-enqueue).

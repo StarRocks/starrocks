@@ -27,6 +27,7 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -35,6 +36,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "compute_env/compute_env.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
@@ -811,6 +813,21 @@ int main(int argc, char** argv) {
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     CHECK_OK(exec_env->init(paths, process_metrics_registry, global_env));
+    starrocks::StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = global_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = starrocks::config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kFixed;
+#endif
+    CHECK_OK(starrocks::StorageEnv::GetInstance()->init(storage_env_options));
+    if (exec_env->compute_env() != nullptr) {
+        starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
+    }
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -823,10 +840,13 @@ int main(int argc, char** argv) {
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
+    starrocks::StorageEnv::GetInstance()->stop();
     exec_env->stop();
 #ifdef USE_STAROS
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
+    starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    starrocks::StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     platform_env->destroy();
     global_env->stop();

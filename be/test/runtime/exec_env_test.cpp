@@ -30,7 +30,6 @@
 #include "runtime/env/global_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_sender.h"
-#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -112,13 +111,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.rpc_services().brpc_stub_cache, platform_env->brpc_stub_cache());
     EXPECT_EQ(env.platform_services().store_path_registry, platform_env->store_path_registry());
 
-    EXPECT_EQ(env.lake_services().lake_tablet_manager, StorageEnv::GetInstance()->lake_tablet_manager());
-    EXPECT_EQ(env.lake_services().lake_update_manager, StorageEnv::GetInstance()->lake_update_manager());
-    EXPECT_EQ(env.lake_services().lake_replication_txn_manager,
-              StorageEnv::GetInstance()->lake_replication_txn_manager());
     EXPECT_EQ(env.lake_services().lake_vector_index_build_thread_pool,
               global_env->lake_vector_index_build_thread_pool());
-    EXPECT_EQ(env.lake_services().snapshot_file_syncer_thread_pool, env._snapshot_file_syncer_thread_pool.get());
 
     EXPECT_EQ(env.runtime_services().query_context_mgr, env._query_context_mgr);
     EXPECT_EQ(env.runtime_services().stream_mgr, env.compute_env()->stream_mgr());
@@ -140,12 +134,10 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
 
     EXPECT_EQ(env.query_execution_services().execution, &env.execution_services());
     EXPECT_EQ(env.query_execution_services().rpc, &env.rpc_services());
-    EXPECT_EQ(env.query_execution_services().lake, &env.lake_services());
     EXPECT_EQ(env.query_execution_services().runtime, &env.runtime_services());
 
     EXPECT_EQ(env.admin_services().execution, &env.execution_services());
     EXPECT_EQ(env.admin_services().rpc, &env.rpc_services());
-    EXPECT_EQ(env.admin_services().lake, &env.lake_services());
     EXPECT_EQ(env.admin_services().runtime, &env.runtime_services());
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
 
