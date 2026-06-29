@@ -53,15 +53,26 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+>>>>>>> 3209b1e532 ([BugFix] Fix nested dict expr exchange translation (#75246))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+import java.util.HashSet;
+>>>>>>> 3209b1e532 ([BugFix] Fix nested dict expr exchange translation (#75246))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -351,6 +362,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             if (context.stringRefToDicts.containsKey(sid)) {
                 dictMap.put(dictRef.getId(), context.stringRefToDicts.get(sid));
             } else {
+<<<<<<< HEAD
                 // compute expressions depend-on dict
                 for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
 
@@ -359,6 +371,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                                 context.stringRefToDicts.get(useRefs.getId()));
                     }
                 }
+=======
+                // follow the dict-expr chain down to the base dictionaries it ultimately needs
+                collectBaseDictChain(dictRef.getId(), dictMap, new HashSet<>());
+>>>>>>> 3209b1e532 ([BugFix] Fix nested dict expr exchange translation (#75246))
             }
         }
         List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
@@ -554,6 +570,65 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public OptExpression visitPhysicalCTEConsume(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.get(consume);
+        Map<ColumnRefOperator, ColumnRefOperator> newMap = consume.getCteOutputColumnRefMap().entrySet().stream().map(
+                        (e) -> new Pair<>(
+                                context.stringRefToDictRefMap.getOrDefault(e.getKey(), e.getKey()),
+                                context.stringRefToDictRefMap.getOrDefault(e.getValue(), e.getValue())))
+                .collect(Collectors.toMap(p -> p.first, p -> p.second));
+        ColumnRefSet supportColumns = new ColumnRefSet(consume.getCteOutputColumnRefMap().entrySet().stream()
+                .filter(k -> info.inputStringColumns.contains(k.getValue())).map(Map.Entry::getKey).toList());
+        PhysicalCTEConsumeOperator newOp = new PhysicalCTEConsumeOperator(
+                consume.getCteId(),
+                newMap,
+                consume.getLimit(),
+                rewritePredicate(consume.getPredicate(), supportColumns),
+                rewriteProjection(consume.getProjection(), supportColumns),
+                computeDictExpr(fragmentUseDictExprs)
+        );
+        return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
+    }
+
+    // Recursively collect a dict expr and every intermediate dict expr it references.
+    private void collectDictExprChain(int dictId, Map<Integer, ScalarOperator> out) {
+        if (out.containsKey(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        if (expr instanceof DictMappingOperator) {
+            collectDictExprChain(((DictMappingOperator) expr).getDictColumn().getId(), out);
+        }
+        out.put(dictId, expr);
+    }
+
+    // Recursively collect the base dictionaries a (possibly chained) dict expr ultimately needs.
+    private void collectBaseDictChain(int dictId, Map<Integer, ColumnDict> dictMap, Set<Integer> visited) {
+        if (!visited.add(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        for (ColumnRefOperator ref : expr.getColumnRefs()) {
+            if (context.stringRefToDicts.containsKey(ref.getId())) {
+                dictMap.put(context.stringRefToDictRefMap.get(ref).getId(),
+                        context.stringRefToDicts.get(ref.getId()));
+            } else if (context.stringRefToDictRefMap.containsKey(ref)) {
+                collectBaseDictChain(context.stringRefToDictRefMap.get(ref).getId(), dictMap, visited);
+            }
+        }
+    }
+
+>>>>>>> 3209b1e532 ([BugFix] Fix nested dict expr exchange translation (#75246))
     @NotNull
     private Map<Integer, ScalarOperator> computeDictExpr(ColumnRefSet fragmentUseDictExprs) {
         Map<Integer, ScalarOperator> dictExprs = Maps.newHashMap();
@@ -564,9 +639,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 continue;
             }
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(strRef);
-            if (context.globalDictsExpr.containsKey(dictRef.getId())) {
-                dictExprs.put(dictRef.getId(), context.globalDictsExpr.get(dictRef.getId()));
-            }
+            // A kept (non-flattened) dict expr can reference an intermediate dict, which can
+            // reference another, etc. Collect the whole chain so the fragment that decodes the
+            // top dict also has every intermediate dict expr it depends on.
+            collectDictExprChain(dictRef.getId(), dictExprs);
         }
         return dictExprs;
     }

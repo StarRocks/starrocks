@@ -1230,6 +1230,45 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testNestedNullSensitiveDictKeepsIntermediate() throws Exception {
+        // A NULL-sensitive outer expression (IS NULL) over a derived dict (the inner CASE result)
+        // must keep the intermediate dict instead of being flattened through the child define.
+        // Flattening would drop the derived dict's synthetic NULL code and the query would fail at
+        // runtime with "Dict Decode failed, Dict can't take cover all key".
+        String sql = "select distinct case when subq.x is null then '-' else subq.x end as x "
+                + "from (select distinct case when S_ADDRESS = 'a' then 'A' else 'B' end as x "
+                + "from supplier_nullable) subq";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "if(<place-holder> = 'a', 'A', 'B')");
+        assertContains(plan, "if(<place-holder> IS NULL, '-', <place-holder>)");
+        assertNotContains(plan, "if(if(");
+    }
+
+    @Test
+    public void testDictMappingGroupByReservesExtraCode() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            // A value-adding dict-mapping group-by key (e.g. `case when x is null then '-'`,
+            // ifnull, coalesce) can grow the derived dict to base dict size + 1 codes. The
+            // compressed group-by key range must reserve that extra code, otherwise the code
+            // overflows the packed key width and decode fails with "Dict can't take cover all key".
+            String sql = "select count(*) from supplier group by "
+                    + "case when S_ADDRESS is null then '-' else S_ADDRESS end";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+
+            sql = "select count(*) from supplier group by ifnull(S_ADDRESS, 'x')";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
+>>>>>>> 3209b1e532 ([BugFix] Fix nested dict expr exchange translation (#75246))
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
