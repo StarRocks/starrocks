@@ -31,14 +31,14 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#include "runtime/routine_load/data_consumer_group.h"
+#include "data_workflows/load/routine_load/data_consumer_group.h"
 
 #include "base/utility/defer_op.h"
 #include "compute_env/load/stream_load_context.h"
+#include "data_workflows/load/routine_load/data_consumer.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 #include "librdkafka/rdkafka.h"
 #include "librdkafka/rdkafkacpp.h"
-#include "runtime/routine_load/data_consumer.h"
-#include "runtime/routine_load/kafka_consumer_pipe.h"
 
 namespace starrocks {
 
@@ -263,6 +263,7 @@ void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>&
     cb(st);
 }
 
+#ifndef __APPLE__
 Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->pulsar_info);
     DCHECK(_consumers.size() >= 1);
@@ -461,5 +462,6 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         }
     }
 }
+#endif
 
 } // namespace starrocks

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/data_consumer.h"
+#include "data_workflows/load/routine_load/data_consumer.h"
 
 #include <functional>
 #include <string>

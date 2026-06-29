@@ -45,8 +45,8 @@
 
 #include "base/uid_util.h"
 #include "common/thread/threadpool.h"
+#include "data_workflows/load/routine_load/data_consumer_pool.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/routine_load/data_consumer_pool.h"
 
 namespace starrocks {
 

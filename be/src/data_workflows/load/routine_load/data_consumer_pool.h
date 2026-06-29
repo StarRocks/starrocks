@@ -39,7 +39,7 @@
 #include <mutex>
 #include <thread>
 
-#include "runtime/routine_load/data_consumer.h"
+#include "data_workflows/load/routine_load/data_consumer.h"
 
 namespace starrocks {
 

@@ -32,13 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/data_consumer_pool.h"
+#include "data_workflows/load/routine_load/data_consumer_pool.h"
 
 #include "common/config_ingest_fwd.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
-#include "data_consumer.h"
-#include "runtime/routine_load/data_consumer_group.h"
+#include "data_workflows/load/routine_load/data_consumer.h"
+#include "data_workflows/load/routine_load/data_consumer_group.h"
 
 namespace starrocks {
 
@@ -67,8 +67,12 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
         consumer = std::make_shared<KafkaDataConsumer>(ctx);
         break;
     case TLoadSourceType::PULSAR:
+#ifdef __APPLE__
+        return Status::NotSupported("routine load pulsar is not supported on MacOS");
+#else
         consumer = std::make_shared<PulsarDataConsumer>(ctx);
         break;
+#endif
     default:
         std::stringstream ss;
         ss << "PAUSE: unknown routine load task type: " << ctx->load_type;
@@ -106,6 +110,7 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
         *ret = grp;
         return Status::OK();
+#ifndef __APPLE__
     } else {
         DCHECK(ctx->pulsar_info);
         DCHECK_GE(ctx->pulsar_info->partitions.size(), 1);
@@ -132,6 +137,10 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         *ret = grp;
         return Status::OK();
     }
+#else
+    }
+    return Status::NotSupported("routine load pulsar is not supported on MacOS");
+#endif
 }
 
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {

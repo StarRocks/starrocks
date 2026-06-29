@@ -1054,6 +1054,7 @@
       "owned_roots": ["be/src/orchestration"],
       "allowed_include_prefixes": [
         "orchestration/",
+        "data_workflows/",
         "connector/data_source_provider.h",
         "column/",
         "exec/",
@@ -1067,7 +1068,7 @@
         "types/"
       ],
       "forbidden_include_prefixes": ["service/", "http/", "agent/"],
-      "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "Platform", "ColumnCore", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
+      "allowed_target_deps": ["DataWorkflows", "Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "Platform", "ColumnCore", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
       "allowed_test_targets": ["orchestration_test"],
       "allowed_test_link_deps": ["Orchestration"],
       "remediation": "Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules."
