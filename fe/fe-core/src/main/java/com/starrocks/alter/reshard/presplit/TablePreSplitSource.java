@@ -75,6 +75,13 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     public PreSplitFlow.Prepared prepare(InsertStmt insertStmt, SelectRelation selectRelation,
                                          OlapTable target, Database database, ConnectContext context)
             throws AccessDeniedException {
+        // The INSERT-from-table column mapping (InsertSelectSourceColumns) assumes
+        // the load writes the full base schema in order, so a partial / reordered
+        // target column list is not yet supported on this path (the common gate
+        // only guarantees all sort keys are present, which is weaker).
+        if (!InsertPreSplitHook.targetColumnListIsFullIdentity(insertStmt, target)) {
+            return null;
+        }
         TableRelation sourceRelation = (TableRelation) selectRelation.getRelation();
         ResolvedSource resolvedSource = resolveSourceTable(sourceRelation, context);
         if (resolvedSource == null) {

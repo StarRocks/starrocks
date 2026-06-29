@@ -356,19 +356,6 @@ public class InsertPreSplitHookFilesTest {
     }
 
     @Test
-    public void testTargetColumnListShortCircuits() throws Exception {
-        // INSERT INTO t (a, b) SELECT * FROM FILES(...) — the explicit column
-        // list reorders/subsets the target's columns; the sampler reads source
-        // columns matching the target's sort-key names, so the sampled column
-        // would mismatch what the load writes.
-        InsertStmt stmt = simpleFilesInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
-
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
-    }
-
-    @Test
     public void testExpressionProjectionShortCircuits() throws Exception {
         // INSERT INTO t SELECT col + 1 FROM FILES(...) — expression projection
         // changes the inserted values; the sampler reads source columns
@@ -570,6 +557,33 @@ public class InsertPreSplitHookFilesTest {
         TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
 
         assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasAlignWithPartialColumnListMatchingFiles() {
+        // INSERT INTO t (k) SELECT * FROM FILES(...): target is (k, v) but the parquet
+        // has only column k. The effective target columns are the list (k), which
+        // aligns by position-name with the FILES schema (k).
+        InsertStmt stmt = byPositionInsertStmt();
+        when(stmt.getTargetColumnNames()).thenReturn(List.of("k"));
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k");
+
+        assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasMisalignedWhenColumnListOrderDiffersFromFiles() {
+        // INSERT INTO t (v, k) SELECT * FROM FILES(k, v): by position the load writes
+        // FILES column k into target v and FILES column v into target k, so the
+        // effective target names (v, k) disagree with the FILES names (k, v) at every
+        // ordinal — the by-name sampler would read the wrong column.
+        InsertStmt stmt = byPositionInsertStmt();
+        when(stmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k", "v");
+
+        assertFalse(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
     }
 
     private static InsertStmt byPositionInsertStmt() {
