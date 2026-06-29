@@ -28,8 +28,13 @@ displayed_sidebar: docs
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+<<<<<<< HEAD
+=======
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
+>>>>>>> a4be7d06e1 ([Doc] Flink Connector 1.2.15 (#75353))
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降       | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降       | 8    | 2.11,2.12 |
 
 > **注意**
 >
@@ -39,7 +44,66 @@ displayed_sidebar: docs
 
 ### 1.2
 
+<<<<<<< HEAD
 ## バージョン 1.2.11
+=======
+#### 1.2.15
+
+リリース日：2026年6月18日
+
+##### 機能
+
+- マルチテーブルトランザクションの Stream Load サポートを追加しました。[#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### 改善点
+
+- Merge Commit でデータ品質エラーメッセージのログ記録に対応しました。[#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### バグ修正
+
+- マルチテーブルトランザクションの並行処理を修正：テーブルごとのロードをシリアル化し、テーブル間のコミットを同期化しました。[#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- PREPARE状態の残留トランザクションでロールバックが失敗した場合、FEのキャンセルAPIにフォールバックするようにしました。[#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- カラム作成ステートメントを生成する際、DEFAULT句内のCURRENT_TIMESTAMPを引用符で囲まない。[#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
+
+#### 1.2.14
+
+リリース日: 2026年2月11日
+
+##### 機能
+
+- Merge Commit をサポート。[#474](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/474)
+
+##### 改善点
+
+- `sink.buffer-flush.interval-ms` を 1 秒未満に設定可能に。[#475](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/475)
+- トランザクション Publish タイムアウトの設定をサポート。[#480](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/480)
+
+##### バグ修正
+
+以下の問題が修正されました：
+
+- guava バージョンを `32.0.1-jre` にアップグレードし、CVE-2023-2976 を修正。[#467](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/467)
+
+#### 1.2.12
+
+リリース日: 2025年9月19日
+
+##### 改善点
+
+- ソースに対してウェアハウスを指定できるようになりました。 [#423](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/423)
+- セキュリティポリシーを追加しました。 [#434](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/434)
+- エラーログ内の機密データをマスクしました。 [#446](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/446)
+- Stream Load トランザクションインターフェイスで `prepared_timeout` を設定できるようになりました。 [#453](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/453)
+
+##### バグ修正
+
+以下の問題を修正しました:
+
+- Open が失敗した場合、ソースリーダーがクローズされない問題。 [#441](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/441)
+- StreamLoadManagerV2.flush 内の例外によって誤って成功と判定される問題。 [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
+
+#### 1.2.11
+>>>>>>> a4be7d06e1 ([Doc] Flink Connector 1.2.15 (#75353))
 
 リリース日：2025年6月3日
 
