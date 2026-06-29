@@ -1,0 +1,68 @@
+-- name: test_task_runs_sql_injection @sequential @slow
+admin set frontend config('task_check_interval_second' = '1');
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE secret_${uuid0}(v INT) DUPLICATE KEY(v) DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into secret_${uuid0} values (1),(2),(3);
+-- result:
+-- !result
+CREATE TABLE ss(event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values('2020-01-14', 1), ('2020-01-15', 2);
+-- result:
+-- !result
+function: assert_query_contains("submit task task_inj_${uuid0} as insert into ss select * from ss;", "SUBMITTED")
+-- result:
+None
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 3, "desc": "wait for task run to be archived"}
+  result=select count(*) from _statistics_.task_run_history where task_name='task_inj_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+
+select if(count(*) > 0, "OK", "FAILED") from information_schema.task_runs where task_name='task_inj_${uuid0}';
+-- result:
+OK
+-- !result
+select count(1) from information_schema.task_runs where task_name = 'no_such'' OR ''1''=''1';
+-- result:
+0
+-- !result
+select count(1) from information_schema.task_runs where task_name = 'a''';
+-- result:
+0
+-- !result
+select count(1) from information_schema.task_runs where task_name = 'no_such'' OR (SELECT count(*) FROM db_${uuid0}.secret_${uuid0}) = 3 OR ''1''=''1';
+-- result:
+0
+-- !result
+select count(1) from information_schema.task_runs where task_name = 'x\\';
+-- result:
+0
+-- !result
+admin set frontend config('enable_task_run_fe_evaluation'='false');
+-- result:
+-- !result
+select count(1) from information_schema.task_runs where task_name = 'no_such'' OR ''1''=''1';
+-- result:
+0
+-- !result
+admin set frontend config('enable_task_run_fe_evaluation'='true');
+-- result:
+-- !result
+admin set frontend config('task_check_interval_second' = '60');
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
