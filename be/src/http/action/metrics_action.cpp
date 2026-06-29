@@ -321,6 +321,10 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     }
 }
 
+bool MetricsAction::need_auth() const {
+    return true;
+}
+
 void MetricsAction::handle(HttpRequest* req) {
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_metrics"));
     const std::string& type = req->param("type");
