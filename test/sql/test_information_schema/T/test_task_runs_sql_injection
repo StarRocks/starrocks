@@ -1,5 +1,17 @@
 -- name: test_task_runs_sql_injection @sequential
 
+-- The only SQL-built lookup sink is TaskRunHistoryTable.lookup(), which queries
+-- the archived _statistics_.task_run_history table over the privileged internal
+-- repo connection. The pending/running/in-memory-history paths feeding
+-- information_schema.task_runs use a Java equality filter and can NOT be injected.
+-- So the regression below is only meaningful once the run has actually been
+-- archived; otherwise the tautology payloads scan an empty archive table and
+-- return 0 even on vulnerable code (a false pass).
+--
+-- Shrink the task-run archive daemon interval (default 60s) so archival happens
+-- quickly during the test, then wait on the archive table directly below.
+admin set frontend config('task_check_interval_second' = '1');
+
 create database db_${uuid0};
 use db_${uuid0};
 
@@ -15,9 +27,15 @@ insert into ss values('2020-01-14', 1), ('2020-01-15', 2);
 -- Populate task_run_history with at least one archived run so a successful
 -- injection (tautology) would have rows to return.
 function: assert_query_contains("submit task task_inj_${uuid0} as insert into ss select * from ss;", "SUBMITTED")
+
+-- Wait until the run is ARCHIVED into _statistics_.task_run_history, not merely
+-- visible via information_schema.task_runs (which also serves in-memory history
+-- that never reaches the privileged SQL lookup). Querying the archive table
+-- directly is the definitive "archived" signal; the LOOP harmlessly retries while
+-- the table/row does not yet exist.
 LOOP {
-  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for task run to appear"}
-  result=select count(*) from information_schema.task_runs where task_name='task_inj_${uuid0}';
+  PROPERTY: {"timeout": 120, "interval": 3, "desc": "wait for task run to be archived"}
+  result=select count(*) from _statistics_.task_run_history where task_name='task_inj_${uuid0}';
   CHECK: int(${result}[-1][0]) > 0
 } END LOOP
 
@@ -27,8 +45,9 @@ select if(count(*) > 0, "OK", "FAILED") from information_schema.task_runs where 
 -- ============================================================================
 -- SQL injection regression (FE evaluation path).
 -- Each payload returns 0 only because the value is treated as a single literal
--- task name. On vulnerable code the OR-tautology/subquery would execute and the
--- WHERE would become true (returning rows) or the internal SQL would error.
+-- task name. On vulnerable code the OR-tautology/subquery would execute against
+-- the archived run(s) and the WHERE would become true (returning rows) or the
+-- internal SQL would error.
 -- ============================================================================
 
 -- (1) Quote tautology: closes the literal and ORs a true condition.
@@ -51,5 +70,8 @@ select count(1) from information_schema.task_runs where task_name = 'x\\';
 admin set frontend config('enable_task_run_fe_evaluation'='false');
 select count(1) from information_schema.task_runs where task_name = 'no_such'' OR ''1''=''1';
 admin set frontend config('enable_task_run_fe_evaluation'='true');
+
+-- Restore the default archive interval.
+admin set frontend config('task_check_interval_second' = '60');
 
 drop database db_${uuid0};
