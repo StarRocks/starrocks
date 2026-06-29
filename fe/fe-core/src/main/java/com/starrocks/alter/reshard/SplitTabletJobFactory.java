@@ -198,7 +198,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         verifyNewTabletRanges(table, reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
-        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
+        // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
+        // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
+                true /* spreadNewShards */);
     }
 
     /**
@@ -348,7 +351,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         verifyNewTabletRanges(table, reshardingPhysicalPartitions);
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
-        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
+        // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
+        // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
+                true /* spreadNewShards */);
     }
 
     /**

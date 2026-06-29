@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
@@ -91,16 +92,36 @@ public class SplitTabletJob extends TabletReshardJob {
     @SerializedName(value = "endTransactionId")
     protected long endTransactionId;
 
+    // When true, new shards are spread across compute nodes instead of being PACKed onto the
+    // source tablet's worker. Set only by the pre-split entry points (the source tablet is empty,
+    // so there is no warm cache to reuse and PACK would funnel the whole load onto one node). An
+    // online split leaves this false to keep its data-locality PACK. Persisted so a leader-switch
+    // re-run of createShardsOnStarOS uses the same placement.
+    @SerializedName(value = "spreadNewShards")
+    protected final boolean spreadNewShards;
+
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        this(jobId, dbId, tableId, reshardingPhysicalPartitions, false);
+    }
+
+    public SplitTabletJob(long jobId, long dbId, long tableId,
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions,
+            boolean spreadNewShards) {
         super(jobId, JobType.SPLIT_TABLET);
         this.dbId = dbId;
         this.tableId = tableId;
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
+        this.spreadNewShards = spreadNewShards;
     }
 
     public long getDbId() {
         return dbId;
+    }
+
+    @VisibleForTesting
+    public boolean isSpreadNewShards() {
+        return spreadNewShards;
     }
 
     public long getTableId() {
@@ -902,7 +923,8 @@ public class SplitTabletJob extends TabletReshardJob {
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
-                shardProperties, WarehouseManager.DEFAULT_RESOURCE);
+                shardProperties, WarehouseManager.DEFAULT_RESOURCE,
+                spreadNewShards);
     }
 
     private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,

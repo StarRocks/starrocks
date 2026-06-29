@@ -320,6 +320,31 @@ public class SplitTabletJobTest {
         }
     }
 
+    // Clean separation of the two split flavors: an online split (SPLIT TABLET clause) keeps the
+    // PACK-to-old placement for warm-cache reuse, while a pre-split spreads its new shards across
+    // compute nodes so the load that follows is not funneled onto the source tablet's single worker.
+    @Test
+    public void testPreSplitSpreadsNewShardsWhileOnlineSplitPacks() throws Exception {
+        SplitTabletJob onlineSplit = (SplitTabletJob) createTabletReshardJob();
+        Assertions.assertFalse(onlineSplit.isSpreadNewShards(),
+                "online split must keep PACK-to-old placement");
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = materializedIndex.getTablets().get(0);
+        // Reset to Range.all() so the K=3 external boundaries below are valid regardless of test order.
+        oldTablet.setRange(new TabletRange());
+        List<TabletRange> newTabletRanges = List.of(
+                tabletRangeUpperOnly(100),
+                tabletRange(100, 200),
+                tabletRangeLowerOnly(200));
+
+        SplitTabletJob preSplit = (SplitTabletJob) SplitTabletJobFactory.forExternalBoundaries(
+                db, table, oldTablet.getId(), newTabletRanges);
+        Assertions.assertTrue(preSplit.isSpreadNewShards(),
+                "pre-split must spread new shards across compute nodes");
+    }
+
     // -------------------------------------------------------------------------
     // external boundaries end-to-end driver.
     //
@@ -693,7 +718,8 @@ public class SplitTabletJobTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 throw new DdlException("simulated StarOS failure");
             }
         };
