@@ -177,7 +177,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 導入時期: v4.2.0
 - 説明: true の場合、ほとんどの外部 BE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は Thrift `checkAuth` RPC で FE Leader に転送されて検証され、ユーザー名/パスワードは FE 側の認証システム（LDAP / security integration を含む）を正としています。次のエンドポイントは常に除外されます：
-  - 公開プローブ / 可観測性: `/api/health`、`/metrics`、`/metrics/memory`。
   - トークン認証の内部転送（FE/BE 間の tablet clone と load エラーファイル取得に使用）: `/api/_tablet/_download`、`/api/_download_load`。これらは各自の token チェックで保護されており、`enable_http_auth=true` を有効にしても `enable_token_check=false` の影響を補うことはできません。
   - ハンドラ内でロードラベル + テーブル権限から認証する Stream Load / transaction エンドポイント: `/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
 

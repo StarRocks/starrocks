@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -53,10 +54,12 @@ public class HealthAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/health", new HealthAction(controller));
     }
 
-    // Liveness probe; intentionally unauthenticated.
+    // Liveness probe. Historically anonymous; gated for backward compatibility so it
+    // requires Basic auth (AuthN-only, no privilege check) only when the operator opts
+    // in via `enable_http_auth`.
     @Override
     public boolean needAuth() {
-        return false;
+        return Config.enable_http_auth;
     }
 
     @Override

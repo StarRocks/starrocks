@@ -196,10 +196,16 @@ TEST(BeHandlerNeedAuthTest, download_action_error_log_requires_framework_auth) {
     EXPECT_TRUE(error_log.need_auth());
 }
 
-TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) {
-    EXPECT_FALSE(HealthAction(nullptr).need_auth());
-    EXPECT_FALSE(MetricsAction(nullptr).need_auth());
-    EXPECT_FALSE(MemoryMetricsAction(fake_global_env()).need_auth());
+// Probe / Prometheus endpoints (/api/health, /metrics, /metrics/memory) are AuthN-only:
+// historically anonymous, now gated by `config::enable_http_auth` -- need_auth() == true
+// (the injected verifier short-circuits when the flag is off) with no extra privilege.
+TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_are_authn_only) {
+    EXPECT_TRUE(HealthAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, HealthAction(nullptr).required_privilege());
+    EXPECT_TRUE(MetricsAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, MetricsAction(nullptr).required_privilege());
+    EXPECT_TRUE(MemoryMetricsAction(fake_global_env()).need_auth());
+    EXPECT_EQ(Priv::NONE, MemoryMetricsAction(fake_global_env()).required_privilege());
 }
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
