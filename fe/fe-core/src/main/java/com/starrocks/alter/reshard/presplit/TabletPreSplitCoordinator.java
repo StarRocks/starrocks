@@ -485,7 +485,7 @@ public final class TabletPreSplitCoordinator {
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
      *                               Must be {@code >= 1}.
      */
-    static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
