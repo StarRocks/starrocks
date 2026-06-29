@@ -144,17 +144,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": backend network options init successfully";
 
-    // init global env
-    auto* global_env = GlobalEnv::GetInstance();
-    EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
-
     auto* platform_env = PlatformEnv::GetInstance();
     PlatformEnvOptions platform_env_options;
     platform_env_options.metrics = process_metrics_registry->root_registry();
     platform_env_options.store_paths = paths;
     EXIT_IF_ERROR(platform_env->init(std::move(platform_env_options)));
     LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
+
+    // init global env
+    auto* global_env = GlobalEnv::GetInstance();
+    EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
@@ -466,9 +466,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
-    platform_env->destroy();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
-
     delete storage_engine;
 
     // Tear down the StorageEnv-owned VectorIndexCache before global_env->stop()
@@ -488,6 +485,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     global_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": global env stop successfully";
+
+    platform_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     shutdown_tracer();
 

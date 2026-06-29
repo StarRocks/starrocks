@@ -14,12 +14,17 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <utility>
+
 #include "base/metrics.h"
 #include "base/testutil/scoped_updater.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_path_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
+#include "platform/platform_env.h"
 #include "runtime/env/diagnose_daemon.h"
 #include "runtime/env/global_env.h"
 #include "runtime/runtime_env_test_util.h"
@@ -50,17 +55,38 @@ TEST(GlobalEnvTest, OwnsDiagnoseDaemonLifecycle) {
     MemInfo::init();
 
     auto* env = GlobalEnv::GetInstance();
+    auto* platform_env = PlatformEnv::GetInstance();
     env->stop();
+    platform_env->destroy();
+    platform_env->reset_store_paths_for_test();
+
+    const auto small_file_dir = std::filesystem::absolute("./ut_dir/runtime_env_platform_global_order");
+    std::error_code ec;
+    std::filesystem::remove_all(small_file_dir, ec);
+
     SCOPED_UPDATE(std::string, config::mem_limit, "90%");
+    SCOPED_UPDATE(std::string, config::small_file_dir, small_file_dir.string());
+
+    MetricRegistry platform_metrics("runtime_env_platform_order_test");
+    PlatformEnvOptions platform_options;
+    platform_options.metrics = &platform_metrics;
+    auto st = platform_env->init(std::move(platform_options));
+    ASSERT_TRUE(st.ok()) << st;
 
     MetricRegistry metrics("runtime_env_diagnose_test");
-    auto st = env->init(&metrics);
+    st = env->init(&metrics);
     ASSERT_TRUE(st.ok()) << st;
     ASSERT_NE(env->diagnose_daemon(), nullptr);
     ASSERT_NE(env->diagnose_daemon()->thread_pool(), nullptr);
 
     env->stop();
     ASSERT_EQ(env->diagnose_daemon(), nullptr);
+    ASSERT_NE(platform_env->brpc_stub_cache(), nullptr);
+    ASSERT_NE(platform_env->small_file_mgr(), nullptr);
+
+    platform_env->destroy();
+    platform_env->reset_store_paths_for_test();
+    std::filesystem::remove_all(small_file_dir, ec);
 }
 
 TEST(GlobalEnvTest, OwnsExecutionThreadPools) {
