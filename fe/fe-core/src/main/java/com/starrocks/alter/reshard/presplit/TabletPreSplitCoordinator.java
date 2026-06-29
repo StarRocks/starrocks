@@ -474,11 +474,14 @@ public final class TabletPreSplitCoordinator {
     /**
      * Choose how many tablets to pre-split a load into.
      *
-     * <p>Picks the larger of two lower bounds — the cluster's active compute-node
-     * count (so every compute node gets at least one tablet) and the byte-volume
-     * estimate ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)})
-     * — then clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
+     * <p>Takes the byte-volume estimate
+     * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
+     * to a whole multiple of the active compute-node count so tablets spread evenly
+     * across nodes, floors it at the node count (so every node gets at least one
+     * tablet), and clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
      * minimum because a single-tablet result is equivalent to skipping pre-split.
+     * The {@code max_split_count} cap takes precedence, so a clamped result is not
+     * necessarily a multiple of the node count.
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
@@ -501,7 +504,20 @@ public final class TabletPreSplitCoordinator {
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
+        // Clamp to maxSplitCount before the node-count rounding. The final result is
+        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
+        // Long.MAX_VALUE estimate (tiny target_size + huge input).
+        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        // Round the byte-volume estimate up to a whole multiple of the compute-node
+        // count so the tablets distribute evenly. A count that is not a multiple of
+        // the node count leaves some nodes owning one more tablet than the rest (e.g.
+        // 4 tablets on 3 nodes -> 2/1/1), skewing load-write and scan parallelism
+        // toward the heavier nodes.
+        long nodeAlignedCount =
+                ((boundedByteTarget + activeComputeNodeCount - 1) / activeComputeNodeCount)
+                        * activeComputeNodeCount;
+        long proposed = Math.max(activeComputeNodeCount, nodeAlignedCount);
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }

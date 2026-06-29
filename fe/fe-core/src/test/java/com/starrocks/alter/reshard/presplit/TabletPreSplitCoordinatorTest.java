@@ -297,8 +297,22 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testTabletCountLargeLoadOnThreeComputeNodes() {
-        // 100 GB / 10 GB target = 10 tablets by bytes; beats the compute-node floor of 3.
-        Assertions.assertEquals(10, selectTabletCount(100L * DebugUtil.GIGABYTE, 3));
+        // 100 GB / 10 GB target = 10 tablets by bytes; rounded up to the next multiple
+        // of the 3 compute nodes -> 12, so each node owns exactly 4 tablets.
+        Assertions.assertEquals(12, selectTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountRoundsUpToComputeNodeMultiple() {
+        // 70 GB / 10 GB target = 7 tablets by bytes; rounded up to the next multiple
+        // of 3 -> 9 (avoids an uneven 3/2/2 spread across the nodes).
+        Assertions.assertEquals(9, selectTabletCount(70L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testTabletCountAlreadyComputeNodeMultipleIsUnchanged() {
+        // 60 GB / 10 GB target = 6 tablets by bytes, already a multiple of 3 -> 6.
+        Assertions.assertEquals(6, selectTabletCount(60L * DebugUtil.GIGABYTE, 3));
     }
 
     @Test
@@ -317,6 +331,16 @@ public class TabletPreSplitCoordinatorTest {
         // 10 PB / 10 GB target ≈ 1M tablets by bytes; clamps to tablet_reshard_max_split_count.
         Assertions.assertEquals(Config.tablet_reshard_max_split_count,
                 selectTabletCount(10L * 1024L * DebugUtil.TERABYTE, 1));
+    }
+
+    @Test
+    public void testTabletCountHugeEstimateSaturatesWithoutOverflow() {
+        // Tiny target_size + near-Long.MAX_VALUE estimate: the node-count rounding
+        // must not overflow (which would collapse the count to the node floor).
+        // The estimate is clamped before alignment, so it saturates at max_split_count.
+        Config.tablet_reshard_target_size = 1L;
+        Assertions.assertEquals(Config.tablet_reshard_max_split_count,
+                selectTabletCount(Long.MAX_VALUE, 3));
     }
 
     @Test
