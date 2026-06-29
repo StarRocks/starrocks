@@ -292,8 +292,11 @@ public class HiveMetadataTest {
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), null, -1, TvrTableSnapshot.empty());
         Assertions.assertEquals(Config.default_statistics_output_row_count, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        // Stats explicitly disabled: columns must remain UNKNOWN so the optimizer respects the intent
+        ColumnStatistic partStat = statistics.getColumnStatistics().get(partColumnRefOperator);
+        ColumnStatistic dataStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
+        Assertions.assertTrue(partStat.isUnknown());
+        Assertions.assertTrue(dataStat.isUnknown());
     }
 
     @Test
