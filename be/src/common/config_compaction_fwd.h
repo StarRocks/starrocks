@@ -128,6 +128,11 @@ CONF_mBool(chaos_test_enable_random_compaction_strategy, "false");
 
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
 
+// Release retained chunk capacity in compaction when the current tracker consumption exceeds this percentage.
+// Currently only used by PK compaction in shared-nothing mode.
+// Set it to a negative value to disable this behavior.
+CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
+
 // Number of thread for flushing memtable per store.
 CONF_mInt32(flush_thread_num_per_store, "2");
 

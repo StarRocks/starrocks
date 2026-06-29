@@ -241,6 +241,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：每个 Compaction 线程允许的最大内存大小。
 - 引入版本：-
 
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- 默认值：-1
+- 类型：Int
+- 单位：Percent
+- 是否动态：是
+- 描述：控制 Compaction 释放内部 Chunk 保留容量的时机。当前该参数仅在存算一体集群的主键表 Compaction 中生效。当当前 Compaction 任务的 Memory Tracker 使用量超过 `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100` 时，StarRocks 在重置内部 Chunk 时释放其保留容量。取值为负数时，关闭该行为。
+- 引入版本：-
+
 ### compaction_max_memory_limit_percent
 
 - 默认值：20
