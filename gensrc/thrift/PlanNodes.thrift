@@ -565,6 +565,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
