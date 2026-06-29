@@ -67,6 +67,39 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
         return INSTANCE;
     }
 
+    // Returns true when `SplitMultiPhaseAggRule` will pick the 4-stage shuffle-by-(g, d) shape
+    // as the sole alternative and the distinct column already has more distinct values than
+    // the number of buckets. In that case the (g, d) shuffle on its own distributes at least
+    // as well as the salt rewrite, so the rewrite is pure overhead.
+    //
+    // When the alternative may be the 3-stage shuffle-by-(g) shape, we keep the
+    // rewrite as a candidate because a hot value in g would otherwise cause severe runtime skew.
+    // The cost model's existing logic decides between them in that case.
+    private boolean shouldSkipRewriteSinceDistinctDistributedWell(OptExpression input, LogicalAggregationOperator aggOp,
+                                                                  ColumnRefOperator distinctColRef, int bucketNum,
+                                                                  OptimizerContext context) {
+        if (input.getGroupExpression() == null) {
+            return false;
+        }
+        final var inputStats = input.getGroupExpression().inputAt(0).getStatistics();
+        if (inputStats == null) {
+            return false;
+        }
+        final var distinctColStat = inputStats.getColumnStatistic(distinctColRef);
+        if (distinctColStat == null || distinctColStat.isUnknown()) {
+            return false;
+        }
+        if (distinctColStat.getDistinctValuesCount() <= bucketNum) {
+            return false;
+        }
+
+        final var groupKeys = Lists.newArrayList(aggOp.getGroupingKeys());
+        groupKeys.add(distinctColRef);
+        final var partitionBys = aggOp.getGroupingKeys();
+
+        return !SplitMultiPhaseAggRule.isThreeStageMoreEfficient(input, groupKeys, partitionBys);
+    }
+
     // compute the type of bucket column, since bucket column introduce extra cost, so we
     // choose just wide enough type to keep bucket number.
     private Type pickBucketType(int bucketNum) {
@@ -112,9 +145,13 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
 
         // create auxiliary group-by column:
         // cast(murmur_hash3_32(cast(distinct_column as varchar))%bucketNum as NarrowInteger)
-        int bucketNum = context.getSessionVariable().getDistinctColumnBuckets();
-        // bucketNum ranges from [4, 65536]
-        bucketNum = Math.max(4, Math.min(65536, bucketNum));
+        final int bucketNum = Math.max(4, Math.min(65536, context.getSessionVariable().getDistinctColumnBuckets()));
+
+        if (!aggOp.checkGroupByCountDistinctWithSkewHint()
+                && shouldSkipRewriteSinceDistinctDistributedWell(input, aggOp, distinctColRef, bucketNum, context)) {
+            return Lists.newArrayList();
+        }
+
         ScalarOperator bucketCol = createBucketColumn(distinctColRef, bucketNum);
         ColumnRefOperator bucketColRef =
                 context.getColumnRefFactory().create(bucketCol, bucketCol.getType(), distinctColRef.isNullable());

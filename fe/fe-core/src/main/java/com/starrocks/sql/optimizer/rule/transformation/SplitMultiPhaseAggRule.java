@@ -342,8 +342,9 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
         return elseOperator;
     }
 
-    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys,
-                                              List<ColumnRefOperator> partitionByColumns) {
+    static boolean isThreeStageMoreEfficient(OptExpression input,
+                                             List<ColumnRefOperator> groupKeys,
+                                             List<ColumnRefOperator> partitionByColumns) {
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
