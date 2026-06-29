@@ -45,7 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
@@ -576,25 +575,38 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
-            
-            // In gsonPostProcess, we should be tolerant of existing properties even when flat_json.enable is false.
-            // The validation should be done at ALTER TABLE time, not during deserialization/copy.
-            // If flat_json.enable is false, ignore other flat JSON properties and use default values.
+            // Read with get(), not analyzerDoubleProp/analyzeIntProp: those remove() the keys, and this
+            // runs on every image load (gsonPostProcess), so the factors would be lost on the next
+            // checkpoint. On a malformed value, warn and keep defaults instead of failing the image
+            // load, matching buildLakeCompactionMaxParallel().
             try {
-                double flatJsonNullFactor = PropertyAnalyzer.analyzerDoubleProp(properties,
-                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, Config.flat_json_null_factor);
-                double flatJsonSparsityFactory = PropertyAnalyzer.analyzerDoubleProp(properties,
-                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
-                int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
-                        PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+                double flatJsonNullFactor = Config.flat_json_null_factor;
+                double flatJsonSparsityFactory = Config.flat_json_sparsity_factory;
+                int flatJsonColumnMax = Config.flat_json_column_max;
+                if (enableFlatJson) {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+                        flatJsonNullFactor = Double.parseDouble(
+                                properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+                    }
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+                        flatJsonSparsityFactory = Double.parseDouble(
+                                properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+                    }
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                        flatJsonColumnMax = Integer.parseInt(
+                                properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+                    }
+                }
                 flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
                         flatJsonSparsityFactory, flatJsonColumnMax);
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION)) {
                     flatJsonConfig.setVersion(Long.parseLong(properties.get(
                             PropertyAnalyzer.PROPERTIES_FLAT_JSON_VERSION)));
                 }
-            } catch (AnalysisException e) {
-                throw new RuntimeException("Failed to analyze flat JSON properties: " + e.getMessage(), e);
+            } catch (NumberFormatException e) {
+                LOG.warn("Invalid flat_json property value, using defaults: {}", e.getMessage());
+                flatJsonConfig = new FlatJsonConfig(enableFlatJson, Config.flat_json_null_factor,
+                        Config.flat_json_sparsity_factory, Config.flat_json_column_max);
             }
         }
         return this;
