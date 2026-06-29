@@ -137,6 +137,23 @@ static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::prot
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
+            // orc_ts_to_native_ts now carries the sub-second into the before-epoch result for the
+            // data load path. Pre-1970 stripe-stats sub-second is a separate, pre-existing concern
+            // here (the ORC nanos field is stored with a +1 offset this decoder does not undo, the
+            // remainder above can be negative, and the before-epoch instant branch ignores the
+            // offset). Dropping the min sub-second does not affect pruning, but dropping the max
+            // sub-second understates the max bound; keep dropping it for negative-epoch bounds to
+            // leave pruning byte-for-byte unchanged rather than regress it.
+            //
+            // TODO: decode pre-1970 stripe-stats sub-second correctly in a dedicated stats path:
+            //   - subtract the +1 nanos offset (mirror liborc's reader);
+            //   - floor secs toward -inf (not toward zero) so the ms remainder stays non-negative;
+            //   - apply the instant tz offset on the negative-epoch branch;
+            //   - round conservatively for bounds (floor the min, ceil the max) so [min, max] still
+            //     contains the true value range instead of understating the max.
+            if (secs < 0) {
+                ns = 0;
+            }
             OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
@@ -148,6 +165,10 @@ static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::prot
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
+            // See the minimum branch: keep dropping the sub-second for negative-epoch bounds.
+            if (secs < 0) {
+                ns = 0;
+            }
             OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
