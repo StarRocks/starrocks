@@ -12,19 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/script")
-
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/script")
-
-set(EXEC_FILES
-    command_executor.cpp
-    script.cpp
-    ../thirdparty/wren/wren.c
+set(SCRIPT_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    command_executor_test.cpp
+    key_cache_script_test.cpp
 )
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+set(SCRIPT_TEST_LINK_LIBS
+    Script
+    ${TEST_LINK_LIBS}
+)
 
-ADD_BE_LIB(Script ${EXEC_FILES})
-target_link_libraries(Script PRIVATE Storage StoragePrimitive Runtime RuntimeCore IO Platform Common Base Gutil StarRocksGen)
-
-target_include_directories(Script PRIVATE ${SRC_DIR}/script ${SRC_DIR}/thirdparty/wren ${SRC_DIR}/thirdparty/wrenbind17)
+add_executable(script_test ${SCRIPT_TEST_FILES})
+target_link_libraries(script_test ${SCRIPT_TEST_LINK_LIBS} gtest_main)
+STARROCKS_FORCE_LOAD_LIBS(script_test Exprs ExprCore)
+set_target_properties(script_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

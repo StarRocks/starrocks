@@ -34,7 +34,7 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
-target_link_libraries(Service PRIVATE Runtime Orchestration Cache AgentServer ComputeEnv ExecRuntime Platform ColumnCore)
+target_link_libraries(Service PRIVATE Script Runtime Orchestration Cache AgentServer ComputeEnv ExecRuntime Platform ColumnCore)
 target_link_libraries(ServiceBE PUBLIC Service)
 target_link_libraries(ServiceBE PRIVATE AgentServer ConnectorBootstrap DataWorkflows Orchestration Storage)
 
