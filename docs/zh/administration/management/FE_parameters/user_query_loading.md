@@ -362,13 +362,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用谓词列收集。如果禁用，谓词列在查询优化期间将不会被记录。
 - 引入版本: -
 
-### `enable_push_down_local_split_agg_through_union_all`
+### `push_down_non_grouped_aggregate_below_union`
 
 - 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否在物理计划中将不带 GROUP BY 的 local split 聚合下推穿过 UNION ALL。
+- 描述: 是否在物理计划中将不带 GROUP BY 的聚合下推到 Union 下方。
 - 引入版本: -
 
 ### `enable_query_queue_v2`

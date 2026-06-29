@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /*
@@ -79,33 +80,32 @@ import java.util.Set;
  *
  * After rewrite, UNION ALL transfers aggregate intermediate states instead of raw input rows.
  */
-public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
+public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
     private static final Set<String> NON_PUSH_DOWN_AGGREGATE_FUNCTIONS = Sets.newHashSet(
             FunctionSet.GROUP_CONCAT, FunctionSet.ARRAY_AGG,
             FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_UNIQUE_AGG,
-            FunctionSet.APPROX_COUNT_DISTINCT, FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH,
-            FunctionSet.DS_HLL_COUNT_DISTINCT, FunctionSet.DS_THETA_COUNT_DISTINCT,
             FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MULTI_DISTINCT_SUM,
             FunctionSet.FUSED_MULTI_DISTINCT_COUNT, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM,
             FunctionSet.FUSED_MULTI_DISTINCT_COUNT_AVG, FunctionSet.FUSED_MULTI_DISTINCT_COUNT_SUM_AVG);
 
-    public PushDownLocalAggregateThroughUnionAll() {
+    public PushDownNonGroupedAggregateBelowUnion() {
     }
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        if (!Config.enable_push_down_local_split_agg_through_union_all) {
+        if (!Config.push_down_non_grouped_aggregate_below_union) {
             return root;
         }
 
         ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
-        return root.getOp().accept(new PushDownLocalAggregateThroughUnionAllVisitor(factory), root, null);
+        return root.getOp().accept(new PushDownNonGroupedAggregateBelowUnionVisitor(factory), root, null);
     }
 
-    private static class PushDownLocalAggregateThroughUnionAllVisitor extends OptExpressionVisitor<OptExpression, Void> {
+    private static class PushDownNonGroupedAggregateBelowUnionVisitor
+            extends OptExpressionVisitor<OptExpression, Void> {
         private final ColumnRefFactory factory;
 
-        PushDownLocalAggregateThroughUnionAllVisitor(ColumnRefFactory factory) {
+        PushDownNonGroupedAggregateBelowUnionVisitor(ColumnRefFactory factory) {
             this.factory = factory;
         }
 
@@ -121,9 +121,9 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             visit(optExpression, context);
-            RewriteContext ctx = match(optExpression);
-            if (ctx != null) {
-                return rewrite(ctx);
+            Optional<RewriteContext> ctx = match(optExpression);
+            if (ctx.isPresent()) {
+                return rewrite(ctx.get());
             }
             return optExpression;
         }
@@ -133,10 +133,10 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
         // push-down precondition. No new plan node is constructed here.
         // ----------------------------------------------------------------------------------------
 
-        private RewriteContext match(OptExpression aggExpr) {
+        private Optional<RewriteContext> match(OptExpression aggExpr) {
             PhysicalHashAggregateOperator localAgg = aggExpr.getOp().cast();
             if (!isEligibleSplitAgg(aggExpr, localAgg, AggType.LOCAL)) {
-                return null;
+                return Optional.empty();
             }
 
             OptExpression projectExpr = null;
@@ -148,20 +148,19 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
 
             OptExpression unionExpr = child;
             if (unionExpr.getOp().getOpType() != OperatorType.PHYSICAL_UNION) {
-                return null;
+                return Optional.empty();
             }
             PhysicalUnionOperator union = unionExpr.getOp().cast();
             if (!union.isUnionAll() || union.getPredicate() != null || union.hasLimit()) {
-                return null;
+                return Optional.empty();
             }
-            return new RewriteContext(aggExpr, projectExpr, unionExpr);
+            return Optional.of(new RewriteContext(aggExpr, projectExpr, unionExpr));
         }
 
         private boolean isEligibleSplitAgg(OptExpression aggExpr, PhysicalHashAggregateOperator agg,
                                            AggType expectedType) {
             if (agg.getType() != expectedType || !agg.isSplit() || !agg.getGroupBys().isEmpty() ||
-                    agg.getPredicate() != null || agg.hasLimit() || agg.getProjection() != null ||
-                    agg.getAggregations().isEmpty() || aggExpr.arity() != 1) {
+                    agg.getPredicate() != null || agg.hasLimit()) {
                 return false;
             }
             return agg.getAggregations().values().stream().noneMatch(this::cannotPushDownAggFunction);
@@ -201,16 +200,27 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
             PhysicalUnionOperator newUnion = new PhysicalUnionOperator(unionOutputColumns, newChildOutputColumns,
                     true, union.getLimit(), union.getPredicate(), null,
                     union.isFromIcebergEqualityDeleteRewrite());
-            OptExpression newUnionExpr = buildExpression(ctx.unionExpr(), newUnion, newUnionChildren,
-                    rewriteLogicalProperty(ctx.localAggExpr().getLogicalProperty(), unionOutputColumns),
-                    ctx.localAggExpr().getStatistics(), ctx.localAggExpr().getCost());
+            OptExpression newUnionExpr = OptExpression.builder()
+                    .with(ctx.unionExpr())
+                    .setOp(newUnion)
+                    .setInputs(newUnionChildren)
+                    .setLogicalProperty(rewriteLogicalProperty(ctx.localAggExpr().getLogicalProperty(),
+                            unionOutputColumns))
+                    .setStatistics(ctx.localAggExpr().getStatistics())
+                    .setCost(ctx.localAggExpr().getCost())
+                    .build();
 
             // 3. Build a new aggregate operator for the merge serialize stage.
             PhysicalHashAggregateOperator mergeSerializeAgg =
                     buildMergeSerializeAggregate(ctx.localAgg(), unionOutputColumns);
-            return buildExpression(ctx.localAggExpr(), mergeSerializeAgg,
-                    Lists.newArrayList(newUnionExpr), ctx.localAggExpr().getLogicalProperty(),
-                    ctx.localAggExpr().getStatistics(), ctx.localAggExpr().getCost());
+            return OptExpression.builder()
+                    .with(ctx.localAggExpr())
+                    .setOp(mergeSerializeAgg)
+                    .setInputs(Lists.newArrayList(newUnionExpr))
+                    .setLogicalProperty(ctx.localAggExpr().getLogicalProperty())
+                    .setStatistics(ctx.localAggExpr().getStatistics())
+                    .setCost(ctx.localAggExpr().getCost())
+                    .build();
         }
 
         private boolean canPushDownThroughExchange(OptExpression unionChild) {
@@ -272,10 +282,15 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
             PhysicalHashAggregateOperator newLocalAgg = new PhysicalHashAggregateOperator(AggType.LOCAL,
                     Lists.newArrayList(), Lists.newArrayList(localAgg.getPartitionByColumns()), newAggregations,
                     true, localAgg.getLimit(), localAgg.getPredicate(), null);
-            OptExpression newLocalAggExpr = buildExpression(ctx.localAggExpr(), newLocalAgg,
-                    Lists.newArrayList(inputRewrite.input()),
-                    rewriteLogicalProperty(ctx.localAggExpr().getLogicalProperty(), branchOutputColumns),
-                    statistics, cost);
+            OptExpression newLocalAggExpr = OptExpression.builder()
+                    .with(ctx.localAggExpr())
+                    .setOp(newLocalAgg)
+                    .setInputs(Lists.newArrayList(inputRewrite.input()))
+                    .setLogicalProperty(rewriteLogicalProperty(ctx.localAggExpr().getLogicalProperty(),
+                            branchOutputColumns))
+                    .setStatistics(statistics)
+                    .setCost(cost)
+                    .build();
             if (exchangeExpr == null) {
                 return new BranchRewriteResult(newLocalAggExpr, branchOutputColumns);
             }
@@ -284,12 +299,14 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
             PhysicalDistributionOperator oldExchange = exchangeExpr.getOp().cast();
             PhysicalDistributionOperator newExchange =
                     new PhysicalDistributionOperator(oldExchange.getDistributionSpec());
-            newExchange.setGlobalDicts(Lists.newArrayList(oldExchange.getGlobalDicts()));
-            newExchange.setGlobalDictsExpr(Maps.newHashMap(oldExchange.getGlobalDictsExpr()));
-            OptExpression newExchangeExpr = buildExpression(exchangeExpr, newExchange,
-                    Lists.newArrayList(newLocalAggExpr),
-                    rewriteLogicalProperty(exchangeExpr.getLogicalProperty(), branchOutputColumns),
-                    statistics, cost);
+            OptExpression newExchangeExpr = OptExpression.builder()
+                    .with(exchangeExpr)
+                    .setOp(newExchange)
+                    .setInputs(Lists.newArrayList(newLocalAggExpr))
+                    .setLogicalProperty(rewriteLogicalProperty(exchangeExpr.getLogicalProperty(), branchOutputColumns))
+                    .setStatistics(statistics)
+                    .setCost(cost)
+                    .build();
             return new BranchRewriteResult(newExchangeExpr, branchOutputColumns);
         }
 
@@ -342,6 +359,7 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
             Map<ColumnRefOperator, ScalarOperator> projectRewriteMap = Maps.newHashMap(childRewriteMap);
             ReplaceColumnRefRewriter childRewriter = new ReplaceColumnRefRewriter(projectRewriteMap);
             Map<ColumnRefOperator, ScalarOperator> projectOutputRewriteMap = Maps.newHashMap();
+
             // Inline common sub-operators in dependency order.
             Set<ColumnRefOperator> resolved = Sets.newHashSet();
             for (ColumnRefOperator key : commonProjectMap.keySet()) {
@@ -364,9 +382,15 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
                     ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(new Projection(newProjectMap), factory);
             PhysicalProjectOperator newProject = new PhysicalProjectOperator(newProjection.getColumnRefMap(),
                     newProjection.getCommonSubOperatorMap());
-            OptExpression newProjectExpr = buildExpression(template, newProject, Lists.newArrayList(child),
-                    rewriteLogicalProperty(template.getLogicalProperty(), newProjection.getColumnRefMap().keySet()),
-                    template.getStatistics(), template.getCost());
+            OptExpression newProjectExpr = OptExpression.builder()
+                    .with(template)
+                    .setOp(newProject)
+                    .setInputs(Lists.newArrayList(child))
+                    .setLogicalProperty(rewriteLogicalProperty(template.getLogicalProperty(),
+                            newProjection.getColumnRefMap().keySet()))
+                    .setStatistics(template.getStatistics())
+                    .setCost(template.getCost())
+                    .build();
             return new ProjectRewriteResult(newProjectExpr, projectOutputRewriteMap);
         }
 
@@ -410,18 +434,6 @@ public class PushDownLocalAggregateThroughUnionAll implements TreeRewriteRule {
             LogicalProperty newProperty = new LogicalProperty(property);
             newProperty.setOutputColumns(new ColumnRefSet(outputColumns));
             return newProperty;
-        }
-
-        private OptExpression buildExpression(OptExpression source, Operator op, List<OptExpression> inputs,
-                                              LogicalProperty property, Statistics statistics, double cost) {
-            return OptExpression.builder()
-                    .with(source)
-                    .setOp(op)
-                    .setInputs(inputs)
-                    .setLogicalProperty(property)
-                    .setStatistics(statistics)
-                    .setCost(cost)
-                    .build();
         }
     }
 

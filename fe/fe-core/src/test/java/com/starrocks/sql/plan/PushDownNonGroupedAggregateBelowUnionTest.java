@@ -20,7 +20,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-public class PushDownLocalAggregateThroughUnionAllTest extends PlanTestBase {
+public class PushDownNonGroupedAggregateBelowUnionTest extends PlanTestBase {
     private static final long UNION_INPUT_ROW_COUNT = 100000000L;
     private static final String UNION_ALL_INPUT =
             "(SELECT v1 AS v FROM t0 UNION ALL SELECT v4 AS v FROM t1)";
@@ -37,14 +37,14 @@ public class PushDownLocalAggregateThroughUnionAllTest extends PlanTestBase {
 
     private String getPlan(String sql, boolean enable, int aggStage) throws Exception {
         int oldAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
-        boolean oldEnable = Config.enable_push_down_local_split_agg_through_union_all;
+        boolean oldEnable = Config.push_down_non_grouped_aggregate_below_union;
         try {
             connectContext.getSessionVariable().setNewPlanerAggStage(aggStage);
-            Config.enable_push_down_local_split_agg_through_union_all = enable;
+            Config.push_down_non_grouped_aggregate_below_union = enable;
             setUnionInputStatistics(UNION_INPUT_ROW_COUNT);
             return getVerboseExplain(sql);
         } finally {
-            Config.enable_push_down_local_split_agg_through_union_all = oldEnable;
+            Config.push_down_non_grouped_aggregate_below_union = oldEnable;
             setUnionInputStatistics(0);
             connectContext.getSessionVariable().setNewPlanerAggStage(oldAggStage);
         }
@@ -156,6 +156,31 @@ public class PushDownLocalAggregateThroughUnionAllTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushDownAdjacentNonGroupedAggregateBelowUnionPatterns() throws Exception {
+        String sql = "SELECT SUM(cnt), SUM(total) FROM (" +
+                "SELECT COUNT(*) AS cnt, SUM(v) AS total FROM " +
+                "(SELECT v1 AS v FROM t0 UNION ALL SELECT v4 AS v FROM t1) u1 " +
+                "UNION ALL " +
+                "SELECT COUNT(*) AS cnt, SUM(v) AS total FROM " +
+                "(SELECT v7 AS v FROM t2 UNION ALL SELECT v1 AS v FROM t0) u2" +
+                ") outer_u";
+
+        String disabledPlan = getPlan(sql, false);
+        Assertions.assertEquals(0, StringUtils.countMatches(disabledPlan, "AGGREGATE (merge serialize)"),
+                disabledPlan);
+        Assertions.assertEquals(3, StringUtils.countMatches(disabledPlan, "AGGREGATE (update serialize)"),
+                disabledPlan);
+
+        String enabledPlan = getPlan(sql, true);
+        Assertions.assertEquals(3, StringUtils.countMatches(enabledPlan, "AGGREGATE (merge serialize)"),
+                enabledPlan);
+        Assertions.assertEquals(6, StringUtils.countMatches(enabledPlan, "AGGREGATE (update serialize)"),
+                enabledPlan);
+
+        assertPlanOrder(enabledPlan, ":UNION", "AGGREGATE (update serialize)");
+    }
+
+    @Test
     public void testPushDownMultiArgumentAggregateBelowUnionAll() throws Exception {
         String sql = "SELECT INTERSECT_COUNT(TO_BITMAP(id), tag, 10) " +
                 "FROM (SELECT v1 AS id, v1 AS tag FROM t0 UNION ALL SELECT v4 AS id, v4 AS tag FROM t1) u";
@@ -164,7 +189,20 @@ public class PushDownLocalAggregateThroughUnionAllTest extends PlanTestBase {
     }
 
     @Test
-    public void testDisablePushDownLocalAggregateBelowUnionAll() throws Exception {
+    public void testPushDownDataSketchAggregateFunctions() throws Exception {
+        String[] sqls = {
+                "SELECT APPROX_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u",
+                "SELECT APPROX_COUNT_DISTINCT_HLL_SKETCH(v) FROM " + UNION_ALL_INPUT + " u",
+                "SELECT DS_HLL_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u",
+                "SELECT DS_THETA_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u"
+        };
+        for (String sql : sqls) {
+            assertPushDownPlanShape(getPlan(sql, true));
+        }
+    }
+
+    @Test
+    public void testDisablePushDownNonGroupedAggregateBelowUnion() throws Exception {
         String sql = "SELECT COUNT(*), SUM(CHAR_LENGTH(CAST(v AS VARCHAR))) FROM " + UNION_ALL_INPUT + " u";
         String plan = getPlan(sql, false);
         assertNotContains(plan, "AGGREGATE (merge serialize)");
@@ -199,11 +237,7 @@ public class PushDownLocalAggregateThroughUnionAllTest extends PlanTestBase {
                 "SELECT ARRAY_AGG(v) FROM " + UNION_ALL_INPUT + " u",
                 "SELECT ARRAY_AGG_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u",
                 "SELECT ARRAY_UNIQUE_AGG(a) FROM " +
-                        "(SELECT [v1] AS a FROM t0 UNION ALL SELECT [v4] AS a FROM t1) u",
-                "SELECT APPROX_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u",
-                "SELECT APPROX_COUNT_DISTINCT_HLL_SKETCH(v) FROM " + UNION_ALL_INPUT + " u",
-                "SELECT DS_HLL_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u",
-                "SELECT DS_THETA_COUNT_DISTINCT(v) FROM " + UNION_ALL_INPUT + " u"
+                        "(SELECT [v1] AS a FROM t0 UNION ALL SELECT [v4] AS a FROM t1) u"
         };
         for (String sql : sqls) {
             assertNotRewritten(sql);
