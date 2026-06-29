@@ -100,19 +100,27 @@ public class SplitTabletJob extends TabletReshardJob {
     @SerializedName(value = "spreadNewShards")
     protected final boolean spreadNewShards;
 
+    // The warehouse the triggering load runs in. When spreading (the WITH_SHARD pin is dropped), this
+    // is the only thing that keeps the new shards in the load's warehouse worker group instead of the
+    // default one. Persisted so a leader-switch re-run of createShardsOnStarOS targets the same
+    // warehouse. Defaults to DEFAULT_WAREHOUSE_ID for online split (where it is unused).
+    @SerializedName(value = "loadWarehouseId")
+    protected final long loadWarehouseId;
+
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        this(jobId, dbId, tableId, reshardingPhysicalPartitions, false);
+        this(jobId, dbId, tableId, reshardingPhysicalPartitions, false, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions,
-            boolean spreadNewShards) {
+            boolean spreadNewShards, long loadWarehouseId) {
         super(jobId, JobType.SPLIT_TABLET);
         this.dbId = dbId;
         this.tableId = tableId;
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
         this.spreadNewShards = spreadNewShards;
+        this.loadWarehouseId = loadWarehouseId;
     }
 
     public long getDbId() {
@@ -122,6 +130,11 @@ public class SplitTabletJob extends TabletReshardJob {
     @VisibleForTesting
     public boolean isSpreadNewShards() {
         return spreadNewShards;
+    }
+
+    @VisibleForTesting
+    public long getLoadWarehouseId() {
+        return loadWarehouseId;
     }
 
     public long getTableId() {
@@ -919,12 +932,12 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
         // Pre-split drops the WITH_SHARD pin, so scheduleToWorkerGroup becomes the only placement hint
-        // left; schedule to the table's (warehouse) compute resource so the spread shards stay in the
-        // load's warehouse instead of defaulting to the default worker group. An online split keeps
-        // DEFAULT_RESOURCE: its WITH_SHARD pin already co-locates each new shard with the source shard
-        // (and hence the source's warehouse), so the schedule target does not change placement.
+        // left; schedule to the triggering load's warehouse so the spread shards stay where the load
+        // runs instead of defaulting to the default worker group. An online split keeps DEFAULT_RESOURCE:
+        // its WITH_SHARD pin already co-locates each new shard with the source shard (and hence the
+        // source's warehouse), so the schedule target does not change placement.
         ComputeResource computeResource = spreadNewShards
-                ? GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(table.getId())
+                ? GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(loadWarehouseId)
                 : WarehouseManager.DEFAULT_RESOURCE;
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,

@@ -591,8 +591,10 @@ public final class TabletPreSplitCoordinator {
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
         try {
+            // Carry the load's compute resource (from the explicitly-passed ConnectContext) so the
+            // spread shards are scheduled in the load's warehouse rather than the default one.
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
-                    database, table, oldTabletIdToRanges);
+                    database, table, oldTabletIdToRanges, ctx.getCurrentComputeResource());
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
         } catch (StarRocksException submitFailure) {

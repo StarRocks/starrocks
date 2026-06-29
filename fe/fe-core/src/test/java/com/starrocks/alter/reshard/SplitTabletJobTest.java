@@ -343,6 +343,16 @@ public class SplitTabletJobTest {
                 db, table, oldTablet.getId(), newTabletRanges);
         Assertions.assertTrue(preSplit.isSpreadNewShards(),
                 "pre-split must spread new shards across compute nodes");
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, preSplit.getLoadWarehouseId(),
+                "no load resource supplied -> default warehouse");
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, onlineSplit.getLoadWarehouseId(),
+                "online split does not carry a load warehouse");
+
+        // The load's warehouse is carried through so the spread shards are scheduled where the load runs.
+        SplitTabletJob preSplitInWarehouse = (SplitTabletJob) SplitTabletJobFactory.forExternalBoundaries(
+                db, table, oldTablet.getId(), newTabletRanges, WarehouseComputeResource.of(12345L));
+        Assertions.assertEquals(12345L, preSplitInWarehouse.getLoadWarehouseId(),
+                "pre-split must carry the load's warehouse id");
     }
 
     // -------------------------------------------------------------------------

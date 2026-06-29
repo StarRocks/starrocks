@@ -123,7 +123,7 @@ public class InsertPreSplitHookFilesPartitionedTest {
 
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                     database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
-                    LoadKind.INSERT_FROM_FILES);
+                    LoadKind.INSERT_FROM_FILES, null);
 
             // Drive the partitioned meta-tier sampler directly via reflection over the
             // package-private field. Then verify it raises MetaTierUnavailableException
@@ -161,7 +161,7 @@ public class InsertPreSplitHookFilesPartitionedTest {
 
             DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
                     database, table, /*oldTabletId*/ 99L, /*fileTotalBytes*/ 1024L,
-                    LoadKind.INSERT_FROM_FILES);
+                    LoadKind.INSERT_FROM_FILES, null);
 
             java.lang.reflect.Field metaField = DefaultPreSplitPipeline.class.getDeclaredField("metaTierSampler");
             metaField.setAccessible(true);
