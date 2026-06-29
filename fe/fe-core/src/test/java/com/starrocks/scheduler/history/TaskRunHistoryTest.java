@@ -448,4 +448,58 @@ public class TaskRunHistoryTest {
             Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
         }
     }
+
+    @Test
+    public void testLookupEscapesSqlLiteral(@Mocked SimpleExecutor repo) {
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+
+        // A TASK_NAME value carrying single quotes must have them doubled so it cannot close the
+        // string literal and inject SQL into the privileged internal repository (root) query.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name = 't1'' OR ''1''=''1'" +
+                        " ORDER BY create_time DESC LIMIT 10000");
+            }
+        };
+        TGetTasksParams params = new TGetTasksParams();
+        params.setTask_name("t1' OR '1'='1");
+        history.lookup(params);
+
+        // Same hardening for the QUERY_ID predicate (maps to task_run_id).
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_run_id = 'q1'' UNION SELECT 1 -- '" +
+                        " ORDER BY create_time DESC LIMIT 10000");
+            }
+        };
+        TGetTasksParams params2 = new TGetTasksParams();
+        params2.setQuery_id("q1' UNION SELECT 1 -- ");
+        history.lookup(params2);
+
+        // And for the IN-list path used by lookupByTaskNames.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name IN ('a'',''b')");
+            }
+        };
+        history.lookupByTaskNames("", Set.of("a','b"));
+
+        // Backslash must also be escaped: a value ending in '\' would otherwise escape the closing
+        // quote (StarRocks honors backslash escapes in string literals), so the following predicate
+        // could be smuggled out of the literal. Quote-doubling alone is not enough here.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name = 'x\\\\' AND  task_run_id = ' UNION SELECT 1 -- '" +
+                        " ORDER BY create_time DESC LIMIT 10000");
+            }
+        };
+        TGetTasksParams params3 = new TGetTasksParams();
+        params3.setTask_name("x\\");
+        params3.setQuery_id(" UNION SELECT 1 -- ");
+        history.lookup(params3);
+    }
 }
