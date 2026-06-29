@@ -543,6 +543,7 @@ set(STARROCKS_LINK_LIBS
     HttpService
     Tools
     AgentServer
+    Script
     ${WL_START_GROUP}
     Connector
     # Legacy connector registration pulls concrete connector objects that
@@ -557,7 +558,6 @@ set(STARROCKS_LINK_LIBS
     DataWorkflows
     Udf
     Util
-    Script
     ${WL_END_GROUP}
     Storage
     FormatAvro
