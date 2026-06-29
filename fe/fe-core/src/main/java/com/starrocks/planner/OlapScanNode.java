@@ -337,8 +337,26 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int bucketNum = distInfo.getBucketNum();
         if (getSelectedPartitionIds().size() <= 1) {
             for (Long pid : getSelectedPartitionIds()) {
-                bucketNum = olapTable.getPartition(pid).getDistributionInfo().getBucketNum();
+                // The selected partition id is captured at planning time. It may be concurrently
+                // removed (e.g. by INSERT OVERWRITE swapping partitions) before the scheduler
+                // builds the colocate/local-bucket-shuffle assignment, in which case
+                // getPartition() returns null. Keep the table default here and fall back to the
+                // actual scan-range bucket sequences below, instead of throwing NPE and crashing
+                // the coordinator preprocessing.
+                Partition partition = olapTable.getPartition(pid);
+                if (partition != null) {
+                    bucketNum = partition.getDistributionInfo().getBucketNum();
+                }
             }
+        }
+        // The table default can be 0 for inferred distributions (e.g. DISTRIBUTED BY HASH(k)
+        // without an explicit BUCKETS, where inferDistribution() only fills the partition copy).
+        // If the selected partition was concurrently removed we would otherwise return 0, and
+        // ExecutionFragment.getBucketSeqAssignment() would allocate zero-length arrays and fail
+        // with "bucketSeq exceeds bucketNum". Derive a non-zero count from the bucket sequences
+        // already materialized in the scan ranges.
+        if (bucketNum <= 0 && !bucketSeq2locations.isEmpty()) {
+            bucketNum = Collections.max(bucketSeq2locations.keySet()) + 1;
         }
         return bucketNum;
     }

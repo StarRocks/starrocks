@@ -22,6 +22,7 @@ import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.type.IntegerType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStorageType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,10 @@ import java.util.Collections;
 public class OlapScanNodeTest {
 
     private OlapScanNode createOlapScanNode(Table.TableType tableType) {
+        return createOlapScanNode(tableType, 3);
+    }
+
+    private OlapScanNode createOlapScanNode(Table.TableType tableType, int defaultBucketNum) {
         OlapTable table = new OlapTable(tableType);
         table.maySetDatabaseId(1L);
         table.setBaseIndexMetaId(1L);
@@ -39,7 +44,7 @@ public class OlapScanNodeTest {
                 Collections.singletonList(new Column("c0", IntegerType.INT)),
                 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(
-                new HashDistributionInfo(3, Collections.emptyList()));
+                new HashDistributionInfo(defaultBucketNum, Collections.emptyList()));
 
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
@@ -104,5 +109,40 @@ public class OlapScanNodeTest {
 
         Assertions.assertNotNull(msg.lake_scan_node);
         Assertions.assertFalse(msg.lake_scan_node.isSetVector_search_options());
+    }
+
+    @Test
+    public void testGetBucketNumsWhenSelectedPartitionConcurrentlyRemoved() {
+        // Regression test for the coordinator-preprocessing NPE on colocate / local-bucket-shuffle
+        // joins. The selected partition id is captured at planning time; a concurrent
+        // INSERT OVERWRITE can swap/remove that partition before the scheduler builds the
+        // colocate assignment, so OlapTable.getPartition(pid) returns null.
+        // getBucketNums() must fall back to the table's default bucket number rather than
+        // dereferencing null and throwing NullPointerException.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.OLAP);
+        // 999L is a partition id that does not exist in the table (concurrently removed).
+        scanNode.setSelectedPartitionIds(Collections.singletonList(999L));
+
+        int bucketNum = Assertions.assertDoesNotThrow(scanNode::getBucketNums);
+        // Falls back to the default distribution bucket number (3, see createOlapScanNode).
+        Assertions.assertEquals(3, bucketNum);
+    }
+
+    @Test
+    public void testGetBucketNumsFallsBackToScanRangesWhenDefaultIsZero() {
+        // Same concurrent-removal race, but for an inferred distribution where the table default
+        // bucket number is 0 (DISTRIBUTED BY HASH(k) without explicit BUCKETS). Returning 0 would
+        // later make ExecutionFragment.getBucketSeqAssignment() allocate zero-length arrays and
+        // fail with "bucketSeq exceeds bucketNum". getBucketNums() must instead derive a non-zero
+        // count from the bucket sequences already materialized in the scan ranges.
+        OlapScanNode scanNode = createOlapScanNode(Table.TableType.OLAP, 0);
+        scanNode.setSelectedPartitionIds(Collections.singletonList(999L)); // concurrently removed
+        // Scan ranges already carry bucket sequences 0, 1, 2 -> expected bucket count = max + 1 = 3.
+        scanNode.bucketSeq2locations.put(0, new TScanRangeLocations());
+        scanNode.bucketSeq2locations.put(1, new TScanRangeLocations());
+        scanNode.bucketSeq2locations.put(2, new TScanRangeLocations());
+
+        int bucketNum = Assertions.assertDoesNotThrow(scanNode::getBucketNums);
+        Assertions.assertEquals(3, bucketNum);
     }
 }
