@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -181,7 +182,7 @@ public class UnionDictionaryManager {
 
     List<Map<ColumnRefOperator, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
                                                                                List<List<ColumnRefOperator>> childColumns,
-                                                                               Set<Integer> allStringColumns) {
+                                                                               ColumnRefSet allStringColumns) {
         List<Map<ColumnRefOperator, ConstantOperator>> result = Lists.newArrayList();
         childColumns.forEach(c -> result.add(Maps.newHashMap()));
         for (int i = 0; i < outputColumns.size(); ++i) {
