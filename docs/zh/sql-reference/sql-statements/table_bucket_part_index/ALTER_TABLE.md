@@ -588,7 +588,7 @@ MODIFY COLUMN <column_name>
 1. 如果修改聚合模型中的值列，需要指定agg_type。
 2. 如果修改非聚合模型中的键列，需要指定KEY关键字。
 3. 在修改类型、默认值、Null 属性及位置时，必须在语句中指定该列的完整定义。
-4. 在修改列注释时，只需指定 `MODIFY COLUMN <column_name> COMMENT “<new_column_comment>”`，而无需指定完整定义。此操作仅会更改元数据，不会触发 Schema Change 任务。它可应用于主键列、键列和普通列。若在语句中指定完整的定义，系统会将其解析为对列定义的修改，从而触发 Schema Change 任务。
+4. 仅修改列注释时——无论是通过 `MODIFY COLUMN <column_name> COMMENT “<new_column_comment>”` 语法，还是通过完整列定义但仅注释发生变化——均只更改元数据，不会触发 Schema Change 任务。此规则适用于主键列、键列和普通列。若完整定义同时修改了列的其他属性，则该语句将照常触发 Schema Change 任务。
 5. 不能修改分区列。
 6. 目前支持以下类型的转换（精度损失由用户保证）。
 
