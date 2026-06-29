@@ -34,12 +34,14 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -465,6 +467,23 @@ public class JDBCMetadata implements ConnectorMetadata {
         Statistics.Builder builder = Statistics.builder().setOutputRowCount(rowCount);
         if (hasRealRowCount) {
             builder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+        }
+        // Populate per-column NDV estimates (Tier-3 type-fraction; no extra IO to source DB)
+        if (!columns.isEmpty()) {
+            Map<ColumnRefOperator, ColumnStatistic> colStats = new HashMap<>();
+            for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+                ConnectorNdvEstimator.TypeCategory cat =
+                        ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+                double ndv = Math.max(1.0, Math.min(
+                        ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+                colStats.put(entry.getKey(), ColumnStatistic.builder()
+                        .setDistinctValuesCount(ndv)
+                        .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                        .setNullsFraction(0)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build());
+            }
+            builder.addColumnStatistics(colStats);
         }
         return builder.build();
     }
