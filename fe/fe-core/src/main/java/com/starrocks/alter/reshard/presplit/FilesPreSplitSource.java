@@ -34,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * INSERT-from-FILES pre-split source. Matches only the strict bare
@@ -106,19 +107,39 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         if (insertStmt.isColumnMatchByName()) {
             return true;
         }
-        List<Column> targetColumns = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        // The effective target columns are the explicit column list when present
+        // (a partial list omits non-key columns, which are defaulted), otherwise
+        // the full base schema. The load writes FILES column N into effective
+        // target column N by position; requiring name equality at every ordinal
+        // makes the sampler's by-name read of a sort-key column resolve to the
+        // same FILES column the load writes into that key.
+        List<String> targetColumnNames = effectiveTargetColumnNames(insertStmt, targetTable);
         List<Column> sourceColumns = sourceTable.getFullSchema();
-        if (targetColumns.size() != sourceColumns.size()) {
+        if (targetColumnNames.size() != sourceColumns.size()) {
             return false;
         }
-        for (int ordinal = 0; ordinal < targetColumns.size(); ordinal++) {
-            String targetName = targetColumns.get(ordinal).getName();
+        for (int ordinal = 0; ordinal < targetColumnNames.size(); ordinal++) {
+            String targetName = targetColumnNames.get(ordinal);
             String sourceName = sourceColumns.get(ordinal).getName();
             if (!targetName.equalsIgnoreCase(sourceName)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Target column names in INSERT (by-position) order: the explicit target
+     * column list when present, otherwise the base (non-generated) schema names.
+     */
+    private static List<String> effectiveTargetColumnNames(InsertStmt insertStmt, OlapTable targetTable) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames != null && !targetColumnNames.isEmpty()) {
+            return targetColumnNames;
+        }
+        return targetTable.getBaseSchemaWithoutGeneratedColumn().stream()
+                .map(Column::getName)
+                .collect(Collectors.toList());
     }
 
     /**
