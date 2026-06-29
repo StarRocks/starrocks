@@ -552,6 +552,7 @@ set(STARROCKS_LINK_LIBS
     FileSystem
     Formats
     Runtime
+    Orchestration
     DataWorkflows
     Udf
     Util
