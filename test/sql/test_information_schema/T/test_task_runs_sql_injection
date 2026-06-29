@@ -1,4 +1,4 @@
--- name: test_task_runs_sql_injection @sequential
+-- name: test_task_runs_sql_injection @sequential @slow
 
 -- The only SQL-built lookup sink is TaskRunHistoryTable.lookup(), which queries
 -- the archived _statistics_.task_run_history table over the privileged internal

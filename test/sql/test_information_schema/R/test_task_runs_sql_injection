@@ -1,4 +1,4 @@
--- name: test_task_runs_sql_injection @sequential
+-- name: test_task_runs_sql_injection @sequential @slow
 admin set frontend config('task_check_interval_second' = '1');
 -- result:
 -- !result
