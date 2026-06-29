@@ -40,9 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class PruneShuffleColumnRuleTest {
     @Test
     public void testPruneJoinShuffleColumns() {
-        JoinShufflePlan plan = createJoinShufflePlan(false);
+        JoinShufflePlan plan = createJoinShufflePlan();
 
-        new PruneShuffleColumnRule().rewrite(plan.root, createTaskContext(plan.columnRefFactory));
+        new PruneShuffleColumnRule().rewrite(plan.root, createTaskContext(plan.columnRefFactory, true));
 
         assertEquals(1, shuffleColumnCount(plan.leftDistribution));
         assertEquals(1, shuffleColumnCount(plan.rightDistribution));
@@ -50,15 +50,16 @@ public class PruneShuffleColumnRuleTest {
 
     @Test
     public void testPreserveJoinShuffleColumns() {
-        JoinShufflePlan plan = createJoinShufflePlan(true);
+        // MERGE INTO disables this rule through the optimizer context; the multi-column shuffle survives.
+        JoinShufflePlan plan = createJoinShufflePlan();
 
-        new PruneShuffleColumnRule().rewrite(plan.root, createTaskContext(plan.columnRefFactory));
+        new PruneShuffleColumnRule().rewrite(plan.root, createTaskContext(plan.columnRefFactory, false));
 
         assertEquals(2, shuffleColumnCount(plan.leftDistribution));
         assertEquals(2, shuffleColumnCount(plan.rightDistribution));
     }
 
-    private JoinShufflePlan createJoinShufflePlan(boolean preserveShuffleColumns) {
+    private JoinShufflePlan createJoinShufflePlan() {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         ColumnRefOperator leftHighCardinality = columnRefFactory.create("left_high_cardinality", IntegerType.INT, false);
         ColumnRefOperator leftLowCardinality = columnRefFactory.create("left_low_cardinality", IntegerType.INT, false);
@@ -74,7 +75,6 @@ public class PruneShuffleColumnRuleTest {
 
         PhysicalHashJoinOperator joinOperator = new PhysicalHashJoinOperator(
                 JoinOperator.INNER_JOIN, null, "", -1, null, null, null, null);
-        joinOperator.setPreserveShuffleColumns(preserveShuffleColumns);
         OptExpression root = OptExpression.create(joinOperator, leftDistribution, rightDistribution);
         return new JoinShufflePlan(columnRefFactory, root, leftDistribution, rightDistribution);
     }
@@ -98,8 +98,9 @@ public class PruneShuffleColumnRuleTest {
                 .build();
     }
 
-    private TaskContext createTaskContext(ColumnRefFactory columnRefFactory) {
+    private TaskContext createTaskContext(ColumnRefFactory columnRefFactory, boolean enablePruneShuffleColumn) {
         OptimizerContext optimizerContext = OptimizerFactory.mockContext(columnRefFactory);
+        optimizerContext.setEnablePruneShuffleColumn(enablePruneShuffleColumn);
         return new TaskContext(optimizerContext, PhysicalPropertySet.EMPTY, new ColumnRefSet(), Double.MAX_VALUE);
     }
 

@@ -73,6 +73,9 @@ public class OptimizerContext {
     private boolean enableJoinEquivalenceDerive = true;
     private boolean enableJoinPredicatePushDown = true;
     private boolean enableJoinIsNullPredicateDerive = true;
+    // When false, PruneShuffleColumnRule is skipped so a join's multi-column shuffle key is not
+    // collapsed to a single (possibly value-skewed) column.
+    private boolean enablePruneShuffleColumn = true;
 
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
@@ -233,6 +236,14 @@ public class OptimizerContext {
 
     public void setEnableJoinIsNullPredicateDerive(boolean enableJoinIsNullPredicateDerive) {
         this.enableJoinIsNullPredicateDerive = enableJoinIsNullPredicateDerive;
+    }
+
+    public boolean isEnablePruneShuffleColumn() {
+        return enablePruneShuffleColumn;
+    }
+
+    public void setEnablePruneShuffleColumn(boolean enablePruneShuffleColumn) {
+        this.enablePruneShuffleColumn = enablePruneShuffleColumn;
     }
 
     public boolean isObtainedFromInternalStatistics() {

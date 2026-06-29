@@ -47,12 +47,6 @@ public class LogicalJoinOperator extends LogicalOperator {
     private String joinHint;
     private ScalarOperator skewColumn;
     private List<ScalarOperator> skewValues;
-    /*
-     * Planner marker propagated from JoinRelation to PhysicalJoinOperator.
-     * MERGE INTO sets it on its synthesized source-target join so later tree
-     * rewrites keep the full hash shuffle key instead of reducing it to one column.
-     */
-    private boolean preserveShuffleColumns;
     // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
@@ -150,14 +144,6 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.skewValues = skewValues;
     }
 
-    public boolean isPreserveShuffleColumns() {
-        return preserveShuffleColumns;
-    }
-
-    public void setPreserveShuffleColumns(boolean preserveShuffleColumns) {
-        this.preserveShuffleColumns = preserveShuffleColumns;
-    }
-
     public int getTransformMask() {
         return transformMask;
     }
@@ -253,14 +239,12 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         LogicalJoinOperator rhs = (LogicalJoinOperator) o;
 
-        return joinType == rhs.joinType &&
-                preserveShuffleColumns == rhs.preserveShuffleColumns &&
-                Objects.equals(onPredicate, rhs.onPredicate);
+        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, onPredicate, preserveShuffleColumns);
+        return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 
     @Override
@@ -291,7 +275,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             builder.joinHint = joinOperator.joinHint;
             builder.skewColumn = joinOperator.skewColumn;
             builder.skewValues = joinOperator.skewValues;
-            builder.preserveShuffleColumns = joinOperator.preserveShuffleColumns;
             builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             builder.originalOnPredicate = joinOperator.originalOnPredicate;
@@ -325,11 +308,6 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setSkewValues(List<ScalarOperator> values) {
             builder.skewValues = values;
-            return this;
-        }
-
-        public Builder setPreserveShuffleColumns(boolean preserveShuffleColumns) {
-            builder.preserveShuffleColumns = preserveShuffleColumns;
             return this;
         }
 

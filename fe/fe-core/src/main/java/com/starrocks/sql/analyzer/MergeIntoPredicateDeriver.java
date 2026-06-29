@@ -25,10 +25,10 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 
@@ -43,26 +43,25 @@ final class MergeIntoPredicateDeriver {
     private MergeIntoPredicateDeriver() {
     }
 
-    static Expr appendDerivedTargetPredicate(Relation sourceRelation, Expr mergeCondition, TableName targetSlotTableName) {
-        Expr derivedPredicate = deriveTargetPredicate(sourceRelation, mergeCondition, targetSlotTableName);
-        if (derivedPredicate == null) {
-            return mergeCondition;
-        }
-        return new CompoundPredicate(CompoundPredicate.Operator.AND, mergeCondition, derivedPredicate);
-    }
-
-    static Expr deriveTargetPredicate(Relation sourceRelation, Expr mergeCondition, TableName targetSlotTableName) {
+    /**
+     * Derive a target-side predicate from the source's filter, mapping source columns to target
+     * columns through the (already analyzed) ON equalities. Returns null when nothing can be safely
+     * derived. The caller is responsible for ANDing the result into the join ON predicate and
+     * re-analyzing it; the {@code onPredicate} passed here must already be analyzed so slot types
+     * are available for the type-equivalence check.
+     */
+    static Expr deriveTargetPredicate(Relation sourceRelation, Expr onPredicate, TableName targetSlotTableName) {
         SourcePredicateInfo sourcePredicateInfo = extractSourcePredicate(sourceRelation);
         if (sourcePredicateInfo == null) {
             return null;
         }
         Expr sourcePredicate = sourcePredicateInfo.predicate;
-        if (sourcePredicate == null || mergeCondition == null || targetSlotTableName == null) {
+        if (sourcePredicate == null || onPredicate == null || targetSlotTableName == null) {
             return null;
         }
 
         Map<String, SlotRef> sourceToTargetSlots = collectSourceToTargetSlots(
-                mergeCondition, targetSlotTableName, sourcePredicateInfo);
+                onPredicate, targetSlotTableName, sourcePredicateInfo);
         if (sourceToTargetSlots.isEmpty()) {
             return null;
         }
@@ -74,7 +73,7 @@ final class MergeIntoPredicateDeriver {
                 derivedConjuncts.add(rewritten);
             }
         }
-        return combineAnd(derivedConjuncts);
+        return ExprUtils.compoundAnd(derivedConjuncts);
     }
 
     private static SourcePredicateInfo extractSourcePredicate(Relation sourceRelation) {
@@ -170,6 +169,15 @@ final class MergeIntoPredicateDeriver {
         if (sourceSlot.getColumnName() == null || targetSlot.getColumnName() == null) {
             return;
         }
+        // Only map across type-equivalent ON keys. The analyzed AST keeps bare SlotRefs even when the
+        // equality needs an implicit cast (e.g. VARCHAR source vs INT target — the cast is added later
+        // on the ScalarOperator, not on this node). Rewriting the source predicate onto a
+        // differently-typed target column would change MATCHED/NOT MATCHED results or yield an invalid
+        // predicate, so skip the mapping and derive nothing for that key.
+        if (sourceSlot.getType() == null || targetSlot.getType() == null
+                || !sourceSlot.getType().matchesType(targetSlot.getType())) {
+            return;
+        }
 
         String sourceColumnName = sourcePredicateInfo.getSourceColumnName(sourceSlot.getColumnName());
         if (sourceColumnName == null) {
@@ -201,17 +209,6 @@ final class MergeIntoPredicateDeriver {
             substitutionMap.put(slotRef, targetSlot);
         }
         return ExprSubstitutionVisitor.rewrite(sourcePredicate, substitutionMap);
-    }
-
-    private static Expr combineAnd(List<Expr> conjuncts) {
-        if (conjuncts.isEmpty()) {
-            return null;
-        }
-        Expr result = conjuncts.get(0);
-        for (int i = 1; i < conjuncts.size(); i++) {
-            result = new CompoundPredicate(CompoundPredicate.Operator.AND, result, conjuncts.get(i));
-        }
-        return result;
     }
 
     private static boolean isTargetSlot(SlotRef slotRef, TableName targetSlotTableName) {

@@ -34,13 +34,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected ScalarOperator onPredicate;
     protected final String joinHint;
     protected boolean outputRequireHashPartition = true;
-    /*
-     * When true, downstream tree rules must not prune this join's hash shuffle
-     * columns. MERGE INTO sets it for the synthesized source-target join because
-     * reducing a multi-column ON-key shuffle to one column can create severe skew
-     * before EnforceUnique and the row-delta sink.
-     */
-    protected boolean preserveShuffleColumns;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
@@ -75,14 +68,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
 
     public String getJoinHint() {
         return joinHint;
-    }
-
-    public boolean isPreserveShuffleColumns() {
-        return preserveShuffleColumns;
-    }
-
-    public void setPreserveShuffleColumns(boolean preserveShuffleColumns) {
-        this.preserveShuffleColumns = preserveShuffleColumns;
     }
 
     @Override
@@ -132,14 +117,12 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         }
 
         PhysicalJoinOperator that = (PhysicalJoinOperator) o;
-        return joinType == that.joinType &&
-                preserveShuffleColumns == that.preserveShuffleColumns &&
-                Objects.equals(onPredicate, that.onPredicate);
+        return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, onPredicate, preserveShuffleColumns);
+        return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 
     @Override

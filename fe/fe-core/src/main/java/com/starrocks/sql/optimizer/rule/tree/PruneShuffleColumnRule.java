@@ -63,6 +63,11 @@ import java.util.stream.Collectors;
 public class PruneShuffleColumnRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        // Skip when the caller opted out of shuffle-column pruning, e.g. to keep a full multi-column
+        // shuffle key rather than collapse it to a single, possibly value-skewed column.
+        if (!taskContext.getOptimizerContext().isEnablePruneShuffleColumn()) {
+            return root;
+        }
         PruneShuffleColumnVisitor visitor = new PruneShuffleColumnVisitor(taskContext);
         visitor.rewrite(root);
         return root;
@@ -205,8 +210,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
 
             PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             if (lc.distributionList.isEmpty() || rc.distributionList.isEmpty() ||
-                    joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW) ||
-                    joinOperator.isPreserveShuffleColumns()) {
+                    joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
                 return optExpression;
             }
 

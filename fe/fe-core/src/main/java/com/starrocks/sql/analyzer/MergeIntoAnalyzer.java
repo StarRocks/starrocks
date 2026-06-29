@@ -257,14 +257,14 @@ public class MergeIntoAnalyzer {
         // Source relation already parsed by grammar — alias is already set by AstBuilder
         Relation sourceRelation = stmt.getSourceRelation();
 
-        // Create LEFT OUTER JOIN: source (left) JOIN target (right) ON merge_condition
-        Expr joinPredicate = MergeIntoPredicateDeriver.appendDerivedTargetPredicate(
-                sourceRelation, stmt.getMergeCondition(), targetSlotTableName);
+        // Create LEFT OUTER JOIN: source (left) JOIN target (right) ON merge_condition.
+        // Source-side predicate propagation to the target is applied AFTER analysis (below), where
+        // resolved slot types are available to gate the derivation on type-equivalent ON keys.
         JoinRelation joinRelation = new JoinRelation(
                 JoinOperator.LEFT_OUTER_JOIN,
                 sourceRelation,
                 targetRelation,
-                joinPredicate,
+                stmt.getMergeCondition(),
                 false
         );
         // Pin the join distribution like IcebergEqualityDeleteRewriteRule does: the
@@ -272,15 +272,6 @@ public class MergeIntoAnalyzer {
         // when the TARGET side is never broadcast/replicated (each target row owned by
         // exactly one instance). The planner re-validates the physical join shape.
         joinRelation.setJoinHint(HintNode.HINT_JOIN_SHUFFLE);
-        // Anti-skew guard (NOT a correctness requirement): keep the full multi-column
-        // ON-key shuffle. PruneShuffleColumnRule would otherwise collapse it to a single
-        // high-NDV column; if that column is value-skewed at runtime, rows pile onto a few
-        // instances/drivers and overload the per-driver EnforceUnique seen-set and the
-        // row-delta sink. This matters most for non-partitioned targets, whose sink
-        // inherits this join distribution; partitioned targets re-shuffle by partition
-        // columns above the check anyway. Duplicate-match correctness does not depend on
-        // the column count — it rests on the shuffle hint set above.
-        joinRelation.setPreserveShuffleColumns(true);
 
         // Create SELECT ... FROM (join)
         SelectRelation selectRelation = new SelectRelation(
@@ -292,6 +283,22 @@ public class MergeIntoAnalyzer {
 
         // Analyze the query statement
         new QueryAnalyzer(session).analyze(queryStatement);
+
+        // Propagate source-side predicates to the target through type-equivalent ON equalities, now
+        // that analysis has resolved slot types. This is done post-analysis on purpose: the analyzed
+        // AST equality keeps bare SlotRefs even across an implicit cast (e.g. VARCHAR = INT), so a
+        // pre-analysis, name-only rewrite could derive a wrong target predicate; deriveTargetPredicate
+        // only maps across equi-keys whose slot types match. Re-analyze the combined ON predicate so
+        // the new AND node and the derived conjunct get full type/legality state.
+        Expr derivedTargetPredicate = MergeIntoPredicateDeriver.deriveTargetPredicate(
+                sourceRelation, joinRelation.getOnPredicate(), targetSlotTableName);
+        if (derivedTargetPredicate != null) {
+            Expr combinedOnPredicate = new CompoundPredicate(CompoundPredicate.Operator.AND,
+                    joinRelation.getOnPredicate(), derivedTargetPredicate);
+            ExpressionAnalyzer.analyzeExpression(
+                    combinedOnPredicate, new AnalyzeState(), joinRelation.getScope(), session);
+            joinRelation.setOnPredicate(combinedOnPredicate);
+        }
 
         // Resolve the op_code routing expression against the join scope. It references
         // target._file plus per-WHEN-clause source predicates, none of which appear as

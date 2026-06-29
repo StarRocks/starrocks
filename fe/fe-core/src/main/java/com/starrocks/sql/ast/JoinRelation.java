@@ -30,12 +30,6 @@ public class JoinRelation extends Relation {
     private List<Expr> skewValues;
     private boolean lateral;
     private boolean isImplicit;
-    /*
-     * Analyzer-only marker propagated to LogicalJoinOperator and PhysicalJoinOperator.
-     * MERGE INTO sets it for its synthesized source-target join; ordinary user
-     * joins should leave it false.
-     */
-    private boolean preserveShuffleColumns;
 
     /**
      * usingColNames is created by parser
@@ -124,14 +118,6 @@ public class JoinRelation extends Relation {
 
     public boolean isImplicit() {
         return isImplicit;
-    }
-
-    public boolean isPreserveShuffleColumns() {
-        return preserveShuffleColumns;
-    }
-
-    public void setPreserveShuffleColumns(boolean preserveShuffleColumns) {
-        this.preserveShuffleColumns = preserveShuffleColumns;
     }
 
     public List<String> getUsingColNames() {

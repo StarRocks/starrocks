@@ -623,7 +623,7 @@ public class MergeIntoAnalyzerIcebergTest {
     }
 
     @Test
-    public void testPartitionedMergeKeepsDefaultJoinHint() {
+    public void testPartitionedMergePinsShuffleJoin() {
         String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
@@ -631,8 +631,11 @@ public class MergeIntoAnalyzerIcebergTest {
 
         JoinRelation joinRelation = analyzeAndGetSyntheticJoin(sql);
 
-        assertEquals("", joinRelation.getJoinHint(),
-                "Partitioned Iceberg MERGE already has sink-side partition shuffle requirements");
+        // The duplicate-match check sits above this join and is correct only when the target
+        // side is never broadcast/replicated. That holds for partitioned targets too, so the
+        // shuffle hint is pinned unconditionally (not only for the unpartitioned case).
+        assertEquals(HintNode.HINT_JOIN_SHUFFLE, joinRelation.getJoinHint(),
+                "Partitioned Iceberg MERGE must also keep the target side shuffle-distributed");
     }
 
     // ---- Positional INSERT VALUES tests ----

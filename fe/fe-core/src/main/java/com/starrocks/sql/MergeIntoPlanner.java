@@ -27,7 +27,6 @@ import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.JoinNode;
-import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
@@ -50,7 +49,6 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -158,11 +156,24 @@ public class MergeIntoPlanner {
                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
                                      IcebergTable icebergTable, PhysicalPropertySet requiredProperty) {
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean prevEnableSkewJoinOptimizeV2 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2();
         try {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            // Disable skew-join broadcast for the MERGE plan: it would replicate the target side and
+            // break the per-driver co-location EnforceUniqueRowLocatorNode relies on. Done here to keep
+            // the invariant MERGE-local instead of special-casing the generic rule.
+            session.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(false);
 
             // Optimize
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            // Anti-skew guard (NOT a correctness requirement): keep the full multi-column ON-key
+            // shuffle that feeds the duplicate check and the row-delta sink. PruneShuffleColumnRule
+            // would otherwise collapse it to a single high-NDV column; if that column is value-skewed
+            // at runtime, rows pile onto a few instances/drivers and overload the per-driver
+            // EnforceUnique seen-set and the sink. This matters most for non-partitioned targets, whose
+            // sink inherits this join distribution; partitioned targets re-shuffle by partition columns
+            // above the check anyway. Correctness rests on the shuffle hint set by MergeIntoAnalyzer.
+            optimizerContext.setEnablePruneShuffleColumn(false);
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             OptExpression optimizedPlan = optimizer.optimize(
                     logicalRoot, requiredProperty, new ColumnRefSet(outputColumns));
@@ -179,6 +190,7 @@ public class MergeIntoPlanner {
             return execPlan;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
+            session.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(prevEnableSkewJoinOptimizeV2);
         }
     }
 
@@ -211,6 +223,11 @@ public class MergeIntoPlanner {
         // Keep the target scan and merge join bound together so sink validation and
         // duplicate checking never fall back to scans/joins from the source subtree.
         MergeTargetContext mergeTargetContext = findMergeTargetContext(execPlan, icebergTable);
+        if (mergeTargetContext != null) {
+            // Reject unexecutable join shapes on every MERGE path, including the canElideEnforceUnique
+            // path below that skips insertEnforceUniqueRowLocatorNode (and its distribution check).
+            validateMergeJoinIsExecutableByBackend(mergeTargetContext.mergeJoin);
+        }
         Expression filterExpr = mergeTargetContext == null
                 ? null
                 : buildTargetIcebergFilterExpr(mergeTargetContext.targetScan);
@@ -312,27 +329,20 @@ public class MergeIntoPlanner {
             return null;
         }
 
-        if (expr instanceof SlotRef groupBySlot) {
-            for (int i = 0; i < outputExprs.size(); i++) {
-                if (outputExprs.get(i) instanceof SlotRef outputSlot
-                        && sameAnalyzedSlot(groupBySlot, outputSlot)) {
-                    return outputNames.get(i);
-                }
-            }
+        // Relate a GROUP BY key to an output column only when it is a plain SlotRef, matched by column
+        // name (aggregation may reassign slot ids). A non-SlotRef key (e.g. GROUP BY f(x)) is not
+        // matched: a toSql() string compare can collide for distinct exprs and wrongly elide the check.
+        // Returning null just keeps EnforceUnique (conservative and always safe).
+        if (!(expr instanceof SlotRef groupBySlot) || groupBySlot.getColumnName() == null) {
+            return null;
         }
-
-        String exprSql = ExprToSql.toSql(expr);
         for (int i = 0; i < outputExprs.size(); i++) {
-            if (exprSql.equalsIgnoreCase(ExprToSql.toSql(outputExprs.get(i)))) {
+            if (outputExprs.get(i) instanceof SlotRef outputSlot
+                    && groupBySlot.getColumnName().equalsIgnoreCase(outputSlot.getColumnName())) {
                 return outputNames.get(i);
             }
         }
         return null;
-    }
-
-    private static boolean sameAnalyzedSlot(SlotRef left, SlotRef right) {
-        return left.getDesc() != null && right.getDesc() != null
-                && left.getSlotId().equals(right.getSlotId());
     }
 
     private static Set<String> collectSourceJoinKeyColumns(MergeIntoStmt mergeIntoStmt) {
@@ -342,6 +352,13 @@ public class MergeIntoPlanner {
                 ? mergeIntoStmt.getTable().getName()
                 : mergeIntoStmt.getTargetAlias();
         if (sourceName == null || targetName == null) {
+            return sourceJoinKeyColumns;
+        }
+        // If source and target share one identifier (e.g. a USING subquery aliased to the target's
+        // bare name), isSlotFromRelation cannot tell their slots apart, so a target-only ON key
+        // (target.k = target.k) would be miscounted as covering the source key and wrongly elide the
+        // check. Credit nothing and keep the runtime EnforceUnique check.
+        if (sourceName.equalsIgnoreCase(targetName)) {
             return sourceJoinKeyColumns;
         }
 
@@ -365,6 +382,14 @@ public class MergeIntoPlanner {
                                                SlotRef targetSlot, String sourceName, String targetName) {
         if (!isSlotFromRelation(sourceSlot, sourceName) || !isSlotFromRelation(targetSlot, targetName)
                 || sourceSlot.getColumnName() == null) {
+            return;
+        }
+        // Cover this ON key only when both sides are type-equivalent. The AST keeps bare SlotRefs
+        // across an implicit cast (added later on the ScalarOperator), so a VARCHAR-vs-INT key still
+        // reads as SlotRef = SlotRef here; that coercion is non-injective (distinct '1','01' match one
+        // target row), so source uniqueness over the raw column does not imply an at-most-one match.
+        if (sourceSlot.getType() == null || targetSlot.getType() == null
+                || !sourceSlot.getType().matchesType(targetSlot.getType())) {
             return;
         }
         sourceJoinKeyColumns.add(sourceSlot.getColumnName());
@@ -536,11 +561,11 @@ public class MergeIntoPlanner {
      * where it is exact; a scanned source is always rejected.
      */
     private static void validateMergeJoinKeepsTargetUnreplicated(PlanNode joinNode) {
-        // Hash and merge joins are both distribution-based: their DistributionMode tells
-        // whether the target side stays partitioned. A merge-join plan (join_implementation_mode
-        // = "merge") is just as valid here as a hash join, so accept both.
-        if (joinNode instanceof HashJoinNode || joinNode instanceof MergeJoinNode) {
-            JoinNode.DistributionMode mode = ((JoinNode) joinNode).getDistrMode();
+        // Reject join shapes the BE cannot execute (also enforced unconditionally in
+        // setupIcebergMergeSink; redundant here but keeps this method self-contained).
+        validateMergeJoinIsExecutableByBackend(joinNode);
+        if (joinNode instanceof HashJoinNode) {
+            JoinNode.DistributionMode mode = ((HashJoinNode) joinNode).getDistrMode();
             Preconditions.checkState(mode == JoinNode.DistributionMode.PARTITIONED
                             || mode == JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET
                             || mode == JoinNode.DistributionMode.COLOCATE,
@@ -548,15 +573,33 @@ public class MergeIntoPlanner {
                             + "prevented this), got distribution mode %s", mode);
             return;
         }
-        if (joinNode instanceof NestLoopJoinNode) {
-            PlanNode source = joinNode.getChild(0);
-            long sourceCardinality = source.getCardinality();
-            if (!subtreeHasScanNode(source) && sourceCardinality >= 0 && sourceCardinality <= 1) {
-                return;
-            }
+        // NestLoopJoinNode: executability is already validated above. A constant single-row source
+        // (no scans, cardinality <= 1) cannot match any target row twice, so the per-driver dedup
+        // stays sound even though the broadcast target is replicated. A multi-row probe is rejected.
+        PlanNode source = joinNode.getChild(0);
+        long sourceCardinality = source.getCardinality();
+        if (!subtreeHasScanNode(source) && sourceCardinality >= 0 && sourceCardinality <= 1) {
+            return;
         }
-        throw new SemanticException("MERGE INTO requires at least one equality predicate between the "
-                + "target and the source in the ON clause");
+        throw new SemanticException(
+                "MERGE INTO requires the target-source join to run as a shuffle hash join (built from an "
+                        + "equality predicate in the ON clause); got an unsupported join shape: "
+                        + joinNode.getClass().getSimpleName());
+    }
+
+    /**
+     * Reject join shapes the BE cannot execute. {@code exec_factory.cpp} builds an operator only for
+     * HASH_JOIN_NODE and CROSS_JOIN_NODE/NESTLOOP_JOIN_NODE — there is no MERGE_JOIN_NODE executor, so a
+     * sort-merge join (e.g. {@code join_implementation_mode=merge}) must fail fast at the FE. This is a
+     * backend-capability invariant independent of the duplicate check, so it holds even when elided.
+     */
+    private static void validateMergeJoinIsExecutableByBackend(PlanNode joinNode) {
+        if (!(joinNode instanceof HashJoinNode) && !(joinNode instanceof NestLoopJoinNode)) {
+            throw new SemanticException(
+                    "MERGE INTO requires the target-source join to run as a shuffle hash join (built from an "
+                            + "equality predicate in the ON clause); got an unsupported join shape: "
+                            + joinNode.getClass().getSimpleName());
+        }
     }
 
     private static boolean subtreeHasScanNode(PlanNode root) {
