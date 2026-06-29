@@ -1,0 +1,67 @@
+-- name: test_unnest_struct_subfield_prune
+-- Coverage for PR #75445: PruneSubfieldsForComplexType.pruneUnnestResultType narrows the
+-- UNNEST output struct to match its (narrowed) input array element. The PR's own SQL cases
+-- use array<struct> LITERALS, which trip the global setEnablePruneComplexTypes(false) guard
+-- (a struct-construct scalar disables the whole prune pass) and therefore never exercise the
+-- narrowing. These cases use a SCAN-backed array<struct> column so the prune actually fires,
+-- plus non-scan (UNION) inputs to check the result stays correct when the scan is not narrowed.
+drop database if exists test_unnest_struct_subfield_prune;
+-- result:
+-- !result
+create database test_unnest_struct_subfield_prune;
+-- result:
+-- !result
+use test_unnest_struct_subfield_prune;
+-- result:
+-- !result
+create table ts_arr(id int, arr array<struct<c1 int, c2 int>>)
+  duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into ts_arr values (1, [row(10,1),row(20,2)]), (2, [row(30,3)]);
+-- result:
+-- !result
+set enable_prune_complex_types_in_unnest = true;
+-- result:
+-- !result
+select s.c1 from ts_arr, unnest(arr) as t(s) order by s.c1;
+-- result:
+10
+20
+30
+-- !result
+select s.c2 from ts_arr, unnest(arr) as t(s) order by s.c2;
+-- result:
+1
+2
+3
+-- !result
+select s.c1, s.c2 from ts_arr, unnest(arr) as t(s) order by s.c1, s.c2;
+-- result:
+10	1
+20	2
+30	3
+-- !result
+select s.c2 from (select arr from ts_arr union all select arr from ts_arr) u,
+  unnest(u.arr) as t(s) order by s.c2;
+-- result:
+1
+1
+2
+2
+3
+3
+-- !result
+select s.c1 from (select arr from ts_arr union all select arr from ts_arr) u,
+  unnest(u.arr) as t(s) order by s.c1;
+-- result:
+10
+10
+20
+20
+30
+30
+-- !result
+drop database test_unnest_struct_subfield_prune;
+-- result:
+-- !result
