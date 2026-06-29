@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -38,7 +39,9 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Single {@code StmtExecutor} &rarr; {@link PreSplitFlow} bridge for Sample-Based
@@ -109,6 +112,10 @@ public final class InsertPreSplitHook {
         if (resolvedTable == null) {
             return;
         }
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
+        if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
+            return;
+        }
         authorizeTargetSideEffects(resolvedTable, context);
 
         PreSplitFlow.Prepared prepared = source.prepare(
@@ -121,9 +128,10 @@ public final class InsertPreSplitHook {
     }
 
     private static boolean passesCommonPreFilters(InsertStmt insertStmt, ConnectContext context) {
-        if (insertStmt.getTargetColumnNames() != null) {
-            return false;
-        }
+        // An explicit target column list is validated after target resolution:
+        // the source-agnostic targetColumnListIsPreSplitSafe gate plus each
+        // source's own column/source alignment in prepare(). The sort-key columns
+        // and table schema are not available this early.
         if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
             return false;
         }
@@ -138,6 +146,98 @@ public final class InsertPreSplitHook {
         }
         if (insertStmt.getProperties() != null && !insertStmt.getProperties().isEmpty()) {
             return false;
+        }
+        return true;
+    }
+
+    /**
+     * Whether an explicit target column list is safe to pre-split on. Returns true
+     * for a bare INSERT (null/empty list). For an explicit list every check below
+     * must hold, otherwise pre-split is skipped so it never mutates tablet metadata
+     * for a statement the analyzer would reject or that would split degenerately:
+     *
+     * <ul>
+     *   <li>no duplicate names, and every listed name is a real base
+     *       (non-generated) column — rejects the unknown/duplicate/generated lists
+     *       that {@code InsertAnalyzer} fails later;</li>
+     *   <li>every base column omitted from the list is fillable without an explicit
+     *       value (has a default, is nullable, auto-increment, or generated) —
+     *       mirrors InsertAnalyzer's "must be explicitly mentioned" rule, so a list
+     *       missing a required column is skipped rather than resharded;</li>
+     *   <li>every range-distribution (sort) key column is present — an omitted key
+     *       is defaulted for every row, collapsing the data on that key and making
+     *       split boundaries degenerate.</li>
+     * </ul>
+     *
+     * <p>Source-specific column/source alignment is still checked later in each
+     * {@link InsertPreSplitSource#prepare}.
+     *
+     * <p>Package-private (not private) so the unit test can drive it directly
+     * without mocking the full eligibility chain that precedes it.
+     */
+    static boolean targetColumnListIsPreSplitSafe(
+            InsertStmt insertStmt, OlapTable target, List<Column> sortKeyColumns) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return true;
+        }
+        Set<String> listed = new HashSet<>();
+        for (String name : targetColumnNames) {
+            if (!listed.add(name.toLowerCase())) {
+                return false;   // duplicate target column
+            }
+        }
+        Set<String> baseNonGenerated = new HashSet<>();
+        for (Column column : target.getBaseSchemaWithoutGeneratedColumn()) {
+            baseNonGenerated.add(column.getName().toLowerCase());
+        }
+        if (!baseNonGenerated.containsAll(listed)) {
+            return false;   // unknown column, or a generated column, named in the list
+        }
+        // Mirror InsertAnalyzer: a column must be mentioned when it has no default,
+        // is not nullable, and is neither auto-increment nor generated.
+        for (Column column : target.getBaseSchema()) {
+            if (column.getDefaultValueType() == Column.DefaultValueType.NULL
+                    && !column.isAllowNull()
+                    && !column.isAutoIncrement()
+                    && !column.isGeneratedColumn()
+                    && !listed.contains(column.getName().toLowerCase())) {
+                return false;   // a required column is missing from the list
+            }
+        }
+        for (Column sortKey : sortKeyColumns) {
+            if (!listed.contains(sortKey.getName().toLowerCase())) {
+                return false;   // a sort-key column is missing -> degenerate split
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether the target column list names every base (non-generated) column
+     * exactly once, in schema order — i.e. it is semantically identical to
+     * omitting the list. Used by the INSERT-from-table source, whose column
+     * mapping assumes the full base schema in order; partial / reordered lists
+     * are not yet supported there.
+     *
+     * <p>Returns true when there is no target column list or when the list is a
+     * full, in-order identity list.
+     *
+     * <p>Package-private (not private) so the unit test can drive it directly.
+     */
+    static boolean targetColumnListIsFullIdentity(InsertStmt insertStmt, OlapTable target) {
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return true;
+        }
+        List<Column> baseColumns = target.getBaseSchemaWithoutGeneratedColumn();
+        if (targetColumnNames.size() != baseColumns.size()) {
+            return false;
+        }
+        for (int i = 0; i < baseColumns.size(); i++) {
+            if (!targetColumnNames.get(i).equalsIgnoreCase(baseColumns.get(i).getName())) {
+                return false;
+            }
         }
         return true;
     }

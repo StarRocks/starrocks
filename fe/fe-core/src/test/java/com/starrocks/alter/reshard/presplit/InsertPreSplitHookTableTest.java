@@ -252,15 +252,6 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testTargetColumnListShortCircuits() throws Exception {
-        InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
-
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
-    }
-
-    @Test
     public void testExpressionProjectionShortCircuits() throws Exception {
         // INSERT INTO t SELECT col + 1 FROM src — a non-SlotRef expression item.
         SelectListItem exprItem = mock(SelectListItem.class);
