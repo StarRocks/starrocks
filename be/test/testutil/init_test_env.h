@@ -204,6 +204,9 @@ int init_test_env(int argc, char** argv) {
     agent_server->stop();
     exec_env->set_agent_server(nullptr);
     orchestration_env->stop();
+    // TODO: Optimize this shutdown ordering by moving query-context and data-workflow teardown under a
+    // single lifecycle owner.
+    exec_env->clear_and_destroy_query_context_mgr();
     data_workflows_env->stop();
     StorageEnv::GetInstance()->stop();
     exec_env->stop();

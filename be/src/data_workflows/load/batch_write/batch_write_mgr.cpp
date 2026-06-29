@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 
 #include "base/metrics.h"
 #include "base/string/string_parser.hpp"
@@ -24,8 +24,8 @@
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/time_bounded_stream_load_pipe.h"
+#include "data_workflows/load/batch_write/batch_write_util.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/batch_write/batch_write_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/merge_commit_trace.h"
 #include "runtime/runtime_metrics.h"

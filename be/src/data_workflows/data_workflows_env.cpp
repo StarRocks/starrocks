@@ -16,9 +16,15 @@
 
 #include <memory>
 
+#include "base/time/monotime.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
+#include "common/util/bthreads/executor.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/rejected_record_sync_daemon.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -34,11 +40,27 @@ Status DataWorkflowsEnv::init(const DataWorkflowsEnvOptions& options) {
     DCHECK(options.brpc_stub_cache != nullptr);
     DCHECK(options.load_mem_tracker != nullptr);
 
+    _exec_env = options.exec_env;
+
     _load_channel_mgr =
             std::make_unique<LoadChannelMgr>(options.lake_tablet_manager, options.diagnose_daemon,
                                              options.brpc_stub_cache, options.metrics, options.table_metrics_mgr);
     RETURN_IF_ERROR(_load_channel_mgr->init(options.load_mem_tracker));
     _load_channel_mgr_started = true;
+
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::merge_commit_thread_pool_num_min)
+                            .set_max_threads(config::merge_commit_thread_pool_num_max)
+                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = std::make_unique<BatchWriteMgr>(std::move(batch_write_executor));
+    RETURN_IF_ERROR(_batch_write_mgr->init(options.metrics));
+    _batch_write_mgr_started = true;
+    _exec_env->set_batch_write_mgr(_batch_write_mgr.get());
 
     // Start unconditionally so mutable config can enable sync without a BE restart.
     _rejected_record_sync_daemon = std::make_unique<RejectedRecordSyncDaemon>(options.exec_env);
@@ -61,12 +83,21 @@ void DataWorkflowsEnv::stop() {
         _load_channel_mgr->close();
         _load_channel_mgr_started = false;
     }
+    if (_batch_write_mgr != nullptr && _batch_write_mgr_started) {
+        _batch_write_mgr->stop();
+        _batch_write_mgr_started = false;
+    }
 }
 
 void DataWorkflowsEnv::destroy() {
     stop();
     _rejected_record_sync_daemon.reset();
+    if (_exec_env != nullptr) {
+        _exec_env->set_batch_write_mgr(nullptr);
+    }
+    _batch_write_mgr.reset();
     _load_channel_mgr.reset();
+    _exec_env = nullptr;
 }
 
 } // namespace starrocks

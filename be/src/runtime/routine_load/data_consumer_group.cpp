@@ -263,6 +263,7 @@ void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>&
     cb(st);
 }
 
+#ifndef __APPLE__
 Status PulsarDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->pulsar_info);
     DCHECK(_consumers.size() >= 1);
@@ -461,5 +462,6 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         }
     }
 }
+#endif
 
 } // namespace starrocks

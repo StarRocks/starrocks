@@ -63,7 +63,6 @@
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
-#include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
@@ -179,6 +178,20 @@ void ExecEnv::set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFi
     _refresh_service_contexts();
 }
 
+void ExecEnv::set_batch_write_mgr(BatchWriteMgr* batch_write_mgr) {
+    _batch_write_mgr = batch_write_mgr;
+    _refresh_service_contexts();
+}
+
+void ExecEnv::clear_and_destroy_query_context_mgr() {
+    if (_query_context_mgr == nullptr) {
+        return;
+    }
+    _query_context_mgr->clear();
+    delete_and_null(_query_context_mgr);
+    _refresh_service_contexts();
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
                      GlobalEnv* global_env, bool as_cn) {
     DCHECK(process_metrics_registry != nullptr);
@@ -224,18 +237,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _stream_load_executor = new StreamLoadExecutor(this);
     _transaction_mgr = new TransactionMgr(this);
-
-    std::unique_ptr<ThreadPool> batch_write_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::merge_commit_thread_pool_num_min)
-                            .set_max_threads(config::merge_commit_thread_pool_num_max)
-                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
-                            .build(&batch_write_thread_pool));
-    auto batch_write_executor =
-            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
-    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
-    RETURN_IF_ERROR(_batch_write_mgr->init(process_metrics));
 
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
@@ -392,12 +393,6 @@ void ExecEnv::stop() {
         component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
-    if (_batch_write_mgr) {
-        start = MonotonicMillis();
-        _batch_write_mgr->stop();
-        component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
-    }
-
     if (global_env->dictionary_cache_pool()) {
         start = MonotonicMillis();
         global_env->dictionary_cache_pool()->shutdown();
@@ -442,7 +437,6 @@ void ExecEnv::destroy() {
     // _query_pool_mem_tracker.
     delete_and_null(_runtime_filter_cache);
     delete_and_null(_lookup_dispatcher_mgr);
-    delete_and_null(_batch_write_mgr);
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
     _query_execution_services.process_metrics = nullptr;

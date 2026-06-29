@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
 
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>

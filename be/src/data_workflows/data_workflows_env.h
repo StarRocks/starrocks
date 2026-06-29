@@ -21,6 +21,7 @@
 namespace starrocks {
 
 class BrpcStubCache;
+class BatchWriteMgr;
 class DiagnoseDaemon;
 class ExecEnv;
 class LoadChannelMgr;
@@ -54,11 +55,16 @@ public:
 
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr.get(); }
     const LoadChannelMgr* load_channel_mgr() const { return _load_channel_mgr.get(); }
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr.get(); }
+    const BatchWriteMgr* batch_write_mgr() const { return _batch_write_mgr.get(); }
 
 private:
+    ExecEnv* _exec_env = nullptr;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
+    std::unique_ptr<BatchWriteMgr> _batch_write_mgr;
     std::unique_ptr<RejectedRecordSyncDaemon> _rejected_record_sync_daemon;
     bool _load_channel_mgr_started = false;
+    bool _batch_write_mgr_started = false;
     bool _rejected_record_sync_daemon_started = false;
 };
 

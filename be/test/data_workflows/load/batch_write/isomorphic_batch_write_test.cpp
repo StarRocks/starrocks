@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/batch_write/isomorphic_batch_write.h"
+#include "data_workflows/load/batch_write/isomorphic_batch_write.h"
 
 #include <gtest/gtest.h>
 

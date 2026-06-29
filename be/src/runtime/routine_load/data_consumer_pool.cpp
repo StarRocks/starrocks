@@ -66,9 +66,14 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
     case TLoadSourceType::KAFKA:
         consumer = std::make_shared<KafkaDataConsumer>(ctx);
         break;
+#ifndef __APPLE__
     case TLoadSourceType::PULSAR:
         consumer = std::make_shared<PulsarDataConsumer>(ctx);
         break;
+#else
+    case TLoadSourceType::PULSAR:
+        return Status::NotSupported("Pulsar routine load is not supported on macOS");
+#endif
     default:
         std::stringstream ss;
         ss << "PAUSE: unknown routine load task type: " << ctx->load_type;
@@ -84,8 +89,17 @@ Status DataConsumerPool::get_consumer(StreamLoadContext* ctx, std::shared_ptr<Da
 }
 
 Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_ptr<DataConsumerGroup>* ret) {
-    if (ctx->load_src_type != TLoadSourceType::KAFKA && ctx->load_src_type != TLoadSourceType::PULSAR) {
-        return Status::InternalError("PAUSE: Currently only support consumer group for Kafka or Palsur data source");
+#ifdef __APPLE__
+    if (ctx->load_src_type == TLoadSourceType::PULSAR) {
+        return Status::NotSupported("Pulsar routine load is not supported on macOS");
+    }
+#endif
+    if (ctx->load_src_type != TLoadSourceType::KAFKA
+#ifndef __APPLE__
+        && ctx->load_src_type != TLoadSourceType::PULSAR
+#endif
+    ) {
+        return Status::InternalError("PAUSE: Currently only support consumer group for Kafka or Pulsar data source");
     }
 
     if (ctx->load_src_type == TLoadSourceType::KAFKA) {
@@ -106,6 +120,7 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
         *ret = grp;
         return Status::OK();
+#ifndef __APPLE__
     } else {
         DCHECK(ctx->pulsar_info);
         DCHECK_GE(ctx->pulsar_info->partitions.size(), 1);
@@ -131,7 +146,10 @@ Status DataConsumerPool::get_consumer_grp(StreamLoadContext* ctx, std::shared_pt
         LOG(INFO) << "get consumer group " << grp->grp_id() << " with " << consumer_num << " consumers";
         *ret = grp;
         return Status::OK();
+#endif
     }
+
+    return Status::InternalError("PAUSE: unknown routine load task type");
 }
 
 void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& consumer) {

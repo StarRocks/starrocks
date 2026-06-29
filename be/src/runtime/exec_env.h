@@ -130,6 +130,7 @@ public:
     StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
+    void set_batch_write_mgr(BatchWriteMgr* batch_write_mgr);
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
@@ -151,6 +152,7 @@ public:
     ProfileReportWorker* profile_report_worker();
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
+    void clear_and_destroy_query_context_mgr();
 
     ComputeEnv* compute_env() const { return _compute_env.get(); }
 

@@ -26,6 +26,7 @@
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/runtime/query_context_manager.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
@@ -142,6 +143,23 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
 
     env.compute_env()->destroy();
+}
+
+TEST(ExecEnvTest, clear_and_destroy_query_context_mgr_is_idempotent_and_refreshes_contexts) {
+    ExecEnv env;
+    env._query_context_mgr = new pipeline::QueryContextManager(0);
+    ASSERT_OK(env._query_context_mgr->init());
+    env._refresh_service_contexts();
+    ASSERT_NE(env.query_context_mgr(), nullptr);
+    ASSERT_EQ(env.runtime_services().query_context_mgr, env.query_context_mgr());
+
+    env.clear_and_destroy_query_context_mgr();
+    EXPECT_EQ(env.query_context_mgr(), nullptr);
+    EXPECT_EQ(env.runtime_services().query_context_mgr, nullptr);
+
+    env.clear_and_destroy_query_context_mgr();
+    EXPECT_EQ(env.query_context_mgr(), nullptr);
+    EXPECT_EQ(env.runtime_services().query_context_mgr, nullptr);
 }
 
 } // namespace starrocks

@@ -417,6 +417,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     orchestration_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env stop successfully";
 
+    // TODO: Optimize this shutdown ordering by moving query-context and data-workflow teardown under a
+    // single lifecycle owner.
+    exec_env->clear_and_destroy_query_context_mgr();
+
     data_workflows_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
 
