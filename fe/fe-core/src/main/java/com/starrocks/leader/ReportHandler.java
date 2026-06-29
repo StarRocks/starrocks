@@ -2240,13 +2240,19 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                 if (olapTable == null) {
                     continue;
                 }
+                // Skip non-flat_json tables before locking so the report hot path avoids a per-tablet
+                // lock for them (cf. handleSetTabletBinlogConfig); the version compare stays under the lock.
+                if (!olapTable.containsFlatJsonConfig()) {
+                    continue;
+                }
                 Locker locker = new Locker();
                 locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
                 try {
-                    if (!olapTable.containsFlatJsonConfig()) {
+                    FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
+                    if (flatJsonConfig == null) {
+                        // flat_json could have been removed between the lock-free check and the lock.
                         continue;
                     }
-                    FlatJsonConfig flatJsonConfig = olapTable.getFlatJsonConfig();
                     long feFlatJsonConfigVersion = flatJsonConfig.getVersion();
                     if (beFlatJsonConfigVersion < feFlatJsonConfigVersion) {
                         tabletToFlatJsonConfig.add(new Pair<>(tabletId, flatJsonConfig));
