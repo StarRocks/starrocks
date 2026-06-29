@@ -484,6 +484,10 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+struct TChangesScanNode {
+    // no implementation, only used for placeholder in TPlanNode
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -1583,6 +1587,9 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+
+  // just a placeholder
+  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
