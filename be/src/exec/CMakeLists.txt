@@ -127,7 +127,6 @@ ADD_BE_LIB(ExecJoinCore
 target_link_libraries(ExecJoinCore PUBLIC
     ComputeEnv
     ExprCore
-    Serde
     RuntimeCore
     ColumnSortCore
     ChunkCore
@@ -178,6 +177,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
+    pipeline/exchange/exchange_compression_strategy.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -517,7 +517,6 @@ target_link_libraries(ExecRuntime PUBLIC
     ExecPrimitive
     StoragePrimitive
     ExprCore
-    Serde
     RuntimeEnv
     RuntimeCore
     Platform

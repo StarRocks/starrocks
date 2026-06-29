@@ -45,6 +45,8 @@ set(RUNTIME_CORE_FILES
     memory/memory_allocator.cpp
     exception_stack.cpp
     prof/heap_prof.cpp
+    serde/chunk_encode_context.cpp
+    serde/protobuf_chunk_serde.cpp
 )
 
 ADD_BE_LIB(RuntimeCore

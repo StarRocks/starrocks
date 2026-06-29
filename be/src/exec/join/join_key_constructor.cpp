@@ -16,7 +16,7 @@
 
 #include <optional>
 
-#include "serde/column_array_serde.h"
+#include "column/serde/column_array_serde.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

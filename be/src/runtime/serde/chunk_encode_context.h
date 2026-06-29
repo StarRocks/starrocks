@@ -21,8 +21,8 @@
 
 #include "column/chunk.h"
 #include "column/chunk_extra_data.h"
+#include "column/serde/encode_level.h"
 #include "common/statusor.h"
-#include "serde/encode_level.h"
 
 namespace starrocks {
 class ChunkPB;

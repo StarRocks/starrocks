@@ -28,7 +28,6 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     StorageBase
     ComputeEnv
     StoragePrimitive
-    Serde
     FSCore
     IO
     RuntimeCore

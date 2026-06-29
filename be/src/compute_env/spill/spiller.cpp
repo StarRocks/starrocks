@@ -27,6 +27,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/spill/common.h"
@@ -39,7 +40,6 @@
 #include "exprs/sort_exec_exprs.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
 
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);

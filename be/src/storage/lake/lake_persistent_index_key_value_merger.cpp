@@ -15,11 +15,11 @@
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
 #include "base/debug/trace.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"

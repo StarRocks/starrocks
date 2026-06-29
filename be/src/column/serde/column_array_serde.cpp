@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "serde/column_array_serde.h"
+#include "column/serde/column_array_serde.h"
 
 #include <fmt/format.h>
 #include <streamvbyte.h>
@@ -36,11 +36,11 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/serde/encode_level.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_diagnostic_fwd.h"
-#include "serde/encode_level.h"
 #include "types/json_value.h"
 #include "types/percentile_value.h"
 

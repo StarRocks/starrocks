@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "serde/compress_strategy.h"
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
 
 #include <cmath>
 #include <random>
 
 #include "common/config_compression_fwd.h"
 
-namespace starrocks::serde {
+namespace starrocks::pipeline {
 
-CompressStrategy::CompressStrategy() : _gen(std::random_device()()) {}
+ExchangeCompressionStrategy::ExchangeCompressionStrategy() : _gen(std::random_device()()) {}
 
-void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes, uint64_t serialization_time_ns,
-                                uint64_t compression_time_ns) {
+void ExchangeCompressionStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes,
+                                           uint64_t serialization_time_ns, uint64_t compression_time_ns) {
     if (uncompressed_bytes == 0 || compressed_bytes == 0 || compression_time_ns == 0) {
         return;
     }
@@ -39,7 +39,7 @@ void CompressStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed
     }
 }
 
-bool CompressStrategy::decide() {
+bool ExchangeCompressionStrategy::decide() {
     std::gamma_distribution<double> gamma_alpha(_alpha, 1.0);
     std::gamma_distribution<double> gamma_beta(_beta, 1.0);
 
@@ -50,4 +50,4 @@ bool CompressStrategy::decide() {
     return theta > 0.5;
 }
 
-} // namespace starrocks::serde
+} // namespace starrocks::pipeline

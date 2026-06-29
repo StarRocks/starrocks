@@ -569,7 +569,6 @@ set(STARROCKS_LINK_LIBS
     ExecPrimitive
     StoragePrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
-    Serde
     $<TARGET_FILE:Cache>
     RuntimeEnv
     RuntimeCore
@@ -988,7 +987,6 @@ add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
-add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
