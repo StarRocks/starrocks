@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/service/action/stop_be_action.h"
+#include "http/action/stop_be_action.h"
 
 #include <event2/http.h>
 #include <gtest/gtest.h>
@@ -20,9 +20,9 @@
 
 #include "common/config_http_fwd.h"
 #include "common/process_exit.h"
-#include "http/core/http_channel.h"
-#include "http/core/http_request.h"
-#include "http/core/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 

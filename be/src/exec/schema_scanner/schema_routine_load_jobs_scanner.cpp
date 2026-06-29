@@ -16,7 +16,7 @@
 
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
-#include "http/core/http_client.h"
+#include "platform/http/http_client.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

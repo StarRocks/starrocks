@@ -25,8 +25,8 @@
 
 #include "base/network/network_util.h"
 #include "column/column_helper.h"
-#include "http/core/http_client.h"
-#include "http/core/http_method.h"
+#include "platform/http/http_client.h"
+#include "platform/http/http_method.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

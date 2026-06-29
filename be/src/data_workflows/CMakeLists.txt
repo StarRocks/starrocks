@@ -50,6 +50,4 @@ target_link_libraries(DataWorkflows PUBLIC
     Base
     Gutil
     StarRocksGen
-    PRIVATE
-    HttpCore
 )
