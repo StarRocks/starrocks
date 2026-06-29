@@ -740,6 +740,21 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_multi_page_no_oob_and_correct_pruning
     auto* reader_const = segment->column_with_uid(_c1_uid);
     ASSERT_TRUE(reader_const != nullptr);
     auto* reader = const_cast<ColumnReader*>(reader_const);
+    // load_segment() only parses the footer; the ordinal index stays unloaded
+    // (num_data_pages() reports 0) until load_ordinal_index() runs. The bloom
+    // read path below reads the same ordinal index (page->row mapping), so load
+    // it now -- in production SegmentIterator::_init_internal() does this before
+    // pruning.
+    {
+        OlapReaderStatistics ord_stats;
+        ASSIGN_OR_ABORT(auto ord_fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+        ASSIGN_OR_ABORT(auto ord_rfile, ord_fs->new_random_access_file(seg_fi));
+        IndexReadOptions ord_opts;
+        ord_opts.read_file = ord_rfile->stream().get();
+        ord_opts.stats = &ord_stats;
+        ord_opts.use_page_cache = false;
+        ASSERT_OK(reader->load_ordinal_index(ord_opts));
+    }
     // Premise: the column really spans multiple data pages, otherwise the test
     // would not exercise the granularity mismatch at all.
     ASSERT_GT(reader->num_data_pages(), 1);
@@ -850,6 +865,19 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_undersized_idx_degrades_to_no_pruning
     auto* reader_const = segment->column_with_uid(_c1_uid);
     ASSERT_TRUE(reader_const != nullptr);
     auto* reader = const_cast<ColumnReader*>(reader_const);
+    // load_segment() leaves the ordinal index unloaded; load it so
+    // num_data_pages() is accurate and the bloom read path can map pages->rows
+    // (production does this in SegmentIterator::_init_internal()).
+    {
+        OlapReaderStatistics ord_stats;
+        ASSIGN_OR_ABORT(auto ord_fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+        ASSIGN_OR_ABORT(auto ord_rfile, ord_fs->new_random_access_file(seg_fi));
+        IndexReadOptions ord_opts;
+        ord_opts.read_file = ord_rfile->stream().get();
+        ord_opts.stats = &ord_stats;
+        ord_opts.use_page_cache = false;
+        ASSERT_OK(reader->load_ordinal_index(ord_opts));
+    }
     const int32_t num_pages = reader->num_data_pages();
     // Premise: many data pages, but we will write only a single bloom filter,
     // so most page indices have no backing filter -> the degrade path fires.
