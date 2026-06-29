@@ -600,6 +600,23 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         alreadyFoundSomeLivingCn = true;
     }
 
+    /**
+     * Returns the version to use when scanning {@code physicalPartitionId}.
+     * If {@code override} contains an entry for this partition, that version is returned;
+     * otherwise {@code visibleVersion} is returned unchanged.
+     * Passing {@code null} for {@code override} is equivalent to an empty map.
+     */
+    public static long chooseScanVersion(long visibleVersion, long physicalPartitionId,
+                                         @Nullable Map<Long, Long> override) {
+        if (override != null) {
+            Long overriddenVersion = override.get(physicalPartitionId);
+            if (overriddenVersion != null) {
+                return overriddenVersion;
+            }
+        }
+        return visibleVersion;
+    }
+
     public void addScanRangeLocations(Partition partition,
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
@@ -612,7 +629,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         String schemaHashStr = String.valueOf(schemaHash);
-        long visibleVersion = physicalPartition.getVisibleVersion();
+        ConnectContext ctx = ConnectContext.get();
+        long visibleVersion = chooseScanVersion(physicalPartition.getVisibleVersion(), physicalPartition.getId(),
+                ctx == null ? null : ctx.getScanVersionOverride());
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);

@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -24,6 +25,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -126,22 +129,23 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * The SCHEMA_CHANGE alter path in {@code AlterJobExecutor} catches
-     * {@code StarRocksException} and re-throws as {@code AlterJobException}
-     * with only the message (no cause), so tests on that path assert
-     * directly on the top exception's message rather than going through
-     * {@link #assertThrowsDdlException} which walks the cause chain.
+     * On a shared-data (lake) range table a sort-key reorder shifts the range sort key, so it is now
+     * routed to {@link LakeRangeRewriteSchemaChangeJob} instead of being rejected. The job is built
+     * (not run) via {@code analyzeAndCreateJob} to assert the routing without needing a backend.
      */
     @Test
-    public void testModifySortKeyRejectedOnRangeDistribution() throws Exception {
+    public void testModifySortKeyRoutedToRangeRewriteOnRangeDistribution() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_orderby"));
-        // Column list SHORTER than base schema routes to
-        // processModifySortKeyColumn (not the schema-reorder overload).
-        Throwable exception = assertThrows(Throwable.class, () ->
-                starRocksAssert.alterTable(
-                        "alter table t_guard_orderby order by (k1)"));
-        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + exception.getMessage());
+        // Column list SHORTER than base schema routes to processModifySortKeyColumn (sort-key modify).
+        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                UtFrameUtils.parseStmtWithNewParser("alter table t_guard_orderby order by (k1)", connectContext);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_orderby");
+        AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
     }
 
     @Test
@@ -169,6 +173,38 @@ public class RangeDistributionGuardTest {
                         "alter table t_guard_addkey add column k_new int key default '0'"));
         assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + exception.getMessage());
+    }
+
+    /**
+     * A range-COLOCATE table stays rejected: the rewrite would resample a fresh K-tablet layout
+     * independently of the colocate range manager's expected ranges, desyncing colocate routing after
+     * the flip. The routing predicate must therefore exclude colocate tables, keeping the existing
+     * range-distribution rejection. (Colocate membership is simulated; create-time colocate+range
+     * wiring is orthogonal to the routing decision under test.)
+     */
+    @Test
+    public void testColocateRangeTableRejectsSortKeyReorder() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_colocate"));
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public boolean isColocateTable(long tableId) {
+                return true;
+            }
+        };
+        assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate order by (k2, k1)");
+    }
+
+    /**
+     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the re-route).
+     */
+    @Test
+    public void testAutoIncrementRangeTableRejectsSortKeyReorder() throws Exception {
+        starRocksAssert.withTable("create table t_guard_autoinc "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        assertAlterRejectedWithRangeDistribution("alter table t_guard_autoinc order by (k2, k1)");
     }
 
     /**

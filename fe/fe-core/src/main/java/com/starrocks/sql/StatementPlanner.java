@@ -604,7 +604,9 @@ public class StatementPlanner {
         }
 
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
+        TransactionState.LoadJobSourceType sourceType = (stmt instanceof InsertStmt && ((InsertStmt) stmt).isShadowRewrite())
+                ? TransactionState.LoadJobSourceType.SHADOW_REWRITE
+                : TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = DmlStmt.INVALID_TXN_ID;
         if (targetTable instanceof ExternalOlapTable) {
             if (!(stmt instanceof InsertStmt)) {

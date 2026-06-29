@@ -625,6 +625,224 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     }
 }
 
+// Shadow-rewrite publish through the RPC path: shadow tablets now travel in the request's ordinary
+// tablet_ids, and the publish is keyed on a single TxnInfoPB whose txn_type == TXN_SHADOW_REWRITE and
+// whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
+// branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
+// flip publish, including the W == 1 skip-load (empty partition) path.
+TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
+    // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
+    // watershed, independent of the shadow tablet's base_version and always < new_version.
+    auto fresh_tablet = [&]() {
+        auto meta = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
+        return meta->id();
+    };
+    auto shadow_request = [&](int64_t tablet_id, int64_t new_version, int64_t alter_version) {
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(new_version);
+        req.add_tablet_ids(tablet_id);
+        auto* txn = req.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE);
+        txn->set_shadow_rewrite_alter_version(alter_version);
+        return req;
+    };
+
+    // (a) W == 1: empty base at watershed -> BE skips the source load (no 404) and synthesizes an empty
+    //     op_schema_change@1; the tablet advances 1 -> 2 with no rowsets.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/2, /*alter_version=*/1);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(t, 2));
+        EXPECT_EQ(2, metadata->version());
+        EXPECT_EQ(0, metadata->rowsets_size());
+    }
+    // (b) W > 1, source load fails with a non-not-found error -> the tablet fails to publish.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        TEST_ENABLE_ERROR_POINT("TabletManager::load_txn_log", Status::IOError("injected shadow source load error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::load_txn_log");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected shadow source load error"))
+                << response.status().error_msgs(0);
+    }
+    // (c) W > 1, no source op_write present and the target version unpublished -> a non-empty partition's
+    //     shadow tablet always has an op_write, so a missing one means the source was lost. The load's
+    //     not-found propagates and the publish FAILS (so it retries) rather than synthesizing an empty
+    //     op_schema_change@W -- which would silently drop the partition's data by advancing the version.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_NE(0, response.status().status_code()) << "lost source must fail the publish";
+        // Crucially, the version did NOT advance with an empty log (no silent data drop).
+        EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(t, 3).status().is_not_found());
+    }
+    // (d) Invalid request: missing alter_version (defaults to 0) -> InvalidArgument (failed tablet).
+    {
+        int64_t t = fresh_tablet();
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(t);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE); // shadow_rewrite_alter_version intentionally unset (=> 0)
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+    }
+}
+
+// Verifies the publish-time async VI dispatch gate: only async-mode tables
+// (index_build_mode = "async") generate vector_index_build_infos in the publish
+// response. Sync-mode tables build VI inline during write/compaction, so the FE
+// scheduler should not be involved.
+TEST_F(LakeServiceTest, test_publish_version_vector_index_dispatch_gate) {
+    auto make_vi_metadata = [&](bool async_mode) {
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        auto* schema = metadata->mutable_schema();
+        auto* idx = schema->add_table_indices();
+        idx->set_index_id(next_id());
+        idx->set_index_type(VECTOR);
+        idx->add_col_unique_id(schema->column(1).unique_id());
+        std::string props_json = R"({"common_properties": {"index_type": "hnsw")";
+        if (async_mode) {
+            props_json += R"(, "index_build_mode": "async")";
+        }
+        props_json += "}}";
+        idx->set_index_properties(props_json);
+        return metadata;
+    };
+
+    auto sync_metadata = make_vi_metadata(false);
+    auto async_metadata = make_vi_metadata(true);
+    auto sync_tablet_id = sync_metadata->id();
+    auto async_tablet_id = async_metadata->id();
+    auto sync_index_id = sync_metadata->schema().table_indices(0).index_id();
+    auto async_index_id = async_metadata->schema().table_indices(0).index_id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(sync_metadata));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(async_metadata));
+
+    auto build_vi_txn_log = [&](int64_t tablet_id, int64_t index_id) {
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+        segment_meta->set_filename(generate_segment_file_for_tablet(tablet_id, txn_id));
+        segment_meta->set_size(1024);
+        segment_meta->set_num_rows(100);
+        segment_meta->add_vector_index_ids(index_id);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        return log;
+    };
+
+    auto sync_log = build_vi_txn_log(sync_tablet_id, sync_index_id);
+    auto async_log = build_vi_txn_log(async_tablet_id, async_index_id);
+    ASSERT_OK(_tablet_mgr->put_txn_log(sync_log));
+    ASSERT_OK(_tablet_mgr->put_txn_log(async_log));
+
+    // Sync-mode table: response should NOT contain vector_index_build_infos.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(sync_tablet_id);
+        request.add_txn_ids(sync_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.vector_index_build_infos_size())
+                << "sync-mode tablet must not appear in vector_index_build_infos";
+    }
+
+    // Async-mode table: response should contain one vector_index_build_infos entry
+    // pointing at this tablet/version.
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(async_tablet_id);
+        request.add_txn_ids(async_log.txn_id());
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_EQ(1, response.vector_index_build_infos_size())
+                << "async-mode tablet with new vector_index_ids must be reported";
+        EXPECT_EQ(async_tablet_id, response.vector_index_build_infos(0).tablet_id());
+        EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+        EXPECT_TRUE(response.vector_index_build_infos(0).build_needed())
+                << "a new rowset carrying vector_index_ids needs a real .vi build";
+    }
+}
+
+// Async-mode table whose new rowset has no vector_index_ids (segment under threshold, or a
+// bundle segment) is still reported on every version-advancing publish, tagged
+// build_needed=false so the FE advances built_version directly without dispatching a CN build.
+TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_reports_no_build) {
+    auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(next_id());
+    idx->set_index_type(VECTOR);
+    idx->add_col_unique_id(schema->column(1).unique_id());
+    idx->set_index_properties(R"({"common_properties": {"index_type": "hnsw", "index_build_mode": "async"}})");
+    auto tablet_id = metadata->id();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    auto txn_id = next_id();
+    TxnLog log;
+    log.set_tablet_id(tablet_id);
+    log.set_partition_id(_partition_id);
+    log.set_txn_id(txn_id);
+    auto* segment_meta = log.mutable_op_write()->mutable_rowset()->add_segment_metas();
+    segment_meta->set_filename(generate_segment_file_for_tablet(tablet_id, txn_id));
+    segment_meta->set_size(1024);
+    segment_meta->set_num_rows(100);
+    // intentionally do NOT add vector_index_ids: simulates async + below-threshold
+    log.mutable_op_write()->mutable_rowset()->set_data_size(1024);
+    log.mutable_op_write()->mutable_rowset()->set_num_rows(100);
+    log.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+    ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(tablet_id);
+    request.add_txn_ids(txn_id);
+    PublishVersionResponse response;
+    _lake_service.publish_version(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+    ASSERT_EQ(1, response.vector_index_build_infos_size())
+            << "async-mode tablet must be reported on every version advance for frontier tracking";
+    EXPECT_EQ(tablet_id, response.vector_index_build_infos(0).tablet_id());
+    EXPECT_EQ(2, response.vector_index_build_infos(0).version());
+    EXPECT_FALSE(response.vector_index_build_infos(0).build_needed())
+            << "no vector_index_ids -> nothing to build this version -> build_needed=false";
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     // Empty TxnLog
     {

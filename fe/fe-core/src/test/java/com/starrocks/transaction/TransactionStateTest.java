@@ -266,6 +266,25 @@ public class TransactionStateTest {
     }
 
     @Test
+    public void testShadowRewriteViaSourceType() {
+        // isShadowRewrite() is now driven solely by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_shadow", null,
+                LoadJobSourceType.SHADOW_REWRITE, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertTrue(txn.isShadowRewrite());
+
+        TransactionState normal = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_normal", null,
+                LoadJobSourceType.INSERT_STREAMING, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertFalse(normal.isShadowRewrite());
+
+        // Verify sourceType round-trips through GSON (it is serialized as "st" on TransactionState).
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState replayed = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(replayed.isShadowRewrite());
+    }
+
+    @Test
     public void testPartitionLoadedIndexes() {
         long tableId = 100L;
         long physicalPartitionId = 200L;

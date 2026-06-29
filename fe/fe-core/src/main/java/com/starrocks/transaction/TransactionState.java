@@ -113,7 +113,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         MV_REFRESH(9, false),                  // Refresh MV
         REPLICATION(10, false),                // Replication
         BYPASS_WRITE(11, false),               // Bypass BE, and write data file directly
-        MULTI_STATEMENT_STREAMING(12, false);  // multi statement streaming load
+        MULTI_STATEMENT_STREAMING(12, false),  // multi statement streaming load
+        SHADOW_REWRITE(13, false);             // shadow-index rewrite phase of a range-dist key schema change
 
         private final int flag;
         private final boolean loadingTransaction;
@@ -900,6 +901,22 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public boolean isVersionOverwrite() {
         return txnCommitAttachment instanceof InsertTxnCommitAttachment
                 && ((InsertTxnCommitAttachment) txnCommitAttachment).getIsVersionOverwrite();
+    }
+
+    public boolean isShadowRewrite() {
+        return sourceType == LoadJobSourceType.SHADOW_REWRITE;
+    }
+
+    // The watershed txn id that a shadow-rewrite txn's converted op_schema_change log is keyed by.
+    public long getShadowRewriteWatershedTxnId() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                ? ((InsertTxnCommitAttachment) txnCommitAttachment).getShadowRewriteWatershedTxnId() : 0;
+    }
+
+    // The alter version a shadow-rewrite txn's rewritten data is anchored at.
+    public long getShadowRewriteAlterVersion() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                ? ((InsertTxnCommitAttachment) txnCommitAttachment).getShadowRewriteAlterVersion() : 0;
     }
 
     // return true if txn is in final status and label is expired

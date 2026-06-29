@@ -565,6 +565,7 @@ SET(DW_TEST_FILES
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
     ./storage/lake/schema_change_test.cpp
+    ./storage/lake/shadow_rewrite_publish_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp

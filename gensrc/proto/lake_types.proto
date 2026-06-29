@@ -460,6 +460,10 @@ message TxnInfoPB {
     // to unblock a stuck-publish transaction. Only meaningful for load/compaction
     // txn types in the current implementation; alter is not supported yet.
     optional bool no_op_publish = 12;
+    // Watershed version W for a TXN_SHADOW_REWRITE flip publish: the shadow tablet's source op_write is
+    // anchored as op_schema_change@W. W == 1 means the base partition was empty at the watershed
+    // (PARTITION_INIT_VERSION == 1), so there is no source op_write and BE synthesizes an empty one.
+    optional int64 shadow_rewrite_alter_version = 13;
 }
 
 message SplittingTabletInfoPB {
@@ -493,6 +497,9 @@ message ReshardingTabletInfoPB {
     optional SplittingTabletInfoPB splitting_tablet_info = 1;
     optional MergingTabletInfoPB merging_tablet_info = 2;
     optional IdenticalTabletInfoPB identical_tablet_info = 3;
+    // Ordinal 4 was shadow_rewrite_tablet_info (removed; shadow rewrite is now keyed on
+    // TxnInfoPB.txn_type == TXN_SHADOW_REWRITE). Do NOT reuse ordinal 4 in this message. The proto2
+    // `reserved 4;` keyword is intentionally NOT used: the FE jprotobuf generator's parser rejects it.
 }
 
 // Placeholder for external cluster snapshot feature.

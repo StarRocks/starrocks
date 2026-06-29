@@ -1492,4 +1492,113 @@ public class OlapTableSinkTest {
         Assertions.assertTrue(e.getMessage().contains("not found in partition"),
                 "missing target index must fail with a 'not found in partition' message, got: " + e.getMessage());
     }
+
+    // Verify that setTargetWriteIndexId() on the sink — which InsertPlanner calls when
+    // insertStmt.getTargetWriteIndexId() is non-null — causes createSchema to emit only the
+    // target index. The OlapTableSinkTest harness does not run a full InsertPlanner pipeline,
+    // so this test exercises the sink-side forwarding contract that InsertPlanner depends on.
+    @Test
+    public void testInsertPlannerForwardsTargetWriteIndexIdToSink() {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Simulate what InsertPlanner does: create the sink and call setTargetWriteIndexId.
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(900L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.setTargetWriteIndexId(TARGET_ROLLUP_INDEX_ID);
+
+        // Verify that the schema emitted via createSchema (which complete() delegates to) is
+        // restricted to the single target index — the invariant the BE relies on.
+        TOlapTableSchemaParam schema2 =
+                OlapTableSink.createSchema(TARGET_TABLE_ID, dstTable, tuple, TARGET_ROLLUP_INDEX_ID);
+        Assertions.assertEquals(1, schema2.getIndexes().size(),
+                "schema must contain exactly one index when targetWriteIndexId is set");
+        Assertions.assertEquals(TARGET_ROLLUP_INDEX_ID, schema2.getIndexes().get(0).getId(),
+                "the single index in the schema must be the target write index");
+    }
+
+    // Verify that a SHADOW index whose MaterializedIndexMeta carries a reordered sort key emits
+    // distributed_exprs over the NEW key order, so range-routing for double-writes uses the new key.
+    //
+    // Scenario: base sort key is (k1, k2) (sortKeyIdxes=[0,1]); shadow sort key is (k2, k1)
+    // (sortKeyIdxes=[1,0]). The output tuple carries shadow-prefixed columns whose slot-binding key
+    // is the column name (isShadowColumn() == true → getName()). We verify:
+    //   1. MetaUtils.getRangeDistributionColumns returns (shadow_k2, shadow_k1) for the shadow meta.
+    //   2. The TOlapTableIndexSchema for the shadow index has distributed_exprs set.
+    //   3. The exprs have 2 slot-refs in shadow-key order: first points to shadow_k2, second to shadow_k1.
+    @Test
+    public void testShadowIndexEmitsDistributedExprsForNewSortKeyOrder() {
+        // Shadow columns: prefix mirrors SchemaChangeHandler.SHADOW_NAME_PREFIX = "__starrocks_shadow_"
+        String shadowPrefix = "__starrocks_shadow_";
+        Column shadowK1 = new Column(shadowPrefix + "k1", IntegerType.INT, true, null, false, null, "");
+        Column shadowK2 = new Column(shadowPrefix + "k2", IntegerType.INT, true, null, false, null, "");
+        Column v1 = new Column("v1", IntegerType.INT, false, null, true, null, "");
+        // Schema order: [shadowK1(0), shadowK2(1), v1(2)].
+        // sortKeyIdxes=[1,0] → sort key is (shadowK2, shadowK1), i.e. the reordered/permuted new key.
+        List<Column> schema = Lists.newArrayList(shadowK1, shadowK2, v1);
+        long shadowMetaId = 300L;
+        MaterializedIndexMeta shadowMeta = new MaterializedIndexMeta(shadowMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(1, 0));
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(shadowMetaId, shadowMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = shadowMetaId;
+                dstTable.getIndexMetaByMetaId(shadowMetaId);
+                result = shadowMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        // 1. Verify MetaUtils returns the new key order: (shadowK2, shadowK1).
+        List<Column> routingCols = MetaUtils.getRangeDistributionColumns(dstTable, shadowMetaId);
+        Assertions.assertEquals(2, routingCols.size());
+        Assertions.assertEquals(shadowPrefix + "k2", routingCols.get(0).getName(),
+                "first routing column must be shadow_k2 (the reordered new key)");
+        Assertions.assertEquals(shadowPrefix + "k1", routingCols.get(1).getName(),
+                "second routing column must be shadow_k1");
+
+        // 2 & 3. Verify createSchema emits distributed_exprs with slot-refs in the new key order.
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema indexSchema = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(indexSchema.isSetDistributed_exprs(),
+                "shadow range-distribution index must carry distributed_exprs");
+        List<TExpr> exprs = indexSchema.getDistributed_exprs();
+        Assertions.assertEquals(2, exprs.size(), "one routing expr per new sort-key column");
+
+        // Resolve slot_id → column name via the schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        // First expr must point to shadow_k2; second to shadow_k1 (the new key order, not the schema order).
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(), "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+        int slotId0 = exprs.get(0).getNodes().get(0).getSlot_ref().getSlot_id();
+        int slotId1 = exprs.get(1).getNodes().get(0).getSlot_ref().getSlot_id();
+        Assertions.assertEquals(shadowPrefix + "k2", slotIdToColName.get(slotId0),
+                "first distributed_expr slot must resolve to shadow_k2 (new key order)");
+        Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
+                "second distributed_expr slot must resolve to shadow_k1 (new key order)");
+    }
 }
