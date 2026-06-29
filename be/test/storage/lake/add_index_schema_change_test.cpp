@@ -28,7 +28,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
