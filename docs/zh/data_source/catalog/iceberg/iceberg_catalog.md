@@ -846,7 +846,7 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
