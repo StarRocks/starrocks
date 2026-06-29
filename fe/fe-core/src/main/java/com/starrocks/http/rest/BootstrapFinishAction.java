@@ -74,9 +74,9 @@ public class BootstrapFinishAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/bootstrap", new BootstrapFinishAction(controller));
     }
 
-    // FE bootstrap probe; intentionally unauthenticated. Caller can pass the cluster
-    // token to unlock additional fields (journal id / ports / version), but the endpoint
-    // itself accepts anonymous requests for readiness checks.
+    // Always anonymous, even under enable_http_auth: the FE-to-FE heartbeat (HeartbeatMgr)
+    // polls this with the cluster token, not HTTP Basic, so gating it would break peer-FE
+    // heartbeats.
     @Override
     public boolean needAuth() {
         return false;

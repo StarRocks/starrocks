@@ -136,14 +136,14 @@ public class RestBaseActionTest {
 
     @Test
     public void testAlwaysAnonymousRestActionsBypassBasicAuth() {
-        // These endpoints are never gated by enable_http_auth (probes / internal token-protected).
+        // These endpoints can never require Basic auth, even when the operator opts into
+        // `enable_http_auth`:
+        //  - GetSmallFile is internal token-protected.
+        //  - /api/bootstrap is polled by the FE-to-FE heartbeat (HeartbeatMgr) using the
+        //    cluster token rather than HTTP Basic; gating it would break peer-FE heartbeats.
         Config.enable_http_auth = true;
-        Assert.assertFalse(new BootstrapFinishAction(null).needAuth());
-        Assert.assertFalse(new FeatureAction(null).needAuth());
-        Assert.assertFalse(new HealthAction(null).needAuth());
         Assert.assertFalse(new GetSmallFileAction(null).needAuth());
-        Assert.assertFalse(new IdleAction(null).needAuth());
-        Assert.assertFalse(new MetricsAction(null).needAuth());
+        Assert.assertFalse(new BootstrapFinishAction(null).needAuth());
     }
 
     @Test
@@ -160,6 +160,25 @@ public class RestBaseActionTest {
         Assert.assertTrue(new ShowDataAction(null).needAuth());
         Assert.assertTrue(new ShowMetaInfoAction(null).needAuth());
         Assert.assertTrue(new ShowRuntimeInfoAction(null).needAuth());
+    }
+
+    @Test
+    public void testPublicProbeActionsAreAuthNOnlyGatedByHttpAuthFlag() {
+        // Health / observability probes were historically anonymous. They are now brought
+        // into the `enable_http_auth` scope at AuthN-only level: Basic identity required
+        // when the flag is on, anonymous (backward compatible) when off. None of them
+        // declare a privilege requirement, so identity alone is sufficient.
+        Config.enable_http_auth = false;
+        Assert.assertFalse(new HealthAction(null).needAuth());
+        Assert.assertFalse(new IdleAction(null).needAuth());
+        Assert.assertFalse(new FeatureAction(null).needAuth());
+        Assert.assertFalse(new MetricsAction(null).needAuth());
+
+        Config.enable_http_auth = true;
+        Assert.assertTrue(new HealthAction(null).needAuth());
+        Assert.assertTrue(new IdleAction(null).needAuth());
+        Assert.assertTrue(new FeatureAction(null).needAuth());
+        Assert.assertTrue(new MetricsAction(null).needAuth());
     }
 
     // -------- enable_http_auth-gated helpers --------

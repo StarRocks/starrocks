@@ -36,6 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -123,12 +124,14 @@ public class MetricsAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, API_PATH, new MetricsAction(controller));
     }
 
-    // Prometheus-style metrics; intentionally unauthenticated by default. Per-table /
-    // per-MV / per-user-connection breakdowns do their own admin check inside
-    // parseRequestParams() and gracefully fall back when unauthenticated.
+    // Prometheus-style metrics. Historically anonymous; gated for backward compatibility
+    // so it requires Basic auth (AuthN-only, no privilege check) only when the operator
+    // opts in via `enable_http_auth`. The per-table / per-MV / per-user-connection
+    // breakdowns still do their own admin check inside parseRequestParams() and
+    // gracefully fall back when the caller lacks admin.
     @Override
     public boolean needAuth() {
-        return false;
+        return Config.enable_http_auth;
     }
 
     @Override
