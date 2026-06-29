@@ -34,10 +34,7 @@
 
 #pragma once
 
-#include <atomic>
-#include <memory>
-#include <unordered_map>
-#include <vector>
+#include <cstdint>
 
 #include "common/status.h"
 #include "common/thread/threadpool.h"
@@ -52,7 +49,6 @@
 // So please consider use forward declaration as much as possible.
 
 namespace starrocks {
-struct StorePath;
 class AgentServer;
 class ComputeEnv;
 class DataStreamMgr;
@@ -97,8 +93,7 @@ class ConnectorSinkSpillExecutor;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    Status init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
-                GlobalEnv* global_env, bool as_cn = false);
+    Status init(ProcessMetricsRegistry* process_metrics_registry, GlobalEnv* global_env);
     void stop();
     void destroy();
     /// Returns the first created exec env instance. In a normal starrocks, this is
@@ -152,7 +147,7 @@ public:
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
-    ComputeEnv* compute_env() const { return _compute_env.get(); }
+    ComputeEnv* compute_env() const { return _compute_env; }
 
     int64_t max_executor_threads() const { return _global_env->max_executor_threads(); }
 
@@ -162,6 +157,7 @@ public:
 
     AgentServer* agent_server() const { return _agent_server; }
     void set_agent_server(AgentServer* agent_server);
+    void set_compute_env(ComputeEnv* compute_env);
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
@@ -172,7 +168,7 @@ private:
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    std::unique_ptr<ComputeEnv> _compute_env;
+    ComputeEnv* _compute_env = nullptr;
 
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;
