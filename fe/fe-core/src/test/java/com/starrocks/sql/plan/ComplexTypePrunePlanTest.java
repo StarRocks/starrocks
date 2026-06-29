@@ -313,6 +313,20 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
+    // Reproduces SIGSEGV scenario where two UNNESTs share the same input array column.
+    @Test
+    public void testTwoUnnestsOnSameArrayColumn() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(c1), sum(case when t2.c2_sub2 is not null then 1 else 0 end) " +
+                "from array_struct_nest, unnest(c2) as t(t1), unnest(c2) as tt(t2) " +
+                "where t1.c2_sub1 = 5";
+        String plan = getVerboseExplain(sql);
+        // After fix: both c2_sub1 (used by t1.c2_sub1 in WHERE) and c2_sub2 (used by t2.c2_sub2) must
+        // be retained in the pruned type, otherwise BE crashes when reading the missing field.
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
     @Test
     public void testSubfieldNoCopy() throws Exception {
         String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
