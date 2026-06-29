@@ -1,0 +1,34 @@
+-- name: test_unnest_stacked_same_array_prune
+-- Repro guard for the stacked-UNNEST access-group overwrite (PR #75012): two UNNESTs on the
+-- SAME array column whose downstream consumers need DIFFERENT subfields. setUnnest's hard put
+-- of the access group lets the second UNNEST drop the subfield the first one needs, so the scan
+-- prunes a still-needed field. This is a prune-ON vs prune-OFF differential: the prune must not
+-- change the result. (On an OLAP build that does not physically prune the array<struct> read the
+-- mis-prune is latent and both match; on a build that honors it, prune-ON would diverge or crash.)
+drop database if exists test_unnest_stacked_same_array_prune;
+create database test_unnest_stacked_same_array_prune;
+use test_unnest_stacked_same_array_prune;
+
+create table array_struct_nest(c1 int, c2 array<struct<c2_sub1 int, c2_sub2 int>>)
+  duplicate key(c1) distributed by hash(c1) buckets 1 properties("replication_num"="1");
+insert into array_struct_nest values
+  (1, [row(5,100),row(6,200)]),
+  (2, [row(5,300),row(7,400)]),
+  (3, [row(8,500)]);
+
+-- Baseline: prune disabled.
+set enable_prune_complex_types_in_unnest = false;
+select count(t1.c2_sub1), sum(t2.c2_sub2) from array_struct_nest,
+  unnest(c2) as t(t1), unnest(c2) as tt(t2) where t1.c2_sub1 = 5;
+-- Prune enabled: t1 needs c2_sub1 (WHERE), t2 needs c2_sub2 (SUM). Must match the baseline.
+set enable_prune_complex_types_in_unnest = true;
+select count(t1.c2_sub1), sum(t2.c2_sub2) from array_struct_nest,
+  unnest(c2) as t(t1), unnest(c2) as tt(t2) where t1.c2_sub1 = 5;
+-- Reversed roles: t1 needs c2_sub2, t2 needs c2_sub1.
+select sum(t1.c2_sub2), count(t2.c2_sub1) from array_struct_nest,
+  unnest(c2) as t(t1), unnest(c2) as tt(t2) where t2.c2_sub1 = 5;
+-- PR #75012's exact reproducer query.
+select count(c1), sum(case when t2.c2_sub2 is not null then 1 else 0 end)
+  from array_struct_nest, unnest(c2) as t(t1), unnest(c2) as tt(t2) where t1.c2_sub1 = 5;
+
+drop database test_unnest_stacked_same_array_prune;
