@@ -16,8 +16,24 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+=======
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "column/binary_column.h"
+#include "column/chunk_factory.h"
+#include "column/global_dict/types.h"
+#include "column/raw_data_visitor.h"
+#include "column/schema.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "gutil/strings/substitute.h"
+#include "gutil/walltime.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+>>>>>>> ec9a22749e ([Enhancement] Reduce memory usage for pk compaction in share nothing mode (#75091))
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -29,7 +45,11 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
+<<<<<<< HEAD
 #include "storage/union_iterator.h"
+=======
+#include "storage/tablet_updates.h"
+>>>>>>> ec9a22749e ([Enhancement] Reduce memory usage for pk compaction in share nothing mode (#75091))
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 
@@ -47,6 +67,7 @@ public:
     }
 
     Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
+        added_chunks.emplace_back(&chunk);
         all_pks->append(*(chunk.get_column_raw_ptr_by_index(0)), 0, chunk.num_rows());
         return Status::OK();
     }
@@ -98,6 +119,7 @@ public:
 
     MutableColumnPtr all_pks;
     vector<uint32_t> all_rssids;
+    std::vector<const Chunk*> added_chunks;
 
     MutableColumns non_key_columns;
 };
@@ -225,6 +247,69 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
         return -1;
     }
     return read_until_eof(iter);
+}
+
+static ChunkPtr create_large_varchar_chunk(size_t num_rows, size_t value_size) {
+    auto field = std::make_shared<Field>(0, "v", TYPE_VARCHAR, false);
+    auto schema = std::make_shared<Schema>(Fields{field});
+    auto column = BinaryColumn::create();
+    std::string value(value_size, 'x');
+    std::vector<Slice> values(num_rows, Slice(value));
+    column->append_strings(values.data(), values.size());
+    return std::make_shared<Chunk>(Columns{std::move(column)}, schema);
+}
+
+TEST_F(RowsetMergerTest, compaction_chunk_clone_empty_releases_capacity) {
+    auto chunk = create_large_varchar_chunk(256, 4096);
+    const auto memory_before_reset = chunk->memory_usage();
+    ASSERT_GT(memory_before_reset, 512 * 1024);
+
+    chunk->reset();
+    ASSERT_EQ(0, chunk->num_rows());
+    const auto memory_after_reset = chunk->memory_usage();
+    ASSERT_GT(memory_after_reset, memory_before_reset / 2);
+
+    chunk = chunk->clone_empty(0);
+    EXPECT_EQ(0, chunk->num_rows());
+    EXPECT_LT(chunk->memory_usage(), memory_after_reset / 8);
+}
+
+TEST_F(RowsetMergerTest, compaction_chunk_reset_memory_tracker_threshold_percent_triggers_output_chunk_release) {
+    const auto old_vector_chunk_size = config::vector_chunk_size;
+    const auto old_reset_memory_tracker_threshold_percent =
+            config::compaction_chunk_reset_memory_tracker_threshold_percent;
+    const auto old_vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    DeferOp restore_config([&]() {
+        config::vector_chunk_size = old_vector_chunk_size;
+        config::compaction_chunk_reset_memory_tracker_threshold_percent = old_reset_memory_tracker_threshold_percent;
+        config::vertical_compaction_max_columns_per_group = old_vertical_compaction_max_columns_per_group;
+    });
+
+    config::vector_chunk_size = 2;
+    config::compaction_chunk_reset_memory_tracker_threshold_percent = 0;
+    config::vertical_compaction_max_columns_per_group = 5;
+
+    MemTracker tracker(-1, "compaction_chunk_reset_test", nullptr);
+    tracker.consume(1);
+    MemTracker* old_tracker = tls_thread_status.set_mem_tracker(&tracker);
+    DeferOp restore_tracker([&]() { tls_thread_status.set_mem_tracker(old_tracker); });
+
+    create_tablet(GetCurrentTimeMicros(), GetCurrentTimeMicros() & 0x7fffffff);
+    std::vector<int64_t> pks = {1, 2, 3, 4, 5};
+    auto rowset = create_rowset(_tablet, pks);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rowset).ok());
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(2, &applied_rowsets).ok());
+
+    TestRowsetWriter writer;
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
+    MergeConfig cfg;
+    ASSERT_TRUE(compaction_merge_rowsets(*_tablet, 2, {rowset}, &writer, cfg).ok());
+    ASSERT_EQ(pks.size(), writer.all_pks->size());
+    ASSERT_GE(writer.added_chunks.size(), 2);
+    EXPECT_NE(writer.added_chunks[0], writer.added_chunks[1]);
 }
 
 TEST_F(RowsetMergerTest, horizontal_merge) {
