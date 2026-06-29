@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/external_cluster_snapshot_task_rpc.h"
+#include "agent/external_cluster_snapshot_task_rpc.h"
 
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "agent/external_cluster_snapshot_task_helper.h"
 #include "agent/finish_task.h"
 #include "base/utility/defer_op.h"
 #include "common/brpc/brpc_stub_cache.h"
@@ -33,7 +34,6 @@
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "glog/logging.h"
-#include "storage/lake/external_cluster_snapshot_task_helper.h"
 #include "storage/lake/tablet_manager.h"
 
 namespace starrocks::lake {

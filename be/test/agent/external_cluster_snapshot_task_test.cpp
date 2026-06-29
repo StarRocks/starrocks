@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/external_cluster_snapshot_task.h"
+#include "agent/external_cluster_snapshot_task.h"
 
 #include <gtest/gtest.h>
 
+#include "agent/external_cluster_snapshot_task_helper.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/external_cluster_snapshot_task_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_metadata.h"
-#include "test_util.h"
+#include "storage/lake/test_util.h"
 
 namespace starrocks::lake {
 

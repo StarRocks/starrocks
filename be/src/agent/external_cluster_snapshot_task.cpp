@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/external_cluster_snapshot_task.h"
+#include "agent/external_cluster_snapshot_task.h"
 
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
@@ -24,6 +24,8 @@
 #include <utility>
 #include <vector>
 
+#include "agent/external_cluster_snapshot_task_helper.h"
+#include "agent/external_cluster_snapshot_task_rpc.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "base/concurrency/countdown_latch.h"
@@ -40,8 +42,6 @@
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "glog/logging.h"
-#include "storage/lake/external_cluster_snapshot_task_helper.h"
-#include "storage/lake/external_cluster_snapshot_task_rpc.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/snapshot_file_syncer.h"

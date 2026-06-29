@@ -652,8 +652,8 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot) {
     auto mock_fs = std::make_shared<SnapshotMockFileSystem>();
     int64_t test_shard_id = 99999;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);
@@ -683,8 +683,8 @@ TEST_F(NewFsStarletTest, test_starlet_input_stream_get_io_stats_snapshot_stream_
     auto mock_fs = std::make_shared<SnapshotMockFileSystem>(/*stream_fails=*/true);
     int64_t test_shard_id = 99998;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);
@@ -806,8 +806,8 @@ TEST_F(NewFsStarletTest, test_get_file_size_returns_stat_size) {
     auto mock_fs = std::make_shared<StatMockFileSystem>(fake_stat);
     int64_t test_shard_id = 55501;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);
@@ -824,8 +824,8 @@ TEST_F(NewFsStarletTest, test_get_file_size_handles_large_uint64) {
     auto mock_fs = std::make_shared<StatMockFileSystem>(fake_stat);
     int64_t test_shard_id = 55502;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);
@@ -840,8 +840,8 @@ TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_not_found) {
     auto mock_fs = std::make_shared<StatMockFileSystem>(absl::NotFoundError("missing object"));
     int64_t test_shard_id = 55503;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);
@@ -877,8 +877,8 @@ TEST_F(NewFsStarletTest, test_get_file_size_propagates_stat_permission_denied) {
     auto mock_fs = std::make_shared<StatMockFileSystem>(absl::PermissionDeniedError("AccessDenied"));
     int64_t test_shard_id = 55504;
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto fs = new_fs_starlet(test_shard_id, false);

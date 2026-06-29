@@ -288,9 +288,6 @@ set(STORAGE_FILES
     lake/tablet_retain_info.cpp
     lake/tablet_writer.cpp
     lake/snapshot_file_syncer.cpp
-    lake/external_cluster_snapshot_task_helper.cpp
-    lake/external_cluster_snapshot_task_rpc.cpp
-    lake/external_cluster_snapshot_task.cpp
     lake/lake_persistent_index_parallel_compact_mgr.cpp
     lake/lake_persistent_index_size_tiered_compaction_strategy.cpp
     lake/persistent_index_sstable_fileset.cpp

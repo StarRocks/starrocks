@@ -18,6 +18,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_metrics.h"
+#include "agent/external_cluster_snapshot_task.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
 #include "base/testutil/sync_point.h"
@@ -38,7 +39,6 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/external_cluster_snapshot_task.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"

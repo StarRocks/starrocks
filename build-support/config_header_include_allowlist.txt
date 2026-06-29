@@ -3,7 +3,7 @@
 
 src/agent/agent_server.cpp
 src/common/config.cpp
-src/fs/key_cache.cpp
+src/platform/key_cache.cpp
 src/runtime/exec_env.cpp
 src/storage/lake/tablet_warmup_manager.cpp
 test/common/path/path_util_test.cpp

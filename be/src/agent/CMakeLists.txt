@@ -30,6 +30,9 @@ ADD_BE_LIB(AgentServer
         agent_task.cpp
         task_signatures_manager.cpp
         resource_group_usage_recorder.cpp
+        external_cluster_snapshot_task.cpp
+        external_cluster_snapshot_task_helper.cpp
+        external_cluster_snapshot_task_rpc.cpp
         )
 
 target_link_libraries(AgentServer
