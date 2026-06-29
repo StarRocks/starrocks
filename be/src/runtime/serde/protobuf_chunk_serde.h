@@ -23,7 +23,7 @@
 #include "column/chunk_extra_data.h"
 #include "common/statusor.h"
 #include "gen_cpp/data.pb.h" // ChunkPB
-#include "serde/encode_context.h"
+#include "runtime/serde/chunk_encode_context.h"
 
 namespace starrocks {
 class RowDescriptor;

@@ -34,7 +34,7 @@
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 #include <utility>
 
@@ -20,12 +20,12 @@
 #include "base/container/raw_container.h"
 #include "column/chunk_extra_data.h"
 #include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "serde/column_array_serde.h"
 
 namespace starrocks::serde {
 

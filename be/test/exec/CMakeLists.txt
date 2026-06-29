@@ -73,7 +73,6 @@ set(EXEC_RUNTIME_TEST_LINK_LIBS
     ExecPrimitive
     StoragePrimitive
     ExprCore
-    Serde
     RuntimeEnv
     RuntimeCore
     Platform
@@ -172,7 +171,6 @@ set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
     ComputeEnv
     ExprCore
-    Serde
     RuntimeCore
     ChunkCore
     ColumnCore

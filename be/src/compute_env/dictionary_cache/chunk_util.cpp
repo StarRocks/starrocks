@@ -23,7 +23,7 @@
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "runtime/current_thread.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks {
 

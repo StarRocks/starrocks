@@ -65,9 +65,10 @@ ADD_BE_LIB(ColumnCore
         variant_merger.cpp
         column_hash/column_hash.cpp
         adaptive_offsets.cpp
+        serde/column_array_serde.cpp
 )
 
-target_link_libraries(ColumnCore PRIVATE arrow)
+target_link_libraries(ColumnCore PRIVATE arrow streamvbyte)
 
 ADD_BE_LIB(ChunkCore
         chunk_factory.cpp

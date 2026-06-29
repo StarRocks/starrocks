@@ -17,11 +17,11 @@
 #include <fmt/format.h>
 
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_rowset_fwd.h"
 #include "common/runtime_profile.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
-#include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/tablet_manager.h"

@@ -73,7 +73,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

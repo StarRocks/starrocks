@@ -17,7 +17,7 @@
 #include "column/chunk_factory.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_index.h"
 #include "storage/primitive/primary_key_encoder.h"

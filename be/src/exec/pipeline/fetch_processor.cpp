@@ -22,6 +22,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/serde/column_array_serde.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
@@ -32,7 +33,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
 #include "storage/primitive/tablet_info.h"
 
 namespace starrocks::pipeline {

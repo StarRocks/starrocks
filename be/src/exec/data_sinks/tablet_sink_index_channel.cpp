@@ -42,7 +42,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/runtime_state.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks {
 

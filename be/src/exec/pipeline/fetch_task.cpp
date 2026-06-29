@@ -24,13 +24,13 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
 
 namespace starrocks::pipeline {
 

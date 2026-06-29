@@ -17,13 +17,13 @@
 #include <cstdint>
 #include <random>
 
-namespace starrocks::serde {
+namespace starrocks::pipeline {
 
 // Compression strategy based on Thompson Sampling
-class CompressStrategy {
+class ExchangeCompressionStrategy {
 public:
-    CompressStrategy();
-    ~CompressStrategy() = default;
+    ExchangeCompressionStrategy();
+    ~ExchangeCompressionStrategy() = default;
 
     // Give the feedback based on previous compression
     void feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes, uint64_t serialization_time_ns,
@@ -40,4 +40,4 @@ private:
     double _beta = 1.0;  // Failure count
 };
 
-} // namespace starrocks::serde
+} // namespace starrocks::pipeline

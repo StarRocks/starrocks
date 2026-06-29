@@ -15,10 +15,10 @@
 #include "runtime/runtime_filter_serde.h"
 
 #include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/object_pool.h"
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
 
 namespace starrocks {
 
