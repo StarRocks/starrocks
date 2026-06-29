@@ -22,6 +22,7 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
@@ -30,7 +31,6 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"

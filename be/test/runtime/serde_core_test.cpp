@@ -14,8 +14,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdio>
-
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
 #include "base/hash/hash_std.hpp"
@@ -32,12 +30,12 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "column/serde/column_array_serde.h"
 #include "column/variant_column.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/mem_chunk_allocator.h"
-#include "serde/column_array_serde.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
@@ -1036,19 +1034,20 @@ void free_hll_registers_with_mem_chunk_allocator(const starrocks::MemChunk& chun
     starrocks::MemChunkAllocator::free(chunk);
 }
 
-} // namespace
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-
-    starrocks::HyperLogLog::RegistersAllocator allocator;
-    allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
-    allocator.free = free_hll_registers_with_mem_chunk_allocator;
-    auto st = starrocks::HyperLogLog::set_registers_allocator(allocator);
-    if (!st.ok()) {
-        fprintf(stderr, "failed to register HLL registers allocator: %s\n", st.to_string().c_str());
-        return 1;
+class HllRegistersAllocatorEnvironment final : public ::testing::Environment {
+public:
+    void SetUp() override {
+        starrocks::HyperLogLog::RegistersAllocator allocator;
+        allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
+        allocator.free = free_hll_registers_with_mem_chunk_allocator;
+        auto st = starrocks::HyperLogLog::set_registers_allocator(allocator);
+        if (!st.ok()) {
+            FAIL() << "failed to register HLL registers allocator: " << st.to_string();
+        }
     }
+};
 
-    return RUN_ALL_TESTS();
-}
+[[maybe_unused]] ::testing::Environment* hll_registers_allocator_environment =
+        ::testing::AddGlobalTestEnvironment(new HllRegistersAllocatorEnvironment);
+
+} // namespace

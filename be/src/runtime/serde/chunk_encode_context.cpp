@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "serde/encode_context.h"
+#include "runtime/serde/chunk_encode_context.h"
 
 #include "gen_cpp/data.pb.h" // ChunkPB
 

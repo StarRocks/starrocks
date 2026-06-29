@@ -140,7 +140,6 @@ target_link_libraries(ComputeEnv PUBLIC
     StoragePrimitive
     ExecPrimitive
     ExprCore
-    Serde
     RuntimeEnv
     RuntimeCore
     Platform

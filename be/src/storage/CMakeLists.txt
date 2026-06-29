@@ -72,7 +72,6 @@ ADD_BE_LIB(StorageBase
 target_link_libraries(StorageBase PUBLIC
     ComputeEnv
     StoragePrimitive
-    Serde
     RuntimeCore
     ColumnSortCore
     ChunkCore
@@ -373,4 +372,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)

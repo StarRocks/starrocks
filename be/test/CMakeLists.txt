@@ -344,7 +344,6 @@ add_subdirectory(fs)
 add_subdirectory(platform)
 add_subdirectory(geo)
 add_subdirectory(cache)
-add_subdirectory(serde)
 add_subdirectory(script)
 
 if (APPLE)

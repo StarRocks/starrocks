@@ -24,6 +24,7 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "column/sorting/sort_permute.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
@@ -37,7 +38,6 @@
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primitive/range.h"
 

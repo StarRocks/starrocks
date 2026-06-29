@@ -36,7 +36,6 @@ set(STARROCKS_LIBS
     Gutil
     IO
     Platform
-    Serde
     Storage
     Runtime
     RuntimeCore

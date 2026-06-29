@@ -32,7 +32,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace brpc {
 class Controller;

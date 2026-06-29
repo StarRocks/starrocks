@@ -39,7 +39,7 @@
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"

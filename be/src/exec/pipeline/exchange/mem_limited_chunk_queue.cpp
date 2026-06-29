@@ -20,6 +20,7 @@
 #include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/serde/column_array_serde.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "compute_env/spill/block_manager.h"
@@ -36,8 +37,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::pipeline {
 
