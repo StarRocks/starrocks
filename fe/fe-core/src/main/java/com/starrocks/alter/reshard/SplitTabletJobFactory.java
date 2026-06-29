@@ -39,7 +39,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -123,16 +122,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table, long oldTabletId,
             List<TabletRange> newTabletRanges) throws StarRocksException {
-        return forExternalBoundaries(db, table, oldTabletId, newTabletRanges, null);
-    }
-
-    /**
-     * Pre-split entry point that also carries the triggering load's {@code ComputeResource} so the
-     * spread shards are scheduled in the load's warehouse (see {@link SplitTabletJob#loadWarehouseId}).
-     * A {@code null} resource falls back to the default warehouse.
-     */
-    public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table, long oldTabletId,
-            List<TabletRange> newTabletRanges, ComputeResource loadComputeResource) throws StarRocksException {
         validateTableLevel(db, table);
         validateRangeListShape(newTabletRanges);
 
@@ -212,9 +201,9 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
         // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
-        // Carry the load's warehouse so the spread shards are scheduled where the load runs.
+        // The triggering load's warehouse is applied by the caller via SplitTabletJob#setLoadWarehouseId.
         return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
-                true /* spreadNewShards */, loadWarehouseIdOf(loadComputeResource));
+                true /* spreadNewShards */, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     /**
@@ -243,17 +232,6 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      */
     public static TabletReshardJob forExternalBoundariesMultiTablet(Database db, OlapTable table,
             Map<Long, List<TabletRange>> oldTabletIdToRanges) throws StarRocksException {
-        return forExternalBoundariesMultiTablet(db, table, oldTabletIdToRanges, null);
-    }
-
-    /**
-     * Multi-tablet pre-split entry point that also carries the triggering load's {@code ComputeResource}
-     * so the spread shards are scheduled in the load's warehouse. A {@code null} resource falls back to
-     * the default warehouse.
-     */
-    public static TabletReshardJob forExternalBoundariesMultiTablet(Database db, OlapTable table,
-            Map<Long, List<TabletRange>> oldTabletIdToRanges, ComputeResource loadComputeResource)
-            throws StarRocksException {
         Preconditions.checkArgument(oldTabletIdToRanges != null && !oldTabletIdToRanges.isEmpty(),
                 "External-boundaries multi-tablet split requires a non-empty oldTabletIdToRanges map");
 
@@ -377,16 +355,9 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
         // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
-        // Carry the load's warehouse so the spread shards are scheduled where the load runs.
+        // The triggering load's warehouse is applied by the caller via SplitTabletJob#setLoadWarehouseId.
         return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
-                true /* spreadNewShards */, loadWarehouseIdOf(loadComputeResource));
-    }
-
-    /** The warehouse the load runs in, or the default warehouse when no load resource is supplied. */
-    private static long loadWarehouseIdOf(ComputeResource loadComputeResource) {
-        return loadComputeResource != null
-                ? loadComputeResource.getWarehouseId()
-                : WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                true /* spreadNewShards */, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     /**

@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
@@ -36,6 +37,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -607,10 +609,14 @@ public final class TabletPreSplitCoordinator {
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
         try {
-            // Carry the load's compute resource (from the explicitly-passed ConnectContext) so the
-            // spread shards are scheduled in the load's warehouse rather than the default one.
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
-                    database, table, oldTabletIdToRanges, ctx.getCurrentComputeResource());
+                    database, table, oldTabletIdToRanges);
+            // Carry the load's warehouse (from the explicitly-passed ConnectContext) so the spread
+            // shards are scheduled where the load runs (no-op under test mocks that are not SplitTabletJob).
+            ComputeResource loadComputeResource = ctx.getCurrentComputeResource();
+            if (loadComputeResource != null && combinedJob instanceof SplitTabletJob splitJob) {
+                splitJob.setLoadWarehouseId(loadComputeResource.getWarehouseId());
+            }
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
         } catch (StarRocksException submitFailure) {
