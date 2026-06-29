@@ -90,10 +90,15 @@ public class NativeAccessController implements AccessController {
     public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
-        Preconditions.checkNotNull(tableName.getDb());
+        // An unqualified table reference can reach this check with a null db (for example a table over an
+        // external catalog whose database was not resolved onto the TableName). Fall back to the session's
+        // current database, mirroring the null-catalog handling above. Keep the check fail-closed: if neither
+        // is available the privilege check still throws rather than letting a null db flow downstream.
+        String db = tableName.getDb() != null ? tableName.getDb() : context.getDatabase();
+        Preconditions.checkNotNull(db);
 
         checkObjectTypeAction(context, privilegeType, ObjectType.TABLE,
-                Arrays.asList(catalog, tableName.getDb(), tableName.getTbl()));
+                Arrays.asList(catalog, db, tableName.getTbl()));
     }
 
     @Override
