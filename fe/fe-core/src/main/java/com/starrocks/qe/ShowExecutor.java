@@ -1560,13 +1560,15 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
 
+            boolean hasLoadDesc = false;
             if (routineLoadJob.getColumnSeparator() != null) {
                 createRoutineLoadSql.append("\n COLUMNS TERMINATED BY ")
                         .append(routineLoadJob.getColumnSeparator().toSql(true));
+                hasLoadDesc = true;
             }
 
             if (routineLoadJob.getColumnDescs() != null) {
-                createRoutineLoadSql.append(",\nCOLUMNS (");
+                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n").append("COLUMNS (");
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
@@ -1581,13 +1583,15 @@ public class ShowExecutor {
                         createRoutineLoadSql.append(", ");
                     }
                 }
+                hasLoadDesc = true;
             }
             if (routineLoadJob.getPartitions() != null) {
-                createRoutineLoadSql.append(",\n");
+                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n");
                 createRoutineLoadSql.append(routineLoadJob.getPartitions().toString());
+                hasLoadDesc = true;
             }
             if (routineLoadJob.getWhereExpr() != null) {
-                createRoutineLoadSql.append(",\nWHERE ");
+                createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n").append("WHERE ");
                 createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
             }
 
