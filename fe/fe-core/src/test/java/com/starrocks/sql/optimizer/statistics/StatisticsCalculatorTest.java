@@ -786,8 +786,8 @@ public class StatisticsCalculatorTest {
     @EnumSource(value = OuterJoin.class)
     public void testOuterJoinEqForNullDoesNotTreatNullKeysAsUnmatched(OuterJoin outerJoin) {
         // GIVEN
-        final var outerJoinKey = columnRefFactory.create("outer_key", IntegerType.INT, true);
-        final var outerOtherCol = columnRefFactory.create("outer_other_col", IntegerType.INT, true);
+        final var outerJoinKey = columnRefFactory.create("outer_key", Type.INT, true);
+        final var outerOtherCol = columnRefFactory.create("outer_other_col", Type.INT, true);
 
         final double outerNullFraction = 0.6;
         final var outerBuilder = Statistics.builder();
@@ -802,8 +802,8 @@ public class StatisticsCalculatorTest {
         outerGroup.setLogicalProperty(new LogicalProperty(
                 new ColumnRefSet(Lists.newArrayList(outerJoinKey, outerOtherCol))));
 
-        final var innerKey = columnRefFactory.create("inner_id", IntegerType.INT, true);
-        final var innerVal = columnRefFactory.create("inner_val", IntegerType.INT, true);
+        final var innerKey = columnRefFactory.create("inner_id", Type.INT, true);
+        final var innerVal = columnRefFactory.create("inner_val", Type.INT, true);
 
         final var innerBuilder = Statistics.builder();
         innerBuilder.setOutputRowCount(80000);
@@ -858,11 +858,11 @@ public class StatisticsCalculatorTest {
         // GIVEN
         // LEFT JOIN where outer key has high null fraction and inner has UNKNOWN stats on one eq col,
         // triggering innerRowCount = outerRowCount. Inner-side null fraction should still reflect the high null fraction.
-        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
-        final var outerCol = columnRefFactory.create("outer_col", IntegerType.BIGINT, true);
-        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
-        final var innerCol = columnRefFactory.create("inner_col", IntegerType.BIGINT, true);
-        final var innerVal = columnRefFactory.create("val", VarcharType.VARCHAR, true);
+        final var outerKey = columnRefFactory.create("outer_key", Type.BIGINT, true);
+        final var outerCol = columnRefFactory.create("outer_col", Type.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", Type.BIGINT, true);
+        final var innerCol = columnRefFactory.create("inner_col", Type.BIGINT, true);
+        final var innerVal = columnRefFactory.create("val", Type.VARCHAR, true);
 
         final double outerKeyNullFraction = 0.95;
         final var outerBuilder = Statistics.builder();
@@ -910,9 +910,9 @@ public class StatisticsCalculatorTest {
     @EnumSource(value = OuterJoin.class)
     public void testOuterJoinKnownStatsUsesSelectivityNotNullKeyFraction(OuterJoin outerJoin) {
         // GIVEN
-        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
-        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
-        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+        final var outerKey = columnRefFactory.create("outer_key", Type.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", Type.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", Type.BIGINT, true);
 
         // Outer side: 1M rows, join key has 15% null fraction (stale/overestimated)
         final double staleOuterKeyNullFraction = 0.15;
@@ -967,9 +967,9 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLeftJoinKnownStatsWithUnmatchedRows() {
         // GIVEN
-        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
-        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
-        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+        final var outerKey = columnRefFactory.create("outer_key", Type.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", Type.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", Type.BIGINT, true);
 
         final var outerBuilder = Statistics.builder();
         outerBuilder.setOutputRowCount(1000);
@@ -1013,10 +1013,10 @@ public class StatisticsCalculatorTest {
     @EnumSource(value = OuterJoin.class)
     public void testOuterJoinUnknownStatsUsesNullKeyFallback(OuterJoin outerJoin) {
         // GIVEN
-        final var outerKey = columnRefFactory.create("outer_key", IntegerType.BIGINT, true);
-        final var outerCol = columnRefFactory.create("outer_col", IntegerType.BIGINT, true);
-        final var innerKey = columnRefFactory.create("inner_key", IntegerType.BIGINT, true);
-        final var innerVal = columnRefFactory.create("inner_val", IntegerType.BIGINT, true);
+        final var outerKey = columnRefFactory.create("outer_key", Type.BIGINT, true);
+        final var outerCol = columnRefFactory.create("outer_col", Type.BIGINT, true);
+        final var innerKey = columnRefFactory.create("inner_key", Type.BIGINT, true);
+        final var innerVal = columnRefFactory.create("inner_val", Type.BIGINT, true);
 
         // Outer side (preserved): 1000 rows, high null fraction on join key
         final double outerKeyNullFraction = 0.90;
@@ -1077,10 +1077,10 @@ public class StatisticsCalculatorTest {
     @Test
     public void testFullOuterJoinUnknownStatsUsesNullKeyFallback() {
         // GIVEN
-        final var leftKey = columnRefFactory.create("left_key", IntegerType.BIGINT, true);
-        final var leftVal = columnRefFactory.create("left_val", IntegerType.BIGINT, true);
-        final var rightKey = columnRefFactory.create("right_key", IntegerType.BIGINT, true);
-        final var rightVal = columnRefFactory.create("right_val", IntegerType.BIGINT, true);
+        final var leftKey = columnRefFactory.create("left_key", Type.BIGINT, true);
+        final var leftVal = columnRefFactory.create("left_val", Type.BIGINT, true);
+        final var rightKey = columnRefFactory.create("right_key", Type.BIGINT, true);
+        final var rightVal = columnRefFactory.create("right_val", Type.BIGINT, true);
 
         // Left: 1000 rows, 80% null fraction on key
         final double leftKeyNullFraction = 0.80;
