@@ -99,15 +99,15 @@ int init_test_env(int argc, char** argv) {
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init(process_metrics_registry->root_registry());
-    CHECK(st.ok()) << st;
     auto* platform_env = PlatformEnv::GetInstance();
     PlatformEnvOptions platform_env_options;
     platform_env_options.metrics = process_metrics_registry->root_registry();
     platform_env_options.store_paths = paths;
-    st = platform_env->init(std::move(platform_env_options));
+    auto st = platform_env->init(std::move(platform_env_options));
+    CHECK(st.ok()) << st;
+    auto* global_env = GlobalEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -220,9 +220,9 @@ int init_test_env(int argc, char** argv) {
     StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     agent_server.reset();
-    platform_env->destroy();
     cache_env->destroy();
     global_env->stop();
+    platform_env->destroy();
 
     shutdown_tracer();
 
