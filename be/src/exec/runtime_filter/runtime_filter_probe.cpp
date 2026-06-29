@@ -224,11 +224,19 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFil
         if ((skip_topn && rf_desc->is_stream_build_filter()) || filter == nullptr || filter->always_true()) {
             continue;
         }
-        // TopN/stream-build RFs push down ONLY as zonemap page-range pruning; they are NOT
-        // applied as row-level ColumnPredicates in storage, so they must still be evaluated
-        // per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide segment).
+        // TopN (min/max) stream-build RFs push down ONLY as zonemap page-range pruning; they
+        // are NOT applied as row-level ColumnPredicates in storage, so they must still be
+        // evaluated per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide
+        // segment).
         if (rf_desc->has_push_down_to_storage() &&
             (!rf_desc->is_stream_build_filter() || rf_desc->probe_expr_ctx() == nullptr)) {
+            continue;
+        }
+        // Aggregate (AGG_FILTER) stream-build RFs are IN filters (colocate GRFs) applied via
+        // hash-partition / storage pushdown; the single-column InRuntimeFilter::evaluate() is an
+        // unimplemented stub that throws "not supported". Never evaluate IN filters per-chunk
+        // here (regardless of has_push_down_to_storage()).
+        if (filter->type() == RuntimeFilterSerializeType::IN_FILTER) {
             continue;
         }
 
@@ -430,11 +438,19 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
             continue;
         }
 
-        // TopN/stream-build RFs push down ONLY as zonemap page-range pruning; they are NOT
-        // applied as row-level ColumnPredicates in storage, so they must still be evaluated
-        // per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide segment).
+        // TopN (min/max) stream-build RFs push down ONLY as zonemap page-range pruning; they
+        // are NOT applied as row-level ColumnPredicates in storage, so they must still be
+        // evaluated per-chunk to trim within-page survivors (e.g. ORDER BY ... LIMIT over a wide
+        // segment).
         if (rf_desc->has_push_down_to_storage() &&
             (!rf_desc->is_stream_build_filter() || rf_desc->probe_expr_ctx() == nullptr)) {
+            continue;
+        }
+        // Aggregate (AGG_FILTER) stream-build RFs are IN filters (colocate GRFs) applied via
+        // hash-partition / storage pushdown; the single-column InRuntimeFilter::evaluate() is an
+        // unimplemented stub that throws "not supported". Never evaluate IN filters per-chunk
+        // here (regardless of has_push_down_to_storage()).
+        if (filter->type() == RuntimeFilterSerializeType::IN_FILTER) {
             continue;
         }
         auto& selection = eval_context.running_context.use_merged_selection
