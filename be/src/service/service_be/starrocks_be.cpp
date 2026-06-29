@@ -155,9 +155,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
+<<<<<<< HEAD
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
     EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
+=======
+    EXIT_IF_ERROR(init_storage_env(global_env, platform_env, exec_env));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage env init successfully";
+>>>>>>> cc5ed88c56a... [Refactor] Reorder BE environment lifecycle (#75499)
 
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
@@ -170,6 +175,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
     EXIT_IF_ERROR(data_workflows_env->init(data_workflows_env_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
     // AgentServer::start() starts workers that can read ExecEnv::agent_server()
@@ -418,14 +427,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     agent_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
 
-    data_workflows_env->destroy();
-    data_workflows_env.reset();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
-
     orchestration_env->destroy();
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
 
+<<<<<<< HEAD
+=======
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
+
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
+
+>>>>>>> cc5ed88c56a... [Refactor] Reorder BE environment lifecycle (#75499)
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
