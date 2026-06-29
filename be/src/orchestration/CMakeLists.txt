@@ -34,6 +34,7 @@ ADD_BE_LIB(Orchestration
 )
 
 target_link_libraries(Orchestration PUBLIC
+    DataWorkflows
     Runtime
     Exec
     ExecRuntime

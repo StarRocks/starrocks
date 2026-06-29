@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/routine_load/kafka_consumer_pipe.h"
+#include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
 
 #include <gtest/gtest.h>
 
