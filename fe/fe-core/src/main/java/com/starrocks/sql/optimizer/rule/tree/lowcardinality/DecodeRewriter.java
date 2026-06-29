@@ -74,8 +74,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.supportLowCardinality;
-
 /*
  * Rewrite the whole plan using the dict column by from bottom-up
  */
@@ -137,6 +135,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
         fragmentUsedDictExprs.union(decodeInfo.usedStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.inProgressStringAggregations);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
                 new ColumnRefSet() : fragmentUsedDictExprs;
 
@@ -157,8 +156,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         // some string column need rewrite
         boolean hasDictInput = !decodeInfo.inputStringColumns.isEmpty();
         boolean hasDictOutput = !decodeInfo.outputStringColumns.isEmpty();
+        boolean hasDictAggregate = !decodeInfo.inProgressStringAggregations.isEmpty() ||
+                !decodeInfo.finalizingStringAggregations.isEmpty();
 
-        if (hasDictInput || hasDictOutput) {
+        if (hasDictInput || hasDictOutput || hasDictAggregate) {
             return optExpression.getOp().accept(this, optExpression, fragmentUsedDictExprs);
         }
         return optExpression;
@@ -364,8 +365,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             }
 
             // merge stage is different from update stage
-            if (supportLowCardinality(aggFn.getType())) {
-                ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
+            if (context.stringRefToDictRefMap.containsKey(aggRef)) {
+                ColumnRefOperator newAggRef = context.stringRefToDictRefMap.get(aggRef);
                 aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
                 inputStringRefs.union(aggRef.getId());
             } else {
@@ -489,13 +490,14 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
         ColumnRefSet inputColumns = new ColumnRefSet();
         inputColumns.union(info.inputStringColumns);
-        info.inputStringColumns.getStream()
+        inputColumns.union(info.inProgressStringAggregations);
+        inputColumns.union(inputColumns.getStream()
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())
                 .map(context::getFieldUseStringRefMap)
                 .filter(Objects::nonNull)
-                .map(Map::values)
-                .forEach(inputColumns::union);
+                .flatMap(k -> k.values().stream())
+                .toList());
         for (int sid : inputColumns.getColumnIds()) {
             ColumnRefOperator stringRef = factory.getColumnRef(sid);
             if (!context.stringRefToDictRefMap.containsKey(stringRef)) {
