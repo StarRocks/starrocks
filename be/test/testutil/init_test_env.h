@@ -169,10 +169,6 @@ int init_test_env(int argc, char** argv) {
         StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
     }
 
-    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
-    CHECK(st.ok()) << st;
-
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
@@ -183,6 +179,10 @@ int init_test_env(int argc, char** argv) {
     data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
     st = data_workflows_env->init(data_workflows_env_options);
+    CHECK(st.ok()) << st;
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);
@@ -211,10 +211,10 @@ int init_test_env(int argc, char** argv) {
 #ifdef USE_STAROS
     StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
-    data_workflows_env->destroy();
-    data_workflows_env.reset();
     orchestration_env->destroy();
     orchestration_env.reset();
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
     delete engine;
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
     StorageEnv::GetInstance()->destroy();
