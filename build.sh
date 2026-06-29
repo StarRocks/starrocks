@@ -179,7 +179,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-mysql' \
   -l 'with-dynamic' \
-  -l 'module' \
+  -l 'module:' \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \

@@ -165,6 +165,10 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
 
+    // Reused across rows so the parser's Builder/Buffer is allocated once for the
+    // whole column instead of once per row.
+    auto json_parser = JsonValue::make_reusable_parser();
+
     for (int row = 0; row < viewer.size(); ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
@@ -186,9 +190,9 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         } else if constexpr (lt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
         } else if constexpr (lt_is_string<FromType>) {
-            auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
+            auto maybe = JsonValue::parse_json_or_string(viewer.value(row), json_parser.get());
             if (maybe.ok()) {
-                value = maybe.value();
+                value = std::move(maybe).value();
             } else {
                 overflow = true;
             }
@@ -219,9 +223,9 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                 if (!st.ok()) {
                     overflow = true;
                 } else {
-                    auto parsed = JsonValue::parse_json_or_string(ss.str());
+                    auto parsed = JsonValue::parse_json_or_string(ss.str(), json_parser.get());
                     if (parsed.ok()) {
-                        value = parsed.value();
+                        value = std::move(parsed).value();
                     } else {
                         overflow = true;
                     }
