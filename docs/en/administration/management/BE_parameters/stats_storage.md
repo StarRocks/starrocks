@@ -244,6 +244,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum memory size allowed for each Compaction thread.
 - Introduced in: -
 
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- Default: -1
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: Controls when compaction releases retained internal chunk capacity. Currently, this parameter takes effect only for Primary Key table compaction in shared-nothing clusters. When the current compaction task memory tracker consumption exceeds `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100`, StarRocks releases retained chunk capacity while resetting internal chunks. A negative value disables this behavior.
+- Introduced in: -
+
 ### compaction_trace_threshold
 
 - Default: 60

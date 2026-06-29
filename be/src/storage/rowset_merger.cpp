@@ -19,6 +19,7 @@
 
 #include "column/binary_column.h"
 #include "gutil/stl_util.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
@@ -43,6 +44,24 @@ public:
                             const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
                             const MergeConfig& cfg) = 0;
 };
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk, MemTracker* mem_tracker) {
+    const int32_t threshold_percent = config::compaction_chunk_reset_memory_tracker_threshold_percent;
+    if (chunk == nullptr || mem_tracker == nullptr || threshold_percent < 0) {
+        return false;
+    }
+
+    int64_t limit = config::compaction_memory_limit_per_worker;
+    if (limit <= 0) {
+        return false;
+    }
+
+    return static_cast<double>(mem_tracker->consumption()) > static_cast<double>(limit) * threshold_percent / 100.0;
+}
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk) {
+    return should_release_compaction_chunk_capacity(chunk, CurrentThread::mem_tracker());
+}
 
 template <class T>
 struct MergeEntry {
@@ -103,7 +122,14 @@ struct MergeEntry {
 
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
-        chunk->reset();
+        if (should_release_compaction_chunk_capacity(chunk.get())) {
+            if (chunk_pk_column != nullptr) {
+                chunk_pk_column = chunk_pk_column->clone_empty();
+            }
+            chunk = chunk->clone_empty(0);
+        } else {
+            chunk->reset();
+        }
         rssid_rowids.clear();
         auto st = Status::OK();
         if (need_rssid_rowids) {
@@ -412,7 +438,11 @@ private:
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
         vector<uint64_t> rssid_rowids;
         while (true) {
-            chunk->reset();
+            if (should_release_compaction_chunk_capacity(chunk.get())) {
+                chunk = chunk->clone_empty(0);
+            } else {
+                chunk->reset();
+            }
             rssid_rowids.clear();
             Status status = get_next(chunk.get(), source_masks.get(), &rssid_rowids);
             if (!status.ok()) {
@@ -570,7 +600,11 @@ private:
             auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
             while (true) {
-                chunk->reset();
+                if (should_release_compaction_chunk_capacity(chunk.get())) {
+                    chunk = chunk->clone_empty(0);
+                } else {
+                    chunk->reset();
+                }
                 Status status = iter->get_next(chunk.get(), source_masks.get());
                 if (!status.ok()) {
                     if (status.is_end_of_file()) {

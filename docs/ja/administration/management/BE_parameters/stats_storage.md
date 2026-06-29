@@ -199,6 +199,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 各コンパクションスレッドに許可される最大メモリサイズ。
 - 導入バージョン: -
 
+### compaction_chunk_reset_memory_tracker_threshold_percent
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Percent
+- 変更可能: はい
+- 説明: コンパクションが内部 Chunk の保持容量を解放するタイミングを制御します。現在、このパラメータは共有なしクラスタの主キーテーブルコンパクションでのみ有効です。現在のコンパクションタスクのメモリトラッカー使用量が `compaction_memory_limit_per_worker * compaction_chunk_reset_memory_tracker_threshold_percent / 100` を超えると、StarRocks は内部 Chunk をリセットするときに保持容量を解放します。負の値に設定すると、この動作は無効になります。
+- 導入バージョン: -
+
 ### compaction_trace_threshold
 
 - デフォルト: 60
