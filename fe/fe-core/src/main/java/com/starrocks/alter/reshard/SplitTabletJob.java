@@ -102,10 +102,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
     // The warehouse the triggering load runs in. When spreading (the WITH_SHARD pin is dropped), this
     // is the only thing that keeps the new shards in the load's warehouse worker group instead of the
-    // default one. Persisted so a leader-switch re-run of createShardsOnStarOS targets the same
+    // default one. Set by the pre-split caller right after construction via setLoadWarehouseId, before
+    // the job is journaled; persisted so a leader-switch re-run of createShardsOnStarOS targets the same
     // warehouse. Defaults to DEFAULT_WAREHOUSE_ID for online split (where it is unused).
     @SerializedName(value = "loadWarehouseId")
-    protected final long loadWarehouseId;
+    protected long loadWarehouseId;
 
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
@@ -135,6 +136,15 @@ public class SplitTabletJob extends TabletReshardJob {
     @VisibleForTesting
     public long getLoadWarehouseId() {
         return loadWarehouseId;
+    }
+
+    /**
+     * Set the triggering load's warehouse for a pre-split job. Called by the pre-split caller right
+     * after the factory builds the job and before it is journaled, so the spread shards are scheduled
+     * in the load's warehouse rather than the default one.
+     */
+    public void setLoadWarehouseId(long loadWarehouseId) {
+        this.loadWarehouseId = loadWarehouseId;
     }
 
     public long getTableId() {
