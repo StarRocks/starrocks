@@ -1,0 +1,36 @@
+-- name: test_glm_outer_join_mixed_expr
+-- Regression for issue #75222: a deferred expression that mixes columns from BOTH
+-- sides of an outer join used to fail with "deserialize column failed, slot_id ..."
+-- under global late materialization. The split projection above the join blanket
+-- widened the preserved side's row-position (row-id) columns to nullable in the
+-- shared slot descriptor, so the GLM FETCH receiver built a nullable column while
+-- the sender serialized non-nullable data.
+set cbo_enable_low_cardinality_optimize = false;
+set enable_global_late_materialization_cost_based = false;
+set enable_global_late_materialization = true;
+
+CREATE TABLE t (txid VARCHAR(20), s1 VARCHAR(20), s2 VARCHAR(20), s3 VARCHAR(20), amt DOUBLE, mref VARCHAR(20))
+  ENGINE=OLAP DUPLICATE KEY(txid) DISTRIBUTED BY HASH(txid) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE mk (mid VARCHAR(20), rate DOUBLE)
+  ENGINE=OLAP DUPLICATE KEY(mid) DISTRIBUTED BY HASH(mid) BUCKETS 1 PROPERTIES("replication_num"="1");
+insert into t values ('TX1','a','x','p',1000,'M1'),('TX2','b','y','q',2000,'M2'),('TX3','c','z','r',3000,'M9');
+insert into mk values ('M1',10),('M2',20),('M3',30);
+alter table t set ('unique_constraints'='txid');
+alter table mk set ('unique_constraints'='mid');
+
+-- the original issue query: CAST over an expression mixing both join sides
+select txid, tas from (
+  select t.txid AS txid, CAST(t.amt * (1.0 - mk.rate/100.0) AS DECIMAL(38,10)) AS tas
+  FROM mk right outer join [bucket] t ON t.mref = mk.mid) w1 order by txid;
+
+-- minimal mixed expression, right outer join (t preserved, mk nullable)
+select t.txid, t.amt + mk.rate as x from mk right outer join [bucket] t on t.mref = mk.mid order by t.txid;
+
+-- left outer join (mk preserved, t nullable)
+select mk.mid, t.amt + mk.rate as x from mk left outer join [bucket] t on t.mref = mk.mid order by mk.mid;
+
+-- full outer join (both sides nullable)
+select mk.mid, t.txid, t.amt + mk.rate as x from mk full outer join t on t.mref = mk.mid order by mk.mid, t.txid;
+
+-- inner join sanity
+select t.txid, t.amt + mk.rate as x from mk inner join [bucket] t on t.mref = mk.mid order by t.txid;
