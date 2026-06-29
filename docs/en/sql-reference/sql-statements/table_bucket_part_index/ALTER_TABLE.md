@@ -587,7 +587,7 @@ Note:
 1. If you modify the value column in aggregation models, you need to specify agg_type.
 2. If you modify the key column in non-aggregation models, you need to specify the KEY keyword.
 3. While modifying the type, default value, nullability, and position, you must specify the full definition of the column in the statement.
-4. While modifying the comment of the column, you must only specify `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` instead of the full definition. This operation will only change the metadata, and will not initiate Schema Change tasks. It can be applied to Primary Key columns, key columns, and regular columns. Specifying the full definition in the statement will be parsed as modifications to the column definition, and thereby initiate Schema Change tasks.
+4. Modifying only the column comment — whether via `MODIFY COLUMN <column_name> COMMENT "<new_column_comment>"` or via a full column definition where only the comment differs — changes only the metadata and does not initiate a Schema Change task. This applies to Primary Key columns, key columns, and regular columns. If the full definition also changes any other attribute of the column, the statement initiates a Schema Change task as usual.
 5. The partition column cannot be modified.
 6. The following types of conversions are currently supported (accuracy loss is guaranteed by the user).
 
