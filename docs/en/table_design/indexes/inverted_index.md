@@ -402,3 +402,37 @@ You can also specify `dict_gram_num` when adding a built-in inverted index after
 ```SQL
 CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
 ```
+
+### lower_case
+
+The `lower_case` parameter is available exclusively for the **built-in** inverted index implementation with English tokenization (`"parser" = "english"`). It controls whether English tokens are normalized to lowercase when the index is built and when queries are matched against it.
+
+#### Parameter details
+
+| Parameter | Default | Valid values | Description |
+|-----------|---------|--------------|-------------|
+| `lower_case` | `true` | `true`, `false` | Whether to normalize English tokens to lowercase. Only valid with `"imp_lib" = "builtin"` and `"parser" = "english"`. |
+
+- `true` (default): Uppercase English letters are converted to lowercase both when the index is built and when query keywords are matched, so matching is case-insensitive. This preserves the existing behavior.
+- `false`: Case is preserved during both indexing and matching, so matching is case-sensitive. Use this when you need to distinguish words that differ only in case, such as `Apple`, `apple`, and `APPLE`.
+
+#### Example
+
+Create a built-in English inverted index with case-sensitive matching:
+
+```SQL
+CREATE TABLE `t_case` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_cs (`value`) USING GIN (
+        "parser" = "english",
+        "imp_lib" = "builtin",
+        "lower_case" = "false"
+    ) COMMENT 'case-sensitive builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```

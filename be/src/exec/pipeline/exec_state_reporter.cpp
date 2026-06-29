@@ -49,11 +49,11 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 namespace {
 
-RuntimeProfile* build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+RuntimeProfile* build_merged_instance_profile(QueryRuntimeState* query_runtime_state, FragmentContext* fragment_ctx,
                                               ObjectPool* obj_pool) {
     auto* instance_profile = fragment_ctx->runtime_state()->runtime_profile();
 
-    if (query_ctx->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
+    if (query_runtime_state->profile_level() >= TPipelineProfileLevel::type::DETAIL) {
         return instance_profile;
     }
 
@@ -132,6 +132,8 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     TReportExecStatusParams& params = *res;
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
+    auto* query_runtime_state = runtime_state->query_runtime_state();
+    DCHECK(query_runtime_state != nullptr);
     DCHECK(profile != nullptr);
     params.protocol_version = FrontendServiceVersion::V1;
     params.__set_query_id(fragment_ctx->query_id());
@@ -145,7 +147,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
         RuntimeStateHelper::update_report_load_status(runtime_state, &params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
 
-        if (query_ctx->enable_profile()) {
+        if (query_runtime_state->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 
@@ -157,7 +159,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             RuntimeStateHelper::update_report_load_status(runtime_state, &params);
             params.__set_load_type(runtime_state->query_options().load_job_type);
         }
-        if (query_ctx->enable_profile()) {
+        if (query_runtime_state->enable_profile()) {
             profile->to_thrift(&params.profile);
             params.__isset.profile = true;
 
@@ -191,7 +193,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
         // Legacy rejected-record file removed; see
-        // RuntimeStateHelper::append_rejected_record_to_file for the
+        // LoadPathStateHelper::append_rejected_record_to_file for the
         // writer-based replacement. The `rejected_record_path` Thrift
         // field is kept for wire-compat but is no longer populated.
         if (!runtime_state->export_output_files().empty()) {
@@ -249,9 +251,11 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
 void ExecStateReporter::report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                           bool done) {
     auto* profile = fragment_ctx->runtime_state()->runtime_profile();
+    auto* query_runtime_state = fragment_ctx->runtime_state()->query_runtime_state();
+    DCHECK(query_runtime_state != nullptr);
     ObjectPool obj_pool;
-    if (query_ctx->enable_profile()) {
-        profile = build_merged_instance_profile(query_ctx, fragment_ctx, &obj_pool);
+    if (query_runtime_state->enable_profile()) {
+        profile = build_merged_instance_profile(query_runtime_state, fragment_ctx, &obj_pool);
 
         // Add counters for query level memory and cpu usage, these two metrics will be specially handled at the frontend
         auto* query_peak_memory = profile->add_counter(
@@ -261,7 +265,7 @@ void ExecStateReporter::report_exec_state(QueryContext* query_ctx, FragmentConte
         auto* query_cumulative_cpu = profile->add_counter(
                 "QueryCumulativeCpuTime", TUnit::TIME_NS,
                 RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::SKIP_FIRST_MERGE));
-        COUNTER_SET(query_cumulative_cpu, query_ctx->query_runtime_state().cpu_cost());
+        COUNTER_SET(query_cumulative_cpu, query_runtime_state->cpu_cost());
 
         auto* query_spill_bytes = profile->add_counter(
                 "QuerySpillBytes", TUnit::BYTES,

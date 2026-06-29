@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
 }
 
 // phases of an execution node
@@ -564,6 +565,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
@@ -631,6 +633,9 @@ struct TVectorSearchOptions {
   // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
   // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
   12: optional bool refine_distance;
+  // 13: retired (was has_complex_residual). The BE now detects a row-filtering operator placed above
+  // the ANN scan directly from the execution tree (FragmentExecutor walk -> ScanNode), instead of an
+  // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
 }
 
 enum SampleMethod {
@@ -642,8 +647,8 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
-
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -1265,6 +1270,13 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+struct TEnforceUniqueRowLocatorNode {
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
+}
+
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -1569,6 +1581,8 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

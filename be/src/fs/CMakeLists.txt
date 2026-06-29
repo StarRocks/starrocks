@@ -40,8 +40,6 @@ target_link_libraries(FSCore PUBLIC IO)
 set(EXEC_FILES
     fs_provider_bootstrap.cpp
     fs_options_helper.cpp
-    key_cache.cpp
-    fs_broker.cpp
     fs_s3.cpp
     azure/azblob_uri.cpp
     azure/fs_azblob.cpp
@@ -49,18 +47,10 @@ set(EXEC_FILES
     credential/cloud_configuration_factory.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
-    s3/aws_sdk_guard.cpp
-    s3/poco_http_client_factory.cpp
-    s3/poco_http_client.cpp
-    s3/poco_common.cpp
     )
-
-if (NOT BUILD_FORMAT_LIB)
-    list(APPEND EXEC_FILES fs_starlet.cpp)
-endif()
 
 ADD_BE_LIB(FileSystem
     ${EXEC_FILES}
 )
 
-target_link_libraries(FileSystem PUBLIC FSCore)
+target_link_libraries(FileSystem PUBLIC FSCore ComputeEnv)

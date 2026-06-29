@@ -921,13 +921,20 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const Binary
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
+    // When the column is too high-cardinality for dictionary encoding, fall back to plain.
+    // If delta-offset plain is enabled, use the delta-offset variant so the offset trailer
+    // (which dominates the compressed size of high-cardinality string columns) compresses
+    // far better. The choice is recorded in the column meta encoding.
+    const EncodingTypePB plain_encoding =
+            config::enable_binary_plain_delta_offset ? PLAIN_ENCODING_DELTA_OFFSET : PLAIN_ENCODING;
+
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;
         for (size_t i = 0; i < row_count; i++) {
             size_t hash = SliceHash()(bin_col.get_slice(i));
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
-                return PLAIN_ENCODING;
+                return plain_encoding;
             }
         }
     }

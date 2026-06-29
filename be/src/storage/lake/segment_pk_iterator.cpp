@@ -18,7 +18,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

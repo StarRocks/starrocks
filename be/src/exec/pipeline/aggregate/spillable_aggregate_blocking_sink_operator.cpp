@@ -20,8 +20,8 @@
 
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller.hpp"

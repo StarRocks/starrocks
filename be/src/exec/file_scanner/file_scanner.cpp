@@ -25,6 +25,8 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
@@ -32,15 +34,13 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs.h"
-#include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
+#include "platform/fs_broker.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/load_stream_mgr.h"
 
 namespace starrocks {
 
@@ -241,8 +241,8 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                         error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                                   << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                         // TODO(meegoo): support other file format
-                        RuntimeStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
-                                                                           error_msg.str(), "");
+                        LoadPathStateHelper::append_rejected_record_to_file(_state, src->rebuild_csv_row(i, ","),
+                                                                            error_msg.str(), "");
                     }
 
                     // avoid print too many debug log
@@ -252,7 +252,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
                     std::stringstream error_msg;
                     error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    RuntimeStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
+                    LoadPathStateHelper::append_error_msg_to_file(_state, src->debug_row(i), error_msg.str());
                 }
             }
         }

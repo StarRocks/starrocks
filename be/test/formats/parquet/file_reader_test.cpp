@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <random>
 #include <set>
@@ -32,8 +33,10 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/binary_predicate.h"
@@ -50,10 +53,10 @@
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/type_descriptor.h"
@@ -61,8 +64,20 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
+
+static const ColumnPtr& get_struct_field_column(const ColumnPtr& column, const std::string& field_name) {
+    const auto* struct_column = down_cast<const StructColumn*>(ColumnHelper::get_data_column(column.get()));
+    auto field_column = struct_column->field_column(field_name);
+    CHECK(field_column.ok()) << field_column.status();
+    return field_column.value();
+}
+
+static void expect_string_data_column(const ColumnPtr& column) {
+    const Column* data_column = ColumnHelper::get_data_column(column.get());
+    EXPECT_TRUE(data_column->is_binary() || data_column->is_binary_view());
+}
 
 class FileReaderTest : public testing::Test {
 public:
@@ -414,7 +429,7 @@ HdfsScannerContext* FileReaderTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = _scanner_ctx.lazy_column_coalesce_counter;
     ctx->runtime_filter_collector = _scanner_ctx.runtime_filter_collector;
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
     return ctx;
 }
 
@@ -432,17 +447,19 @@ HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_d
     _scanner_ctx.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     _scanner_ctx.runtime_filter_collector = _rf_probe_collector;
     _scanner_ctx.scan_range = _create_scan_range(file_path, scan_length);
-    _scanner_ctx.options.parquet_bloom_filter_enable = true;
-    _scanner_ctx.options.parquet_page_index_enable = true;
+    _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable = true;
+    _scanner_ctx.format_scan_context.options.parquet_page_index_enable = true;
 
     ctx->lazy_column_coalesce_counter = _scanner_ctx.lazy_column_coalesce_counter;
     ctx->runtime_filter_collector = _scanner_ctx.runtime_filter_collector;
     ctx->scan_range = _scanner_ctx.scan_range;
-    ctx->options.parquet_bloom_filter_enable = _scanner_ctx.options.parquet_bloom_filter_enable;
-    ctx->options.parquet_page_index_enable = _scanner_ctx.options.parquet_page_index_enable;
+    ctx->format_scan_context.options.parquet_bloom_filter_enable =
+            _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable;
+    ctx->format_scan_context.options.parquet_page_index_enable =
+            _scanner_ctx.format_scan_context.options.parquet_page_index_enable;
 
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
@@ -859,9 +876,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->slot_descs[2], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->slot_descs[3], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->slot_descs[4], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{3, ctx->slot_descs[2], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{4, ctx->slot_descs[3], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{5, ctx->slot_descs[4], false});
     ctx->partition_values.emplace_back(partition_col3);
     ctx->partition_values.emplace_back(partition_col4);
     ctx->partition_values.emplace_back(partition_col5);
@@ -904,9 +921,9 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
     ColumnPtr partition_col3 = ColumnHelper::create_const_column<TYPE_INT>(5, 1);
     ColumnPtr partition_col4 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     ColumnPtr partition_col5 = ColumnHelper::create_const_null_column(1);
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{3, ctx->slot_descs[2], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{4, ctx->slot_descs[3], false});
-    ctx->partition_columns.emplace_back(HdfsScannerContext::ColumnInfo{5, ctx->slot_descs[4], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{3, ctx->slot_descs[2], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{4, ctx->slot_descs[3], false});
+    ctx->partition_columns.emplace_back(FormatColumnInfo{5, ctx->slot_descs[4], false});
     ctx->partition_values.emplace_back(partition_col3);
     ctx->partition_values.emplace_back(partition_col4);
     ctx->partition_values.emplace_back(partition_col5);
@@ -1773,7 +1790,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
 
     Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC}, {"c2", c2}, {""}};
     auto ctx = _create_scan_context(slot_descs, _file4_path);
-    ctx->options.case_sensitive = true;
+    ctx->format_scan_context.options.case_sensitive = true;
     // --------------finish init context---------------
 
     ASSERT_OK(file_reader->init(ctx));
@@ -2778,7 +2795,10 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     std::vector<std::string> subfield_path({"c_struct", "c0"});
     _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
                                                     &ctx->conjunct_ctxs_by_slot[3]);
-    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+    // Use a small chunk size so that the scan takes multiple rounds and some ranges are fully
+    // filtered out by the dict filter (hit_count == 0), exercising the temporary dict-code
+    // column restore path in ScalarColumnReader.
+    auto file_reader = _create_file_reader(struct_in_struct_file_path, 13);
 
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
@@ -2804,6 +2824,84 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
         total_row_nums += chunk->num_rows();
         if (chunk->num_rows() != 0) {
             ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+            const auto& c_struct_struct = chunk->get_column_by_slot_id(3);
+            expect_string_data_column(get_struct_field_column(c_struct_struct, "c0"));
+            const auto& c_struct = get_struct_field_column(c_struct_struct, "c_struct");
+            expect_string_data_column(get_struct_field_column(c_struct, "c0"));
+            expect_string_data_column(get_struct_field_column(c_struct, "c1"));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
+
+// Reproduce: when a chunk is fully filtered (hit_count==0), the ScalarColumnReader's
+// fill_dst_column() is skipped and the subfield slot is left pointing at the internal
+// Int32 dict-code column. The next chunk that does survive then reads/fills against
+// a wrong column type, causing a type-mismatch crash or corrupt output.
+// Using chunk_size=30 ensures the first chunk (rows 1-30, c0%100 in 1..30) has no
+// match for c_struct.c0='55', forcing the skipped-fill path before a matching chunk.
+TEST_F(FileReaderTest, TestStructSubfieldDictCodeNoLeakOnSkippedFill) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> subfield_path({"c_struct", "c0"});
+    _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 3, type_struct_in_struct, subfield_path, "55",
+                                                    &ctx->conjunct_ctxs_by_slot[3]);
+
+    // Small chunk size: first chunk (rows 1-30) has no match for c_struct.c0='55',
+    // so hit_count==0 and fill is skipped — this is what triggers the bug.
+    auto file_reader = _create_file_reader(struct_in_struct_file_path, 30);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // After a successful fill (get_next returns >0 rows), verify that the inner
+    // struct subfield c_struct.c0 in _read_chunk is still a binary column.
+    // Without the fix, gap B leaves _ori_column pointing at _tmp_code_column (Int32),
+    // so fill_dst_column "restores" c0 to Int32 instead of Binary — detectable here.
+    auto assert_read_chunk_c_struct_c0_is_binary = [&]() {
+        const auto& rg = file_reader->_row_group_readers[0];
+        const ChunkPtr& rc = rg->_column_materializer->read_chunk();
+        ASSERT_TRUE(rc != nullptr);
+        // Use as_mutable_raw_ptr() to navigate const ColumnPtr& without casts.
+        auto* outer_col = rc->get_column_by_slot_id(3)->as_mutable_raw_ptr();
+        auto* outer_nullable = down_cast<NullableColumn*>(outer_col);
+        auto* outer_struct = down_cast<StructColumn*>(outer_nullable->data_column_raw_ptr());
+        auto c_struct_r = outer_struct->field_column("c_struct");
+        ASSERT_TRUE(c_struct_r.ok());
+        auto* inner_nullable = down_cast<NullableColumn*>(c_struct_r.value()->as_mutable_raw_ptr());
+        auto* inner_struct = down_cast<StructColumn*>(inner_nullable->data_column_raw_ptr());
+        auto c0_r = inner_struct->field_column("c0");
+        ASSERT_TRUE(c0_r.ok());
+        // c0 is NullableColumn(BinaryColumn); unwrap to check the data column type.
+        Column* c0_data = ColumnHelper::get_data_column(c0_r.value()->as_mutable_raw_ptr());
+        ASSERT_TRUE(c0_data->is_binary())
+                << "Bug: c_struct.c0 in _read_chunk leaked as dict-code column: " << c0_r.value()->get_name();
+    };
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file()) << status.message();
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+            // Verify internal state: c_struct.c0 must be binary, not a leaked Int32 dict-code column.
+            assert_read_chunk_c_struct_c0_is_binary();
         }
     }
     EXPECT_EQ(100, total_row_nums);
@@ -3404,11 +3502,11 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 
     // first init, populate footer cache
     auto* ctx = _create_file1_base_context();
-    ctx->stats->footer_cache_read_count = 0;
-    ctx->stats->footer_cache_write_count = 0;
+    ctx->format_scan_context.stats->footer_cache_read_count = 0;
+    ctx->format_scan_context.stats->footer_cache_write_count = 0;
     ASSERT_OK(file_reader->init(ctx));
-    ASSERT_EQ(ctx->stats->footer_cache_read_count, 0);
-    ASSERT_EQ(ctx->stats->footer_cache_write_count, 1);
+    ASSERT_EQ(ctx->format_scan_context.stats->footer_cache_read_count, 0);
+    ASSERT_EQ(ctx->format_scan_context.stats->footer_cache_write_count, 1);
 
     auto file_reader2 = std::make_shared<FileReader>(
             config::vector_chunk_size, file.get(), std::filesystem::file_size(_file1_path), _mock_datacache_options());
@@ -3416,13 +3514,13 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
 
     // second init, read footer cache
     auto* ctx2 = _create_file1_base_context();
-    ctx2->stats->footer_cache_read_count = 0;
-    ctx2->stats->footer_cache_write_count = 0;
-    ctx2->stats->footer_cache_read_ns = 0;
+    ctx2->format_scan_context.stats->footer_cache_read_count = 0;
+    ctx2->format_scan_context.stats->footer_cache_write_count = 0;
+    ctx2->format_scan_context.stats->footer_cache_read_ns = 0;
     Status status2 = file_reader2->init(ctx2);
     ASSERT_TRUE(status2.ok());
-    ASSERT_EQ(ctx2->stats->footer_cache_read_count, 1);
-    ASSERT_EQ(ctx2->stats->footer_cache_write_count, 0);
+    ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_read_count, 1);
+    ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_write_count, 0);
 }
 
 TEST_F(FileReaderTest, TestTime) {

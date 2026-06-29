@@ -38,9 +38,9 @@
 #include <vector>
 
 #include "base/string/faststring.h"
+#include "column/global_dict/types.h"
 #include "common/status.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types.h"
 #include "storage/primitive/rowid_types.h"
 
 namespace starrocks {

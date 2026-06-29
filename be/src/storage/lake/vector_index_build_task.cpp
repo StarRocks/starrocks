@@ -23,14 +23,14 @@
 #include "column/chunk_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "storage/chunk_helper.h"
+#include "platform/key_cache.h"
 #include "storage/index/vector/vector_index_builder.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
 #include "storage/index/vector/vector_index_file_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
@@ -309,7 +309,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         RETURN_IF_ERROR(builder->init());
 
         // Read column data in batches and add to builder
-        auto field = ChunkHelper::convert_field(col_idx, column);
+        auto field = StorageSchemaHelper::convert_field(col_idx, column);
         auto col_ptr = ChunkFactory::column_from_field(field);
         ordinal_t total_rows = col_iter->num_rows();
         ordinal_t rows_read = 0;

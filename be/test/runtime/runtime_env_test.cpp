@@ -15,8 +15,12 @@
 #include <gtest/gtest.h>
 
 #include "base/metrics.h"
+#include "base/testutil/scoped_updater.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/system/cpu_info.h"
+#include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
+#include "runtime/env/diagnose_daemon.h"
 #include "runtime/env/global_env.h"
 #include "runtime/runtime_env_test_util.h"
 
@@ -32,6 +36,31 @@ TEST(GlobalEnvTest, CalcQueryMemLimit) {
 TEST(GlobalEnvTest, GetInstanceReturnsStableSingleton) {
     ASSERT_NE(GlobalEnv::GetInstance(), nullptr);
     ASSERT_EQ(GlobalEnv::GetInstance(), GlobalEnv::GetInstance());
+}
+
+TEST(GlobalEnvTest, OwnsHeartbeatFlags) {
+    auto* env = GlobalEnv::GetInstance();
+    auto* heartbeat_flags = env->heartbeat_flags();
+    ASSERT_NE(heartbeat_flags, nullptr);
+    ASSERT_EQ(heartbeat_flags, env->heartbeat_flags());
+}
+
+TEST(GlobalEnvTest, OwnsDiagnoseDaemonLifecycle) {
+    CpuInfo::init();
+    MemInfo::init();
+
+    auto* env = GlobalEnv::GetInstance();
+    env->stop();
+    SCOPED_UPDATE(std::string, config::mem_limit, "90%");
+
+    MetricRegistry metrics("runtime_env_diagnose_test");
+    auto st = env->init(&metrics);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_NE(env->diagnose_daemon(), nullptr);
+    ASSERT_NE(env->diagnose_daemon()->thread_pool(), nullptr);
+
+    env->stop();
+    ASSERT_EQ(env->diagnose_daemon(), nullptr);
 }
 
 TEST(GlobalEnvTest, OwnsExecutionThreadPools) {

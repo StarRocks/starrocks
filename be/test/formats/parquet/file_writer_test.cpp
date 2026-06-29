@@ -38,7 +38,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {
@@ -66,7 +66,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = (_create_scan_range(_file_path, file_size));
         ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &g_hdfs_stats;
+        ctx->format_scan_context.stats = &g_hdfs_stats;
 
         return ctx;
     }

@@ -18,7 +18,7 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/json_parser.h"
-#include "util/byte_buffer.h"
+#include "runtime/byte_buffer.h"
 
 namespace starrocks {
 class HdfsJsonReader {
@@ -61,6 +61,10 @@ private:
     simdjson::ondemand::parser _simdjson_parser;
     std::unique_ptr<JsonDocumentStreamParser> _parser;
     bool _empty_parser = true;
+    // Number of trailing bytes of the current buffer that were held back from the parser
+    // because they form an incomplete multi-byte UTF-8 character split across the read
+    // boundary. They are carried over to the next read together with the truncated record.
+    size_t _utf8_partial_tail = 0;
 };
 
 class HdfsJsonScanner final : public HdfsScanner {

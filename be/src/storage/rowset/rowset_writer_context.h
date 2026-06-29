@@ -34,9 +34,9 @@
 
 #pragma once
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "fs/fs.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/primitive/flat_json_config.h"
 #include "storage/primitive/type_utils.h"
 

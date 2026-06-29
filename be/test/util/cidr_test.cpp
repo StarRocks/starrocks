@@ -23,9 +23,9 @@
 #include <cstdlib>
 #include <iostream>
 
+#include "base/logging.h"
 #include "common/configbase.h"
 #include "common/system/cpu_info.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

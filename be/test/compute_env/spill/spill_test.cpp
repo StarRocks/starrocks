@@ -34,6 +34,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
@@ -43,16 +44,17 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sorting.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spill_components.h"
+#include "compute_env/spill/spill_observable.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller.hpp"
 #include "compute_env/spill/spiller_factory.h"
 #include "compute_env/spill/task_executor.h"
 #include "compute_env/workgroup/scan_task.h"
+#include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -64,7 +66,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {
@@ -177,6 +179,33 @@ struct SyncExecutor {
         return Status::OK();
     }
     static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+
+// Test-only executor whose submit() always fails: the IO task is discarded, so its lambda (and every defer
+// inside it) never runs. Used to drive the submit-failure compensation paths deterministically, without
+// the fail-point machinery.
+struct FailingSubmitExecutor {
+    static Status submit(workgroup::ScanTask task) { return Status::InternalError("inject submit failure"); }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+};
+
+// Records which trigger the spiller fired so notify-on-completion (and
+// notify-on-submit-failure) can be asserted without a real driver.
+class CountingObserver final : public pipeline::PipelineObserver {
+public:
+    void source_trigger() override { source_count++; }
+    void sink_trigger() override { sink_count++; }
+    void cancel_trigger() override { cancel_count++; }
+    void all_trigger() override {
+        source_count++;
+        sink_count++;
+    }
+    void runtime_filter_timeout_trigger() override {}
+    std::string debug_string() const override { return "CountingObserver"; }
+
+    std::atomic_int32_t source_count{0};
+    std::atomic_int32_t sink_count{0};
+    std::atomic_int32_t cancel_count{0};
 };
 
 struct ASyncExecutor {
@@ -727,6 +756,359 @@ TEST_F(SpillTest, partition_yield_with_failed) {
     }
 }
 
+// Submit failure on the raw-writer flush choke point must fully compensate:
+// in-flight aggregate and per-writer counter back to zero, the mem-table back in
+// the pool, the error published, and both observer lists woken.
+TEST_F(SpillTest, submit_failure_raw_flush_compensates) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 4;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    dummy_rt_st.set_enable_event_scheduler(true);
+    CountingObserver sink_obs;
+    CountingObserver source_obs;
+    spiller->observable().subscribe_sink(&dummy_rt_st, &sink_obs);
+    spiller->observable().subscribe_source(&dummy_rt_st, &source_obs);
+
+    auto* writer = spiller->_writer->as<spill::RawSpillerWriter*>();
+    const size_t pool_capacity = spill_options.mem_table_pool_size;
+
+    // One spill acquires a mem-table from the pool into _mem_table.
+    auto chunk = chunk_builder.gen(tuple, nullables);
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    ASSERT_EQ(writer->_mem_table_pool.size(), pool_capacity - 1);
+    ASSERT_FALSE(spiller->has_running_io_tasks());
+
+    auto st = caller.flush<FailingSubmitExecutor>(&dummy_rt_st, EmptyMemGuard{});
+    ASSERT_FALSE(st.ok());
+
+    // Aggregate and per-writer counter fully unwound.
+    ASSERT_FALSE(spiller->has_running_io_tasks());
+    ASSERT_EQ(spiller->_in_flight_io.load(), 0);
+    ASSERT_EQ(writer->running_flush_tasks(), 0);
+    // Mem-table returned to the pool, none lost.
+    ASSERT_EQ(writer->_mem_table_pool.size(), pool_capacity);
+    // Error published.
+    ASSERT_FALSE(spiller->task_status().ok());
+    // Both lists woken (a flush completion or failure matters to the writer and the pump).
+    ASSERT_GT(sink_obs.sink_count.load(), 0);
+    ASSERT_GT(source_obs.source_count.load(), 0);
+}
+
+// Submit failure on the restore choke point must compensate the aggregate and
+// per-reader counter, publish the error, and wake source-side sleepers only.
+TEST_F(SpillTest, submit_failure_restore_compensates) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 4;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    // Spill + flush some data so there is a non-empty stream to restore from.
+    size_t test_loop = 256;
+    for (size_t i = 0; i < test_loop; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    dummy_rt_st.set_enable_event_scheduler(true);
+    CountingObserver sink_obs;
+    CountingObserver source_obs;
+    spiller->observable().subscribe_sink(&dummy_rt_st, &sink_obs);
+    spiller->observable().subscribe_source(&dummy_rt_st, &source_obs);
+
+    // trigger_restore acquires the input stream on first call, then submits a
+    // restore task; FailingSubmitExecutor makes that submit fail.
+    auto st = caller.trigger_restore<FailingSubmitExecutor>(&dummy_rt_st, EmptyMemGuard{});
+    ASSERT_FALSE(st.ok());
+
+    ASSERT_FALSE(spiller->has_running_io_tasks());
+    ASSERT_EQ(spiller->_in_flight_io.load(), 0);
+    ASSERT_EQ(spiller->_reader->running_restore_tasks(), 0);
+    ASSERT_FALSE(spiller->task_status().ok());
+    // Restore feeds only readers: source woken, sink untouched.
+    ASSERT_GT(source_obs.source_count.load(), 0);
+    ASSERT_EQ(sink_obs.sink_count.load(), 0);
+}
+
+// Submit failure on the partitioned-writer flush choke point must compensate the
+// aggregate and per-writer counter, publish the error, and wake both lists.
+TEST_F(SpillTest, submit_failure_partitioned_flush_compensates) {
+    ObjectPool pool;
+    std::vector<bool> nullables = {false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options(4);
+    spill_options.mem_table_pool_size = 1;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    dummy_rt_st.set_enable_event_scheduler(true);
+    CountingObserver sink_obs;
+    CountingObserver source_obs;
+    spiller->observable().subscribe_sink(&dummy_rt_st, &sink_obs);
+    spiller->observable().subscribe_source(&dummy_rt_st, &source_obs);
+
+    size_t test_loop = 1024;
+    for (size_t i = 0; i < test_loop; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+        chunk->append_column(std::move(hash_column), -1);
+        ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+
+    auto st = spiller->flush<FailingSubmitExecutor>(&dummy_rt_st, EmptyMemGuard{});
+    ASSERT_FALSE(st.ok());
+
+    ASSERT_FALSE(spiller->has_running_io_tasks());
+    ASSERT_EQ(spiller->_in_flight_io.load(), 0);
+    ASSERT_EQ(spiller->_writer->running_flush_tasks(), 0);
+    ASSERT_FALSE(spiller->task_status().ok());
+    ASSERT_GT(sink_obs.sink_count.load(), 0);
+    ASSERT_GT(source_obs.source_count.load(), 0);
+}
+
+// Helper: build a prepared raw spiller with a subscribed observer pair.
+struct RawSpillerFixture {
+    RawSpillerFixture(SpillTest* test, ObjectPool* pool, RuntimeState* state, size_t pool_size)
+            : _test(test), _state(state) {
+        TExprBuilder order_by_slots_builder;
+        order_by_slots_builder << TYPE_INT;
+        order_by_slots = order_by_slots_builder.get_res();
+        TExprBuilder tuple_slots_builder;
+        tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+        tuple_slots = tuple_slots_builder.get_res();
+
+        auto ctx_st = no_partition_context(pool, state, order_by_slots, tuple_slots);
+        CHECK(ctx_st.ok());
+        ctx = ctx_st.value();
+
+        auto factory = spill::make_spilled_factory();
+        SpilledOptions spill_options;
+        spill_options.mem_table_pool_size = pool_size;
+        spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+        spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+        spill_options.block_manager = test->dummy_block_mgr.get();
+        spiller = factory->create(spill_options);
+        spiller->set_metrics(test->metrics);
+        CHECK(spiller->prepare(state).ok());
+
+        state->set_enable_event_scheduler(true);
+        spiller->observable().subscribe_sink(state, &sink_obs);
+        spiller->observable().subscribe_source(state, &source_obs);
+    }
+
+    std::vector<TExpr> order_by_slots;
+    std::vector<TExpr> tuple_slots;
+    SpillTestContext* ctx = nullptr;
+    std::shared_ptr<spill::Spiller> spiller;
+    CountingObserver sink_obs;
+    CountingObserver source_obs;
+    SpillTest* _test;
+    RuntimeState* _state;
+};
+
+// A raw-writer flush completion wakes both the sink and the source list, even with pool_size > 1 (the
+// first mem-table return must wake).
+TEST_F(SpillTest, emission_e1_raw_flush_wakes_both_lists) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/3);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    auto chunk = chunk_builder.gen(tuple, nullables);
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+
+    ASSERT_EQ(fx.sink_obs.sink_count.load(), 0);
+    ASSERT_EQ(fx.source_obs.source_count.load(), 0);
+
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // First return wakes: both lists notified, in-flight back to zero.
+    ASSERT_GT(fx.sink_obs.sink_count.load(), 0);
+    ASSERT_GT(fx.source_obs.source_count.load(), 0);
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+}
+
+// The synchronous flush-all path. set_flush_all_call_back registered with
+// zero running flush tasks runs the callback on the calling thread and fires the
+// source wakeup (read phase may begin), with no IO thread involved.
+TEST_F(SpillTest, emission_e3_sync_flush_all_wakes_source) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    // Spill + flush some data so the stream is non-empty and spilled() is true.
+    for (size_t i = 0; i < 64; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+
+    int32_t source_before = fx.source_obs.source_count.load();
+    bool cb_ran = false;
+    // No flush task is in flight, so the wrapper runs synchronously here.
+    ASSERT_OK(fx.spiller->set_flush_all_call_back<SyncExecutor>(
+            [&]() {
+                cb_ran = true;
+                return Status::OK();
+            },
+            &dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_TRUE(cb_ran);
+    ASSERT_GT(fx.source_obs.source_count.load(), source_before);
+}
+
+// A restore completion wakes the source list only.
+TEST_F(SpillTest, emission_e4_restore_wakes_source) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    for (size_t i = 0; i < 256; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    int32_t sink_before = fx.sink_obs.sink_count.load();
+    int32_t source_before = fx.source_obs.source_count.load();
+
+    ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // Restore completion woke the source list; the sink list is untouched.
+    ASSERT_GT(fx.source_obs.source_count.load(), source_before);
+    ASSERT_EQ(fx.sink_obs.sink_count.load(), sink_before);
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+}
+
+// reset_state must refuse while IO is in flight: swapping
+// writer/reader out from under a task that captured the raw pointers is unsafe.
+// Drive the in-flight aggregate through the public accessors so the guard is
+// tested deterministically, without thread/timing dependence.
+TEST_F(SpillTest, reset_state_refuses_while_io_in_flight) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+    ASSERT_OK(fx.spiller->reset_state(&dummy_rt_st));
+
+    fx.spiller->increase_in_flight_io();
+    ASSERT_TRUE(fx.spiller->has_running_io_tasks());
+    ASSERT_FALSE(fx.spiller->reset_state(&dummy_rt_st).ok());
+
+    fx.spiller->decrease_in_flight_io();
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+    ASSERT_OK(fx.spiller->reset_state(&dummy_rt_st));
+}
+
+// Observer lists live on the Spiller and must survive reset_state: re-prepare
+// reallocates writer/reader but must not clear or re-append observers
+// (subscribe-once-per-driver-lifetime).
+TEST_F(SpillTest, observers_survive_reset_state) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+
+    ASSERT_EQ(fx.spiller->observable().observer_count(), 2);
+    ASSERT_OK(fx.spiller->reset_state(&dummy_rt_st));
+    ASSERT_EQ(fx.spiller->observable().observer_count(), 2);
+
+    // Still wired after reset: a notify reaches the same observers.
+    int32_t source_before = fx.source_obs.source_count.load();
+    fx.spiller->notify_source_observers();
+    ASSERT_GT(fx.source_obs.source_count.load(), source_before);
+}
+
+// detach during an in-flight notify on the spiller's own observable must not
+// crash (locked iteration vs exclusive clear, TSAN; jthread pattern).
+TEST_F(SpillTest, detach_notify_race_on_spiller) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+
+    std::vector<std::jthread> threads;
+    threads.emplace_back([&]() { fx.spiller->notify_source_observers(); });
+    threads.emplace_back([&]() { fx.spiller->notify_sink_observers(); });
+    threads.emplace_back([&]() { fx.spiller->observable().detach_observers(); });
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    ASSERT_EQ(fx.spiller->observable().observer_count(), 0);
+}
+
 TEST_F(SpillTest, resource_mem_tracker_guard_should_protect_query_lifetime) {
     auto lifetime = std::make_shared<QueryContextLifetime>();
     auto guard = spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr<QueryContextLifetime>(lifetime));
@@ -832,5 +1214,60 @@ TEST_F(SpillTest, file_group_test) {
     }
 }
 */
+
+// Death tests for the CHECK invariants added in _compact_skew_chunks
+// (https://github.com/StarRocks/starrocks/issues/74074). Contract guard so a
+// future refactor cannot silently re-introduce a defensive skip and let the
+// OOB read sneak back in. The test target is built with -fno-access-control,
+// so we can call the private method directly.
+class SpillCompactSkewChunksCheckTest : public ::testing::Test {
+protected:
+    static ChunkPtr make_chunk_with_n_rows(size_t n) {
+        auto chunk = std::make_shared<Chunk>();
+        auto hash_col = spill::SpillHashColumn::create(n);
+        chunk->append_column(std::move(hash_col), 0);
+        return chunk;
+    }
+    static ChunkPtr make_empty_chunk() { return std::make_shared<Chunk>(); }
+    static void invoke(std::vector<ChunkPtr> chunks, size_t num_rows) {
+        RuntimeState rt_st;
+        spill::PartitionedSpillerWriter writer(nullptr, &rt_st);
+        (void)writer._compact_skew_chunks(num_rows, chunks);
+    }
+};
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_chunks_aborts) {
+    EXPECT_DEATH(invoke({}, 30), "empty chunks with num_rows");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_first_chunk_aborts) {
+    EXPECT_DEATH(invoke({ChunkPtr{}}, 30), "null chunk at idx 0");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_first_chunk_aborts) {
+    EXPECT_DEATH(invoke({make_empty_chunk()}, 30), "empty chunk at idx 0");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, num_rows_overshoot_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(5)}, 100), "disagrees with sum");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_mid_chunk_in_locator_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(15), ChunkPtr{}, make_chunk_with_n_rows(30)}, 45),
+                 "null chunk at idx 1");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_mid_chunk_in_locator_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(15), make_empty_chunk(), make_chunk_with_n_rows(30)}, 45),
+                 "empty chunk at idx 1");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, null_chunk_in_frequency_pass_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), ChunkPtr{}}, 50), "null chunk in frequency pass");
+}
+
+TEST_F(SpillCompactSkewChunksCheckTest, empty_chunk_in_frequency_pass_aborts) {
+    EXPECT_DEATH(invoke({make_chunk_with_n_rows(50), make_empty_chunk()}, 50), "empty chunk in frequency pass");
+}
 
 } // namespace starrocks::vectorized

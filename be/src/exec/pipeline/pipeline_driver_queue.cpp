@@ -18,8 +18,8 @@
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "exec/pipeline/schedule/utils.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime/schedule/utils.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::pipeline {

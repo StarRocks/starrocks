@@ -1041,6 +1041,33 @@ This topic introduces the following types of FE configurations:
 - Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
 - Introduced in: -
 
+### `jdbc_row_count_cache_refresh_sec`
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Background refresh interval for the JDBC table row-count cache. After this interval, the stale value is returned immediately while a reload runs asynchronously in the background. Overridable per-catalog via the catalog property `jdbc_row_count_cache_refresh_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- Default: 1200
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Hard eviction TTL for JDBC table row-count cache entries. Entries not accessed within this window are evicted. Must be greater than `jdbc_row_count_cache_refresh_sec`. Overridable per-catalog via the catalog property `jdbc_row_count_cache_expire_sec`.
+- Introduced in: -
+
+### `jdbc_row_count_cache_max_size`
+
+- Default: 10000
+- Type: Long
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of entries in the JDBC table row-count cache per catalog. Limits memory growth for catalogs with large numbers of tables. Overridable per-catalog via the catalog property `jdbc_row_count_cache_max_size`.
+- Introduced in: -
+
 ### `jdbc_minimum_idle_connections`
 
 - Default: 1
@@ -1434,6 +1461,6 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to prefer string type for fixed length varchar columns in materialized view creation and CTAS operations.
+- Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 

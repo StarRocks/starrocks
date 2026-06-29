@@ -28,17 +28,19 @@
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
 #include "storage/chunk_helper.h"
+#include "storage/index/inverted/inverted_index_option.h"
 
 namespace starrocks {
 BuiltinInvertedIndexIterator::BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta,
                                                            InvertedReader* reader, OlapReaderStatistics* stats,
-                                                           std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
+                                                           std::unique_ptr<SegmentBitmapIndexIterator>& bitmap_itr,
                                                            const size_t& segment_rows)
-        : InvertedIndexIterator(index_meta, reader, stats),
+        : SegmentInvertedIndexIterator(index_meta, reader, stats),
           _bitmap_itr(std::move(bitmap_itr)),
           _segment_rows(segment_rows) {
     if (_analyser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-        _builtin_query_analyzer = std::make_unique<SimpleAnalyzer>();
+        bool lower_case = get_lower_case_from_properties(_index_meta->index_properties());
+        _builtin_query_analyzer = std::make_unique<SimpleAnalyzer>(lower_case);
     } else if (_analyser_type == InvertedIndexParserType::PARSER_STANDARD) {
         _query_analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
     } else if (_analyser_type == InvertedIndexParserType::PARSER_CHINESE) {

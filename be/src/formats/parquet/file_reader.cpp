@@ -29,7 +29,8 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "compute_env/runtime_range_pruner.hpp"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
@@ -54,12 +55,12 @@ FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    if (ctx->options.use_file_metacache) {
+    if (ctx->format_scan_context.options.use_file_metacache) {
         _cache = DataCache::GetInstance()->page_cache();
     }
 
     // parse FileMetadata
-    FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
+    FileMetaDataParser file_metadata_parser{_file, &ctx->format_scan_context, _cache, &_datacache_options, _file_size};
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
 
     // set existed SlotDescriptor in this parquet file
@@ -92,10 +93,12 @@ std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
         // the parquet file carries field ids.  Without field ids, the lake schema cannot
         // be matched reliably and we fall back to ParquetMetaHelper which handles
         // col_unique_id / col_physical_name / name lookup chains correctly.
-        return std::make_shared<LakeMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive,
+        return std::make_shared<LakeMetaHelper>(_file_metadata.get(),
+                                                _scanner_ctx->format_scan_context.options.case_sensitive,
                                                 _scanner_ctx->table_specific.iceberg_schema);
     } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->options.case_sensitive);
+        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(),
+                                                   _scanner_ctx->format_scan_context.options.case_sensitive);
     }
 }
 
@@ -116,7 +119,8 @@ Status FileReader::_build_split_tasks() {
     // don't do split in following cases:
     // 1. this feature is not enabled
     // 2. we have already done split before (that's why `split_context` is nullptr)
-    if (!_scanner_ctx->options.enable_split_tasks || _scanner_ctx->split_context != nullptr) {
+    if (!_scanner_ctx->format_scan_context.options.enable_split_tasks ||
+        _scanner_ctx->format_scan_context.split_context != nullptr) {
         return Status::OK();
     }
 
@@ -142,8 +146,8 @@ Status FileReader::_build_split_tasks() {
         }
 #endif
         auto split_ctx = std::make_unique<SplitContext>();
-        split_ctx->split_start = start_offset;
-        split_ctx->split_end = end_offset;
+        split_ctx->start_offset = start_offset;
+        split_ctx->end_offset = end_offset;
         split_ctx->file_metadata = _file_metadata;
         split_ctx->skip_rows_ctx = _skip_rows_ctx;
         _scanner_ctx->split.split_tasks.emplace_back(std::move(split_ctx));
@@ -156,8 +160,8 @@ Status FileReader::_build_split_tasks() {
 
     if (VLOG_OPERATOR_IS_ON) {
         std::stringstream ss;
-        for (const HdfsSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
-            ss << "[" << ctx->split_start << "," << ctx->split_end << "]";
+        for (const FileScanSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
+            ss << "[" << ctx->start_offset << "," << ctx->end_offset << "]";
         }
         VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
                       << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();
@@ -171,8 +175,8 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     bool& filtered = group_reader->get_is_group_filtered();
     filtered = false;
     auto visitor = PredicateFilterEvaluator{_scanner_ctx->predicates.predicate_tree, group_reader.get(),
-                                            _scanner_ctx->options.parquet_page_index_enable,
-                                            _scanner_ctx->options.parquet_bloom_filter_enable};
+                                            _scanner_ctx->format_scan_context.options.parquet_page_index_enable,
+                                            _scanner_ctx->format_scan_context.options.parquet_bloom_filter_enable};
     auto sparse_range = _scanner_ctx->predicates.predicate_tree.visit(visitor);
     _group_reader_param.stats->bloom_filter_tried_counter += visitor.counter.bloom_filter_tried_counter;
     _group_reader_param.stats->bloom_filter_success_counter += visitor.counter.bloom_filter_success_counter;
@@ -256,10 +260,10 @@ Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_rea
         std::vector<SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
         ColumnIOTypeFlags flags = 0;
-        if (_scanner_ctx->options.parquet_page_index_enable) {
+        if (_scanner_ctx->format_scan_context.options.parquet_page_index_enable) {
             flags |= ColumnIOType::PAGE_INDEX;
         }
-        if (_scanner_ctx->options.parquet_bloom_filter_enable) {
+        if (_scanner_ctx->format_scan_context.options.parquet_bloom_filter_enable) {
             flags |= ColumnIOType::BLOOM_FILTER;
         }
         group_reader->collect_io_ranges(&ranges, &end_offset, flags);
@@ -278,7 +282,7 @@ Status FileReader::_init_group_readers() {
     // and hot fields (stats, lazy_column_coalesce_counter) remain direct copies.
     _group_reader_param.scanner_ctx = _scanner_ctx;
     _group_reader_param.conjunct_ctxs_by_slot = fd_scanner_ctx.conjunct_ctxs_by_slot;
-    _group_reader_param.stats = fd_scanner_ctx.stats;
+    _group_reader_param.stats = fd_scanner_ctx.format_scan_context.stats;
     _group_reader_param.sb_stream = _sb_stream;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
@@ -361,9 +365,8 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         }
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, row_count));
-                _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
-                _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, row_count);
+                // partition / not-existed / extended columns are now appended
+                // inside GroupReader::get_next() before emit_physical_columns.
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -411,18 +414,22 @@ Status FileReader::get_next(ChunkPtr* chunk) {
 Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = 0;
-        if (_scanner_ctx->options.use_count_opt) {
+        if (_scanner_ctx->format_scan_context.options.use_count_opt) {
             read_size = _total_row_count - _scan_row_count;
-            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, 1);
+            // append_side_columns_to_chunk fills per-row count (value=1),
+            // partition, and extended columns first.  The next call overwrites
+            // the count column with the aggregated file row count.
+            RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, 1));
+            _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, read_size);
         } else {
             read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, read_size));
-            _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
-            _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, read_size);
+            RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, read_size));
         }
         _scan_row_count += read_size;
+        if (!_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+            RETURN_IF_ERROR(
+                    ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, (*chunk).get()));
+        }
         return Status::OK();
     }
 

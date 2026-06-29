@@ -915,21 +915,21 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testIFFunctionCardinalityEstimate() throws Exception {
         String sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' else 'others' end) a from orders group by 1";
         String plan = getCostExplain(sql);
-        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE");
+        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0] MCV: [[others:149999999][ALGERIA:1]] ESTIMATE");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', 'others') a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] MCV: [[others:149999999][ALGERIA:1]] ESTIMATE");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', " +
                 "if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0]");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', " +
                 "if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0]");
     }
 
     @Test

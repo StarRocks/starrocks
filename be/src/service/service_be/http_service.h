@@ -46,14 +46,20 @@ class DataCache;
 class EvHttpServer;
 class GlobalEnv;
 class HttpHandler;
+class LoadChannelMgr;
 class ProcessMetricsRegistry;
 class WebPageHandler;
+
+namespace orchestration {
+class OrchestrationEnv;
+}
 
 // HTTP service for StarRocks BE
 class HttpServiceBE {
 public:
-    HttpServiceBE(DataCache* cache_env, ExecEnv* env, const GlobalEnv& global_env,
-                  ProcessMetricsRegistry* process_metrics_registry, int port, int num_threads);
+    HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
+                  const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
+                  LoadChannelMgr* load_channel_mgr, int port, int num_threads);
     ~HttpServiceBE();
 
     Status start();
@@ -63,8 +69,10 @@ public:
 private:
     [[maybe_unused]] DataCache* _cache_env;
     ExecEnv* _env;
+    orchestration::OrchestrationEnv* _orchestration_env;
     const GlobalEnv& _global_env;
     ProcessMetricsRegistry* _process_metrics_registry;
+    LoadChannelMgr* _load_channel_mgr;
 
     std::unique_ptr<EvHttpServer> _ev_http_server;
     std::unique_ptr<WebPageHandler> _web_page_handler;

@@ -96,4 +96,13 @@ bool is_tokenized_from_properties(const std::map<std::string, std::string>& prop
     return false;
 }
 
+bool get_lower_case_from_properties(const std::map<std::string, std::string>& properties) {
+    for (const auto& prop : properties) {
+        if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_LOWER_CASE_KEY) {
+            return boost::to_lower_copy(prop.second) != "false";
+        }
+    }
+    return true; // default: lower_case = true
+}
+
 } // namespace starrocks

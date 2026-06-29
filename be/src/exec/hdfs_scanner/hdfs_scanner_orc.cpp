@@ -34,10 +34,10 @@
 
 namespace starrocks {
 
-struct SplitContext : public HdfsSplitContext {
+struct SplitContext : public FileScanSplitContext {
     std::shared_ptr<std::string> footer;
 
-    HdfsSplitContextPtr clone() override {
+    FileScanSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
         return ctx;
@@ -255,7 +255,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;
         const int64_t* offset_data = dict->dictionaryOffset.data();
-        offsets.resize(offset_size);
+        offsets.resize_uninitialized(offset_size, content_size);
 
         if (slot_desc->type().type == TYPE_CHAR) {
             // for char type, dict strings are also padded with spaces.
@@ -269,15 +269,15 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                 size_t old_size = offset_data[i + 1] - offset_data[i];
                 size_t new_size = remove_trailing_spaces(s, old_size);
                 bytes.insert(bytes.end(), s, s + new_size);
-                offsets[i] = total_size;
+                offsets.set(i, total_size);
                 total_size += new_size;
             }
-            offsets[dict_size] = total_size;
+            offsets.set(dict_size, total_size);
         } else {
             bytes.insert(bytes.end(), start, end);
             // type mismatch, have to use loop to assign.
             for (size_t i = 0; i < offset_size; i++) {
-                offsets[i] = offset_data[i];
+                offsets.set(i, offset_data[i]);
             }
         }
 
@@ -402,8 +402,8 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
 Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
-                                          _scanner_ctx->options.case_sensitive,
-                                          _scanner_ctx->options.orc_use_column_names);
+                                          _scanner_ctx->format_scan_context.options.case_sensitive,
+                                          _scanner_ctx->format_scan_context.options.orc_use_column_names);
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -414,7 +414,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx->materialized_columns) {
-        auto col_name = Utils::format_name(column.name(), _scanner_ctx->options.case_sensitive);
+        auto col_name = Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_ctx->is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
@@ -447,16 +447,16 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes) {
     // we can split task if we enable split tasks feature and have >= 2 stripes.
     // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
-    bool enable_split_tasks = (_scanner_ctx->options.enable_split_tasks && stripes.size() >= 2) &&
-                              (_scanner_ctx->split_context == nullptr);
+    bool enable_split_tasks = (_scanner_ctx->format_scan_context.options.enable_split_tasks && stripes.size() >= 2) &&
+                              (_scanner_ctx->format_scan_context.split_context == nullptr);
     if (!enable_split_tasks) return Status::OK();
 
     auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-        ctx->split_start = info.offset();
-        ctx->split_end = info.offset() + info.length();
+        ctx->start_offset = info.offset();
+        ctx->end_offset = info.offset() + info.length();
         _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx->merge_split_tasks();
@@ -488,8 +488,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
-        if (_scanner_ctx->split_context != nullptr) {
-            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->split_context);
+        if (_scanner_ctx->format_scan_context.split_context != nullptr) {
+            auto* split_context = down_cast<const SplitContext*>(_scanner_ctx->format_scan_context.split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
         reader = orc::createReader(std::move(_input_stream), options);
@@ -529,8 +529,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->timezone));
     _orc_reader->set_hive_column_names(&_scanner_ctx->hive_column_names);
-    _orc_reader->set_case_sensitive(_scanner_ctx->options.case_sensitive);
-    _orc_reader->set_use_orc_column_names(_scanner_ctx->options.orc_use_column_names);
+    _orc_reader->set_case_sensitive(_scanner_ctx->format_scan_context.options.case_sensitive);
+    _orc_reader->set_use_orc_column_names(_scanner_ctx->format_scan_context.options.orc_use_column_names);
     // for hive table, we set this flag
     _orc_reader->set_invalid_as_null(true);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
@@ -573,7 +573,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     size_t rows_read = 0;
 
-    if (_scanner_ctx->options.use_count_opt) {
+    if (_scanner_ctx->format_scan_context.options.use_count_opt) {
         ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
     } else {
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
@@ -618,7 +618,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
 
     if (!st.is_end_of_file()) return st;
     if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
-    _scanner_ctx->append_or_update_count_column_to_chunk(chunk, read_num_values);
+    _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, read_num_values);
     return 1;
 }
 
@@ -699,6 +699,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {
                 ck->filter(_chunk_filter);
+            }
+            if (_scanner_ctx->has_count_column()) {
+                _scanner_ctx->append_or_update_count_column_to_chunk(chunk, rows_read, 1);
             }
         }
 

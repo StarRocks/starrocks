@@ -32,7 +32,6 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "platform/store_path.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -10375,6 +10374,32 @@ TEST(SplitFamilyInferenceTest, mix_orphan_and_family) {
     EXPECT_EQ(lake::detail::InferredSplitFamilies::kNoFamily, result.old_tablet_to_family[0]);
     EXPECT_EQ(0u, result.old_tablet_to_family[1]);
     EXPECT_EQ(0u, result.old_tablet_to_family[2]);
+}
+
+// Tests for convert_op_write_to_op_schema_change (SHADOW_REWRITE transform helper).
+// These use only scalar RowsetMetadataPB fields (id/num_rows/data_size) to stay
+// independent of segment file naming conventions.
+
+TEST(ShadowRewriteTransformTest, ShadowRewriteTransformMovesRowsetAndAnchors) {
+    TxnLogPB log;
+    auto* rs = log.mutable_op_write()->mutable_rowset();
+    rs->set_num_rows(7);
+    rs->set_data_size(123);
+    starrocks::lake::convert_op_write_to_op_schema_change(&log, /*alter_version=*/9);
+    ASSERT_FALSE(log.has_op_write());
+    ASSERT_TRUE(log.has_op_schema_change());
+    EXPECT_EQ(9, log.op_schema_change().alter_version());
+    ASSERT_EQ(1, log.op_schema_change().rowsets_size());
+    EXPECT_EQ(1, log.op_schema_change().rowsets(0).id());
+    EXPECT_EQ(7, log.op_schema_change().rowsets(0).num_rows());
+}
+
+TEST(ShadowRewriteTransformTest, ShadowRewriteTransformEmptyWhenNoRowset) {
+    TxnLogPB log; // no op_write
+    starrocks::lake::convert_op_write_to_op_schema_change(&log, /*alter_version=*/9);
+    ASSERT_TRUE(log.has_op_schema_change());
+    EXPECT_EQ(9, log.op_schema_change().alter_version());
+    EXPECT_EQ(0, log.op_schema_change().rowsets_size());
 }
 
 // =============================================================================

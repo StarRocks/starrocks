@@ -182,6 +182,10 @@ public class MetaUtils {
         return "update_" + DebugUtil.printId(executionId);
     }
 
+    public static String genMergeLabel(TUniqueId executionId) {
+        return "merge_" + DebugUtil.printId(executionId);
+    }
+
     public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
@@ -290,6 +294,18 @@ public class MetaUtils {
      *         rollup).
      */
     public static List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId) {
+        return getRangeDistributionColumns(olapTable, indexMetaId, null);
+    }
+
+    /**
+     * Variant that applies a keyness override when computing the sort-key columns. Used to compute
+     * the hypothetical sort key after a keyness flip without mutating the schema.
+     *
+     * @param keynessOverride a column-name → isKey map applied when {@code sortKeyIdxes} is absent;
+     *                        null or empty means no override (identical to the 2-arg overload)
+     */
+    public static List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId,
+                                                            Map<String, Boolean> keynessOverride) {
         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
         if (indexMeta == null) {
             throw new IllegalArgumentException(String.format(
@@ -304,7 +320,16 @@ public class MetaUtils {
             }
         } else {
             for (Column column : schema) {
-                if (column.isKey()) {
+                boolean isKey = column.isKey();
+                if (keynessOverride != null) {
+                    for (Map.Entry<String, Boolean> e : keynessOverride.entrySet()) {
+                        if (e.getKey().equalsIgnoreCase(column.getName())) {
+                            isKey = e.getValue();
+                            break;
+                        }
+                    }
+                }
+                if (isKey) {
                     sortKeyColumns.add(column);
                 }
             }

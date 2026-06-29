@@ -144,13 +144,17 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     public static DefaultPreSplitPipeline forLoadKind(
             Database database, OlapTable table, long oldTabletId, long fileTotalBytes, LoadKind loadKind) {
         MetaTierSampler metaTierSampler;
-        if (table.getPartitionInfo().isPartitioned()) {
-            // Partitioned tables: force data tier. Throwing MetaTierUnavailableException
-            // routes the pipeline's fallback to runDataTier without any meta-tier RPC.
+        if (loadKind == LoadKind.INSERT_FROM_TABLE || table.getPartitionInfo().isPartitioned()) {
+            // INSERT_FROM_TABLE always uses the data tier: an OLAP source table has no
+            // Parquet/ORC file footer for the meta tier to read.
+            // Partitioned tables also force data tier: meta tier per-column min/max is
+            // lossy under expression-based partitioning.
             metaTierSampler = (request, requestedTabletCount) -> {
                 throw new MetaTierUnavailableException(
-                        "partitioned table forces data tier (meta tier per-column min/max "
-                                + "is lossy under expression-based partitioning)");
+                        loadKind == LoadKind.INSERT_FROM_TABLE
+                                ? "INSERT-from-table forces data tier (OLAP source has no Parquet/ORC footer)"
+                                : "partitioned table forces data tier (meta tier per-column min/max "
+                                        + "is lossy under expression-based partitioning)");
             };
         } else {
             ParquetMetadataSampler parquetMetadataSampler = new ParquetMetadataSampler(
@@ -170,14 +174,24 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
             case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();
+            // INSERT_FROM_TABLE always forces data tier; the meta tier is bypassed in forLoadKind
+            // before this method is ever reached for that load kind.
+            case INSERT_FROM_TABLE -> throw new IllegalStateException(
+                    "INSERT_FROM_TABLE never uses the meta tier; rowGroupStatisticsProviderFor must not be called");
         };
     }
 
-    private static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
+    static SampleSubqueryExecutor sampleSubqueryExecutorFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesSampleSubqueryExecutor();
             case BROKER_LOAD -> new BrokerLoadSampleSubqueryExecutor();
+            case INSERT_FROM_TABLE -> new InsertFromTableSampleSubqueryExecutor();
         };
+    }
+
+    /** Exposes the installed meta-tier sampler for unit tests that verify tier-routing logic. */
+    MetaTierSampler getMetaTierSamplerForTest() {
+        return metaTierSampler;
     }
 
     @Override
@@ -298,8 +312,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges
-     *  {@code (-∞, c1), [c1, c2), [c2, c3), ..., [c_{K-1}, +∞)}. */
-    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
+     *  {@code (-∞, c1), [c1, c2), [c2, c3), ..., [c_{K-1}, +∞)}.
+     *  Requires a non-empty boundary list; callers that need to handle the empty case must guard
+     *  before calling (e.g. return a single {@code Range.all()} tablet). */
+    public static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
         Preconditions.checkArgument(!boundaries.isEmpty(), "boundaries must be non-empty");
         List<TabletRange> ranges = new ArrayList<>(boundaries.size() + 1);
         Tuple previousBoundary = null;

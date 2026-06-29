@@ -86,6 +86,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでのクラウドネイティブテーブルコンパクションのためのリーダーのリモート I/O バッファサイズ。デフォルト値は 1MB です。この値を増やすことでコンパクションプロセスを加速できます。
 - 導入バージョン: v3.2.3
 
+### lake_enable_protobuf_file_checksum
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタの Tablet メタデータおよびトランザクションログファイルを、Adler-32 チェックサム付きで書き込むかどうか。これにより、これらのファイルの破損を読み取り時に検出できます。この項目の設定にかかわらず、読み取り側はチェックサムが存在する場合は常に自動的に検出して検証します。この項目は書き込み形式のみを制御します。クラスタが、チェックサム形式に対応していないバージョンへダウングレードされる可能性がある場合にのみ、この項目を `false` に設定してください。ローリングアップグレードまたはダウングレードの期間中、古い BE または CN は旧来のリーダーを使用するため、新形式で書き込まれたファイルを解析できません。
+- 導入バージョン: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -173,6 +182,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
+
+### lake_vacuum_min_batch_delete_size
+
+- デフォルト: 200
+- タイプ: Int64
+- 単位: ファイル数
+- 変更可能: はい
+- 説明: 共有データクラスタにおいて、Vacuum が単一の `DeleteObjects` リクエストにまとめる古いファイルの数。バッチを大きくすると、呼び出しごとの HTTP / 認証 / 署名オーバーヘッドが摊销され、オブジェクトストレージの prefix 単位リクエストレートへの圧力も軽減されますが、一回あたりの latency が上がり、瞬間的なエラーで retry した際の replay コストも増えます。AWS S3 では `DeleteObjects` のサーバー処理時間が batch size にほとんど依存しないため、AWS S3 ユーザーはこの値をプロトコル上限の `1000` までさらに引き上げることを推奨します。
 
 ### loop_count_wait_fragments_finish
 

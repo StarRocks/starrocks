@@ -25,11 +25,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/split_context.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {
 class ColumnMetaData;
@@ -41,7 +42,9 @@ namespace starrocks {
 class RandomAccessFile;
 struct HdfsScannerContext;
 class BlockCache;
+class StoragePageCache;
 class SlotDescriptor;
+class RuntimeScanRangePruner;
 
 namespace parquet {
 struct ParquetField;
@@ -52,18 +55,6 @@ class ObjectCache;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-
-struct SplitContext : public HdfsSplitContext {
-    FileMetaDataPtr file_metadata;
-    SkipRowsContextPtr skip_rows_ctx;
-
-    HdfsSplitContextPtr clone() override {
-        auto ctx = std::make_unique<SplitContext>();
-        ctx->file_metadata = file_metadata;
-        ctx->skip_rows_ctx = skip_rows_ctx;
-        return ctx;
-    }
-};
 
 class FileReader {
 public:

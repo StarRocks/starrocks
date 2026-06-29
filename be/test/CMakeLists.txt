@@ -39,27 +39,30 @@ set(EXEC_FILES
         ./fs/azure/fs_azblob_test.cpp
         ./fs/azure/utils_test.cpp
         ./fs/credential/cloud_configuration_factory_test.cpp
-        ./fs/fs_broker_test.cpp
+        ./platform/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
-        ./fs/key_cache_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
-        ./exec/column_value_range_test.cpp
+        ./platform/key_cache_script_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
+        ./compute_env/spill/spill_observable_test.cpp
+        ./exec/pipeline/spill_process_channel_test.cpp
+        ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
+        ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
-        ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
@@ -67,11 +70,13 @@ set(EXEC_FILES
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
+        ./exec/pipeline/nljoin_probe_operator_test.cpp
+        ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
+        ./exec/pipeline/ordered_partition_exchanger_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
-        ./exec/pipeline/fragment_executor_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
@@ -82,6 +87,7 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_loads_scanner_test.cpp
+        ./exec/schema_materialized_view_refresh_jobs_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
@@ -90,7 +96,6 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_partitions_meta_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
-        ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
@@ -117,6 +122,7 @@ set(EXEC_FILES
         ./exec/data_sinks/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
+        ./exec/olap_scan_keys_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
         ./exec/file_scanner/avro_scanner_test.cpp
         ./exec/file_scanner/csv_scanner_test.cpp
@@ -130,6 +136,7 @@ set(EXEC_FILES
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
+        ./exprs/agg/aggregate_factory_extension_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
@@ -144,6 +151,7 @@ set(EXEC_FILES
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
         ./exprs/cast_expr_test.cpp
+        ./exprs/unary_function_test.cpp
         ./exprs/decimal_cast_expr_decimal_test.cpp
         ./exprs/decimal_cast_expr_integer_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
@@ -156,7 +164,6 @@ set(EXEC_FILES
         ./exprs/function_call_expr_test.cpp
         ./exprs/geography_functions_test.cpp
         ./exprs/if_expr_test.cpp
-        ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
@@ -173,6 +180,7 @@ set(EXEC_FILES
         ./exprs/string_fn_repeat_test.cpp
         ./exprs/string_fn_reverse_test.cpp
         ./exprs/string_fn_sm3_test.cpp
+        ./exprs/string_fn_blake3_test.cpp
         ./exprs/string_fn_space_test.cpp
         ./exprs/string_fn_substr_test.cpp
         ./exprs/string_fn_test.cpp
@@ -188,21 +196,6 @@ set(EXEC_FILES
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./exprs/http_request_functions_test.cpp
-        ./formats/csv/array_converter_test.cpp
-        ./formats/csv/boolean_converter_test.cpp
-        ./formats/csv/csv_file_writer_test.cpp
-        ./formats/csv/date_converter_test.cpp
-        ./formats/csv/datetime_converter_test.cpp
-        ./formats/csv/decimalv2_converter_test.cpp
-        ./formats/csv/float_converter_test.cpp
-        ./formats/csv/json_converter_test.cpp
-        ./formats/csv/map_converter_test.cpp
-        ./formats/csv/nullable_converter_test.cpp
-        ./formats/csv/numeric_converter_test.cpp
-        ./formats/csv/default_value_converter_test.cpp
-        ./formats/csv/string_converter_test.cpp
-        ./formats/csv/varbinary_converter_test.cpp
-        ./formats/csv/csv_reader_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -218,11 +211,7 @@ set(EXEC_FILES
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
-        ./formats/orc/orc_column_reader_test.cpp
-        ./formats/orc/orc_emit_rejected_rows_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
-        ./formats/orc/orc_lazy_load_test.cpp
-        ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
@@ -263,35 +252,23 @@ set(EXEC_FILES
         ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./runtime/agg_state_desc_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
         ./runtime/descriptors_test.cpp
         ./runtime/diagnose_daemon_test.cpp
-        ./runtime/external_scan_context_mgr_test.cpp
-        ./runtime/fragment_mgr_test.cpp
         ./exec/data_sinks/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
-        ./runtime/local_tablets_channel_test.cpp
-        ./runtime/lake_tablets_channel_test.cpp
-        ./runtime/load_channel_test.cpp
-        ./runtime/load_channel_mgr_test.cpp
+        ./runtime/pipeline_fragment_reporter_test.cpp
         ./runtime/runtime_metrics_test.cpp
-        ./runtime/stream_load_metrics_test.cpp
-        ./runtime/rejected_record_sync_daemon_test.cpp
-        ./runtime/rejected_record_writer_test.cpp
-        ./runtime/runtime_state_helper_test.cpp
+        ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
         ./runtime/batch_write/txn_state_cache_test.cpp
-        ./runtime/stream_load/stream_load_context_test.cpp
-        #./runtime/routine_load_task_executor_test.cpp
+        ./compute_env/load/stream_load_context_handle_test.cpp
+        #./orchestration/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
-        ./runtime/small_file_mgr_test.cpp
-        ./runtime/snapshot_loader_test.cpp
-        ./runtime/stream_load_pipe_test.cpp
-        ./runtime/time_bounded_stream_load_pipe_test.cpp
+        ./compute_env/load/time_bounded_stream_load_pipe_test.cpp
         ./runtime/merge_cascade_test.cpp
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
         ./exec/data_sinks/memory_scratch_sink_test.cpp
@@ -303,14 +280,11 @@ set(EXEC_FILES
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/brpc_stub_cache_test.cpp
-        ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
-        ./util/dynamic_cache_test.cpp
         ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
-        ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -319,9 +293,9 @@ set(EXEC_FILES
         ./util/internal_service_recoverable_stub_parallel_test.cpp
         ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
-        ./util/time_guard_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
+        ./service/core_dump_resource_releaser_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
@@ -332,8 +306,6 @@ set(EXEC_FILES
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/jvm_metrics_test.cpp
-        ./util/llm_cache_test.cpp
-        ./util/llm_query_service_test.cpp
         ./util/network_util_test.cpp
         )
 
@@ -372,6 +344,8 @@ add_subdirectory(storage_primitive)
 add_subdirectory(storage_base)
 add_subdirectory(runtime)
 add_subdirectory(compute_env)
+add_subdirectory(orchestration)
+add_subdirectory(data_workflows)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
@@ -380,7 +354,6 @@ add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(serde)
-add_subdirectory(staros_integration)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
@@ -418,9 +391,6 @@ SET(DW_TEST_FILES
     ./storage/chunk_aggregator_test.cpp
     ./storage/chunk_helper_test.cpp
     ./storage/column_aggregator_test.cpp
-    ./storage/column_and_predicate_test.cpp
-    ./storage/column_or_predicate_test.cpp
-    ./storage/column_predicate_test.cpp
     ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp
@@ -438,7 +408,6 @@ SET(DW_TEST_FILES
     ./storage/delta_writer_test.cpp
     ./storage/del_vector_test.cpp
     ./storage/dictionary_cache_manager_test.cpp
-    ./storage/disjunctive_predicates_test.cpp
     ./storage/fast_schema_evolution_test.cpp
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp
@@ -470,6 +439,7 @@ SET(DW_TEST_FILES
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
     ./storage/lake/partial_update_test.cpp
+    ./storage/lake/partial_update_vector_index_test.cpp
     ./storage/lake/persistent_index_memtable_test.cpp
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
@@ -483,6 +453,7 @@ SET(DW_TEST_FILES
     ./storage/lake/segment_task_runner_test.cpp
     ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
+    ./storage/lake/shadow_rewrite_publish_test.cpp
     ./storage/lake/lake_replication_txn_manager_test.cpp
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
@@ -513,7 +484,6 @@ SET(DW_TEST_FILES
     ./storage/meta_reader_test.cpp
     ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
-    ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/persistent_index_consistency_test.cpp
     ./storage/persistent_index_load_executor_test.cpp
     ./storage/persistent_index_snapshot_load_test.cpp
@@ -521,9 +491,8 @@ SET(DW_TEST_FILES
     ./storage/primary_index_test.cpp
     ./storage/primary_key_encoder_test.cpp
     ./storage/protobuf_file_test.cpp
-    ./storage/publish_version_manager_test.cpp
+    ./agent/publish_version_manager_test.cpp
     ./storage/publish_version_task_test.cpp
-    ./storage/push_handler_test.cpp
     ./storage/replication_txn_manager_test.cpp
     ./storage/replication_utils_test.cpp
     ./storage/rowset/binary_dict_page_test.cpp
@@ -550,7 +519,6 @@ SET(DW_TEST_FILES
     ./storage/rowset_merger_test.cpp
     ./storage/rowset/metadata_cache_test.cpp
     ./storage/rowset/ordinal_page_index_test.cpp
-    ./storage/rowset/page_handle_test.cpp
     ./storage/rowset/page_io_test.cpp
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
@@ -573,6 +541,8 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
+    ./storage/storage_cleanup_executor_test.cpp
+    ./storage/storage_env_test.cpp
     ./storage/storage_metrics_test.cpp
     ./storage/storage_engine_compaction_test.cpp
     ./storage/storage_engine_test.cpp
@@ -598,7 +568,6 @@ SET(DW_TEST_FILES
 )
 
 if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND DW_TEST_FILES ./fs/fs_starlet_test.cpp)
     list(APPEND DW_TEST_FILES ./storage/lake/local_pk_index_manager_test.cpp)
 endif ()
 
@@ -612,7 +581,10 @@ STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
+ADD_BE_TEST(data_workflows/migration/engine_storage_migration_task_test)
+if (APPLE)
+    target_sources(engine_storage_migration_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 ADD_BE_TEST(storage/lake/compaction_task_test)
 
 # you can simply add test case as single binary without adding `main`

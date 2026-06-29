@@ -23,7 +23,7 @@
 #include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "types/type_descriptor.h"

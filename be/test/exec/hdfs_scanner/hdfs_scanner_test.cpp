@@ -27,6 +27,7 @@
 #include "column/column_helper.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
@@ -35,10 +36,10 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "formats/csv/csv_defaults.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_state.h"
@@ -2467,8 +2468,8 @@ TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {
 
     {
         auto* range = _create_scan_range(small_file, 0, 0);
-        range->text_file_desc.__set_field_delim(DEFAULT_FIELD_DELIM);
-        range->text_file_desc.__set_collection_delim(DEFAULT_COLLECTION_DELIM);
+        range->text_file_desc.__set_field_delim(csv::DEFAULT_FIELD_DELIM);
+        range->text_file_desc.__set_collection_delim(csv::DEFAULT_COLLECTION_DELIM);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* ctx = _create_ctx(small_file, range, tuple_desc);
         std::vector<std::string> hive_column_names{"id", "array", "sex"};

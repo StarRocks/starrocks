@@ -28,11 +28,11 @@
 #include "column/chunk_factory.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "platform/store_path.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_file_stream_converter.h"
 #include "storage/delta_column_group.h"
@@ -44,7 +44,7 @@
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -53,6 +53,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
+#include "testutil/local_snapshot_client.h"
 
 namespace starrocks {
 
@@ -74,7 +75,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
-        _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
+        _replication_txn_manager =
+                std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get(), local_snapshot_client_for_test());
 
         ASSERT_TRUE(_tablet_manager->create_tablet(get_create_tablet_req(_tablet_id, _version, _schema_hash)).ok());
 
@@ -254,12 +256,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) 
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -276,12 +278,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_versions) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version + 1);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -298,12 +300,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -321,7 +323,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash + 1);
@@ -348,12 +350,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -382,12 +384,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -402,7 +404,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -451,12 +453,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -471,7 +473,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -513,12 +515,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -554,7 +556,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -591,12 +593,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
     remote_snapshot_request.__set_src_visible_version(_src_version);
-    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_backends({local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     Status status = _replication_txn_manager->remote_snapshot(remote_snapshot_request, &remote_snapshot_info);
@@ -618,7 +620,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);

@@ -25,15 +25,15 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/tablet_info.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
 
@@ -239,11 +239,12 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
 TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     TQueryOptions query_options;
     pipeline::QueryContext query_ctx;
-    query_ctx.set_enable_profile();
-    query_ctx.set_big_query_profile_threshold(10, TTimeUnit::SECOND);
-    query_ctx.set_runtime_profile_report_interval(5);
+    auto& query_runtime_state = query_ctx.query_runtime_state();
+    query_runtime_state.set_enable_profile();
+    query_runtime_state.set_big_query_profile_threshold(10, TTimeUnit::SECOND);
+    query_runtime_state.set_runtime_profile_report_interval(5);
     auto runtime_state = _build_runtime_state(query_options);
-    runtime_state->set_query_ctx(&query_ctx, &query_ctx.query_runtime_state());
+    runtime_state->set_query_ctx(&query_ctx, &query_ctx.query_runtime_state(), query_ctx.object_pool());
     PLoadChannelProfileConfig expect_config;
     expect_config.set_enable_profile(true);
     expect_config.set_big_query_profile_threshold_ns(10 * 1e9);

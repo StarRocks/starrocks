@@ -21,6 +21,8 @@
 #include "cache/datacache.h"
 #endif
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/hive_chunk_sink.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
 #include "exec/hdfs_scanner/hdfs_scanner_avro.h"
@@ -40,7 +42,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
@@ -116,9 +117,9 @@ std::string HiveDataSource::name() const {
 Status HiveDataSource::open(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (_split_context != nullptr) {
-        auto split_context = down_cast<HdfsSplitContext*>(_split_context);
-        _scan_range.offset = split_context->split_start;
-        _scan_range.length = split_context->split_end - split_context->split_start;
+        auto split_context = down_cast<FileScanSplitContext*>(_split_context);
+        _scan_range.offset = split_context->start_offset;
+        _scan_range.length = split_context->end_offset - split_context->start_offset;
     }
 
     if (_scan_range.file_length == 0) {
@@ -209,21 +210,23 @@ Status HiveDataSource::open(RuntimeState* state) {
     // Only support file metacache in starcache engine
 #ifdef WITH_STARCACHE
     if (state->query_options().__isset.enable_file_metacache) {
-        _scanner_ctx.options.use_file_metacache = state->query_options().enable_file_metacache;
+        _scanner_ctx.format_scan_context.options.use_file_metacache = state->query_options().enable_file_metacache;
     }
-    _scanner_ctx.options.use_file_metacache &= DataCache::GetInstance()->page_cache_available();
+    _scanner_ctx.format_scan_context.options.use_file_metacache &= DataCache::GetInstance()->page_cache_available();
 
     if (state->query_options().__isset.enable_file_pagecache) {
-        _scanner_ctx.options.use_file_pagecache = state->query_options().enable_file_pagecache;
+        _scanner_ctx.format_scan_context.options.use_file_pagecache = state->query_options().enable_file_pagecache;
     }
-    _scanner_ctx.options.use_file_pagecache &= DataCache::GetInstance()->page_cache_available();
+    _scanner_ctx.format_scan_context.options.use_file_pagecache &= DataCache::GetInstance()->page_cache_available();
 #endif
 
     if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
-        _scanner_ctx.options.enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
+        _scanner_ctx.format_scan_context.options.enable_dynamic_prune_scan_range =
+                state->query_options().enable_dynamic_prune_scan_range;
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
-        _scanner_ctx.options.enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+        _scanner_ctx.format_scan_context.options.enable_split_tasks =
+                state->query_options().enable_connector_split_io_tasks;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -281,7 +284,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     }
 
     if (hdfs_scan_node.__isset.case_sensitive) {
-        _scanner_ctx.options.case_sensitive = hdfs_scan_node.case_sensitive;
+        _scanner_ctx.format_scan_context.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
     RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_ctx.conjuncts.min_max_ctxs, state));
@@ -362,7 +365,7 @@ Status HiveDataSource::_init_partition_values() {
         return Status::OK();
     }
 
-    if (_scanner_ctx.options.enable_dynamic_prune_scan_range && _runtime_filters) {
+    if (_scanner_ctx.format_scan_context.options.enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_runtime_filter_counters();
         _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
         if (!partition_chunk->has_rows()) {
@@ -458,10 +461,10 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         _scanner_ctx.hive_column_names = hdfs_scan_node.hive_column_names;
     }
     if (hdfs_scan_node.__isset.case_sensitive) {
-        _scanner_ctx.options.case_sensitive = hdfs_scan_node.case_sensitive;
+        _scanner_ctx.format_scan_context.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
-        _scanner_ctx.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_ctx.format_scan_context.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -469,13 +472,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // the scanner can avoid reading that placeholder column from the data file when
     // min/max optimization is active.
     if (hdfs_scan_node.__isset.can_use_any_column) {
-        _scanner_ctx.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
+        _scanner_ctx.format_scan_context.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
-        _scanner_ctx.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
+        _scanner_ctx.format_scan_context.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
     if (hdfs_scan_node.__isset.use_partition_column_value_only) {
-        _scanner_ctx.options.use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+        _scanner_ctx.format_scan_context.options.use_partition_column_value_only =
+                hdfs_scan_node.use_partition_column_value_only;
     }
 
     // The reason why we need double check here is for iceberg table.
@@ -498,15 +502,15 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         return true;
     };
     if (!check_partition_opt()) {
-        _scanner_ctx.options.use_partition_column_value_only = false;
-        _scanner_ctx.options.use_count_opt = false;
+        _scanner_ctx.format_scan_context.options.use_partition_column_value_only = false;
+        _scanner_ctx.format_scan_context.options.use_count_opt = false;
     }
 
     // for min/max optimization, we already check that on FE side this iceberg table
     // is unpartitioned, or all partition columns are constant value.
     // so we just need to make sure there is no delete file.
     if (!_scan_range.delete_files.empty()) {
-        _scanner_ctx.options.use_min_max_opt = false;
+        _scanner_ctx.format_scan_context.options.use_min_max_opt = false;
     }
 }
 
@@ -582,6 +586,27 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _scanner_ctx.profile.late_materialize_skip_rows_counter =
             ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
+    // Row count: rows filtered out before lazy columns were read.
+    _scanner_ctx.profile.parquet_lazy_col_skip_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyColSkipRows", TUnit::UNIT);
+
+    // Event count: how many lazy slots were materialized on-demand during
+    // predicate evaluation via MissingColumnProvider.
+    _scanner_ctx.profile.parquet_lazy_slot_triggered_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazySlotTriggered", TUnit::UNIT);
+
+    // Operation count: lazy column read_range() calls (includes both
+    // on-demand triggers and backfill reads).
+    _scanner_ctx.profile.parquet_lazy_read_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyReadCount", TUnit::UNIT);
+
+    // Time spent reading lazy columns (on-demand + backfill).
+    _scanner_ctx.profile.parquet_lazy_read_timer = ADD_TIMER(_runtime_profile, "ParquetLazyReadTime");
+
+    // Row group count: row groups where every classified-lazy column was
+    // triggered on-demand (suggests active/lazy classification misprediction).
+    _scanner_ctx.profile.parquet_lazy_full_trigger_count_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
 
@@ -770,7 +795,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
         bool failed = false;
-        auto path_resolver = make_column_access_path_resolver(state, state->obj_pool());
+        auto path_resolver = make_column_access_path_resolver(state, &_pool);
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
             auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
@@ -793,7 +818,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     _scanner_ctx.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
     if (state->query_options().__isset.connector_max_split_size) {
-        _scanner_ctx.options.connector_max_split_size = state->query_options().connector_max_split_size;
+        _scanner_ctx.format_scan_context.options.connector_max_split_size =
+                state->query_options().connector_max_split_size;
     }
     // Set per-range fields directly on the datasource-level context (no copy).
     _scanner_ctx.obj_pool = &_pool;
@@ -803,7 +829,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     _scanner_ctx.file_path = native_file_path;
     _scanner_ctx.file_size = _scan_range.file_length;
     _scanner_ctx.table_location = _scanner_ctx.hive_table->get_base_path();
-    _scanner_ctx.split_context = down_cast<HdfsSplitContext*>(_split_context);
+    _scanner_ctx.format_scan_context.split_context = down_cast<FileScanSplitContext*>(_split_context);
 
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};
@@ -869,7 +895,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                                                             .scan_node = &hdfs_scan_node};
     if (_scanner_ctx.datacache_options.enable_cache_select) {
         scanner = new CacheSelectScanner();
-    } else if (_scanner_ctx.options.use_partition_column_value_only) {
+    } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
@@ -882,12 +908,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
-        _scanner_ctx.options.parquet_page_index_enable =
+        _scanner_ctx.format_scan_context.options.parquet_page_index_enable =
                 config::parquet_page_index_enable ? state->query_options().__isset.enable_parquet_reader_page_index
                                                             ? state->query_options().enable_parquet_reader_page_index
                                                             : true
                                                   : false;
-        _scanner_ctx.options.parquet_bloom_filter_enable =
+        _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable =
                 config::parquet_reader_bloom_filter_enable
                         ? state->query_options().__isset.enable_parquet_reader_bloom_filter
                                   ? state->query_options().enable_parquet_reader_bloom_filter
@@ -895,7 +921,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                         : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
-        _scanner_ctx.options.orc_use_column_names = state->query_options().orc_use_column_names;
+        _scanner_ctx.format_scan_context.options.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
         const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table);
@@ -957,6 +983,11 @@ void HiveDataSource::close(RuntimeState* state) {
         }
         _scanner->close();
     }
+    // ColumnExprPredicate destructors call ExprContext::close() on cloned
+    // ExprContexts whose root() Expr* lives in HiveDataSource::_pool
+    // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
+    // Release predicates here while _pool is still alive.
+    _scanner_ctx.predicates = {};
     ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
     ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
     ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);
@@ -973,7 +1004,7 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     do {
-        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, _runtime_state->chunk_size()));
+        RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
         Status st = _scanner->get_next(state, chunk);
         if (!st.ok()) {
             return _scanner->reinterpret_status(st);

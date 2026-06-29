@@ -21,6 +21,7 @@
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
 #include "formats/parquet/file_reader.h"
@@ -29,12 +30,11 @@
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats;
+static FormatScannerStats g_hdfs_stats;
 using starrocks::HdfsScannerContext;
 
 class PageIndexTest : public testing::Test {
@@ -75,9 +75,9 @@ HdfsScannerContext* PageIndexTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
     ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_stats;
-    ctx->options.parquet_page_index_enable = true;
-    ctx->options.parquet_bloom_filter_enable = true;
+    ctx->format_scan_context.stats = &g_hdfs_stats;
+    ctx->format_scan_context.options.parquet_page_index_enable = true;
+    ctx->format_scan_context.options.parquet_bloom_filter_enable = true;
     return ctx;
 }
 

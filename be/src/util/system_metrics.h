@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include <map>
 #include <memory>
 #include <mutex>
 
@@ -27,7 +26,6 @@ namespace starrocks {
 
 class QueryCacheMetrics;
 class VectorIndexCacheMetrics;
-class RuntimeFilterMetrics;
 
 class MemoryMetrics {
 public:
@@ -95,10 +93,6 @@ private:
 
     void _update_query_cache_metrics();
 
-    void _install_runtime_filter_metrics(MetricRegistry* registry);
-
-    void _update_runtime_filter_metrics();
-
     void _install_vector_index_cache_metrics(MetricRegistry* registry);
 
     void _update_vector_index_cache_metrics();
@@ -112,7 +106,6 @@ private:
     std::unique_ptr<MemoryMetrics> _memory_metrics;
     std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
     std::unique_ptr<VectorIndexCacheMetrics> _vector_index_cache_metrics;
-    std::map<std::string, RuntimeFilterMetrics*> _runtime_filter_metrics;
 
     std::mutex _update_mutex;
     MetricRegistry* _registry = nullptr;

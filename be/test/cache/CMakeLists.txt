@@ -22,7 +22,9 @@ set(CACHE_TEST_FILES
     data_cache_hit_rate_counter_test.cpp
     datacache_metrics_test.cpp
     datacache_utils_test.cpp
+    dynamic_cache_test.cpp
     mem_cache/lrucache_engine_test.cpp
+    mem_cache/page_handle_test.cpp
     mem_cache/page_cache_test.cpp
     scan/shared_buffered_input_stream_test.cpp
 )

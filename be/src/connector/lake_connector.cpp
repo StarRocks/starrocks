@@ -27,14 +27,15 @@
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue_builder.h"
 #include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/pipeline/scan/split_scan_morsel.h"
 #include "exec/query_scan_metrics.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_access_path_resolver.h"
@@ -42,12 +43,9 @@
 #include "exprs/expr_factory.h"
 #include "exprs/jsonpath.h"
 #include "fs/fs.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/global_dict/parser.h"
-#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
@@ -56,19 +54,18 @@
 #include "storage/predicate_parser.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/vector_search_option.h"
+#include "storage/query/olap_dynamic_morsel_queue_builder.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/short_key_range_option.h"
-#include "storage/runtime_range_pruner.hpp"
+#include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
 
 namespace {
 
-lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
-    const auto* query_execution_services = state->query_execution_services();
-    return query_execution_services != nullptr && query_execution_services->lake != nullptr
-                   ? query_execution_services->lake->lake_tablet_manager
-                   : nullptr;
+lake::TabletManager* lake_tablet_manager() {
+    return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
 } // namespace
@@ -442,6 +439,16 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
+
+    // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
+    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
+    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // operator placed ABOVE this scan in the execution tree (FragmentExecutor's tree walk sets it on the
+    // ConnectorScanNode). See design doc §7 (lake twin). The provider's scan node is null when the data
+    // source is built without one (UT path); no scan node means nothing sits above the iterator.
+    const auto* scan_node = _provider->_scan_node;
+    _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
+                                           (scan_node != nullptr && scan_node->is_filtered_above_iterator());
 
     // Range
     for (const auto& key_range : key_ranges) {
@@ -1284,7 +1291,7 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
     if (_tablet_manager == nullptr) {
-        _tablet_manager = lake_tablet_manager(state);
+        _tablet_manager = lake_tablet_manager();
     }
     RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {

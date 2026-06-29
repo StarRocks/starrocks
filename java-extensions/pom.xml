@@ -49,8 +49,8 @@
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
         <arrow.version>17.0.0</arrow.version>
-        <jackson.version>2.21.1</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.1 version released -->
+        <jackson.version>2.21.4</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
@@ -325,6 +325,10 @@
                     <exclusion>
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.jline</groupId>
+                        <artifactId>jline</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

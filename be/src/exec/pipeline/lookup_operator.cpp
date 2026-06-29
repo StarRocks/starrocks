@@ -20,10 +20,10 @@
 #include "base/statusor.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
-#include "compute_env/sorting/sort_permute.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/scan_task.h"
@@ -87,14 +87,20 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
         auto col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         request_chunk->append_column(std::move(col), slot_desc->id());
     }
+    // Build the row-source column from its descriptor like every other request column, so the
+    // sender and receiver agree on the serialized layout (the sender reconciles each column to the
+    // descriptor before serializing). The fetch node only emits row-position columns for non-null
+    // source rows, so the deserialized column must carry no nulls even when the descriptor is
+    // nullable -- assert that invariant below instead of forcing the type non-nullable here.
     auto slot_desc = state->desc_tbl().get_slot_descriptor(row_pos_desc->get_row_source_slot_id());
-    // row source column from fetch node won't be nullable
-    auto row_source_col = ColumnHelper::create_column(slot_desc->type(), false);
+    auto row_source_col = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
     request_chunk->append_column(std::move(row_source_col), slot_desc->id());
 
     for (auto& request_ctx : _ctx->request_ctxs) {
         RETURN_IF_ERROR(request_ctx->collect_input_columns(request_chunk));
     }
+    DCHECK(!request_chunk->get_column_by_slot_id(row_pos_desc->get_row_source_slot_id())->has_null())
+            << "row source column from fetch node must not contain nulls";
     return Status::OK();
 }
 

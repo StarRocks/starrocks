@@ -21,7 +21,6 @@
 
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
@@ -29,6 +28,7 @@
 #include "storage/lake/tablet_splitter.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "storage/storage_env.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -352,7 +352,7 @@ Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
         return Status::OK();
     }
     delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-            *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+            *txn_log, StorageEnv::GetInstance()->lake_tablet_manager()));
     txn_log->clear_op_compaction();
     txn_log->clear_op_parallel_compaction();
     return Status::OK();
@@ -383,7 +383,7 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     if (txn_log->has_op_compaction() || txn_log->has_op_parallel_compaction()) {
         if (publish_tablet_info.get_split_index() == 0) {
             delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-                    *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+                    *txn_log, StorageEnv::GetInstance()->lake_tablet_manager()));
         }
         txn_log->clear_op_compaction();
         txn_log->clear_op_parallel_compaction();
@@ -446,6 +446,28 @@ std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info
     return out << "{publish_tablet_type: " << static_cast<int>(tablet_info.get_publish_tablet_type())
                << ", tablet_id_in_metadata: " << tablet_info.get_tablet_id_in_metadata()
                << ", tablet_id_in_txn_log: " << tablet_info.get_tablet_ids_in_txn_logs() << '}';
+}
+
+void convert_op_write_to_op_schema_change(TxnLogPB* log, int64_t alter_version) {
+    // Rewrite a shadow tablet's historical-rewrite op_write into an op_schema_change anchored at
+    // alter_version, in place. The shadow rewrite is an append-only snapshot, so the single op_write rowset
+    // maps 1:1 to the single op_schema_change rowset. apply_schema_change_log requires a rowset id; the shadow
+    // tablet is freshly
+    // created and published from version 1, so its sole pre-conversion rowset id is the create-time
+    // next_rowset_id (1). The single-rowset invariant is asserted (a future >1-rowset shadow would collide
+    // on id 1). No op_write rowset => empty op_schema_change@alter_version (partition empty at W).
+    const bool has_rowset = log->has_op_write() && log->op_write().has_rowset();
+    RowsetMetadataPB rowset;
+    if (has_rowset) rowset.Swap(log->mutable_op_write()->mutable_rowset());
+    log->clear_op_write();
+    auto* schema_change = log->mutable_op_schema_change();
+    schema_change->set_alter_version(alter_version);
+    if (has_rowset) {
+        DCHECK_EQ(0, schema_change->rowsets_size());
+        auto* new_rowset = schema_change->add_rowsets();
+        new_rowset->Swap(&rowset);
+        new_rowset->set_id(1);
+    }
 }
 
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,

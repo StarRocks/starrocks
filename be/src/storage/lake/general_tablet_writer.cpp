@@ -28,18 +28,18 @@
 #include "common/thread/threadpool.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/vector_index_utils.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
 
-namespace {
 // async/sync is a table-level setting (every vector index on a given schema shares the
 // same index_build_mode). Returning bool from "any vector index has async mode" is
 // equivalent to "the table is in async mode" for this purpose.
@@ -136,7 +136,6 @@ Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tab
     }
     return Status::OK();
 }
-} // namespace
 
 void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* segment_writer) {
     if (segment_writer == nullptr) {

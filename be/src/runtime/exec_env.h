@@ -54,15 +54,11 @@
 namespace starrocks {
 struct StorePath;
 class AgentServer;
-class BrokerMgr;
 class ComputeEnv;
 class DataStreamMgr;
 class EvHttpServer;
-class ExternalScanContextMgr;
-class FragmentMgr;
 class BaseLoadPathMgr;
 class LoadPathMgr;
-class RejectedRecordSyncDaemon;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class StreamContextMgr;
@@ -75,18 +71,10 @@ class ThreadPool;
 class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
-class LoadChannelMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
-class RoutineLoadTaskExecutor;
-class SmallFileMgr;
-class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
-
-class HeartbeatFlags;
-class DiagnoseDaemon;
-class VectorIndexCache;
 
 namespace pipeline {
 class DriverExecutor;
@@ -94,13 +82,6 @@ class QueryContextManager;
 class DriverLimiter;
 } // namespace pipeline
 
-namespace lake {
-class LocationProvider;
-class TabletManager;
-class UpdateManager;
-class ReplicationTxnManager;
-class LakePersistentIndexParallelCompactMgr;
-} // namespace lake
 namespace spill {
 class DirManager;
 class GlobalSpillManager;
@@ -120,14 +101,6 @@ public:
                 GlobalEnv* global_env, bool as_cn = false);
     void stop();
     void destroy();
-    // Tears down the SR-owned VectorIndexCache. Kept out of destroy() so the
-    // call site can be placed before GlobalEnv::stop() — the entry deleters
-    // need vector_index_mem_tracker alive to account for the release.
-    // ~VectorIndexCache itself handles the IVF-PQ self-cascade safely; see
-    // the destructor for the FUTEX_WAIT_PRIVATE deadlock the cascade triggers.
-    void destroy_vector_index_cache();
-    void wait_for_finish();
-
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
@@ -140,8 +113,6 @@ public:
     // declarations for classes in scoped_ptrs.
     ~ExecEnv();
 
-    std::string token() const;
-    ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
     ProcessMetricsRegistry* process_metrics_registry() const { return _process_metrics_registry; }
     TableMetricsManager* table_metrics_mgr() const { return _table_metrics_mgr; }
     DataStreamMgr* stream_mgr();
@@ -154,23 +125,15 @@ public:
     workgroup::ScanExecutor* connector_scan_executor();
     workgroup::WorkGroupManager* workgroup_manager();
 
-    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    RejectedRecordSyncDaemon* rejected_record_sync_daemon() { return _rejected_record_sync_daemon; }
-    BrokerMgr* broker_mgr() const { return _broker_mgr; }
-    LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
-    LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
-    SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
-    StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
+    BaseLoadPathMgr* load_path_mgr();
+    LoadStreamMgr* load_stream_mgr();
+    StreamContextMgr* stream_context_mgr();
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
     BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
 
-    const std::vector<StorePath>& store_paths() const { return _store_paths; }
-
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
-    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
-    HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
     const ExecutionEnv& execution_services() const { return _execution_services; }
+    const PlatformServices& platform_services() const { return _platform_services; }
     const RpcServices& rpc_services() const { return _rpc_services; }
     const LakeServices& lake_services() const { return _lake_services; }
     const RuntimeServices& runtime_services() const { return _runtime_services; }
@@ -180,7 +143,7 @@ public:
 
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
-    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
+    void set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFilterQueryLifecycle* query_lifecycle);
     MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
@@ -197,87 +160,43 @@ public:
 
     uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
 
-    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
-
-    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
-
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
-
-    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
-
     AgentServer* agent_server() const { return _agent_server; }
+    void set_agent_server(AgentServer* agent_server);
 
     query_cache::CacheManagerRawPtr cache_mgr() const;
 
-    ThreadPool* delete_file_thread_pool();
-
-    lake::LakePersistentIndexParallelCompactMgr* parallel_compact_mgr() { return _parallel_compact_mgr.get(); }
-
-    void try_release_resource_before_core_dump();
-
-    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
-
-    VectorIndexCache* vector_index_cache() { return _vector_index_cache.get(); }
-
 private:
     void _refresh_service_contexts();
-    void _wait_for_fragments_finish();
-    size_t _get_running_fragments_count() const;
 
     GlobalEnv* _global_env = nullptr;
-    std::vector<StorePath> _store_paths;
-    // Leave protected so that subclasses can override
-    ExternalScanContextMgr* _external_scan_context_mgr = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
-    FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<ComputeEnv> _compute_env;
 
-    BaseLoadPathMgr* _load_path_mgr = nullptr;
-    RejectedRecordSyncDaemon* _rejected_record_sync_daemon = nullptr;
-
-    BrokerMgr* _broker_mgr = nullptr;
-    LoadChannelMgr* _load_channel_mgr = nullptr;
-    LoadStreamMgr* _load_stream_mgr = nullptr;
-    StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
     BatchWriteMgr* _batch_write_mgr = nullptr;
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
-    RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;
-    SmallFileMgr* _small_file_mgr = nullptr;
-    HeartbeatFlags* _heartbeat_flags = nullptr;
 
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
-    RuntimeFilterWorker* _runtime_filter_worker = nullptr;
+    RuntimeFilterSender* _runtime_filter_sender = nullptr;
+    RuntimeFilterQueryLifecycle* _runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
-    lake::TabletManager* _lake_tablet_manager = nullptr;
-    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
-    lake::UpdateManager* _lake_update_manager = nullptr;
-    lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
-    std::unique_ptr<lake::LakePersistentIndexParallelCompactMgr> _parallel_compact_mgr;
-
     AgentServer* _agent_server = nullptr;
-    DiagnoseDaemon* _diagnose_daemon = nullptr;
     LookUpDispatcherMgr* _lookup_dispatcher_mgr = nullptr;
     ExecutionEnv _execution_services;
+    PlatformServices _platform_services;
     RpcServices _rpc_services;
     LakeServices _lake_services;
     RuntimeServices _runtime_services;
     AgentServices _agent_services;
     QueryExecutionServices _query_execution_services;
     AdminServices _admin_services;
-
-    // SR-owned LRU behind tenann::IndexCache. Must be destructed before the
-    // mem tracker hierarchy (see ExecEnv::destroy()). Only constructed when
-    // WITH_TENANN is on; the type is always declared so callers don't need
-    // their own WITH_TENANN guards to hold a pointer.
-    std::unique_ptr<VectorIndexCache> _vector_index_cache;
 };
 
 } // namespace starrocks

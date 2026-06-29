@@ -23,6 +23,7 @@
 #include "base/status_fmt.hpp"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -156,8 +157,34 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     request.set_request_tuple_id(_ctx->request_tuple_id);
     {
         SCOPED_TIMER(processor->_serialize_timer);
+
+        // The remote LookUp receiver rebuilds every request column purely from its slot descriptor via
+        // ColumnHelper::create_column(type, slot_desc->is_nullable()) and then deserializes the raw,
+        // non-self-describing ColumnArraySerde bytes into it. So the bytes serialized here must match
+        // the receiver's descriptor-driven layout. A projection above the FETCH may conservatively
+        // widen a preserved-side row-position column's descriptor to nullable while the column produced
+        // here is still non-nullable; serializing the non-nullable layout then overruns the receiver's
+        // nullable column (issue #75222). Reconcile each column to its declared descriptor nullability
+        // before serializing. These are row-position columns built only for non-null source rows, so a
+        // nullable descriptor only ever wraps a null-free column (the receiver asserts no nulls).
+        std::vector<std::pair<SlotId, ColumnPtr>> serialize_columns;
+        serialize_columns.reserve(request_chunk->get_slot_id_to_index_map().size());
+        for (const auto& [slot_id, idx] : request_chunk->get_slot_id_to_index_map()) {
+            if (slot_id == FetchProcessor::kPositionColumnSlotId) {
+                // we don't need to send position column to remote node
+                continue;
+            }
+            ColumnPtr column = request_chunk->get_column_by_index(idx);
+            auto* slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
+            if (slot_desc != nullptr && slot_desc->is_nullable() != column->is_nullable()) {
+                size_t num_rows = column->size();
+                column = ColumnHelper::update_column_nullable(slot_desc->is_nullable(), std::move(column), num_rows);
+            }
+            serialize_columns.emplace_back(slot_id, std::move(column));
+        }
+
         size_t max_serialize_size = 0;
-        for (const auto& column : request_chunk->columns()) {
+        for (const auto& [_, column] : serialize_columns) {
             max_serialize_size += serde::ColumnArraySerde::max_serialized_size(*column);
         }
 
@@ -166,14 +193,9 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
 
         uint8_t* buff = reinterpret_cast<uint8_t*>(processor->_serialize_buffer.data());
         uint8_t* begin = buff;
-        for (const auto& [slot_id, idx] : request_chunk->get_slot_id_to_index_map()) {
-            if (slot_id == FetchProcessor::kPositionColumnSlotId) {
-                // we don't need to send position column to remote node
-                continue;
-            }
+        for (const auto& [slot_id, column] : serialize_columns) {
             auto p_column = request.add_request_columns();
             p_column->set_slot_id(slot_id);
-            const auto& column = request_chunk->get_column_by_index(idx);
             uint8_t* start = buff;
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff));
             p_column->set_data_size(buff - start);

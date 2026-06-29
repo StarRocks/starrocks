@@ -86,6 +86,15 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### lake_enable_protobuf_file_checksum
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -173,6 +182,14 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
+
+### lake_vacuum_min_batch_delete_size
+
+- Default: 200
+- Type: Int64
+- Unit: Number of files
+- Is mutable: Yes
+- Description: The number of stale files Vacuum batches into a single `DeleteObjects` request on a shared-data cluster. A larger batch amortizes per-call HTTP / auth / signing overhead and reduces the prefix-level request rate against the object store, at the cost of higher single-call latency and a larger replay cost when a transient error retries. Users running on AWS S3 are encouraged to raise this further (up to the protocol cap of 1000) where per-request server time is nearly batch-size insensitive.
 
 ### loop_count_wait_fragments_finish
 

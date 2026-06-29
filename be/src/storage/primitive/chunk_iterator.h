@@ -19,10 +19,10 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/global_dict/types.h"
 #include "column/schema.h"
 #include "common/constexpr.h"
 #include "common/runtime_profile.h"
-#include "runtime/global_dict/types.h"
 #include "storage/primitive/row_source_mask.h"
 
 namespace starrocks {

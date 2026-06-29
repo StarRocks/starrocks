@@ -25,6 +25,8 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.orc.OrcFile;
@@ -179,9 +181,22 @@ final class PresplitTestSupport {
             String schemaText,
             int rowCount,
             BiConsumer<Group, Integer> rowFiller) throws IOException {
+        return writeParquetFixture(tempDirectory, MessageTypeParser.parseMessageType(schemaText), rowCount, rowFiller);
+    }
+
+    /**
+     * Variant of {@link #writeParquetFixture(java.nio.file.Path, String, int, BiConsumer)} that
+     * takes a prebuilt {@link MessageType}. Tests that need a precise logical-type flag the schema
+     * text cannot express (e.g. TIMESTAMP {@code isAdjustedToUTC}) build the schema with the
+     * {@code org.apache.parquet.schema.Types} API and call this overload.
+     */
+    static Path writeParquetFixture(
+            java.nio.file.Path tempDirectory,
+            MessageType schema,
+            int rowCount,
+            BiConsumer<Group, Integer> rowFiller) throws IOException {
         java.nio.file.Path file = Files.createTempFile(tempDirectory, "presplit-fixture-", ".parquet");
         Path outputPath = new Path(file.toUri());
-        MessageType schema = MessageTypeParser.parseMessageType(schemaText);
         SimpleGroupFactory groupFactory = new SimpleGroupFactory(schema);
         Configuration configuration = new Configuration();
         configuration.setLong("parquet.block.size", 256);
@@ -199,6 +214,17 @@ final class PresplitTestSupport {
             }
         }
         return outputPath;
+    }
+
+    /**
+     * Resolve a local-filesystem {@link FileStatus} for a fixture {@link Path}. The footer readers
+     * take a {@code FileStatus} (the load snapshots one), so reader tests pass their written fixture
+     * through here.
+     */
+    static FileStatus statusOf(Path path) throws IOException {
+        LocalFileSystem fileSystem = new LocalFileSystem();
+        fileSystem.initialize(path.toUri(), new Configuration());
+        return fileSystem.getFileStatus(path);
     }
 
     /** Fills column values for one row into an ORC {@link VectorizedRowBatch}. */

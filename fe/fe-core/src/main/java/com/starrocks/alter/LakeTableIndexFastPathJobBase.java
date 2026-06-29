@@ -574,6 +574,19 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         return watershedTxnId == -1 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
+    /**
+     * The lake ADD/DROP INDEX fast path is provably safe against concurrent partition
+     * creation: the owned tablet set is snapshotted once at runPendingJob and every later
+     * phase iterates only that snapshot ({@link #partitionToTablets}); no table-level shadow
+     * meta is registered before FINISHED; the catalog flip at FINISHED is an idempotent,
+     * table-level-only change; and cancel performs FE-only cleanup with no per-partition work.
+     * A partition created after the snapshot is simply outside the job's scope.
+     */
+    @Override
+    public boolean allowConcurrentPartitionCreation() {
+        return true;
+    }
+
     @Override
     public void replay(AlterJobV2 replayedJob) {
         LakeTableIndexFastPathJobBase other = (LakeTableIndexFastPathJobBase) replayedJob;

@@ -22,7 +22,7 @@ description: "materialized_views 提供所有物化视图的信息。"
 | TASK_NAME                            | 物化视图刷新任务的名称。                         |
 | LAST_REFRESH_START_TIME              | 最近一次刷新任务的开始时间。                     |
 | LAST_REFRESH_FINISHED_TIME           | 最近一次刷新任务的结束时间。                     |
-| LAST_REFRESH_DURATION                | 最近一次刷新任务的持续时间。                     |
+| LAST_REFRESH_DURATION                | 最近一次刷新的墙钟耗时（秒）：最后一个 task run 的完成时间减去第一个 task run 的开始执行时间。与该 job 在 `materialized_view_refresh_jobs.DURATION_TIME` 中的值一致。 |
 | LAST_REFRESH_STATE                   | 最近一次刷新任务的状态。                         |
 | LAST_REFRESH_FORCE_REFRESH           | 最近一次刷新任务是否强制刷新。                   |
 | LAST_REFRESH_START_PARTITION         | 最近一次刷新任务的开始分区。                     |
@@ -46,3 +46,4 @@ description: "materialized_views 提供所有物化视图的信息。"
 | RESOURCE_GROUP                       | 物化视图刷新任务所使用的资源组（来自物化视图的 `resource_group` 属性）。未设置时默认为 `default_mv_wg`。 |
 | QUERY_REWRITE_STATUS_REASON          | `QUERY_REWRITE_STATUS` 的原因。有效值：`OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION` 和 `UNKNOWN`。 |
 | LAST_FRESHNESS_CONFIRMED_AT          | 最近一次成功刷新的开始时间，在整次刷新（其全部 task run）完成后才记录；确认基表无变化、无需刷新的刷新同样会确认新鲜度。物化视图反映该时刻的基表数据。区别于 `LAST_REFRESH_TIME`（基表数据版本时间），这是墙钟时间。首次成功刷新前、以及同步物化视图，为 `NULL`。按分区范围的 REFRESH（部分刷新）不推进该值。 |
+| BASE_TABLE_REFRESH_VERSION_TIMES     | 各基表的数据版本时间，以 JSON 对象给出：键为基表的 `catalog.database.table` 名称，值为观测到的最新数据版本时间。这是 `LAST_REFRESH_TIME`（所有基表的单一最大值）背后的按表明细：外部/数据湖基表上报分区源修改时间，OLAP（内部）基表上报可见版本提交时间。无任何基表有可记录时间时为 `{}`。 |

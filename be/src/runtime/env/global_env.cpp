@@ -26,13 +26,15 @@
 #include "common/system/mem_info.h"
 #include "platform/python/env.h"
 #include "runtime/current_thread.h"
+#include "runtime/env/diagnose_daemon.h"
+#include "runtime/heartbeat_flags.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "types/hll.h"
 
 namespace starrocks {
 
-GlobalEnv::GlobalEnv() = default;
+GlobalEnv::GlobalEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
 
 GlobalEnv::~GlobalEnv() {
     _is_init = false;
@@ -120,14 +122,26 @@ bool GlobalEnv::is_init() {
 }
 
 Status GlobalEnv::init(MetricRegistry* metrics) {
+    _heartbeat_flags->update(0);
     RETURN_IF_ERROR(_init_mem_tracker(metrics));
     RETURN_IF_ERROR(global_python_env_registry().init(config::python_envs));
     CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
+    if (_diagnose_daemon != nullptr) {
+        _diagnose_daemon->stop();
+        _diagnose_daemon.reset();
+    }
+    auto diagnose_daemon = std::make_unique<DiagnoseDaemon>();
+    RETURN_IF_ERROR(diagnose_daemon->init());
+    _diagnose_daemon = std::move(diagnose_daemon);
     _is_init = true;
     return Status::OK();
 }
 
 void GlobalEnv::stop() {
+    if (_diagnose_daemon != nullptr) {
+        _diagnose_daemon->stop();
+        _diagnose_daemon.reset();
+    }
     _thread_pools.shutdown();
     _thread_pools.destroy();
     _is_init = false;

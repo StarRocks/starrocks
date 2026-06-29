@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/jni_scanner.h"
 
+#include <type_traits>
 #include <utility>
 
 #include "base/utility/defer_op.h"
@@ -177,9 +178,17 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     int total_length = offset_ptr[args.num_rows];
     bytes.resize(total_length);
-    offsets.resize(args.num_rows + 1);
-
-    memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+    offsets.resize_uninitialized(args.num_rows + 1, total_length);
+    offsets.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        if constexpr (std::is_same_v<OffsetValue, uint32_t>) {
+            memcpy(offsets_buf.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
+        } else {
+            for (size_t i = 0; i <= args.num_rows; ++i) {
+                offsets_buf[i] = static_cast<uint64_t>(offset_ptr[i]);
+            }
+        }
+    });
     memcpy(bytes.data(), column_ptr, total_length);
     return Status::OK();
 }
@@ -388,9 +397,8 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     // Partition and not-existed columns must be appended before predicate evaluation
     // because ctxs_by_slot may reference non-file or partition slots.
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
+    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, chunk_size));
+    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
     return Status::OK();
 }
 
@@ -451,7 +459,7 @@ Status JniScanner::update_jni_scanner_params() {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx->materialized_columns) {
             if (column.name() == "___count___") continue;
-            auto col_name = column.formatted_name(_scanner_ctx->options.case_sensitive);
+            auto col_name = column.formatted_name(_scanner_ctx->format_scan_context.options.case_sensitive);
             names.insert(col_name);
         }
         RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
@@ -488,18 +496,7 @@ class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : JniScanner(std::move(factory_class), std::move(params)) {}
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
-
-Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    // fill chunk with all wanted column exclude partition columns
-    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
-    RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
-    // only Hive needs partition columns appended explicitly; Paimon and Hudi append them on the Java side.
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, chunk_size);
-    // conjunct_ctxs_by_slot evaluation is handled uniformly by HdfsScanner::get_next().
-    return Status::OK();
-}
 
 std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
     const auto& scan_range = *(options.scan_range);

@@ -1148,7 +1148,7 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
     column->offsets_column_raw_ptr()->append(6);
     column->offsets_column_raw_ptr()->append(6);
 
-    Offsets off;
+    Buffer<uint32_t> off;
     off.emplace_back(0);
     off.emplace_back(3);
     off.emplace_back(5);

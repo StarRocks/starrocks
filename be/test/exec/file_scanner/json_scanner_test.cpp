@@ -29,6 +29,8 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -36,7 +38,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 
 namespace starrocks {
 

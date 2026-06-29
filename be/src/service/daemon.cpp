@@ -47,8 +47,8 @@
 #include "compute_env/workgroup/work_group.h"
 #include "util/system_metrics.h"
 #ifdef USE_STAROS
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "fslib/star_cache_handler.h"
-#include "staros_integration/staros_worker_runtime.h"
 #endif
 #include <fmt/ranges.h>
 
@@ -59,6 +59,7 @@
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
+#include "common/glog_init.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
@@ -75,11 +76,11 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
+#include "service/failure_handler.h"
 #include "service/mem_hook.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 #include "util/memory_lock.h"
 
 namespace starrocks {
@@ -325,6 +326,7 @@ void init_signals() {
     if (ret < 0) {
         exit(-1);
     }
+    signal(SIGPIPE, SIG_IGN);
 }
 
 void init_minidump() {
@@ -347,6 +349,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
     } else {
         init_glog("be", true);
     }
+    init_runtime_logging_hooks();
 
     LOG(INFO) << get_version_string(false);
 

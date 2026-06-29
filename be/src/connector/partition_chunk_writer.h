@@ -17,9 +17,9 @@
 #include <utility>
 
 #include "base/uid_util.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
-#include "compute_env/sorting/sorting.h"
 #include "connector/connector_sink_profile.h"
 #include "connector/utils.h"
 #include "formats/file_writer.h"

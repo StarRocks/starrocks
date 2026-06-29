@@ -193,6 +193,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }
+            // A shadow-rewrite txn writes a real, non-version-advancing PartitionCommitInfo so the
+            // publish daemon has a work item. The sentinel version (-1) and the txn sourceType
+            // (txnState.isShadowRewrite()) keep it out of all version allocation, adjacency checks,
+            // and visible-version advances.
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }

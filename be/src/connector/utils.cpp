@@ -17,13 +17,13 @@
 #include <boost/algorithm/string.hpp>
 
 #include "arrow/util/decimal.h"
+#include "base/base64.h"
 #include "base/compression/compression_utils.h"
 #include "base/url_coding.h"
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
-#include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "types/datum.h"

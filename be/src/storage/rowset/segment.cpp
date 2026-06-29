@@ -45,14 +45,16 @@
 #include "base/string/slice.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
+#include "column/flat_json/json_flat_path.h"
 #include "column/schema.h"
+#include "common/bloom_filter.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -66,7 +68,6 @@
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
-#include "util/json_flattener.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT

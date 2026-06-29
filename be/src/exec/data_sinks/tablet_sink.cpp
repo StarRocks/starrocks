@@ -57,6 +57,8 @@
 #include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/tracer.h"
+#include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/data_sinks/range_tablet_sink_sender.h"
 #include "exec/data_sinks/tablet_sink_colocate_sender.h"
 #include "exec/pipeline/query_context.h"
@@ -71,8 +73,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/stream_load_metrics.h"
 #include "serde/protobuf_serde.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -174,14 +174,13 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
-    if (state->query_ctx()) {
-        // Query context is only available for pipeline engine (insert/broker load)
-        auto query_ctx = state->query_ctx();
-        _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
+    if (auto* query_runtime_state = state->query_runtime_state(); query_runtime_state != nullptr) {
+        // Query runtime state is only available for pipeline engine (insert/broker load)
+        _load_channel_profile_config.set_enable_profile(query_runtime_state->get_enable_profile_flag());
         _load_channel_profile_config.set_big_query_profile_threshold_ns(
-                query_ctx->get_big_query_profile_threshold_ns());
+                query_runtime_state->get_big_query_profile_threshold_ns());
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
-                query_ctx->get_runtime_profile_report_interval_ns());
+                query_runtime_state->get_runtime_profile_report_interval_ns());
     } else {
         // For non-pipeline engine (stream load/routine load), get the profile config from query options
         auto& query_options = state->query_options();
@@ -755,12 +754,12 @@ Status OlapTableSink::_send_chunk(RuntimeState* state, Chunk* chunk, bool nonblo
                     ss << "The row is out of partition ranges. Please add a new partition.";
                     if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
                         std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
-                        RuntimeStateHelper::append_error_msg_to_file(state, debug_row, ss.str());
+                        LoadPathStateHelper::append_error_msg_to_file(state, debug_row, ss.str());
                     }
                     for (auto i : invalid_row_indexs) {
                         if (state->enable_log_rejected_record()) {
-                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
-                                                                               ss.str(), "");
+                            LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
+                                                                                ss.str(), "");
                         } else {
                             break;
                         }
@@ -936,7 +935,7 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
                                                 error_str, str.get_size(), desc->col_name(), desc->type().len);
-    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
+    LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
@@ -946,7 +945,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
     }
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
                                                 decimal.to_string(), desc->col_name(), desc->type().debug_string());
-    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
+    LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
@@ -958,7 +957,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-    RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
+    LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT>
@@ -986,8 +985,8 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
                     std::string error_msg =
                             strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
-                    RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","), error_msg,
-                                                                       "");
+                    LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
+                                                                        error_msg, "");
                 }
             }
         }
@@ -1027,13 +1026,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
+                            LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         // If enable_log_rejected_record is true, we need to log the rejected record.
                         if (state->enable_log_rejected_record()) {
-                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
-                                                                               ss.str(), "");
+                            LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                                ss.str(), "");
                         }
                     }
                 }
@@ -1065,12 +1064,12 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         LOG(INFO) << ss.str();
 #else
                         if (!state->has_reached_max_error_msg_num()) {
-                            RuntimeStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
+                            LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(j), ss.str());
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
-                                                                               ss.str(), "");
+                            LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                                ss.str(), "");
                         }
                     }
                 }
@@ -1109,8 +1108,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
                                                         binary->get_slice(j).size, desc->col_name(), desc->type().len);
-                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
-                                                                               error_msg, "");
+                            LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                                error_msg, "");
                         }
                     }
                 }
@@ -1135,8 +1134,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
                                     desc->col_name(), desc->type().debug_string());
-                            RuntimeStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
-                                                                               error_msg, "");
+                            LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(j, ","),
+                                                                                error_msg, "");
                         }
                     }
                 }
@@ -1173,22 +1172,25 @@ namespace {
 // the memcpy entirely: their padding is already correct because the buffer is zeroed.
 void pad_char_values(const Offsets& offset, const Bytes& bytes, uint32_t len, size_t num_rows, const uint8_t* null_data,
                      Bytes& new_bytes) {
-    uint32_t from = 0;
-    if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
-        for (size_t j = 0; j < num_rows; ++j) {
-            if (!null_data[j]) {
-                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
+    size_t from = 0;
+    offset.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        if (null_data != nullptr && SIMD::count_nonzero(null_data, num_rows) > num_rows / 8) {
+            for (size_t j = 0; j < num_rows; ++j) {
+                if (!null_data[j]) {
+                    size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                }
+                from += len;
             }
-            from += len;
+        } else {
+            for (size_t j = 0; j < num_rows; ++j) {
+                size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                from += len;
+            }
         }
-    } else {
-        for (size_t j = 0; j < num_rows; ++j) {
-            uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-            from += len;
-        }
-    }
+    });
 }
 } // namespace
 
@@ -1218,7 +1220,7 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             pad_char_values(offset, bytes, len, num_rows, null_data, new_bytes);
 
             for (size_t j = 1; j <= num_rows; ++j) {
-                new_offset[j] = len * j;
+                new_offset.set(j, static_cast<uint64_t>(len) * j);
             }
 
             if (desc->is_nullable()) {

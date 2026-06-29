@@ -83,6 +83,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### lake_enable_protobuf_file_checksum
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
+- 引入版本：v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -170,6 +179,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
+
+### lake_vacuum_min_batch_delete_size
+
+- 默认值：200
+- 类型：Int64
+- 单位：文件数
+- 是否动态：是
+- 描述：存算分离集群下，Vacuum 单次 `DeleteObjects` 请求批量合并的过期文件数量。批量越大，单次调用摊销的 HTTP/认证/签名等固定开销越多，且对对象存储 prefix 级别的请求频次压力越小；代价是单次调用 latency 升高、出现瞬时错误需要 retry 时回放成本增大。AWS S3 用户可以进一步将该值调到协议上限 `1000`，因为 AWS S3 单 `DeleteObjects` 服务端耗时几乎与 batch size 无关。
 
 ### loop_count_wait_fragments_finish
 

@@ -615,6 +615,24 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
+    public void testFirstFullRefreshOfAggregateIvmMvRebuildsRewrittenInsert() throws Exception {
+        // First refresh (no TVR baseline) of an aggregate IVM MV full-rebuilds through the
+        // hybrid -> PCT path, whose INSERT must use the re-derived rewritten query (the hidden
+        // __ROW_ID__/__AGG_STATE columns it adds), not the user query. Without the re-derive the
+        // positional INSERT mismatches the MV schema ("target column count doesn't match select").
+        // The other IVM tests seed a TVR baseline (skipping this path), so this is the only cover.
+        String query = "SELECT data, count(id) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY data;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        advanceTableVersionTo(2);
+        MVTaskRunProcessor proc = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(proc.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        Assertions.assertTrue(
+                ((MVHybridRefreshProcessor) proc.getMVRefreshProcessor()).getCurrentProcessor()
+                        instanceof MVPCTRefreshProcessor,
+                "first refresh with no baseline must full-rebuild via the PCT path");
+    }
+
+    @Test
     public void testAutoRefreshFallbackCanPersistCheckpointForNextIvm() throws Exception {
         String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
@@ -1488,7 +1506,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // builds its plan from getTaskDefinition() and is unaffected.
         new MockUp<MaterializedView>() {
             @Mock
-            public String getIVMTaskDefinition() {
+            public String getIVMTaskDefinition(String selectSql) {
                 throw new SemanticException("injected IVM plan failure");
             }
         };

@@ -18,18 +18,28 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.orc.ColumnStatistics;
+import org.apache.orc.DateColumnStatistics;
+import org.apache.orc.DecimalColumnStatistics;
 import org.apache.orc.IntegerColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.StripeInformation;
 import org.apache.orc.StripeStatistics;
+import org.apache.orc.TimestampColumnStatistics;
 import org.apache.orc.TypeDescription;
 
 import java.io.IOException;
+import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -41,16 +51,27 @@ import java.util.Objects;
  * tuples already carry the StarRocks-side primitive type and feed the same
  * format-agnostic {@link ParquetMetadataSampler}.
  *
- * <p>Supported type window (intentionally conservative, matching the Parquet
- * reader's integer subset):
+ * <p>Supported type window:
  * <ul>
  *   <li>ORC BYTE/SHORT/INT/LONG → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
+ *   <li>ORC DATE → StarRocks DATE (day-of-epoch, timezone-free), gated to
+ *       {@code [0001-01-01, 9999-12-31]} (the BE day-of-epoch load is proleptic-Gregorian with no
+ *       sub-second part, so the boundary is FE/BE-identical down to year 1); values outside that
+ *       window fall back to data tier</li>
+ *   <li>ORC DECIMAL → StarRocks DECIMAL of the SAME precision and scale (ORC orders decimal
+ *       stats correctly, so footer min/max are usable). Non-matching precision/scale → data tier</li>
+ *   <li>ORC TIMESTAMP (local, no timezone) → StarRocks DATETIME, using the tz-independent UTC stat,
+ *       gated to {@code [1970-01-01, 9999-12-31]}. TIMESTAMP_INSTANT is deferred (the load applies a
+ *       session-tz offset this reader cannot reproduce).</li>
  * </ul>
- * Everything else — STRING/CHAR/VARCHAR (whose stats would always need data-tier
- * fallback anyway), BOOLEAN, FLOAT/DOUBLE, DATE, TIMESTAMP, DECIMAL, and any
- * complex type — makes the reader throw {@link MetaTierUnavailableException} so
- * the pipeline falls back to data tier. That is NOT a load failure. Pure I/O
- * failures surface as {@link StarRocksException}.
+ * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
+ * FLOAT/DOUBLE, TIMESTAMP_INSTANT (load applies a session-tz offset this reader cannot reproduce),
+ * non-matching-precision/scale DECIMAL, and any complex type — makes the reader throw
+ * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
+ * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
+ * Note: a legacy ORC file lacking modern UTC stats (pre-1.5-era footer) decodes through the JVM
+ * default timezone, which may bias or reorder cut points — the load still routes every row by its
+ * actual value, so this only mis-places the split, never loses or corrupts data.
  */
 public final class OrcStripeStatisticsReader {
 
@@ -120,7 +141,7 @@ public final class OrcStripeStatisticsReader {
                     "ORC schema does not contain sort-key column \"" + columnName + "\"");
         }
         TypeDescription fieldType = fieldTypes.get(fieldIndex);
-        rejectIncompatibleTypeMapping(fieldType.getCategory(), sortKeyColumn);
+        rejectIncompatibleTypeMapping(fieldType, sortKeyColumn);
         // ORC assigns column ids in schema pre-order; getColumnStatistics() is
         // indexed by that id (index 0 is the struct root).
         return new SortKeyLocation(fieldType.getId(), sortKeyColumn);
@@ -129,15 +150,26 @@ public final class OrcStripeStatisticsReader {
     /**
      * Reject ORC/StarRocks type pairings outside meta tier's supported window
      * eagerly, before iterating stripes. Anything outside the window means "fall
-     * back to data tier", not "fail the load". Only the unannotated integer
-     * categories are admitted in v1; string, boolean, floating-point, and the
-     * logical date/decimal/timestamp categories are deferred.
+     * back to data tier", not "fail the load". The supported window is the unannotated
+     * integer categories, ORC DATE → StarRocks DATE, ORC DECIMAL → a same-precision/scale
+     * StarRocks DECIMAL, and ORC TIMESTAMP → StarRocks DATETIME. String, boolean,
+     * floating-point, TIMESTAMP_INSTANT, non-matching DECIMAL, and complex types are deferred
+     * (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
-            TypeDescription.Category orcCategory, Column sortKeyColumn) throws MetaTierUnavailableException {
+            TypeDescription fieldType, Column sortKeyColumn) throws MetaTierUnavailableException {
+        TypeDescription.Category orcCategory = fieldType.getCategory();
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (orcCategory) {
             case BYTE, SHORT, INT, LONG -> starRocksPrimitive.isIntegerType();
+            // ORC DATE is day-of-epoch (no timezone) → StarRocks DATE only.
+            case DATE -> starRocksPrimitive == PrimitiveType.DATE;
+            // ORC orders decimal stats correctly (no Parquet unsigned-byte trap), so footer
+            // min/max are usable; require an exact precision/scale match with the StarRocks column.
+            case DECIMAL -> decimalMatchesExactly(fieldType, sortKeyColumn);
+            // Plain ORC TIMESTAMP is local (no timezone); the BE load stores its UTC wall clock
+            // verbatim (no session-tz offset, unlike TIMESTAMP_INSTANT) → StarRocks DATETIME.
+            case TIMESTAMP -> starRocksPrimitive == PrimitiveType.DATETIME;
             default -> false;
         };
         if (!compatible) {
@@ -147,21 +179,52 @@ public final class OrcStripeStatisticsReader {
         }
     }
 
+    /**
+     * True only when the StarRocks sort-key column is a DECIMAL whose precision and scale
+     * exactly equal the ORC decimal field's. The BE split validator requires an exact match
+     * too; anything else falls back to data tier.
+     */
+    private static boolean decimalMatchesExactly(TypeDescription fieldType, Column sortKeyColumn) {
+        Type starRocksType = sortKeyColumn.getType();
+        if (!starRocksType.isDecimalOfAnyVersion()) {
+            return false;
+        }
+        ScalarType scalarType = (ScalarType) starRocksType;
+        return fieldType.getPrecision() == scalarType.getScalarPrecision()
+                && fieldType.getScale() == scalarType.getScalarScale();
+    }
+
     private static RowGroupStatistics convertStripe(
-            StripeStatistics stripeStatistics, StripeInformation stripeInfo, SortKeyLocation location)
+            StripeStatistics stripeStatistics, StripeInformation stripeInformation, SortKeyLocation location)
             throws MetaTierUnavailableException {
-        long rowCount = stripeInfo.getNumberOfRows();
+        long rowCount = stripeInformation.getNumberOfRows();
         ColumnStatistics[] columnStatistics = stripeStatistics.getColumnStatistics();
         ColumnStatistics sortKeyStatistics =
                 location.columnId < columnStatistics.length ? columnStatistics[location.columnId] : null;
-        // ORC integer stats expose no presence flag (getMinimum() returns a default
-        // when the stripe has no values), so we must treat absent / all-null stats
-        // as missing explicitly rather than emit a bogus min/max. The instanceof
-        // pattern also absorbs the out-of-bounds (null) case above.
-        if (!(sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics)
-                || integerStatistics.getNumberOfValues() == 0) {
-            return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+        if (sortKeyStatistics instanceof IntegerColumnStatistics integerStatistics
+                && integerStatistics.getNumberOfValues() > 0) {
+            return convertIntegerStripe(integerStatistics, rowCount, location);
         }
+        if (sortKeyStatistics instanceof DateColumnStatistics dateStatistics
+                && dateStatistics.getNumberOfValues() > 0) {
+            return convertDateStripe(dateStatistics, rowCount, location);
+        }
+        if (sortKeyStatistics instanceof DecimalColumnStatistics decimalStatistics
+                && decimalStatistics.getNumberOfValues() > 0) {
+            return convertDecimalStripe(decimalStatistics, rowCount, location);
+        }
+        if (sortKeyStatistics instanceof TimestampColumnStatistics timestampStatistics
+                && timestampStatistics.getNumberOfValues() > 0) {
+            return convertTimestampStripe(timestampStatistics, rowCount, location);
+        }
+        // Absent / all-null stats (no presence flag on ORC numeric/date stats, so an
+        // empty stripe is detected via getNumberOfValues() == 0) → missing min/max.
+        return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertIntegerStripe(
+            IntegerColumnStatistics integerStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
         Variant minVariant;
         Variant maxVariant;
         try {
@@ -178,10 +241,108 @@ public final class OrcStripeStatisticsReader {
         }
         // ORC integer statistics are always exact (no truncation like Parquet binary).
         return new RowGroupStatistics(
-                new Tuple(List.of(minVariant)),
-                new Tuple(List.of(maxVariant)),
-                rowCount,
-                /*truncated=*/ false);
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertDateStripe(
+            DateColumnStatistics dateStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // getMinimumDayOfEpoch() is day-of-epoch (timezone-free).
+            LocalDate minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
+            LocalDate maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
+            // rejectDateOutsideWindow throws a checked MetaTierUnavailableException (not a
+            // RuntimeException), so a window rejection propagates past the catch below keeping its
+            // own message. ofEpochDay and Variant.of RuntimeExceptions are wrapped as a meta-tier
+            // fallback signal — mirroring convertIntegerStripe — so any unrepresentable value falls
+            // back to data tier instead of escaping read() (which only catches IOException) as an
+            // uncaught exception that would skip pre-split entirely.
+            MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
+            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
+            minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER_UNIX));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER_UNIX));
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC date stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertDecimalStripe(
+            DecimalColumnStatistics decimalStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // HiveDecimal min/max carry the source scale; ORC orders decimal stats correctly
+            // (no Parquet-style unsigned-byte trap), and the exact precision/scale gate
+            // guarantees the source scale equals the StarRocks column scale. Variant.of
+            // RuntimeExceptions are wrapped as a meta-tier fallback signal — mirroring
+            // convertIntegerStripe/convertDateStripe — so an unrepresentable value falls back
+            // to data tier instead of escaping read() (which only catches IOException).
+            // Render via toPlainString() (not toString()) so large-exponent values never
+            // surface in scientific notation, which the BE datum_from_string would reject.
+            minVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMinimum().bigDecimalValue().toPlainString());
+            maxVariant = Variant.of(location.starRocksColumn.getType(),
+                    decimalStatistics.getMaximum().bigDecimalValue().toPlainString());
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC decimal stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static RowGroupStatistics convertTimestampStripe(
+            TimestampColumnStatistics timestampStatistics, long rowCount, SortKeyLocation location)
+            throws MetaTierUnavailableException {
+        Variant minVariant;
+        Variant maxVariant;
+        try {
+            // getMinimumUTC()/getMaximumUTC() return the tz-independent UTC wall clock (raw UTC
+            // millis, NOT the TimeZone.getDefault()-shifted getMinimum()). This matches what the BE
+            // load stores for a plain (non-instant) TIMESTAMP: the wall clock verbatim, no session-tz
+            // offset. getNanos() carries the full sub-second nanos (millis fraction + sub-millisecond),
+            // which BE also keeps for a plain TIMESTAMP; renderDateTime truncates to microseconds
+            // (StarRocks DATETIME precision), mirroring the Parquet reader.
+            // NOTE: a legacy ORC file carrying only pre-1.5-era stats (no minimumUtc) decodes through
+            // TimeZone.getDefault(), so getMinimumUTC() may be tz-shifted (and under DST, shifted
+            // non-uniformly so individual values can reorder); the high-level stats API exposes no flag
+            // to detect this. BoundaryPlanner still emits a SORTED boundary set and BE routes every row
+            // by its actual value, so the only effect is a possibly mis-placed / uneven split — never
+            // wrong data or wrong results (and if a conversion ever yields min > max, the downstream
+            // ParquetMetadataSampler treats the row group as fallback rather than emitting a boundary).
+            // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
+            // rejectDateTimeOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
+            // catch(RuntimeException) below (keeping its own message); getMinimumUTC/Variant.of
+            // RuntimeExceptions are wrapped as the data-tier fallback signal — mirroring convertDateStripe.
+            LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
+            LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(minDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(maxDateTime.toLocalDate());
+            minVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(minDateTime));
+            maxVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(maxDateTime));
+        } catch (RuntimeException conversionFailure) {
+            throw new MetaTierUnavailableException(String.format(
+                    "ORC timestamp stats value not representable for sort-key column \"%s\": %s",
+                    location.starRocksColumn.getName(), conversionFailure.getMessage()));
+        }
+        return new RowGroupStatistics(
+                new Tuple(List.of(minVariant)), new Tuple(List.of(maxVariant)), rowCount, /*truncated=*/ false);
+    }
+
+    private static LocalDateTime utcTimestampToDateTime(Timestamp utcTimestamp) {
+        // getTime() is UTC epoch millis (no TimeZone.getDefault() shift, unlike getMinimum());
+        // getNanos() is the full sub-second nanos (0..999_999_999). floorDiv keeps the whole-second
+        // part correct; ofEpochSecond combines them. The window gate rejects pre-1970 / post-9999.
+        long epochSecond = Math.floorDiv(utcTimestamp.getTime(), 1000L);
+        return LocalDateTime.ofEpochSecond(epochSecond, utcTimestamp.getNanos(), ZoneOffset.UTC);
     }
 
     private record SortKeyLocation(int columnId, Column starRocksColumn) {

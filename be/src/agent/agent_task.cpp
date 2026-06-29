@@ -25,24 +25,25 @@
 #include "common/config_agent_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "data_workflows/clone/engine_clone_task.h"
+#include "data_workflows/compaction/engine_compaction_control_task.h"
+#include "data_workflows/compaction/engine_manual_compaction_task.h"
+#include "data_workflows/consistency/engine_checksum_task.h"
+#include "data_workflows/migration/engine_storage_migration_task.h"
+#include "data_workflows/schema_change/engine_alter_tablet_task.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/snapshot_loader.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/metadata_util.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
-#include "storage/task/engine_alter_tablet_task.h"
-#include "storage/task/engine_checksum_task.h"
-#include "storage/task/engine_clone_task.h"
-#include "storage/task/engine_compaction_control_task.h"
-#include "storage/task/engine_manual_compaction_task.h"
-#include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
@@ -64,7 +65,7 @@ static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash,
     return status;
 }
 
-static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature,
+static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signature, ExecEnv* exec_env,
                          TFinishTaskRequest* finish_task_request) {
     TStatus task_status;
     std::vector<std::string> error_msgs;
@@ -76,7 +77,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     TSchemaHash new_schema_hash = 0;
     new_tablet_id = agent_task_req.new_tablet_id;
     new_schema_hash = agent_task_req.new_schema_hash;
-    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req, exec_env);
     Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
     AgentStatus status;
     if (!sc_status.ok()) {
@@ -250,7 +251,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
     if (create_status.ok()) {
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
 #ifndef __APPLE__
-            create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+            create_status = StorageEnv::GetInstance()->lake_tablet_manager()->create_tablet(create_tablet_req);
 #endif
         } else {
             create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
@@ -313,7 +314,7 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
         TFinishTaskRequest finish_task_request;
         TTaskType::type task_type = agent_task_req->task_type;
         if (task_type == TTaskType::ALTER) {
-            alter_tablet(agent_task_req->task_req, signatrue, &finish_task_request);
+            alter_tablet(agent_task_req->task_req, signatrue, exec_env, &finish_task_request);
         }
         finish_task(finish_task_request);
     }
@@ -360,7 +361,6 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::CLONE);
     AgentMetrics::instance()->clone_requests_total.increment(1);
     const TCloneReq& clone_req = agent_task_req->task_req;
-    AgentStatus status = STARROCKS_SUCCESS;
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_CLONE, clone_req.tablet_id);
 
@@ -416,8 +416,9 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             }
         }
     } else {
+        Status clone_status;
         EngineCloneTask engine_task(GlobalEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
-                                    &error_msgs, &tablet_infos, &status);
+                                    &error_msgs, &tablet_infos, &clone_status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             AgentMetrics::instance()->clone_requests_failed.increment(1);
@@ -425,13 +426,13 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
             error_msgs.emplace_back("clone failed.");
         } else {
-            if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+            if (!clone_status.ok()) {
                 AgentMetrics::instance()->clone_requests_failed.increment(1);
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "clone failed. signature: " << agent_task_req->signature;
+                LOG(WARNING) << "clone failed. status:" << clone_status << ", signature:" << agent_task_req->signature;
                 error_msgs.emplace_back("clone failed.");
             } else {
-                LOG(INFO) << "clone success, set tablet infos. status:" << status
+                LOG(INFO) << "clone success, set tablet infos. status:" << clone_status
                           << ", signature:" << agent_task_req->signature;
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
 
@@ -926,7 +927,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
     // alter meta SHARED_DATA
     if (update_tablet_meta_req.__isset.tablet_type &&
         update_tablet_meta_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        lake::SchemaChangeHandler handler(ExecEnv::GetInstance()->lake_tablet_manager());
+        lake::SchemaChangeHandler handler(StorageEnv::GetInstance()->lake_tablet_manager());
         auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
         if (!res.ok()) {
             // TODO explict the error message and errorCode
@@ -1061,7 +1062,8 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 
     Status res;
     if (remote_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req, &src_snapshot_info);
+        res = StorageEnv::GetInstance()->lake_replication_txn_manager()->remote_snapshot(remote_snapshot_req,
+                                                                                         &src_snapshot_info);
     } else {
         res = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_req,
                                                                                     &src_snapshot_info);
@@ -1103,7 +1105,7 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 
     Status res;
     if (replicate_snapshot_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-        res = exec_env->lake_replication_txn_manager()->replicate_snapshot(
+        res = StorageEnv::GetInstance()->lake_replication_txn_manager()->replicate_snapshot(
                 replicate_snapshot_req, /*replicate_file_thread_pool=*/replicate_file_pool);
     } else {
         res = StorageEngine::instance()->replication_txn_manager()->replicate_snapshot(replicate_snapshot_req);

@@ -103,10 +103,10 @@ THRIFT_SOURCE=thrift-0.23.0
 THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
 
 # protobuf
-PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
-PROTOBUF_NAME=protobuf-3.14.0.tar.gz
-PROTOBUF_SOURCE=protobuf-3.14.0
-PROTOBUF_MD5SUM="0c9d2a96f3656ba7ef3b23b533fb6170"
+PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.16.1.tar.gz"
+PROTOBUF_NAME=protobuf-3.16.1.tar.gz
+PROTOBUF_SOURCE=protobuf-3.16.1
+PROTOBUF_MD5SUM="6294f01dedea72a76b9e113369f55097"
 
 # gflags
 GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
@@ -410,10 +410,10 @@ LLVM_SOURCE="llvm-project-18.1.8.src"
 LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2026.04.09.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2026.04.09"
-CLUCENE_MD5SUM="a06ce32908dad5b2b834b19a8879a2c8"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2026.06.23.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2026.06.23"
+CLUCENE_MD5SUM="774561443bc372ec6e8e56f46f3e9f4a"
 
 
 #absl

@@ -206,8 +206,10 @@ class RankWindowFunction final : public WindowFunction<RankState> {
                     size_t end) const override {
         DCHECK_GT(end, start);
         auto* column = down_cast<Int64Column*>(dst);
+        auto* data = column->get_data().data();
+        const int64_t rank = this->data(state).rank;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).rank;
+            data[i] = rank;
         }
     }
 

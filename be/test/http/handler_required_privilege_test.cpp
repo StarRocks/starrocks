@@ -21,37 +21,39 @@
 
 #include <gtest/gtest.h>
 
-#include "http/action/checksum_action.h"
-#include "http/action/compact_rocksdb_meta_action.h"
-#include "http/action/compaction_action.h"
-#include "http/action/datacache_action.h"
-#include "http/action/greplog_action.h"
-#include "http/action/health_action.h"
-#include "http/action/lake/dump_tablet_metadata_action.h"
-#include "http/action/memory_metrics_action.h"
-#include "http/action/meta_action.h"
-#include "http/action/metrics_action.h"
-#include "http/action/pipeline_blocking_drivers_action.h"
-#include "http/action/pprof_actions.h"
-#include "http/action/proc_profile_action.h"
-#include "http/action/proc_profile_file_action.h"
-#include "http/action/query_cache_action.h"
-#include "http/action/reload_tablet_action.h"
-#include "http/action/restore_tablet_action.h"
-#include "http/action/runtime_filter_cache_action.h"
-#include "http/action/snapshot_action.h"
-#include "http/action/stop_be_action.h"
-#include "http/action/stream_load.h"
-#include "http/action/transaction_stream_load.h"
-#include "http/action/update_config_action.h"
-#include "http/download_action.h"
-#include "http/ev_http_server.h"
-#include "http/http_handler.h"
-#include "http/web_page_handler.h"
+#include "http/core/ev_http_server.h"
+#include "http/core/http_handler.h"
+#include "http/service/action/checksum_action.h"
+#include "http/service/action/compact_rocksdb_meta_action.h"
+#include "http/service/action/compaction_action.h"
+#include "http/service/action/datacache_action.h"
+#include "http/service/action/greplog_action.h"
+#include "http/service/action/health_action.h"
+#include "http/service/action/lake/dump_tablet_metadata_action.h"
+#include "http/service/action/memory_metrics_action.h"
+#include "http/service/action/meta_action.h"
+#include "http/service/action/metrics_action.h"
+#include "http/service/action/pipeline_blocking_drivers_action.h"
+#include "http/service/action/pprof_actions.h"
+#include "http/service/action/proc_profile_action.h"
+#include "http/service/action/proc_profile_file_action.h"
+#include "http/service/action/query_cache_action.h"
+#include "http/service/action/reload_tablet_action.h"
+#include "http/service/action/restore_tablet_action.h"
+#include "http/service/action/runtime_filter_cache_action.h"
+#include "http/service/action/snapshot_action.h"
+#include "http/service/action/stop_be_action.h"
+#include "http/service/action/stream_load.h"
+#include "http/service/action/transaction_stream_load.h"
+#include "http/service/action/update_config_action.h"
+#include "http/service/download_action.h"
+#include "http/service/web_page_handler.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "runtime/env/global_env.h"
+#include "runtime/exec_env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
-#include "http/action/jit_cache_action.h"
+#include "http/service/action/jit_cache_action.h"
 #endif
 
 namespace starrocks {
@@ -185,23 +187,31 @@ TEST(BeHandlerPrivilegeTest, greplog_requires_OPERATE) {
 // framework Basic is skipped (`need_auth() == false`).
 // ERROR_LOG (user-facing load-failure log): framework Basic required.
 TEST(BeHandlerNeedAuthTest, download_action_normal_skips_framework_auth) {
-    DownloadAction normal(nullptr, std::vector<std::string>{});
+    DownloadAction normal(std::vector<std::string>{});
     EXPECT_FALSE(normal.need_auth());
 }
 
 TEST(BeHandlerNeedAuthTest, download_action_error_log_requires_framework_auth) {
-    DownloadAction error_log(nullptr, std::string{});
+    DownloadAction error_log(std::string{});
     EXPECT_TRUE(error_log.need_auth());
 }
 
-TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) {
-    EXPECT_FALSE(HealthAction(nullptr).need_auth());
-    EXPECT_FALSE(MetricsAction(nullptr).need_auth());
-    EXPECT_FALSE(MemoryMetricsAction(fake_global_env()).need_auth());
+// Probe / Prometheus endpoints (/api/health, /metrics, /metrics/memory) are AuthN-only:
+// historically anonymous, now gated by `config::enable_http_auth` -- need_auth() == true
+// (the injected verifier short-circuits when the flag is off) with no extra privilege.
+TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_are_authn_only) {
+    EXPECT_TRUE(HealthAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, HealthAction(nullptr).required_privilege());
+    EXPECT_TRUE(MetricsAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, MetricsAction(nullptr).required_privilege());
+    EXPECT_TRUE(MemoryMetricsAction(fake_global_env()).need_auth());
+    EXPECT_EQ(Priv::NONE, MemoryMetricsAction(fake_global_env()).required_privilege());
 }
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
-    StreamLoadAction action(nullptr, nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
+    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -211,7 +221,9 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // look up the StreamLoadContext by label).
     TransactionManagerAction txn_mgr(nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
-    TransactionStreamLoadAction txn_load(nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

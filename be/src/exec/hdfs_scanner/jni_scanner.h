@@ -46,12 +46,7 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) override;
     virtual Status update_jni_scanner_params();
     Status reinterpret_status(const Status& st) override { return st; }
-
-protected:
     StatusOr<size_t> fill_empty_chunk(ChunkPtr* chunk);
-    // Predicate evaluation/filtering is handled uniformly by HdfsScanner::get_next()
-    // via evaluate_on_conjunct_ctxs_by_slot() and ChunkPredicateEvaluator; JniScanner
-    // does not maintain its own chunk filter.
 
 private:
     struct FillColumnArgs {

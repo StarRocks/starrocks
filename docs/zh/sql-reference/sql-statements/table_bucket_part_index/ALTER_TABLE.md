@@ -587,9 +587,10 @@ MODIFY COLUMN <column_name>
 
 1. 如果修改聚合模型中的值列，需要指定agg_type。
 2. 如果修改非聚合模型中的键列，需要指定KEY关键字。
-3. 只能修改列的类型。列的其他属性保持不变。（即其他属性需要在语句中根据原属性显式写出，参见[列](#column)部分的示例8）。
-4. 不能修改分区列。
-5. 目前支持以下类型的转换（精度损失由用户保证）。
+3. 在修改类型、默认值、Null 属性及位置时，必须在语句中指定该列的完整定义。
+4. 仅修改列注释时——无论是通过 `MODIFY COLUMN <column_name> COMMENT “<new_column_comment>”` 语法，还是通过完整列定义但仅注释发生变化——均只更改元数据，不会触发 Schema Change 任务。此规则适用于主键列、键列和普通列。若完整定义同时修改了列的其他属性，则该语句将照常触发 Schema Change 任务。
+5. 不能修改分区列。
+6. 目前支持以下类型的转换（精度损失由用户保证）。
 
    - 将TINYINT/SMALLINT/INT/BIGINT转换为TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
    - 将TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL转换为VARCHAR。VARCHAR支持修改最大长度。
@@ -600,8 +601,8 @@ MODIFY COLUMN <column_name>
    - 将FLOAT转换为DOUBLE
    - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
-6. 不支持从NULL转换为NOT NULL。
-7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
+7. 不支持从NULL转换为NOT NULL。
+8. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
 
 #### 重新排序指定索引的列
 

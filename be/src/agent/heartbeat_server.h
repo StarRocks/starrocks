@@ -42,7 +42,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/Status_types.h"
 #include "gutil/macros.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 #include "thrift/transport/TTransportUtils.h"
 
 namespace starrocks {

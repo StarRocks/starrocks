@@ -30,7 +30,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"

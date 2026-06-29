@@ -28,16 +28,17 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/schedule/common.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/common.h"
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -626,7 +627,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         query_ctx = query_execution_services->runtime->query_context_mgr->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
-    if (!query_ctx->enable_profile()) {
+    auto* query_runtime_state = &query_ctx->query_runtime_state();
+    if (!query_runtime_state->enable_profile()) {
         return;
     }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
@@ -708,7 +710,8 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
         pipeline::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
-    ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);
+    ops = ::starrocks::pipeline::builder::maybe_interpolate_collect_stats(context, context->runtime_state(),
+                                                                          scan_node->id(), ops);
 
     return ops;
 }

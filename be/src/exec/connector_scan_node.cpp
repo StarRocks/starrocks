@@ -22,15 +22,16 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/connector_registry.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 
@@ -170,8 +171,9 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(
-                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
+        operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, context->fragment_context()->runtime_state(), id(), operators,
+                context->degree_of_parallelism());
     }
     return operators;
 }

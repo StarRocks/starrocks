@@ -28,10 +28,9 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -47,7 +46,7 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -503,10 +502,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (async_compact_cb == nullptr && !skip_early_sst_compact &&
                 index.current_fileset_index() - current_fileset_start_idx >=
                         config::pk_index_early_sst_compaction_threshold) {
+                if (_parallel_compact_mgr == nullptr) {
+                    return Status::InternalError("parallel compact manager is not initialized");
+                }
                 TRACE_COUNTER_INCREMENT("early_sst_compact_times", 1);
                 ASSIGN_OR_RETURN(async_compact_cb,
-                                 index.early_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                         metadata, current_fileset_start_idx + 1 /* new fileset*/));
+                                 index.early_sst_compact(_parallel_compact_mgr, _tablet_mgr, metadata,
+                                                         current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
     }     // end batch loop
@@ -722,8 +724,19 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (size_t i = 0; i < tschema->num_key_columns(); i++) pk_cids.push_back((uint32_t)i);
     Schema pkey_schema = ChunkHelper::convert_schema(tschema, pk_cids);
 
-    std::vector<uint32_t> update_cids(op_write.txn_meta().partial_update_column_ids().begin(),
-                                      op_write.txn_meta().partial_update_column_ids().end());
+    // Resolve cid from uid against current schema; partial_update_column_ids is stale across schema drift.
+    const auto& txn_meta = op_write.txn_meta();
+    std::vector<uint32_t> update_cids;
+    update_cids.reserve(txn_meta.partial_update_column_unique_ids_size());
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = tschema->field_index(uid);
+        if (cid == -1) {
+            return Status::InternalError(strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
+                                                             tablet->tablet_id()));
+        }
+        update_cids.push_back(static_cast<uint32_t>(cid));
+    }
 
     int32_t ai_cid = -1;
     for (int i = 0; i < tschema->num_columns(); ++i) {
@@ -1314,11 +1327,22 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
+    // Only parallelize when the segment iterator will actually split into more than one
+    // compare chunk. SegmentPKIterator splits at pk_index_parallel_execution_min_rows, so a
+    // rowset smaller than that yields a single chunk per segment, and comparing it inline on
+    // the publish thread is cheaper than a thread-pool round-trip. The rowset-wide row count
+    // is a safe lower bound for the per-segment count: if the whole rowset is under the
+    // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+    if (config::enable_pk_index_parallel_execution &&
+        params.op_write.rowset().num_rows() >= config::pk_index_parallel_execution_min_rows) {
+        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
+    // TRACE_COUNTER_* reads a thread-local current trace that pool worker threads do not
+    // inherit, so counters incremented inside a submitted compare task would silently drop.
+    // Capture the publish thread's trace and re-adopt it inside each worker task.
+    Trace* parent_trace = Trace::CurrentTrace();
 
     std::mutex mutex;
     Status status = Status::OK();
@@ -1332,6 +1356,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
         auto compare_func = [&, result, current]() {
+            ADOPT_TRACE(parent_trace);
             auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
                                                                         upsert.get(), current, tablet_column,
                                                                         read_column_ids, index, result);
@@ -1348,6 +1373,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
                 status.update(submit_st);
             }
         } else {
+            // Single-chunk (or parallel execution disabled): compare on the publish thread.
             compare_func();
             RETURN_IF_ERROR(status);
         }
@@ -1922,8 +1948,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, metadata.get()));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
 
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
@@ -1979,8 +2004,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, metadata.get()));
+        ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
         return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
@@ -1997,8 +2021,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     auto& index = index_entry->value();
     // 1. iterate output rowset, update primary index and generate delvec
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                 input_rowsets_id, metadata.get()));
+    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
                          tablet_schema);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
@@ -2271,8 +2294,10 @@ void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_p
 
 Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log) {
     if (config::enable_pk_index_parallel_compaction) {
-        return LakePersistentIndex::parallel_major_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
-                                                           metadata, txn_log);
+        if (_parallel_compact_mgr == nullptr) {
+            return Status::InternalError("parallel compact manager is not initialized");
+        }
+        return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
     }
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
 }

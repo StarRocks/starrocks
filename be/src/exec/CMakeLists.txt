@@ -21,6 +21,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_PRIMITIVE_FILES
+    arrow/result_to_arrow_converter.cpp
+    data_sink.cpp
     exec_node.cpp
     runtime_filter/runtime_filter_descriptor.cpp
     runtime_filter/runtime_filter_probe.cpp
@@ -36,6 +38,7 @@ set(EXEC_PRIMITIVE_FILES
     pipeline/scan/dynamic_morsel_queue.cpp
     pipeline/scan/fixed_morsel_queue.cpp
     pipeline/scan/morsel_queue.cpp
+    pipeline/scan/morsel_queue_factory_base.cpp
     pipeline/scan/scan_morsel.cpp
     pipeline/scan/split_morsel_ticket_checker.cpp
 )
@@ -55,16 +58,7 @@ target_link_libraries(ExecPrimitive PUBLIC
     Gutil
     StarRocksGen
 )
-
-set(EXEC_SINK_CORE_FILES
-    data_sink.cpp
-)
-
-ADD_BE_LIB(ExecSinkCore
-    ${EXEC_SINK_CORE_FILES}
-)
-
-target_link_libraries(ExecSinkCore PUBLIC Common Base Gutil StarRocksGen)
+target_link_libraries(ExecPrimitive PRIVATE arrow)
 
 set(EXEC_SCHEMA_SCANNER_CORE_FILES
     schema_scanner.cpp
@@ -135,6 +129,7 @@ target_link_libraries(ExecJoinCore PUBLIC
     ExprCore
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -157,8 +152,6 @@ endif()
 # module boundaries yet; keep them named by intended ownership so later
 # cycle-cut leaves can promote them into real targets incrementally.
 set(PIPELINE_GRAPH_SRCS
-    pipeline/group_execution/execution_group.cpp
-    pipeline/group_execution/execution_group_builder.cpp
 )
 
 set(PIPELINE_RUNTIME_SRCS
@@ -169,20 +162,16 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/pipeline_driver_poller.cpp
     pipeline/audit_statistics_reporter.cpp
     pipeline/exec_state_reporter.cpp
-    pipeline/fragment_context.cpp
-    pipeline/fragment_context_manager.cpp
-    pipeline/query_context.cpp
-    pipeline/query_context_manager.cpp
+    pipeline/fragment_context_cancel.cpp
     pipeline/schedule/timeout_tasks.cpp
-    pipeline/schedule/event_scheduler.cpp
-    pipeline/schedule/pipeline_driver_observer.cpp
     pipeline/runtime_filter_types.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS
     pipeline/exec_node_pipeline_adapter.cpp
-    pipeline/fragment_executor.cpp
-    pipeline/pipeline_builder.cpp
+    pipeline/fragment_execution_params.cpp
+    pipeline/pipeline_builder_operators.cpp
+    pipeline/pipeline_driver_instantiator.cpp
 )
 
 set(PIPELINE_OPERATORS_BATCH_SRCS
@@ -208,14 +197,8 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
-    pipeline/scan/bucket_sequence_morsel_queue.cpp
-    pipeline/scan/olap_dynamic_morsel_queue.cpp
-    pipeline/scan/olap_fixed_morsel_queue.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/morsel_queue_factory.cpp
-    pipeline/scan/olap_morsel_queue.cpp
-    pipeline/scan/split_morsel_queue.cpp
-    pipeline/scan/split_scan_morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
     pipeline/scan/olap_scan_operator.cpp
@@ -259,6 +242,7 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/bucket_process_operator.cpp
     pipeline/table_function_operator.cpp
     pipeline/assert_num_rows_operator.cpp
+    pipeline/enforce_unique_row_locator_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
     pipeline/set/raw_values_source_operator.cpp
@@ -321,7 +305,6 @@ set(EXEC_NON_PIPELINE_FILES
     short_circuit.cpp
     short_circuit_hybrid.cpp
     olap_common.cpp
-    tablet_info.cpp
     write_combined_txn_log.cpp
     cache_stats_scanner.cpp
     local_file_writer.cpp
@@ -368,6 +351,7 @@ set(EXEC_NON_PIPELINE_FILES
     parquet_builder.cpp
     file_scan_node.cpp
     assert_num_rows_node.cpp
+    enforce_unique_row_locator_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
     json_parser.cpp
@@ -388,6 +372,7 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_parquet.cpp
     hdfs_scanner/hdfs_scanner_orc.cpp
     hdfs_scanner/hdfs_scanner_avro.cpp
+    hdfs_scanner/hdfs_scanner_context.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
@@ -404,6 +389,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_columns_scanner.cpp
     schema_scanner/schema_column_stats_usage_scanner.cpp
     schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
@@ -513,8 +499,17 @@ ENDIF()
 
 ADD_BE_LIB(ExecRuntime
     runtime/query_runtime_state.cpp
-    pipeline/pipeline.cpp
-    pipeline/pipeline_driver.cpp
+    runtime/group_execution/execution_group.cpp
+    runtime/group_execution/execution_group_builder.cpp
+    runtime/pipeline.cpp
+    runtime/pipeline_builder_context.cpp
+    runtime/pipeline_driver.cpp
+    runtime/fragment_context.cpp
+    runtime/fragment_context_manager.cpp
+    runtime/query_context.cpp
+    runtime/query_context_manager.cpp
+    runtime/schedule/event_scheduler.cpp
+    runtime/schedule/pipeline_driver_observer.cpp
 )
 
 target_link_libraries(ExecRuntime PUBLIC
@@ -528,6 +523,7 @@ target_link_libraries(ExecRuntime PUBLIC
     Platform
     FSCore
     IO
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -545,5 +541,5 @@ ADD_BE_LIB(Exec
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatsIO Platform)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
+target_link_libraries(Exec PRIVATE FormatCore Platform)

@@ -17,21 +17,30 @@
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
 
+#include <memory>
+
+#include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "compute_env/compute_env.h"
 #include "connector/connector_bootstrap.h"
+#include "data_workflows/data_workflows_env.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
+#include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -40,10 +49,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -95,7 +104,10 @@ int init_test_env(int argc, char** argv) {
     auto st = global_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
     auto* platform_env = PlatformEnv::GetInstance();
-    st = platform_env->init(process_metrics_registry->root_registry());
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    st = platform_env->init(std::move(platform_env_options));
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -140,24 +152,74 @@ int init_test_env(int argc, char** argv) {
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = global_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+#endif
+    st = StorageEnv::GetInstance()->init(storage_env_options);
+    CHECK(st.ok()) << st;
+    if (exec_env->compute_env() != nullptr) {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
+    }
+
+    auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
+    DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.exec_env = exec_env;
+    data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    data_workflows_env_options.diagnose_daemon = global_env->diagnose_daemon();
+    data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
+    data_workflows_env_options.metrics = process_metrics_registry->root_registry();
+    data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    data_workflows_env_options.load_mem_tracker = global_env->load_mem_tracker();
+    st = data_workflows_env->init(data_workflows_env_options);
+    CHECK(st.ok()) << st;
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
+
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    exec_env->set_agent_server(agent_server.get());
+    st = agent_server->start();
+    if (!st.ok()) {
+        exec_env->set_agent_server(nullptr);
+    }
+    CHECK(st.ok()) << st;
+
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-    exec_env->wait_for_finish();
-    // delete engine
-    engine->stop();
-    // destroy exec env
+    orchestration_env->wait_for_finish();
     tls_thread_status.set_mem_tracker(nullptr);
+    // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
+    agent_server->stop();
+    exec_env->set_agent_server(nullptr);
+    orchestration_env->stop();
+    data_workflows_env->stop();
+    StorageEnv::GetInstance()->stop();
     exec_env->stop();
+    engine->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
+    orchestration_env->destroy();
+    orchestration_env.reset();
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
     delete engine;
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
+    agent_server.reset();
     platform_env->destroy();
     cache_env->destroy();
     global_env->stop();

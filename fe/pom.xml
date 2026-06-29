@@ -49,8 +49,8 @@ under the License.
         <junit.version>5.8.2</junit.version>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
-        <jackson.version>2.21.1</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.1 version released -->
+        <jackson.version>2.21.4</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
@@ -79,9 +79,9 @@ under the License.
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.3.1</paimon.version>
-        <delta-kernel.version>4.0.0rc1</delta-kernel.version>
+        <delta-kernel.version>4.2.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.2-rc1</staros.version>
+        <staros.version>4.2-rc2</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -965,6 +965,10 @@ under the License.
                         <groupId>ch.qos.reload4j</groupId>
                         <artifactId>reload4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.jline</groupId>
+                        <artifactId>jline</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1433,6 +1437,12 @@ under the License.
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-client-runtime</artifactId>
                     </exclusion>
+                  <!-- FE uses slf4j 1.7.x with log4j-slf4j-impl; exclude delta's slf4j 2.x binding to avoid
+                       NoClassDefFoundError: org/slf4j/spi/LoggingEventBuilder at startup -->
+                  <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j2-impl</artifactId>
+                  </exclusion>
                 </exclusions>
             </dependency>
 

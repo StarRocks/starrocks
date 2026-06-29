@@ -33,6 +33,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/expr_executor.h"
@@ -212,11 +213,9 @@ void AggregatorParams::init() {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
 
-        if (AggStateUtils::is_count_function(fn.name.function_name) &&
-            fn.name.function_name != FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
-            // count family output is always non-nullable BIGINT. count_combine is the
-            // exception: it needs the real input nullability so the nested lookup picks
-            // the NULL-skipping CountNullableAggregateFunction (else it counts NULLs too).
+        if (AggStateUtils::is_count_function(fn.name.function_name)) {
+            // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
+            // re-derived from the real input nullability in _is_agg_result_nullable, not here.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
@@ -594,8 +593,10 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
 
 bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type) {
     const TFunction& fn = desc.nodes[0].fn;
-    // NOTE: For count, we cannot use agg_func_type since it's only mocked values.
-    if (fn.name.function_name == FUNCTION_COUNT) {
+    // NOTE: count and count_combine carry mocked agg_func_type values (non-nullable fast-path), so
+    // their NULL-skipping choice must come from the real input nullability on the plan node.
+    if (fn.name.function_name == FUNCTION_COUNT ||
+        fn.name.function_name == FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
         if (fn.arg_types.empty()) {
             return false;
         }

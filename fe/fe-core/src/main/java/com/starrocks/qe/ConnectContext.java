@@ -284,6 +284,19 @@ public class ConnectContext {
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
 
+    // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
+    // instead of physicalPartition.getVisibleVersion() for each entry in this map.
+    // Null means no override (normal visible-version path).
+    private Map<Long, Long> scanVersionOverride = null;
+
+    public void setScanVersionOverride(Map<Long, Long> scanVersionOverride) {
+        this.scanVersionOverride = scanVersionOverride;
+    }
+
+    public Map<Long, Long> getScanVersionOverride() {
+        return scanVersionOverride;
+    }
+
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }

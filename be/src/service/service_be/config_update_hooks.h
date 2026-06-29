@@ -18,7 +18,8 @@ namespace starrocks {
 
 class ExecEnv;
 class GlobalEnv;
+class LoadChannelMgr;
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env);
+void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr);
 
 } // namespace starrocks

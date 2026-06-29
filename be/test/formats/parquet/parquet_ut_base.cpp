@@ -17,13 +17,13 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "compute_env/global_dict/parser.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
-#include "storage/predicate_parser.h"
+#include "storage/primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 

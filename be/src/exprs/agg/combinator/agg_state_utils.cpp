@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/combinator/agg_state_combinator.h"
 #include "exprs/agg/combinator/agg_state_combine.h"
 #include "exprs/agg/combinator/agg_state_if.h"
@@ -67,7 +68,7 @@ StatusOr<const AggregateFunction*> AggStateUtils::get_agg_state_function(const A
 
     if (AggStateUtils::is_agg_state_merge(nested_func_name, func_name)) {
         // aggregate _merge combinator
-        auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+        auto* nested_func = get_aggregate_function(agg_state_desc);
         if (nested_func == nullptr) {
             return Status::InternalError(fmt::format(
                     "Merge combinator function {} fails to get the nested agg func: {}", func_name, nested_func_name));
@@ -75,7 +76,7 @@ StatusOr<const AggregateFunction*> AggStateUtils::get_agg_state_function(const A
         return new AggStateMerge(agg_state_desc, nested_func);
     } else if (AggStateUtils::is_agg_state_union(nested_func_name, func_name)) {
         // aggregate _union combinator
-        auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+        auto* nested_func = get_aggregate_function(agg_state_desc);
         if (nested_func == nullptr) {
             return Status::InternalError(fmt::format(
                     "Union combinator function {} fails to get the nested agg func: {}", func_name, nested_func_name));
@@ -83,7 +84,7 @@ StatusOr<const AggregateFunction*> AggStateUtils::get_agg_state_function(const A
         return new AggStateUnion(agg_state_desc, nested_func);
     } else if (AggStateUtils::is_agg_state_combine(nested_func_name, func_name)) {
         // aggregate _combine combinator
-        auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+        auto* nested_func = get_aggregate_function(agg_state_desc);
         if (nested_func == nullptr) {
             return Status::InternalError(
                     fmt::format("Combine combinator function {} fails to get the nested agg func: {}", func_name,
@@ -92,7 +93,7 @@ StatusOr<const AggregateFunction*> AggStateUtils::get_agg_state_function(const A
         return new AggStateCombine(agg_state_desc, nested_func);
     } else if (AggStateUtils::is_agg_state_if(nested_func_name, func_name)) {
         // aggregate _if combinator
-        auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
+        auto* nested_func = get_aggregate_function(agg_state_desc);
         if (nested_func == nullptr) {
             return Status::InternalError(fmt::format("if combinator function {} fails to get the nested agg func: {}",
                                                      func_name, nested_func_name));

@@ -21,10 +21,13 @@
 #include <string_view>
 #include <utility>
 
+#include "base/coding.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/util/thrift_util.h"
-#include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/split_context.h"
 #include "formats/parquet/utils.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::parquet {

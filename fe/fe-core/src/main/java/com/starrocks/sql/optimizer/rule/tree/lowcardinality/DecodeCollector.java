@@ -400,13 +400,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
             List<CallOperator> aggregateExprs = stringAggregateExpressions.get(aggregateId);
-            for (CallOperator agg : aggregateExprs) {
-                if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
-                        .anyMatch(context.allStringColumns::contains)) {
-                    context.stringAggregateExprs.put(aggregateId, aggregateExprs);
-                    context.allStringColumns.add(aggregateId);
-                    break;
-                }
+            if (aggregateExprs.get(0).getColumnRefs().stream().map(ColumnRefOperator::getId)
+                    .anyMatch(context.allStringColumns::contains)) {
+                context.stringAggregateExprs.put(aggregateId, aggregateExprs);
             }
         }
 
@@ -417,6 +413,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.outputStringColumns.intersect(alls);
             info.decodeStringColumns.intersect(alls);
             info.inputStringColumns.intersect(alls);
+            info.usedStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
                 if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
@@ -835,17 +832,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
                 boolean isCandidate = childColumns.stream().allMatch(
                         c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
-                int outputColumnId = setOp.getOutputColumnRefOp().get(i).getId();
+                ColumnRefOperator outputColumn = setOp.getOutputColumnRefOp().get(i);
                 Integer useChildId;
                 if (isCandidate && (useChildId = unionDictionaryManager.mergeDictionaries(childColumnIds)) != null) {
                     childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
                         result.usedStringColumns.union(c);
                         expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
                     });
-                    stringRefToDefineExprMap.put(outputColumnId, childColumns.stream()
-                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow());
-                    expressionStringRefCounter.put(outputColumnId, 1);
-                    result.outputStringColumns.union(outputColumnId);
+                    setDefineExpr(outputColumn, childColumns.stream()
+                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow(), 1);
+                    result.outputStringColumns.union(outputColumn);
                 } else {
                     childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
                             .forEach(result.decodeStringColumns::union);
@@ -986,7 +982,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
-    private boolean shouldProcessAggFunction(CallOperator agg, ColumnRefSet supportColumns, boolean isFirstStage) {
+    private boolean shouldProcessAggFunction(CallOperator agg, DecodeInfo info, boolean isFirstStage) {
+        ColumnRefSet supportColumns = new ColumnRefSet();
+        supportColumns.union(info.getInputStringColumns());
+        supportColumns.union(info.getInProgressStringAggregations());
+        supportColumns.union(info.getFinalizingStringAggregations());
         final boolean enableArrayAgg = sessionVariable.isEnableArrayAggLowCardinalityOptimize()
                 && sessionVariable.isEnableArrayLowCardinalityOptimize()
                 && sessionVariable.isEnableStructLowCardinalityOptimize();
@@ -1012,7 +1012,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
+        if (context.outputStringColumns.isEmpty() && context.inProgressStringAggregations.isEmpty()) {
             return DecodeInfo.empty();
         }
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
@@ -1023,7 +1023,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             CallOperator agg = aggregate.getAggregations().get(key);
             final boolean isFirstStage = !agg.getArguments().isEmpty() &&
                     (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
-            if (!shouldProcessAggFunction(agg, info.inputStringColumns, isFirstStage)) {
+            if (!shouldProcessAggFunction(agg, info, isFirstStage)) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
             } else if (isFirstStage && FunctionSet.ARRAY_AGG.equals(agg.getFnName()) &&
@@ -1039,6 +1039,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         info.outputStringColumns.clear();
+        info.inProgressStringAggregations.clear();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             if (disableColumns.contains(key)) {
                 continue;
@@ -1047,20 +1048,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             // aggregate ref -> aggregate expr
             stringAggregateExpressions.computeIfAbsent(key.getId(), x -> Lists.newArrayList()).add(value);
             AggregateFunction aggFn = (AggregateFunction) value.getFunction();
-            if (aggFn.getIntermediateTypeOrReturnType().isStructType()
-                    && !structRefToFieldUseStringRef.containsKey(key.getId())) {
+            if (aggFn.getReturnType().isStructType() && !structRefToFieldUseStringRef.containsKey(key.getId())) {
                 final Map<String, ColumnRefOperator> fieldsData;
-                if (FunctionSet.ARRAY_AGG.equals(aggFn.functionName())) {
-                    fieldsData = Maps.newHashMap();
-                    StructType structType = (StructType) aggFn.getIntermediateTypeOrReturnType();
-                    Preconditions.checkState(structType.getFields().size() == value.getArguments().size());
-                    for (int i = 0; i < value.getArguments().size(); i++) {
-                        if (value.getArguments().get(i).isColumnRef() && value.getArguments().get(i).getType().isStringType()
-                                && info.inputStringColumns.contains(value.getArguments().get(i).cast())) {
-                            fieldsData.put(structType.getField(i).getName(), value.getArguments().get(i).cast());
-                        }
-                    }
-                } else if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
+                if (FunctionSet.ANY_VALUE.equals(aggFn.functionName())) {
                     fieldsData = getFieldUseStringRefMap(value.getArguments().get(0));
                 } else {
                     throw new UnsupportedOperationException(
@@ -1069,12 +1059,18 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 Preconditions.checkNotNull(fieldsData);
                 structOpToFieldUseStringRef.put(value, fieldsData);
             }
-            if (supportLowCardinality(value.getType())) {
-                info.outputStringColumns.union(key.getId());
+            if (supportLowCardinality(aggFn.getReturnType())) {
                 setDefineExpr(key, value, 1);
-            } else if (aggregate.getType().isLocal() || aggregate.getType().isDistinct()) {
-                // count/count distinct, need output dict-set in 1st stage
-                info.outputStringColumns.union(key.getId());
+            }
+            final boolean isFinalStage = aggregate.getType().isGlobal() ||
+                    (aggregate.getType().isLocal() && !aggregate.isSplit());
+            if (isFinalStage) {
+                info.finalizingStringAggregations.union(key.getId());
+                if (supportLowCardinality(value.getType())) {
+                    info.outputStringColumns.union(key.getId());
+                }
+            } else {
+                info.inProgressStringAggregations.union(key.getId());
             }
         }
 
@@ -1134,7 +1130,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalDistribution(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
+        if (context.outputStringColumns.isEmpty() && context.inProgressStringAggregations.isEmpty()) {
             return DecodeInfo.empty();
         }
         return context.createOutputInfo();

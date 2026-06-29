@@ -16,6 +16,7 @@
 
 #include <deque>
 #include <future>
+#include <memory>
 #include <sstream>
 
 // use string iequal
@@ -26,37 +27,36 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "base/json/json_util.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/thread/thread.h"
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_auth.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
+#include "http/core/http_auth.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_common.h"
+#include "http/core/http_headers.h"
+#include "http/core/http_request.h"
+#include "http/core/http_response.h"
 #include "platform/thrift_rpc_helper.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/load_path_mgr.h"
-#include "runtime/plan_fragment_executor.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/stream_load/stream_load_pipe.h"
-#include "runtime/stream_load/transaction_mgr.h"
-#include "util/byte_buffer.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 
@@ -90,7 +90,7 @@ std::string TransactionMgr::_build_reply(const std::string& txn_op, StreamLoadCo
 }
 
 std::string TransactionMgr::_build_reply(const std::string& label, const std::string& txn_op, const Status& st) {
-    auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
+    auto ctx = std::make_unique<StreamLoadContext>(_exec_env->load_stream_mgr());
     ctx->label = label;
     return ctx->to_resp_json(txn_op, st);
 }
@@ -162,14 +162,14 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
     Status st;
     auto ctx = _exec_env->stream_context_mgr()->get(label);
     if (ctx == nullptr) {
-        ctx = new StreamLoadContext(_exec_env,
+        ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
                                     &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
         std::lock_guard<std::mutex> l(ctx->lock);
         st = _begin_transaction(req, ctx);
         if (!st.ok()) {
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -265,7 +265,7 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
         if (!st.ok()) {
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
-            if (ctx->need_rollback) {
+            if (ctx->need_rollback()) {
                 (void)_rollback_transaction(ctx);
             }
         }
@@ -383,6 +383,7 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
 
     // 3. rollback transaction by send request to FE
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->rollback_txn(ctx));
+    ctx->clear_need_rollback();
 
     // 4. remove stream load context
     //    By remove context at the end, we can retry when the rollback FE fails

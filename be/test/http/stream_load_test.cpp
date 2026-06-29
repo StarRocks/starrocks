@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "http/action/stream_load.h"
+#include "http/service/action/stream_load.h"
 
 #include <event2/buffer.h>
 #include <event2/http.h>
@@ -41,6 +41,7 @@
 #include <rapidjson/document.h>
 
 #include <cstring>
+#include <utility>
 
 #include "base/concurrency/concurrent_limiter.h"
 #include "base/metrics.h"
@@ -48,17 +49,24 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/process_exit.h"
+#include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "http/core/http_channel.h"
+#include "http/core/http_common.h"
+#include "http/core/http_request.h"
+#include "orchestration/stream_load_orchestrator.h"
 #include "platform/platform_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/stream_load_executor.h"
 
 class mg_connection;
@@ -72,6 +80,37 @@ namespace {
 static std::string k_response_str;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
     k_response_str = content;
+}
+
+static Status init_platform_env_for_stream_load_test(MetricRegistry* metrics, bool* owns_platform_env) {
+    auto* platform_env = PlatformEnv::GetInstance();
+    if (platform_env->brpc_stub_cache() != nullptr) {
+        return Status::OK();
+    }
+
+    PlatformEnvOptions options;
+    options.metrics = metrics;
+    options.store_paths.emplace_back(config::storage_root_path);
+    Status status = platform_env->init(std::move(options));
+    if (!status.ok()) {
+        platform_env->destroy();
+        platform_env->reset_store_paths_for_test();
+        return status;
+    }
+    *owns_platform_env = true;
+    return Status::OK();
+}
+
+static ComputeEnvOptions make_stream_load_compute_env_options(MetricRegistry* metrics) {
+    ComputeEnvOptions options;
+    options.global_env = GlobalEnv::GetInstance();
+    options.metrics = metrics;
+    options.store_paths = PlatformEnv::GetInstance()->store_path_registry()->store_path_roots();
+    options.as_cn = true;
+    options.query_cache_capacity = 4 * 1024 * 1024;
+    options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    return options;
 }
 } // namespace
 
@@ -95,26 +134,24 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
-        auto* platform_env = PlatformEnv::GetInstance();
-        if (platform_env->brpc_stub_cache() == nullptr) {
-            ASSERT_OK(platform_env->init(&_metrics));
-            _owns_platform_env = true;
-        }
-        _env._refresh_service_contexts();
-        _env._load_stream_mgr = new LoadStreamMgr();
+        ASSERT_OK(init_platform_env_for_stream_load_test(&_metrics, &_owns_platform_env));
+        ASSERT_OK(_env.compute_env()->init(make_stream_load_compute_env_options(&_metrics)));
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
+        _env._refresh_service_contexts();
+        ASSERT_NE(nullptr, _env.load_stream_mgr());
+        ASSERT_NE(nullptr, _env.stream_context_mgr());
 
         _evhttp_req = evhttp_request_new(nullptr, nullptr);
         _evhttp_req->remote_host = nullptr;
         _limiter.reset(new ConcurrentLimiter(1000));
     }
     void TearDown() override {
-        delete _env._load_stream_mgr;
-        _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
+        _env.compute_env()->destroy();
         if (_owns_platform_env) {
             PlatformEnv::GetInstance()->destroy();
+            PlatformEnv::GetInstance()->reset_store_paths_for_test();
             _owns_platform_env = false;
         }
 
@@ -125,6 +162,7 @@ public:
 
 private:
     ExecEnv _env;
+    orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
     evhttp_request* _evhttp_req = nullptr;
     std::unique_ptr<ConcurrentLimiter> _limiter;
     MetricRegistry _metrics{"stream_load_action_test"};
@@ -132,7 +170,7 @@ private:
 };
 
 TEST_F(StreamLoadActionTest, no_auth) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request.set_handler(&action);
@@ -146,7 +184,7 @@ TEST_F(StreamLoadActionTest, no_auth) {
 
 #if 0
 TEST_F(StreamLoadActionTest, no_content_length) {
-    StreamLoadAction action(&__env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -160,7 +198,7 @@ TEST_F(StreamLoadActionTest, no_content_length) {
 }
 
 TEST_F(StreamLoadActionTest, unknown_encoding) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -176,7 +214,7 @@ TEST_F(StreamLoadActionTest, unknown_encoding) {
 #endif
 
 TEST_F(StreamLoadActionTest, normal) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -194,7 +232,7 @@ TEST_F(StreamLoadActionTest, normal) {
 }
 
 TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -225,7 +263,7 @@ TEST_F(StreamLoadActionTest, process_exit_abort_stream_load) {
 }
 
 TEST_F(StreamLoadActionTest, put_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
 
@@ -243,7 +281,7 @@ TEST_F(StreamLoadActionTest, put_fail) {
 }
 
 TEST_F(StreamLoadActionTest, commit_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -260,7 +298,7 @@ TEST_F(StreamLoadActionTest, commit_fail) {
 }
 
 TEST_F(StreamLoadActionTest, commit_try) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -277,7 +315,7 @@ TEST_F(StreamLoadActionTest, commit_try) {
 }
 
 TEST_F(StreamLoadActionTest, begin_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -295,7 +333,7 @@ TEST_F(StreamLoadActionTest, begin_fail) {
 
 #if 0
 TEST_F(StreamLoadActionTest, receive_failed) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -315,7 +353,7 @@ TEST_F(StreamLoadActionTest, plan_fail) {
     SyncPoint::GetInstance()->SetCallBack("StreamLoadExecutor::execute_plan_fragment:1",
                                           [](void* arg) { *((Status*)arg) = Status::InternalError("TestFail"); });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -334,8 +372,8 @@ TEST_F(StreamLoadActionTest, plan_fail) {
 }
 
 TEST_F(StreamLoadActionTest, huge_malloc) {
-    StreamLoadAction action(&_env, _limiter.get());
-    auto ctx = new StreamLoadContext(&_env);
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
     ctx->ref();
     ctx->body_sink = std::make_shared<StreamLoadPipe>();
     HttpRequest request(_evhttp_req);
@@ -417,7 +455,7 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
     HttpRequest request(_evhttp_req);
 
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -476,7 +514,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
     HttpRequest request(_evhttp_req);
 
     request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
@@ -526,7 +564,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
 }
 
 TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -546,7 +584,7 @@ TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {
 TEST_F(StreamLoadActionTest, merge_commit_response) {
     // success
     {
-        StreamLoadContext ctx(&_env);
+        StreamLoadContext ctx(_env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::OK();
         ctx.txn_id = 1;
@@ -586,7 +624,7 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
 
     // fail
     {
-        StreamLoadContext ctx(&_env);
+        StreamLoadContext ctx(_env.load_stream_mgr());
         ctx.enable_batch_write = true;
         ctx.status = Status::InternalError("TestFail");
         ctx.txn_id = 2;
@@ -626,7 +664,7 @@ TEST_F(StreamLoadActionTest, merge_commit_response) {
 }
 
 TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "%RR");
@@ -635,7 +673,7 @@ TEST_F(StreamLoadActionTest, url_db_key_decode_fail) {
 }
 
 TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -645,7 +683,7 @@ TEST_F(StreamLoadActionTest, url_table_key_decode_fail) {
 }
 
 TEST_F(StreamLoadActionTest, invalid_envelope) {
-    StreamLoadAction action(&_env, _limiter.get());
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -675,7 +713,7 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     };
 
     for (const auto& tc : test_cases) {
-        StreamLoadAction action(&_env, _limiter.get());
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");

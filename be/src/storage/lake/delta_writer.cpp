@@ -32,7 +32,7 @@
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
+#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -53,7 +53,7 @@
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 

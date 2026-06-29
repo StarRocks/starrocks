@@ -18,18 +18,16 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/load_path/rejected_record_writer.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "fs/fs_broker.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
-#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 
 namespace starrocks {
 
@@ -53,7 +51,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
         const std::string& col_name = ctx->current_column_name;
         std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
                                                     col_name.empty() ? "null" : col_name, raw_data);
-        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+        LoadPathStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
         // Emit a rejected-records anchor. The `raw_record` column stays as
         // a single-column diagnostic fragment so users can quickly eyeball
@@ -74,7 +72,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
         // file, which is the price we pay for not building the full ORC-
         // style broker-load validation pipeline on the Parquet side. See
         // the rejected-records plan file for the TVF follow-up.
-        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        auto* writer = LoadPathStateHelper::rejected_record_writer(state);
         if (writer != nullptr) {
             const std::string key = col_name.empty() ? std::string("_raw") : col_name;
 

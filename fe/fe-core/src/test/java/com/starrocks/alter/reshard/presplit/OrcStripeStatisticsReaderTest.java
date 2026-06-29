@@ -15,20 +15,25 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -49,7 +54,7 @@ class OrcStripeStatisticsReaderTest {
                         ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
 
         List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
-                statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
         Assertions.assertFalse(stripeStatistics.isEmpty());
         long totalRowCount = 0L;
@@ -80,7 +85,7 @@ class OrcStripeStatisticsReaderTest {
                         ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex + 100);
 
         List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
-                statusOf(orcPath), new Configuration(), new Column("region_id", IntegerType.INT));
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("region_id", IntegerType.INT));
 
         long globalMin = Long.MAX_VALUE;
         long globalMax = Long.MIN_VALUE;
@@ -103,7 +108,7 @@ class OrcStripeStatisticsReaderTest {
                         ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
 
         List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
-                statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
         Assertions.assertFalse(stripeStatistics.isEmpty());
         Assertions.assertNotNull(stripeStatistics.get(0).getMinTuple());
@@ -121,7 +126,7 @@ class OrcStripeStatisticsReaderTest {
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR)));
     }
 
     @Test
@@ -135,7 +140,7 @@ class OrcStripeStatisticsReaderTest {
         // DOUBLE is outside the meta-tier mapping window even for a numeric sort key.
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("payload", IntegerType.BIGINT)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("payload", IntegerType.BIGINT)));
     }
 
     @Test
@@ -149,7 +154,8 @@ class OrcStripeStatisticsReaderTest {
         // ORC integer stats cannot route into a VARCHAR sort-key column.
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("region_id", VarcharType.VARCHAR)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("region_id", VarcharType.VARCHAR)));
     }
 
     @Test
@@ -162,7 +168,8 @@ class OrcStripeStatisticsReaderTest {
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("missing_sort_key", IntegerType.BIGINT)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("missing_sort_key", IntegerType.BIGINT)));
     }
 
     @Test
@@ -179,7 +186,7 @@ class OrcStripeStatisticsReaderTest {
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT)));
     }
 
     @Test
@@ -194,7 +201,8 @@ class OrcStripeStatisticsReaderTest {
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        statusOf(orcPath), new Configuration(), new Column("wide_value", IntegerType.TINYINT)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("wide_value", IntegerType.TINYINT)));
     }
 
     @Test
@@ -213,7 +221,7 @@ class OrcStripeStatisticsReaderTest {
                 });
 
         List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
-                statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
         long totalRowCount = 0L;
         for (RowGroupStatistics stripe : stripeStatistics) {
@@ -232,19 +240,433 @@ class OrcStripeStatisticsReaderTest {
                 (batch, batchRow, rowIndex) -> { });
 
         List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
-                statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
 
         Assertions.assertTrue(stripeStatistics.isEmpty());
+    }
+
+    @Test
+    void readsDateStatistics() throws Exception {
+        // ORC DATE is stored in a LongColumnVector as day-of-epoch. Day 0 = 1970-01-01.
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 5,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(5L, totalRowCount);
+        Assertions.assertEquals("1970-01-01", globalMin);
+        Assertions.assertEquals("1970-01-05", globalMax);
+    }
+
+    @Test
+    void dateColumnIntoNonDateSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = rowIndex);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_day", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void allNullDateStripeReportsAbsentStatistics() throws Exception {
+        // ORC DATE column written with only nulls → DateColumnStatistics.getNumberOfValues() == 0,
+        // so the stripe reports absent min/max (same contract as the integer all-null path).
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
+    }
+
+    @Test
+    void pre1970DateStripeIsAccepted() throws Exception {
+        // day-of-epoch -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
+        // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
+        // on the meta tier (only DATETIME keeps the 1970 lower bound).
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = -1 - rowIndex);
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1969-12-31",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1582DateStripeIsAccepted() throws Exception {
+        // day-of-epoch -171499 = 1500-06-15, before the 1582 Gregorian cutover. BE's calendar is
+        // proleptic Gregorian (no Julian switch), so this still aligns and stays on the meta tier.
+        Path orcPath = writeOrc(
+                "struct<event_day:date>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) ->
+                        ((LongColumnVector) batch.cols[0]).vector[batchRow] = -171499);
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_day", DateType.DATE));
+
+        Assertions.assertFalse(stats.isEmpty());
+        Assertions.assertEquals("1500-06-15",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsTimestampStatistics() throws Exception {
+        // Plain ORC TIMESTAMP → StarRocks DATETIME. setIsUTC(true): time[] is UTC epoch millis, so
+        // minimumUtc == the written millis. 1000 ms = 1970-01-01 00:00:01 UTC; +1000 ms per row.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("1970-01-01 00:00:01", globalMin);
+        // Whole-second max; assert the second prefix to stay robust to a sub-millisecond stats
+        // ceiling if the ORC writer leaves maxNanos at its sentinel for a 0-nanos value.
+        Assertions.assertTrue(globalMax.startsWith("1970-01-01 00:00:03"), "unexpected max " + globalMax);
+    }
+
+    @Test
+    void readsTimestampStatisticsWithMicroseconds() throws Exception {
+        // Sub-second precision must survive: BE keeps microseconds for a plain TIMESTAMP, so the
+        // boundary must too. 1.500123 s = time=1000 ms (second 1) + nanos=500123000: a Hive
+        // TimestampColumnVector adds nanos[] (the full sub-second, confirmed for orc-core 1.9.1) onto
+        // the whole second of time[].
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 1000L;
+                    vector.nanos[batchRow] = 500_123_000;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals("1970-01-01 00:00:01.500123",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void timestampInstantFallsBackToDataTier() throws Exception {
+        // TIMESTAMP_INSTANT (timestamp with local time zone) gets a session-tz offset at load time
+        // that this reader cannot reproduce → defer to data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void timestampIntoNonDatetimeSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void pre1970TimestampFallsBackToDataTier() throws Exception {
+        // -1000 ms = 1969-12-31 23:59:59 < 1970-01-01: outside the safe window → data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = -1000L - rowIndex;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void postYear9999TimestampFallsBackToDataTier() throws Exception {
+        // 253402300800000 ms = 10000-01-01 00:00:00 UTC, year > 9999 → above the safe window.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 253402300800000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME)));
+    }
+
+    @Test
+    void allNullTimestampStripeReportsAbsentStatistics() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertFalse(stats.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
+    }
+
+    @Test
+    void readsDecimalStatistics() throws Exception {
+        // ORC decimal(18,2): write 1.00, 2.00, ... 5.00. ORC orders decimal stats correctly.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 5,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        // Assert on BigDecimal VALUE, not the exact string: ORC's decimal-stats round-trip may
+        // normalize trailing-zero scale ("1.00" vs "1"). Both are accepted downstream because the
+        // Variant carries the column's ScalarType precision/scale regardless of the rendered text.
+        Assertions.assertFalse(stats.isEmpty());
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("1.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("5.00")));
+    }
+
+    @Test
+    void readsNegativeDecimalStatistics() throws Exception {
+        // ORC decimal(18,2) spanning negative→positive: -2.00, -1.00, 0.00, 1.00. ORC orders by value.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 4,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex - 2) * 100L, 2))));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        // Value-based comparison (ORC may render scale as "1" vs "1.00"); proves signed order.
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("-2.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("1.00")));
+    }
+
+    @Test
+    void readsDecimal128Statistics() throws Exception {
+        // Accepted non-DECIMAL64 case: ORC decimal(20,2) → StarRocks DECIMAL128(20,2). The max
+        // value's unscaled form (20 digits) exceeds 64-bit range, so this genuinely exercises the
+        // 128-bit path through Type.isDecimalOfAnyVersion()/Variant.of/DecimalVariant.
+        BigDecimal[] values = {
+                new BigDecimal("1.00"),
+                new BigDecimal("2.00"),
+                new BigDecimal("999999999999999999.99"),
+        };
+        Path orcPath = writeOrc(
+                "struct<d:decimal(20,2)>",
+                /*rowCount=*/ values.length,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(values[rowIndex])));
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)));
+
+        Assertions.assertFalse(stats.isEmpty());
+        BigDecimal globalMin = null;
+        BigDecimal globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            BigDecimal minValue = new BigDecimal(stripe.getMinTuple().getValues().get(0).getStringValue());
+            BigDecimal maxValue = new BigDecimal(stripe.getMaxTuple().getValues().get(0).getStringValue());
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals(0, globalMin.compareTo(new BigDecimal("1.00")));
+        Assertions.assertEquals(0, globalMax.compareTo(new BigDecimal("999999999999999999.99")));
+    }
+
+    @Test
+    void decimalScaleMismatchFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+    }
+
+    @Test
+    void decimalPrecisionMismatchFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2))));
+    }
+
+    @Test
+    void decimalIntoNonDecimalSortKeyFallsBackToDataTier() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> ((DecimalColumnVector) batch.cols[0])
+                        .set(batchRow, HiveDecimal.create(BigDecimal.valueOf((rowIndex + 1) * 100L, 2))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("d", IntegerType.BIGINT)));
+    }
+
+    @Test
+    void allNullDecimalStripeReportsAbsentStatistics() throws Exception {
+        // All-null decimal column → DecimalColumnStatistics.getNumberOfValues() == 0 → absent min/max.
+        Path orcPath = writeOrc(
+                "struct<d:decimal(18,2)>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    batch.cols[0].noNulls = false;
+                    batch.cols[0].isNull[batchRow] = true;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+
+        Assertions.assertFalse(stats.isEmpty());
+        long totalRowCount = 0L;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+            totalRowCount += stripe.getRowCount();
+        }
+        Assertions.assertEquals(3L, totalRowCount);
     }
 
     private Path writeOrc(
             String schemaText, int rowCount, PresplitTestSupport.OrcRowFiller rowFiller) throws IOException {
         return PresplitTestSupport.writeOrcFixture(tempDirectory, schemaText, rowCount, rowFiller);
-    }
-
-    private static FileStatus statusOf(Path path) throws IOException {
-        LocalFileSystem fs = new LocalFileSystem();
-        fs.initialize(path.toUri(), new Configuration());
-        return fs.getFileStatus(path);
     }
 }

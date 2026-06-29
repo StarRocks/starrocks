@@ -18,12 +18,12 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/global_dict/decoder.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline_node.h"
-#include "runtime/global_dict/decoder.h"
-#include "runtime/global_dict/parser.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <aws/core/Aws.h>
 #include <fmt/format.h>
 #include <gflags/gflags.h>
 #include <thrift/protocol/TBinaryProtocol.h>
@@ -54,6 +53,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
 #include "common/util/debug_util.h"
@@ -61,7 +61,6 @@
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -71,6 +70,8 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "platform/aws/aws_sdk_guard.h"
+#include "platform/key_cache.h"
 #include "platform/store_path.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
@@ -78,11 +79,12 @@
 #include "storage/delta_column_group.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/olap_define.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primitive/key_coder.h"
+#include "storage/primitive/storage_define.h"
 #include "storage/primitive/storage_stats.h"
 #include "storage/primitive/zone_map_detail.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -97,7 +99,6 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "types/olap_type_infra.h"
-#include "util/logging.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -1883,9 +1884,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         dump_lake_persistent_index_sst(FLAGS_file, enc_info);
     } else if (FLAGS_operation == "print_lake_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
-        if (!metadata.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&metadata, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse tablet metadata: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1966,9 +1972,14 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << json << '\n';
         }
     } else if (FLAGS_operation == "print_lake_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TxnLogPB txn_log;
-        if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1981,9 +1992,14 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::CombinedTxnLogPB combined_txn_log;
-        if (!combined_txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse combined txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&combined_txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse combined txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -2023,15 +2039,13 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "expired_sec is less than 10min" << std::endl;
             return -1;
         }
-        Aws::SDKOptions options;
-        Aws::InitAPI(options);
+        starrocks::AwsSdkGuard aws_sdk_guard(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
         auto status =
                 starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
         if (!status.ok()) {
             std::cout << status << std::endl;
         }
         starrocks::close_s3_clients();
-        Aws::ShutdownAPI(options);
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",

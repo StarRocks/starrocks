@@ -19,12 +19,23 @@ endif()
 
 set(STORAGE_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    column_and_predicate_test.cpp
+    column_or_predicate_test.cpp
+    column_predicate_test.cpp
+    column_value_range_test.cpp
+    disjunctive_predicates_test.cpp
     key_coder_test.cpp
+    lake_file_name_test.cpp
+    predicate_tree_test.cpp
     projection_iterator_test.cpp
     range_test.cpp
     roaring2range_test.cpp
     row_source_mask_test.cpp
     storage_value_types_test.cpp
+    tablet_column_test.cpp
+    tablet_info_test.cpp
+    tablet_column_util_test.cpp
+    tablet_column_type_utils_test.cpp
     union_iterator_test.cpp
 )
 

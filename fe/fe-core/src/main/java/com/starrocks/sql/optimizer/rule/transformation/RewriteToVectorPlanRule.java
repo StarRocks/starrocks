@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -37,7 +38,6 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -109,23 +109,32 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         // index the distance is already exact, so refine would be wasted work and is skipped.
         boolean doRefine = context.getSessionVariable().isEnableVectorIndexRefine() && isQuantizedIndex(info.index);
 
+        // Split the scan predicate into the vector-distance-range part (folded into the ANN range) and the
+        // residual scalar part. The residual is kept on the scan; the BE pre/post-filters it against the ANN
+        // (SegmentIterator::_get_row_ranges_by_vector_index). A non-range predicate (e.g. category = 'x') no
+        // longer disables the vector index -- it used to bail out here to a brute-force full scan.
         ScalarOperator predicate = scanOp.getPredicate();
         if (predicate != null) {
-            Optional<Double> value = extractVectorRange(predicate, info);
-            // If some predicates cannot be parsed to vector range, vector index cannot be used.
-            if (value.isEmpty()) {
+            PredicateSplit split = splitVectorRangeAndResidual(predicate, info);
+            // A distance predicate that is not a valid range bound disables the vector index (as before).
+            if (split == null) {
                 return List.of();
             }
-            opts.setPredicateRange(value.get());
-            // Trust path: drop the predicate -- the bound is enforced by the ANN range_search on the
-            // index distance, which the trust path accepts as-is (lossy for a quantized index). Refine
-            // path: keep it as a Filter re-applied on the recomputed exact distance above the scan -- a
-            // precision recheck that drops false positives the lossy range_search/over-fetch let through,
-            // and that also bounds segments whose .vi is still missing (scanned in full, recomputed above).
-            if (!doRefine) {
-                predicate = null;
-            }
+            split.range.ifPresent(opts::setPredicateRange);
+            // Trust path (refine off): the distance-range bound is folded into the ANN range_search, which
+            // enforces it on the lossy index distance and accepts that (lossy) result, so it is dropped from
+            // the scan, leaving only the residual. Refine path (refine on): ALSO keep the distance bound on
+            // the scan as a Filter. range_search still prefilters on the lossy distance, then this kept
+            // conjunct re-applies the bound on the recomputed exact distance above the scan -- a precision
+            // recheck that removes false positives the lossy prefilter let through, and that also bounds
+            // segments whose .vi is still missing (those skip range_search and are scanned in full).
+            predicate = doRefine ? predicate : split.residual;
         }
+
+        // Note: a residual that the optimizer cannot push into the scan (e.g. cat + tag > 50) ends up
+        // as a SELECT above the ANN scan. The BE detects that from the execution tree (FragmentExecutor
+        // walk -> ScanNode::is_filtered_above_iterator) and routes to exact brute-force, so the rewrite
+        // does not need to predict it here.
 
         opts.setEnableUseANN(true);
         opts.setRefineDistance(doRefine);
@@ -169,10 +178,15 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                                                      ScalarOperator newPredicate,
                                                      VectorFuncInfo info,
                                                      VectorSearchOptions opts) {
-        // Add index distanceColumn to the scan operator, including table, colRefToColumnMetaMap, and columnMetaToColRefMap.
+        // The distance column is per-query synthetic state: it only needs to live in the scan operator's
+        // colRef maps below (PlanFragmentBuilder builds the scan slot's Column from colRefToColumnMetaMap).
+        // It must NOT be added to the shared catalog table's fullSchema. Table.addColumn appends to
+        // fullSchema (a List that does not dedup) while only nameToColumn dedups, so adding it here
+        // appended a duplicate "__vector_*" column on every vector query that planned on the live table
+        // (the whole-phase-lock path). Once two duplicates accumulated, building the Column-keyed map in
+        // RelationTransformer threw "Multiple entries with same key" for any later statement on the table.
         String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
         Column distanceColumn = new Column(distanceColumnName, FloatType.FLOAT);
-        scanOp.getTable().addColumn(distanceColumn);
 
         ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, FloatType.FLOAT, false);
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
@@ -215,6 +229,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return scalarOperator;
     }
 
+
     /**
      * Check if the operator matches the specific vector function call.
      *
@@ -239,49 +254,65 @@ public class RewriteToVectorPlanRule extends TransformationRule {
     }
 
     /**
-     * Extract the vector range from the predicates.
+     * Split the scan predicate into a vector-distance-range part and a residual scalar part.
      *
-     * <p> Only the predicates in the following format can be parsed to vector range:
-     * - req1: <=, >=, and one side is constant, the other side is the vector index column.
-     * - req2: AND, and each child predicate meets req1.
+     * <p> A conjunct is a distance-range part when it is "&lt;approx_func&gt; &lt;=|&gt;= const" matching the
+     * ORDER BY function and direction (see {@link #parseVectorRangeFromBinaryPredicate}); such conjuncts are
+     * combined into a single tightest range and folded into the ANN as vector_range. Every other conjunct is
+     * residual and kept on the scan, where the BE pre/post-filters it against the ANN. So, unlike the old
+     * all-or-nothing extraction, a predicate like "category = 'x'" (or "v1 <= 10 AND c1 < 10") no longer
+     * disables the vector index.
      *
-     * <p> For example, suppose v1 is the vector index column and isAscending=true, then:
-     * - v1 <= 10: 10
-     * - v1 <= 10 AND v1 < 20: 10
-     * - v1 >= 10: cannot be parsed
-     * - c1 <= 10: cannot be parsed
-     * - v1 <= 10 and c1 < 10: cannot be parsed
-     *
-     * @return the vector range value if the predicate can be parsed to vector range, otherwise empty.
+     * <p> Examples (v1 = vector distance, isAscending = true): "v1 <= 10" -> range 10, residual null;
+     * "v1 <= 10 AND v1 < 20" -> range 10, residual null; "c1 = 5" -> range empty, residual "c1 = 5";
+     * "v1 <= 10 AND c1 < 10" -> range 10, residual "c1 < 10".
      */
-    private Optional<Double> extractVectorRange(ScalarOperator predicate, VectorFuncInfo info) {
-        if (predicate instanceof BinaryPredicateOperator) {
-            return parseVectorRangeFromBinaryPredicate(predicate, info);
-        } else if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
-            if (!compoundPredicate.isAnd()) {
-                return Optional.empty();
+    private PredicateSplit splitVectorRangeAndResidual(ScalarOperator predicate, VectorFuncInfo info) {
+        Optional<Double> range = Optional.empty();
+        List<ScalarOperator> residuals = new ArrayList<>();
+        for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+            Optional<Double> childValue = parseVectorRangeFromBinaryPredicate(conjunct, info);
+            if (childValue.isPresent()) {
+                range = range.isEmpty() ? childValue
+                        : Optional.of(info.isAscending ? Math.min(range.get(), childValue.get())
+                                                       : Math.max(range.get(), childValue.get()));
+            } else if (referencesVectorDistanceFunc(conjunct)) {
+                // A conjunct that involves the vector distance but is not a valid range bound (wrong
+                // direction/op/column, or wrapped in another expression) cannot be pushed to the index nor
+                // safely kept as a residual -> signal that the vector index cannot be used.
+                return null;
+            } else {
+                residuals.add(conjunct);
             }
-            Optional<Double> value = Optional.empty();
-            for (ScalarOperator child : predicate.getChildren()) {
-                Optional<Double> childValue = parseVectorRangeFromBinaryPredicate(child, info);
-                if (childValue.isEmpty()) {
-                    return Optional.empty();
-                }
-                if (value.isEmpty()) {
-                    value = childValue;
-                } else {
-                    if (info.isAscending) {
-                        value = Optional.of(Math.min(value.get(), childValue.get()));
-                    } else {
-                        value = Optional.of(Math.max(value.get(), childValue.get()));
-                    }
-                }
-            }
-            return value;
         }
+        return new PredicateSplit(range, residuals.isEmpty() ? null : Utils.compoundAnd(residuals));
+    }
 
-        return Optional.empty();
+    // Whether the operator tree references a vector distance function (approx_l2_distance /
+    // approx_cosine_similarity) in any position.
+    private boolean referencesVectorDistanceFunc(ScalarOperator op) {
+        if (op instanceof CallOperator) {
+            String fnName = ((CallOperator) op).getFnName();
+            if (fnName.equalsIgnoreCase(APPROX_L2_DISTANCE) || fnName.equalsIgnoreCase(APPROX_COSINE_SIMILARITY)) {
+                return true;
+            }
+        }
+        for (ScalarOperator child : op.getChildren()) {
+            if (referencesVectorDistanceFunc(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final class PredicateSplit {
+        final Optional<Double> range;
+        final ScalarOperator residual;
+
+        PredicateSplit(Optional<Double> range, ScalarOperator residual) {
+            this.range = range;
+            this.residual = residual;
+        }
     }
 
     private Optional<Double> parseVectorRangeFromBinaryPredicate(ScalarOperator predicate, VectorFuncInfo info) {

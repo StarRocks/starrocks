@@ -1,0 +1,94 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/task/engine_alter_tablet_task.cpp
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "data_workflows/schema_change/engine_alter_tablet_task.h"
+
+#include "base/utility/defer_op.h"
+#include "common/config_storage_fwd.h"
+#include "io/io_profiler.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
+#include "storage/lake/schema_change.h"
+#include "storage/schema_change.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
+#include "storage/storage_metrics.h"
+
+namespace starrocks {
+
+using std::to_string;
+
+EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request,
+                                             ExecEnv* exec_env)
+        : _alter_tablet_req(request), _exec_env(exec_env) {
+    size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+    _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::SCHEMA_CHANGE_TASK, mem_limit, "schema change task",
+                                                mem_tracker);
+}
+
+Status EngineAlterTabletTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    StorageMetrics::instance()->create_rollup_requests_total.increment(1);
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_ALTER, _alter_tablet_req.new_tablet_id);
+
+    Status res;
+    std::string alter_msg_header = strings::Substitute("[Alter Job:$0, tablet:$1]: ", _alter_tablet_req.job_id,
+                                                       _alter_tablet_req.base_tablet_id);
+    std::string task_detail_msg = "";
+    if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        lake::SchemaChangeHandler handler(StorageEnv::GetInstance()->lake_tablet_manager(),
+                                          StorageEngine::instance()->lake_schema_change_thread_pool(), _exec_env);
+        res = handler.process_alter_tablet(_alter_tablet_req);
+    } else {
+        SchemaChangeHandler handler(_exec_env);
+        handler.set_alter_msg_header(alter_msg_header);
+        res = handler.process_alter_tablet(_alter_tablet_req);
+        task_detail_msg = handler.get_task_detail_msg();
+    }
+    if (!res.ok()) {
+        LOG(WARNING) << alter_msg_header << "failed to do alter task. status=" << res.to_string()
+                     << " detail run msg: " << '\n'
+                     << task_detail_msg;
+        StorageMetrics::instance()->create_rollup_requests_failed.increment(1);
+        return res;
+    }
+
+    VLOG(2) << alter_msg_header << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
+    return Status::OK();
+} // execute
+
+} // namespace starrocks

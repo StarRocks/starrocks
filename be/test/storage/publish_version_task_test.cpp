@@ -22,6 +22,7 @@
 #include "agent/publish_version.h"
 #include "base/concurrency/await.h"
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/path/file_util.h"
 #include "base/testutil/assert.h"
 #include "base/time/time.h"
@@ -31,6 +32,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
+#include "common/system/master_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/query_context.h"
@@ -55,16 +57,28 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
+#include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "testutil/local_snapshot_client.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
 class PublishVersionTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
+
+    void SetUp() override {
+        _previous_snapshot_client =
+                StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                        local_snapshot_client_for_test());
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->replication_txn_manager()->TEST_set_remote_snapshot_client(
+                _previous_snapshot_client);
+    }
 
     static void TearDownTestCase() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
@@ -205,6 +219,7 @@ private:
     std::string _names[3] = {"k1", "k2", "v1"};
     RuntimeState _runtime_state;
     ObjectPool _pool;
+    RemoteSnapshotClient* _previous_snapshot_client = nullptr;
 };
 
 TEST_F(PublishVersionTaskTest, test_publish_version) {
@@ -740,12 +755,12 @@ TEST_F(PublishVersionTaskTest, test_publish_version_replication_failed) {
     remote_snapshot_request.__set_schema_hash(1111);
     // current tablet visible version is at least 3 in previous tests
     remote_snapshot_request.__set_visible_version(3);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(12345);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(1111);
     remote_snapshot_request.__set_src_visible_version(4);
-    remote_snapshot_request.__set_src_backends(std::vector<TBackend>{TBackend()});
+    remote_snapshot_request.__set_src_backends(std::vector<TBackend>{local_snapshot_backend_for_test()});
 
     TSnapshotInfo remote_snapshot_info;
     (void)StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,

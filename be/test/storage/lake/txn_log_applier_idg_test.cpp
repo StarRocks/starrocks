@@ -18,6 +18,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log_applier.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 namespace lake {
@@ -59,7 +60,7 @@ MutableTabletMetadataPtr make_pk_meta(int64_t id, int64_t version) {
 // MetaFileBuilder::apply_add_index. After apply, idg_meta carries the new
 // segment entry and table_indices reconciles the new index.
 TEST(TxnLogApplierIdgTest, npk_apply_op_add_index_populates_idg_meta) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 70001);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70001);
     auto meta = make_npk_meta(70001, /*version=*/4);
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/5, /*rebuild_pindex=*/false,
                                        /*skip_write_tablet_metadata=*/true);
@@ -97,7 +98,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_op_add_index_populates_idg_meta) {
 // matching TabletIndexPB into dropped_table_indices via the transient
 // MetaFileBuilder.
 TEST(TxnLogApplierIdgTest, npk_apply_op_drop_index_records_tombstone) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 70002);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70002);
     auto meta = make_npk_meta(70002, /*version=*/6);
     // Pre-populate schema with the index that will be dropped.
     auto* ix = meta->mutable_schema()->add_table_indices();
@@ -127,7 +128,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_op_drop_index_records_tombstone) {
 // Lake replication carries idg_meta from source TabletMetadata into the
 // target during a full snapshot (tablet_metadata branch, lines 1353-1360).
 TEST(TxnLogApplierIdgTest, npk_apply_replication_carries_idg_meta) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 70003);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70003);
     auto meta = make_npk_meta(70003, /*version=*/1);
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/2, /*rebuild_pindex=*/false,
                                        /*skip_write_tablet_metadata=*/true);
@@ -160,7 +161,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_replication_carries_idg_meta) {
 // metadata still references the same index_file (lines 1391-1398, plus
 // collect_idg_orphan_files path).
 TEST(TxnLogApplierIdgTest, npk_apply_replication_collects_old_idx_orphans) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 70004);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70004);
     auto meta = make_npk_meta(70004, /*version=*/1);
     // Pre-existing IDG entries on the *target*; the unreferenced one must
     // become an orphan, the still-referenced one must be skipped.
@@ -209,7 +210,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_replication_collects_old_idx_orphans) {
 // PK replication: idg_meta carry-over (lines 743-745) plus orphan collection
 // for the unreferenced .idx file (lines 807-811, 833).
 TEST(TxnLogApplierIdgTest, pk_apply_replication_carries_idg_meta) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 70005);
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70005);
     auto meta = make_pk_meta(70005, /*version=*/1);
     auto& stale = (*meta->mutable_idg_meta()->mutable_idgs())[4];
     stale.add_entries()->set_index_file("pk_stale.idx");

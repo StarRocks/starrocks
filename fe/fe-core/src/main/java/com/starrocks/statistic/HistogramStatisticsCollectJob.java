@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -155,6 +157,17 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
+    // Convert a sample ratio in (0, 1) into a percent string in (0, 100) for the SAMPLE('percent'=...) clause.
+    // Uses BigDecimal to avoid both binary float noise (e.g. 0.49999999999999994) and truncation to 0 for
+    // sub-1% ratios on very large tables (which used to produce the illegal SAMPLE('percent'='0')).
+    @VisibleForTesting
+    static String formatSamplePercent(double sampleRatio) {
+        BigDecimal percent = BigDecimal.valueOf(sampleRatio).multiply(BigDecimal.valueOf(100));
+        // Drop trailing zeros so integral percents stay clean (e.g. "50" not "50.00"), and avoid
+        // scientific notation that the SQL parser cannot consume.
+        return percent.stripTrailingZeros().toPlainString();
+    }
+
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName, double sampleRatio) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
@@ -166,7 +179,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("topN", topN);
 
         if (sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sample = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
+            String sample = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
             context.put("sampleClause", sample);
         } else {
             context.put("sampleClause", "");
@@ -264,7 +277,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         // TODO: use it by default and remove this switch
         if (Config.enable_use_table_sample_collect_statistics && sampleRatio > 0.0 && sampleRatio < 1.0) {
-            String sampleClause = String.format("SAMPLE('percent'='%d')", (int) (sampleRatio * 100));
+            String sampleClause = String.format("SAMPLE('percent'='%s')", formatSamplePercent(sampleRatio));
             context.put("sampleClause", sampleClause);
             context.put("randFilter", "TRUE");
         } else {

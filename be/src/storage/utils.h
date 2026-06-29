@@ -56,7 +56,7 @@
 #include "common/status.h"
 #include "platform/path_rw.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

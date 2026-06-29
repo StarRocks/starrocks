@@ -15,14 +15,30 @@
 set(PLATFORM_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     download_util_test.cpp
+    fs_broker_test.cpp
+    key_cache_test.cpp
+    llm/llm_cache_test.cpp
+    llm/model_config_test.cpp
     path_rw_test.cpp
     platform_env_test.cpp
     platform_metrics_test.cpp
     python_env_test.cpp
+    small_file_mgr_test.cpp
     store_path_test.cpp
     thrift_rpc_helper_test.cpp
     user_function_cache_test.cpp
 )
+
+if(NOT APPLE)
+    list(APPEND PLATFORM_TEST_FILES
+        llm/llm_query_service_test.cpp
+    )
+else()
+    # The HTTP-backed LLMQueryServiceTest cases pass on macOS but can hang in
+    # EvHttpServer::join() during suite teardown. Keep this suite in
+    # platform_test for non-Apple builds until the platform HTTP teardown issue
+    # is fixed.
+endif()
 
 set(PLATFORM_TEST_LINK_LIBS
     Platform

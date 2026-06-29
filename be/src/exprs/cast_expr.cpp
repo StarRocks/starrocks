@@ -112,8 +112,9 @@ struct CastFn {
                                                                                                          TO_TYPE>(     \
                             column);                                                                                   \
                 } else {                                                                                               \
-                    return VectorizedInputCheckUnaryFunction<                                                          \
-                            UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+                    return NullAwareInputCheckUnaryFunction<UNARY_IMPL, NumberCheckWithThrowException,                 \
+                                                            NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>(       \
+                            column);                                                                                   \
                 }                                                                                                      \
             }                                                                                                          \
             return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);           \
@@ -1442,7 +1443,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
         for (int i = 0; i < size; ++i) {                                                                    \
             auto f = fmt::format_int(r1[i]);                                                                \
             bytes.insert(bytes.end(), (uint8_t*)f.data(), (uint8_t*)f.data() + f.size());                   \
-            offset[i + 1] = bytes.size();                                                                   \
+            offset.set(i + 1, bytes.size());                                                               \
         }                                                                                                   \
         return result;                                                                                      \
     }
@@ -1474,13 +1475,13 @@ DEFINE_INT_CAST_TO_STRING(TYPE_BIGINT, TYPE_VARCHAR);
             for (int i = 0; i < size; ++i) {                                                                \
                 r1[i].to_string(dst + off, MAX_LEN);                                                        \
                 off += MAX_LEN;                                                                             \
-                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+                offset.set(i + 1, off);                                                                     \
             }                                                                                               \
         } else {                                                                                            \
             for (int i = 0; i < size; ++i) {                                                                \
                 int len = r1[i].to_string(dst + off, MAX_LEN);                                              \
                 if (LIKELY(len > 0)) off += len;                                                            \
-                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+                offset.set(i + 1, off);                                                                     \
             }                                                                                               \
         }                                                                                                   \
         bytes.resize(off);                                                                                  \
@@ -1842,6 +1843,18 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
     case TYPE_STRUCT: {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
+        // Validate that every struct field name is a parseable JSON path before constructing
+        // CastJsonToStruct, whose ctor would otherwise throw an uncaught std::runtime_error.
+        // The throw propagates out of create_expr_tree (no try/catch on that path) and aborts
+        // the BE at fragment prepare. Returning nullptr surfaces a clean Status::NotSupported.
+        for (const auto& field_name : cast_to.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!JsonPath::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast json to struct: field name is not a valid JSON path: " << field_name;
+                return nullptr;
+            }
+        }
+
         std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
@@ -1975,6 +1988,18 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
     }
     case TYPE_STRUCT: {
         TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        // Validate that every struct field name is a parseable variant path before constructing
+        // CastVariantToStruct, whose ctor would otherwise throw an uncaught std::runtime_error
+        // that propagates out of create_expr_tree and aborts the BE at fragment prepare.
+        // Returning nullptr surfaces a clean Status::NotSupported instead.
+        for (const auto& field_name : expected_type.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!VariantPathParser::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast variant to struct: field name is not a valid variant path: " << field_name;
+                return nullptr;
+            }
+        }
 
         std::vector<Expr*> field_casts(expected_type.children.size());
         for (int i = 0; i < expected_type.children.size(); ++i) {

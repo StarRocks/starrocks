@@ -18,9 +18,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
+    byte_buffer.cpp
+    message_body_sink.cpp
     current_thread.cpp
     chunk_helper.cpp
     descriptors.cpp
+    descriptors_ext.cpp
     runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
@@ -32,10 +35,7 @@ set(RUNTIME_CORE_FILES
     bucket_aware_partition.cpp
     query_statistics.cpp
     runtime_metrics.cpp
-    stream_load/stream_load_metrics.cpp
-    global_dict/decoder.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
+    time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
@@ -62,6 +62,7 @@ target_link_libraries(RuntimeCore PRIVATE
 )
 
 set(RUNTIME_ENV_FILES
+    env/diagnose_daemon.cpp
     env/global_env.cpp
     env/global_thread_pools.cpp
     env/java/java_env.cpp
@@ -82,29 +83,13 @@ target_link_libraries(RuntimeEnv PUBLIC
 )
 
 set(RUNTIME_FILES
-    broker_mgr.cpp
     lookup_stream_mgr.cpp
-    descriptors_ext.cpp
     exec_env.cpp
     jdbc_driver_manager.cpp
-    plan_fragment_executor.cpp
+    pipeline_fragment_reporter.cpp
     runtime_state_helper.cpp
-    rejected_record_writer.cpp
-    rejected_record_sync_daemon.cpp
-    fragment_mgr.cpp
-    load_path_mgr.cpp
-    dummy_load_path_mgr.cpp
-    agg_state_desc.cpp
-    load_channel_mgr.cpp
-    load_channel.cpp
-    local_tablets_channel.cpp
-    snapshot_loader.cpp
-    message_body_sink.cpp
     stream_load/transaction_mgr.cpp
-    stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
-    stream_load/stream_load_pipe.cpp
-    stream_load/time_bounded_stream_load_pipe.cpp
     batch_write/isomorphic_batch_write.cpp
     batch_write/batch_write_mgr.cpp
     batch_write/batch_write_util.cpp
@@ -112,24 +97,18 @@ set(RUNTIME_FILES
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
-    routine_load/routine_load_task_executor.cpp
-    small_file_mgr.cpp
-    external_scan_context_mgr.cpp
-    tablets_channel.cpp
-    runtime_filter_worker.cpp
+    runtime_filter_merger.cpp
+    runtime_filter_port.cpp
+    runtime_filter_rpc.cpp
+    runtime_filter_worker_context.cpp
     runtime_filter_serde.cpp
-    global_dict/fragment_dict_state.cpp
-    global_dict/parser.cpp
-    lake_tablets_channel.cpp
-    lake_snapshot_loader.cpp
     command_executor.cpp
-    diagnose_daemon.cpp
-    logconfig.cpp
 )
 
 ADD_BE_LIB(Runtime
     ${RUNTIME_FILES}
     )
 
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive ExecSinkCore Platform)
+target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform Cache)
+target_link_libraries(Runtime PRIVATE ExecRuntime)
 target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

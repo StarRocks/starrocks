@@ -18,11 +18,12 @@
 #include <mutex>
 #include <utility>
 
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sorting.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "runtime/current_thread.h"
@@ -59,9 +60,36 @@ bool SortContext::is_partition_ready() const {
     });
 }
 
+Status SortContext::spiller_task_status() const {
+    for (const auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            if (Status st = sorter->spiller()->task_status(); !st.ok()) {
+                return st;
+            }
+        }
+    }
+    return Status::OK();
+}
+
+void SortContext::subscribe_source_to_spillers(RuntimeState* state, PipelineObserver* observer) {
+    for (auto& sorter : _chunks_sorter_partitions) {
+        if (sorter->spiller() != nullptr) {
+            sorter->spiller()->observable().subscribe_source(state, observer);
+        }
+    }
+}
+
+// Cancel is intentionally minimal. Each partition spiller's cancel is already driven from the sink side
+// (SpillablePartitionSortSinkOperator::set_finishing/set_finished call _chunks_sorter->cancel() ->
+// _spiller->cancel() when cancelled), and any in-flight restore/flush IO holds its own query-lifetime pin
+// for the duration of its completion, so an explicit per-spiller cancel() here would be redundant (and
+// could only race the IO task's own guard); none is issued.
 void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
+    // Propagate a partition spiller task error before touching the merger, which would otherwise stall on a
+    // not-eos no-data cursor.
+    RETURN_IF_ERROR(spiller_task_status());
     RETURN_IF_ERROR(_init_merger());
 
     while (_required_rows > 0 && !_merger.is_eos()) {
@@ -125,7 +153,7 @@ Status SortContext::_init_merger() {
             // Without this, a spiller restore failure leaves the merger cursor in a
             // not-eos / no-data limbo and the source operator hangs.
             if (!st.ok() && !st.is_end_of_file()) {
-                _state->fragment_ctx()->cancel(st);
+                cancel_fragment_context(_state->fragment_ctx(), st);
                 *eos = true;
             }
             if (!st.ok() || *eos || chunk == nullptr) {

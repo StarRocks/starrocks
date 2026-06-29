@@ -37,6 +37,7 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
@@ -50,9 +51,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -161,7 +162,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             insertStmt = prepareRefreshPlan(refreshScope.getMvPartitionsToRefresh(),
-                    refreshScope.getRefTablePartitionNames());
+                    toTableKeyedRefreshPartitions(refreshScope.getRefTableRefreshPartitions()));
         }
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
     }
@@ -182,11 +183,23 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         return Constants.TaskRunState.SUCCESS;
     }
 
+    private static Map<Table, PCellSortedSet> toTableKeyedRefreshPartitions(
+            Map<BaseTableSnapshotInfo, PCellSortedSet> snapshotKeyed) {
+        Map<Table, PCellSortedSet> result = Maps.newLinkedHashMap();
+        snapshotKeyed.forEach((snapshotInfo, partitions) -> {
+            Table table = snapshotInfo.getBaseTable();
+            if (table != null) {
+                result.put(table, partitions);
+            }
+        });
+        return result;
+    }
+
     /**
      * Prepare the statement and plan for mv refreshing, considering the partitions of ref table
      */
     private InsertStmt prepareRefreshPlan(PCellSortedSet mvToRefreshedPartitions,
-                                          PCellSetMapping refTablePartitionNames)
+                                          Map<Table, PCellSortedSet> refTableRefreshPartitions)
             throws AnalysisException, LockTimeoutException {
         // Prepare refresh connect context
         ConnectContext ctx = mvContext.getCtx();
@@ -224,11 +237,19 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvPctRefreshPartitioner);
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
+            // An IVM MV's full rebuild must INSERT the rewritten query (hidden __ROW_ID__/__AGG_STATE
+            // columns), re-derived inside the lock. Require BOTH an IVM mode AND the __ROW_ID__ schema:
+            // mode alone misfires on a non-IVM AUTO MV, __ROW_ID__ alone on a PCT MV that merely outputs a
+            // column named __ROW_ID__. Either misfire fails this terminal PCT refresh.
+            if (mv.getCurrentRefreshMode().isIncrementalOrAuto() && mv.getRowIdStrategy() != null) {
+                insertStmt = generateInsertAst(ctx, mvToRefreshedPartitions,
+                        mv.getTaskDefinition(IvmRefreshDefinition.derive(ctx, mv)));
+            }
             // Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv
             try (Timer ignored = Tracers.watchScope("MVRefreshAnalyzer")) {
                 insertStmt = planBuilder.analyzeAndBuildInsertPlan(insertStmt,
-                        mvToRefreshedPartitions, refTablePartitionNames, ctx);
+                        mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
                 // Must set execution id before StatementPlanner.plan
                 ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
             }
@@ -272,11 +293,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         if (logger.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
             logger.info("MV Refresh Final Plan\nMV PartitionsToRefresh: {}\nBase PartitionsToScan: {}\n" +
                             "Insert Plan:\n{}",
-                    mvToRefreshedPartitions, refTablePartitionNames,
+                    mvToRefreshedPartitions, refTableRefreshPartitions,
                     execPlan != null ? execPlan.getExplainString(StatementBase.ExplainLevel.VERBOSE) : "");
         } else {
             logger.info("MV Refresh Final Plan, MV PartitionsToRefresh: {}, Base PartitionsToScan: {}",
-                    mvToRefreshedPartitions, refTablePartitionNames);
+                    mvToRefreshedPartitions, refTableRefreshPartitions);
         }
 
         mvContext.setExecPlan(execPlan);
@@ -284,9 +305,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
     }
 
     @Override
-    public void generateNextTaskRunIfNeeded() {
+    public boolean generateNextTaskRunIfNeeded() {
         if (!mvContext.hasNextBatchPartition() || mvContext.getTaskRun().isKilled()) {
-            return;
+            return false;
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -359,9 +380,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     .setExecuteOption(option)
                     .build();
             nextTaskRun = taskRun;
-        } else {
-            taskManager.executeTask(taskName, option);
+            return true;
         }
+        // Report the job as continued only if the successor run was accepted; a rejected submit (e.g. queue
+        // full) means no successor runs, so the current run stays the job's terminal run.
+        return taskManager.executeTask(taskName, option).getStatus() == SubmitResult.SubmitStatus.SUBMITTED;
     }
 
     @Override

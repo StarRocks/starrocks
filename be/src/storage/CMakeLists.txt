@@ -17,18 +17,37 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-add_subdirectory(rowset)
-
 ADD_BE_LIB(StoragePrimitive
     primitive/aggregate_type.cpp
     primitive/chunk_iterator.cpp
+    primitive/column_and_predicate.cpp
+    primitive/column_expr_predicate.cpp
+    primitive/column_in_predicate.cpp
+    primitive/column_not_in_predicate.cpp
+    primitive/column_or_predicate.cpp
+    primitive/column_null_predicate.cpp
+    primitive/column_placeholder_predicate.cpp
+    primitive/column_predicate_cmp.cpp
+    primitive/column_predicate_dict_conjuct.cpp
+    primitive/column_value_range.cpp
+    primitive/conjunctive_predicates.cpp
+    primitive/disjunctive_predicates.cpp
     primitive/edit_version.cpp
     primitive/empty_iterator.cpp
     primitive/flat_json_config.cpp
     primitive/key_coder.cpp
     primitive/projection_iterator.cpp
     primitive/range.cpp
+    primitive/predicate_parser.cpp
+    primitive/primary_key_encoder.cpp
+    primitive/schema_helper.cpp
+    primitive/predicate_tree/predicate_tree.cpp
+    primitive/storage_define.cpp
     primitive/storage_ids.cpp
+    primitive/tablet_column.cpp
+    primitive/tablet_info.cpp
+    primitive/tablet_column_util.cpp
+    primitive/tablet_column_type_utils.cpp
     primitive/union_iterator.cpp
 )
 
@@ -55,6 +74,7 @@ target_link_libraries(StorageBase PUBLIC
     StoragePrimitive
     Serde
     RuntimeCore
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -70,25 +90,32 @@ set(STORAGE_FILES
     del_vector.cpp
     delta_column_group.cpp
     flat_json_metrics.cpp
+    json_path_deriver.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
     local_tablet_reader.cpp
-    publish_version_manager.cpp
-    olap_define.cpp
     olap_server.cpp
     persistent_index.cpp
     primary_index.cpp
-    primary_key_encoder.cpp
+    query/bucket_sequence_morsel_queue.cpp
+    query/olap_dynamic_morsel_queue.cpp
+    query/olap_fixed_morsel_queue.cpp
+    query/olap_morsel_queue.cpp
+    query/split_morsel_queue.cpp
+    query/split_scan_morsel.cpp
     protobuf_file.cpp
     replication_txn_manager.cpp
+    remote_snapshot_client.cpp
     replication_utils.cpp
     segment_stream_converter.cpp
     del_file_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
+    storage_cleanup_executor.cpp
+    storage_env.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp
@@ -161,32 +188,14 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    task/engine_batch_load_task.cpp
-    task/engine_checksum_task.cpp
-    task/engine_clone_task.cpp
-    task/engine_manual_compaction_task.cpp
-    task/engine_compaction_control_task.cpp
-    task/engine_storage_migration_task.cpp
-    task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
-    column_predicate_cmp.cpp
-    column_in_predicate.cpp
-    column_not_in_predicate.cpp
-    column_null_predicate.cpp
-    column_or_predicate.cpp
-    column_and_predicate.cpp
-    column_expr_predicate.cpp
-    conjunctive_predicates.cpp
     runtime_filter_predicate.cpp
-    predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
-    disjunctive_predicates.cpp
     predicate_parser.cpp
-    push_handler.cpp
     row_store_encoder.cpp
     row_store_encoder_simple.cpp
     row_store_encoder_factory.cpp
@@ -209,7 +218,6 @@ set(STORAGE_FILES
     compaction.cpp
     rowset_merger.cpp
     column_predicate_rewriter.cpp
-    column_predicate_dict_conjuct.cpp
     column_predicate_inverted_index_fallback.cpp
     compaction_task.cpp
     compaction_utils.cpp
@@ -222,7 +230,6 @@ set(STORAGE_FILES
     default_compaction_policy.cpp
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
-    push_utils.cpp
     primary_key_recover.cpp
     local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
@@ -265,7 +272,6 @@ set(STORAGE_FILES
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
-    lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
@@ -323,7 +329,6 @@ set(STORAGE_FILES
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
     primary_key_dump.cpp
-    dictionary_cache_manager.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
@@ -353,7 +358,12 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
     index/inverted/builtin/builtin_simple_analyzer.cpp
-    manual_compaction.cpp)
+    manual_compaction.cpp
+    rowset/unique_rowset_id_generator.cpp
+    rowset/rowset.cpp
+    rowset/rowset_factory.cpp
+    rowset/rowset_meta_manager.cpp
+    rowset/rowset_writer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
@@ -363,4 +373,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache HttpCore)

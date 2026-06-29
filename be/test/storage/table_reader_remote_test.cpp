@@ -38,6 +38,7 @@
 #include "storage/table_reader.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {

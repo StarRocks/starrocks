@@ -19,6 +19,7 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 
@@ -37,7 +38,10 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "compute_env/runtime_range_pruner.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "glog/logging.h"
@@ -45,10 +49,6 @@
 #include "gutil/stl_util.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
-#include "storage/chunk_helper.h"
-#include "storage/column_expr_predicate.h"
-#include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -60,10 +60,14 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/chunk_iterator.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_or_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/range.h"
 #include "storage/primitive/roaring2range.h"
 #include "storage/primitive/rowid_types.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -77,8 +81,6 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_metrics.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -357,6 +359,12 @@ private:
     StatusOr<SparseRange<>> _get_row_ranges_by_short_key_ranges();
     Status _get_row_ranges_by_zone_map();
     Status _get_row_ranges_by_vector_index();
+    // Fold the residual scalar predicates (those on columns without an exact index, so still present in
+    // the predicate tree at vector-index time) into a row bitmap by reading their columns and evaluating
+    // them. Returns the subset of `candidate` matching all such predicates, enabling a true pre-filter of
+    // the ANN search. Mirrors _apply_inverted_index() but reads + evaluates instead of using an index.
+    StatusOr<roaring::Roaring> _evaluate_residual_to_bitmap(const roaring::Roaring& candidate);
+    StatusOr<roaring::Roaring> _narrow_scan_range_by_residual();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
@@ -476,8 +484,14 @@ private:
     bool need_early_materialize_subfield(const FieldPtr& field);
 
     Status _init_ann_reader();
-    void _setup_brute_force_fallback(const TabletIndex& index);
+    Status _setup_brute_force_fallback(const TabletIndex& index);
     void _compute_brute_force_distances(const Column* vector_column, Chunk* chunk);
+    // Pure distance computation shared by the brute-force fallback and the selectivity-gate rescan:
+    // maps an ARRAY<FLOAT> vector column to a per-row distance column (sentinel for null/dim-mismatch).
+    FloatColumn::MutablePtr _brute_force_distance_column(const Column* vector_column);
+    // Exact distance rescan over a candidate bitmap, used when the HNSW filtered search under-returns
+    // (selective + scattered residual). Fills _vector_index_ctx->id2distance_map and sets _scan_range.
+    Status _exact_search_over_candidates(const roaring::Roaring& candidates);
 
     IndexReadOptions _index_read_options(ColumnId cid) const;
 
@@ -935,12 +949,16 @@ Status SegmentIterator::_init_internal() {
     if (apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
     }
-    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
-    RETURN_IF_ERROR(_apply_data_sampling());
 
     // rewrite stage
-    // Rewriting predicates using segment dictionary codes
+    // Rewriting predicates using segment dictionary codes. Runs before the vector stage so the
+    // residual bitmap there evaluates the rewritten (dict-code) predicates and inherits the
+    // ALWAYS_TRUE / ALWAYS_FALSE collapses; must stay after the index filters above (the inverted
+    // index consumes predicates from the tree) and before _init_column_predicates (which splits
+    // the tree into the read-loop copies the vector stage's pruning must precede).
     RETURN_IF_ERROR(_rewrite_predicates());
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
@@ -1003,65 +1021,63 @@ inline Status SegmentIterator::_init_reader_from_file(const std::string& index_p
 #endif
 }
 
+// Resolves the metric the exact distance kernel must compute: true = cosine similarity,
+// false = l2 distance, nullopt = missing/unsupported metadata (callers must not silently
+// fall back to L2).
+// Single home of the vector_range orientation: result_order 0 (ascending, l2) keeps distance <=
+// range; descending (cosine) keeps similarity >= range. Bounds are inclusive, matching the FE's
+// `<=` / `>=` conjunct forms.
+static inline bool within_vector_range(float d, float range, bool ascending) {
+    return ascending ? d <= range : d >= range;
+}
+
+// Returns true iff the index's distance metric is cosine similarity; l2_distance -- and any value
+// FE should never emit -- is scored as L2.
+static bool index_metric_is_cosine(const TabletIndex& index) {
+    auto it = index.common_properties().find("metric_type");
+    if (it == index.common_properties().end()) {
+        return false;
+    }
+    std::string metric = it->second;
+    std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
+    return metric == "cosine_similarity";
+}
+
 // Sets up brute-force fallback state and ensures the vector data column is in _schema.
 // Called from _init_ann_reader, before _init_column_iterators.
-void SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
+Status SegmentIterator::_setup_brute_force_fallback(const TabletIndex& index) {
     int32_t vector_col_uid = index.col_unique_ids()[0];
     _vector_index_ctx->use_vector_index = false;
     _vector_index_ctx->use_brute_force = true;
     _vector_index_ctx->vector_data_column_uid = vector_col_uid;
-
-    // Determine metric type from index metadata. Brute-force fallback only
-    // implements the metrics that match a planner-side approx_*_distance
-    // expression and have a straightforward local computation. Anything else
-    // disables the fallback rather than silently treating it as L2 distance.
-    const auto& props = index.common_properties();
-    auto metric_it = props.find("metric_type");
-    if (metric_it == props.end()) {
-        LOG(WARNING) << "disable brute-force vector fallback: missing metric_type for vector index on segment "
-                     << _segment->file_name();
-        _vector_index_ctx->use_brute_force = false;
-        return;
-    }
-    std::string metric = metric_it->second;
-    std::transform(metric.begin(), metric.end(), metric.begin(), ::tolower);
-    if (metric == "cosine_similarity") {
-        _vector_index_ctx->is_cosine_similarity = true;
-    } else if (metric == "l2_distance") {
-        _vector_index_ctx->is_cosine_similarity = false;
-    } else {
-        LOG(WARNING) << "disable brute-force vector fallback: unsupported metric_type '" << metric << "' on segment "
-                     << _segment->file_name();
-        _vector_index_ctx->use_brute_force = false;
-        return;
-    }
+    _vector_index_ctx->is_cosine_similarity = index_metric_is_cosine(index);
 
     // Check if the vector column is already in _schema
     for (const auto& field : _schema.fields()) {
         if (field->uid() == vector_col_uid) {
             _vector_index_ctx->vector_data_column_id = field->id();
-            return;
+            return Status::OK();
         }
     }
 
     // Not in schema (pruned by FE) — add it
     int32_t col_idx = _segment->tablet_schema().field_index(vector_col_uid);
     if (col_idx < 0) {
-        // Schema/index metadata mismatch: the index references a column the
-        // segment does not have. Disable brute-force rather than producing
-        // distances against an undefined column.
-        LOG(WARNING) << "disable brute-force vector fallback: vector column uid " << vector_col_uid
-                     << " not found in tablet schema for segment " << _segment->file_name();
-        _vector_index_ctx->use_brute_force = false;
-        return;
+        // Schema/index metadata mismatch: the index references a column the segment does not have.
+        // There is no embedding to score against, so fail loudly rather than emitting a chunk whose
+        // distance slot is never populated (a silent wrong/empty result downstream).
+        return Status::InternalError(
+                fmt::format("vector index references column uid {} absent from tablet schema (segment {})",
+                            vector_col_uid, _segment->file_name()));
     }
 
     const auto& col = _segment->tablet_schema().column(col_idx);
     ColumnId cid = static_cast<ColumnId>(col_idx);
-    auto field = std::make_shared<Field>(ChunkHelper::convert_field(cid, col));
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(cid, col));
     _vector_index_ctx->vector_data_column_id = cid;
     _schema.append(field);
     _vector_index_ctx->added_vector_data_column = true;
+    return Status::OK();
 }
 
 // Opens the .vi and inits the ANN reader. If the index is unusable (footer marks no .vi, or the .vi
@@ -1110,13 +1126,44 @@ Status SegmentIterator::_init_ann_reader() {
 
     if (!_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         // No usable index: trust needs brute-force to produce the distance column; refine recomputes above.
-        _setup_brute_force_fallback(*tablet_index_meta);
+        RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
+    }
+
+    if (_vector_index_ctx->use_vector_index) {
+        // The ANN-route exact rescans key on is_cosine_similarity, which is otherwise initialized
+        // only by _setup_brute_force_fallback; resolve it here so a cosine index is not scored as L2.
+        _vector_index_ctx->is_cosine_similarity = index_metric_is_cosine(*tablet_index_meta);
+    }
+
+    // Decide PRE vs brute now: routing to brute must add the embedding column to _schema before
+    // _init_column_iterators runs (refine re-ranks above the scan, stays out).
+    if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
+        // PRE picks the top-k inside the segment, so anything that drops rows above the iterator --
+        // an above-iterator predicate, or a runtime filter post-filtering the top-k -- makes it
+        // under-return; fall back to exact brute-force (the upper TopN cuts its k after the filter).
+        // A residual additionally needs index filtered-search support; no residual is a plain top-k.
+        const bool has_runtime_filter =
+                _opts.enable_join_runtime_filter_pushdown &&
+                (!_opts.runtime_filter_preds.empty() || _opts.runtime_range_pruner.has_runtime_filters());
+        const bool prefilter_allowed =
+                !_opts.has_predicate_above_iterator && !has_runtime_filter &&
+                (_opts.pred_tree.empty() || _vector_index_ctx->ann_reader->supports_efficient_filtered_search());
+        if (!prefilter_allowed) {
+            RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
+        }
     }
 
     return Status::OK();
 }
 
 Status SegmentIterator::_get_row_ranges_by_vector_index() {
+    // Brute pre-narrowing: resolve the residual into an exact bitmap first, so the read loop only
+    // touches surviving rows (the embedding column is wide). Outside the TenANN guard: the brute
+    // fallback exists in non-TenANN builds too.
+    if (_vector_index_ctx != nullptr && _vector_index_ctx->use_brute_force && !_opts.pred_tree.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+        return _narrow_scan_range_by_residual().status();
+    }
 #ifdef WITH_TENANN
     if (!_vector_index_ctx || !_vector_index_ctx->use_vector_index) {
         return Status::OK();
@@ -1124,6 +1171,32 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     RETURN_IF(_scan_range.empty(), Status::OK());
 
     SCOPED_RAW_TIMER(&_opts.stats->get_row_ranges_by_vector_index_timer);
+
+    // PRE: evaluate the whole predicate tree into an exact bitmap and narrow _scan_range before the
+    // search (k unchanged).
+    roaring::Roaring matched;
+    uint64_t matched_cardinality = 0;
+    bool pre_narrowed = false;
+    if (!_opts.pred_tree.empty()) {
+        ASSIGN_OR_RETURN(auto matched_tmp, _narrow_scan_range_by_residual());
+        matched = std::move(matched_tmp);
+        matched_cardinality = matched.cardinality();
+        RETURN_IF(_scan_range.empty(), Status::OK());
+        pre_narrowed = true;
+    }
+
+    // Short-circuit (PRE only): score candidates exactly when the search cannot pay for itself --
+    // cardinality <= k, or sparse vs the whole graph (a filtered HNSW walk would be slow and likely
+    // under-return). Both paths are exact, top-k and range search alike.
+    if (pre_narrowed && !_vector_index_ctx->refine_distance) {
+        const double ratio = config::vector_index_brute_selectivity_threshold;
+        if (matched_cardinality <= static_cast<uint64_t>(_vector_index_ctx->k) ||
+            (ratio > 0 && matched_cardinality <= static_cast<uint64_t>(ratio * _segment->num_rows()))) {
+            return _exact_search_over_candidates(matched);
+        }
+    }
+
+    int search_k = _vector_index_ctx->k;
 
     Status st;
     std::map<rowid_t, float> id2distance_map;
@@ -1136,14 +1209,14 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
         if (_vector_index_ctx->vector_range >= 0) {
             st = _vector_index_ctx->ann_reader->range_search(
-                    _vector_index_ctx->query_view, _vector_index_ctx->k, &result_ids, &result_distances, &del_id_filter,
+                    _vector_index_ctx->query_view, search_k, &result_ids, &result_distances, &del_id_filter,
                     static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
         } else {
-            result_ids.resize(_vector_index_ctx->k);
-            result_distances.resize(_vector_index_ctx->k);
-            st = _vector_index_ctx->ann_reader->search(
-                    _vector_index_ctx->query_view, _vector_index_ctx->k, (result_ids.data()),
-                    reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+            result_ids.resize(search_k);
+            result_distances.resize(search_k);
+            st = _vector_index_ctx->ann_reader->search(_vector_index_ctx->query_view, search_k, (result_ids.data()),
+                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
+                                                       &del_id_filter);
         }
     }
 
@@ -1155,6 +1228,17 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     for (size_t i = 0; i < result_ids.size() && result_ids[i] != -1; i++) {
         id2distance_map[result_ids[i]] = result_distances[i];
+    }
+
+    // Count gate: a filtered HNSW search can under-return on scattered survivors (graph reachability).
+    // If it returned fewer than the bitmap could supply, rescan the candidates exactly. Top-k only --
+    // under a radius, returning fewer rows is legitimate.
+    if (pre_narrowed && _vector_index_ctx->vector_range < 0) {
+        const size_t found = id2distance_map.size();
+        const size_t want = std::min(static_cast<size_t>(search_k), static_cast<size_t>(matched_cardinality));
+        if (found < want) {
+            return _exact_search_over_candidates(matched);
+        }
     }
 
     SparseRange r;
@@ -1182,6 +1266,158 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 #else
     return Status::OK();
 #endif
+}
+
+// If this predicate is generated by join runtime filter,
+// We only use it to compute segment row range.
+struct IndexOnlyPredicateChecker {
+    bool operator()(const PredicateColumnNode& node) const {
+        const auto* col_pred = node.col_pred();
+        return col_pred != nullptr && col_pred->is_index_filter_only();
+    }
+
+    template <CompoundNodeType Type>
+    bool operator()(const PredicateCompoundNode<Type>& node) const {
+        return std::all_of(node.children().begin(), node.children().end(),
+                           [&](const auto& child) { return child.visit(*this); });
+    }
+};
+
+StatusOr<roaring::Roaring> evaluate_pred_tree_to_bitmap(
+        const PredicateTree& pred_tree, const Schema& schema,
+        const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators_by_cid,
+        std::vector<rowid_t>* fallback_rowids, const roaring::Roaring& candidate,
+        const std::vector<uint8_t>* dict_code_candidates_by_cid) {
+    if (candidate.isEmpty() || pred_tree.empty()) {
+        return candidate;
+    }
+
+    // Drop index-only predicates before reading/evaluating. Their filtering is already applied by the
+    // index-filter stage (its effect is in `candidate`), and the read loop drops them the same way
+    // (_init_column_predicates / IndexOnlyPredicateChecker). In particular the rewriter leaves an
+    // index-only expr predicate -- e.g. the `ngram_search(...) >= 0` AddIndexOnlyPredicateRule injects --
+    // in its original (string-typed) form, so evaluating it against a column read as dict codes would be
+    // a type mismatch. What survives is the exact set of real residual predicates, i.e. the precise
+    // bitmap an ANN filtered-search needs.
+    PredicateAndNode index_only_root;
+    PredicateAndNode used_root;
+    pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
+                                    &index_only_root, &used_root);
+    const PredicateTree used_tree = PredicateTree::create(std::move(used_root));
+    if (used_tree.empty()) {
+        return candidate;
+    }
+
+    // cid -> field index in `schema`.
+    std::unordered_map<ColumnId, size_t> cid_2_fid;
+    for (size_t i = 0; i < schema.num_fields(); i++) {
+        cid_2_fid.emplace(schema.field(i)->id(), i);
+    }
+
+    // Collect every column referenced by the predicate tree, with its field and reader, once. A
+    // missing iterator/field is a hard error rather than a silent skip -- silently skipping would
+    // make the bitmap incomplete (too wide) and let a downstream k-limit under-return.
+    struct PredColumn {
+        ColumnId cid;
+        FieldPtr field;
+        ColumnIterator* iter;
+    };
+    std::vector<PredColumn> pred_columns;
+    std::vector<std::unique_ptr<ColumnIterator>> dict_code_wrappers;
+    auto pred_schema = std::make_shared<Schema>();
+    for (ColumnId cid : used_tree.column_ids()) {
+        auto it = cid_2_fid.find(cid);
+        if (it == cid_2_fid.end() || cid >= column_iterators_by_cid.size() || column_iterators_by_cid[cid] == nullptr) {
+            return Status::InternalError(
+                    strings::Substitute("pred-tree bitmap: predicate column $0 is not readable", cid));
+        }
+        FieldPtr field = schema.field(it->second);
+        ColumnIterator* iter = column_iterators_by_cid[cid].get();
+        // A dict-code candidate carries predicates the ColumnPredicateRewriter rewrote into dict
+        // codes -- it rewrites exactly when the column is all-page dict-encoded -- so the column
+        // must be read as codes: code-typed field + DictCodeColumnIterator, mirroring the read
+        // context (_build_context).
+        if (dict_code_candidates_by_cid != nullptr && cid < dict_code_candidates_by_cid->size() &&
+            (*dict_code_candidates_by_cid)[cid] && iter->all_page_dict_encoded()) {
+            field = std::make_shared<Field>(cid, field->name(), kDictCodeType, -1, -1, field->is_nullable());
+            dict_code_wrappers.emplace_back(std::make_unique<DictCodeColumnIterator>(cid, iter));
+            iter = dict_code_wrappers.back().get();
+        }
+        pred_columns.emplace_back(PredColumn{cid, field, iter});
+        pred_schema->append(field);
+    }
+
+    // PredicateTree::evaluate uses uint16_t [from, to), so read + evaluate in <= kEvalBatch slices.
+    constexpr uint32_t kEvalBatch = 4096;
+    SparseRange<> rows = roaring2range(candidate);
+    roaring::Roaring result;
+    std::vector<uint8_t> selection;
+    for (auto iter = rows.new_iterator(); iter.has_more();) {
+        Range<> r = iter.next(kEvalBatch);
+        const uint32_t bn = r.end() - r.begin();
+
+        // Build a chunk keyed by column id so PredicateTree::evaluate (chunk->get_column_by_id(cid))
+        // can evaluate the WHOLE tree -- AND / OR / compound / single-column expr -- not just a
+        // per-column immediate map (which silently drops OR/expr nodes and widens the result).
+        Columns cols;
+        cols.reserve(pred_columns.size());
+        for (const auto& [cid, field, iter] : pred_columns) {
+            MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+            // next_batch reads from the current page and does not seek internally; position first.
+            RETURN_IF_ERROR(iter->seek_to_ordinal(r.begin()));
+            SparseRange<> sub;
+            sub.add(r);
+            RETURN_IF_ERROR(iter->next_batch(sub, col.get()));
+            cols.emplace_back(std::move(col));
+        }
+        // Chunk(Columns, Schema) rebuilds the cid index, so chunk.get_column_by_id(cid) resolves in
+        // evaluate().
+        Chunk chunk(std::move(cols), pred_schema);
+
+        // Publish this batch's contiguous segment rowids for predicates that resolve chunk rows back
+        // to segment rowids (e.g. the inverted-index fallback for a MATCH inside an OR). Without
+        // this, such a predicate dereferences an empty/stale buffer.
+        if (fallback_rowids != nullptr) {
+            fallback_rowids->resize(bn);
+            for (uint32_t i = 0; i < bn; i++) {
+                (*fallback_rowids)[i] = r.begin() + i;
+            }
+        }
+
+        selection.assign(bn, 1);
+        RETURN_IF_ERROR(used_tree.evaluate(&chunk, selection.data(), 0, static_cast<uint16_t>(bn)));
+        for (uint32_t i = 0; i < bn; i++) {
+            if (selection[i]) {
+                result.add(r.begin() + i);
+            }
+        }
+    }
+    return result;
+}
+
+// Adapter over evaluate_pred_tree_to_bitmap: supplies the cid-indexed iterators and, when
+// inverted-index fallback predicates are present (a MATCH inside an OR), the rowid buffer they
+// resolve chunk rows through (their bitmaps are ready -- _apply_inverted_index ran earlier).
+StatusOr<roaring::Roaring> SegmentIterator::_evaluate_residual_to_bitmap(const roaring::Roaring& candidate) {
+    std::vector<rowid_t>* fallback_rowids =
+            _inverted_index_ctx != nullptr && _inverted_index_ctx->has_fallback_predicates
+                    ? &_inverted_index_ctx->rowid_buffer
+                    : nullptr;
+    return evaluate_pred_tree_to_bitmap(_opts.pred_tree, _schema, _column_iterators, fallback_rowids, candidate,
+                                        &_predicate_need_rewrite);
+}
+
+// Narrows _scan_range to the residual survivors and drops the fully evaluated tree, so the read
+// loop neither reads nor re-evaluates rows the residual already rejected. Returns the survivor
+// bitmap for the PRE gates.
+StatusOr<roaring::Roaring> SegmentIterator::_narrow_scan_range_by_residual() {
+    ASSIGN_OR_RETURN(auto matched, _evaluate_residual_to_bitmap(range2roaring(_scan_range)));
+    const size_t prev_span = _scan_range.span_size();
+    _scan_range = roaring2range(matched);
+    _opts.stats->rows_vector_index_filtered += (prev_span - _scan_range.span_size());
+    // Every surviving row already passed the whole tree. (Predicates are owned at the reader level.)
+    _opts.pred_tree = PredicateTree();
+    return matched;
 }
 
 Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r) {
@@ -1479,21 +1715,6 @@ bool SegmentIterator::need_early_materialize_subfield(const FieldPtr& field) {
     }
     return false;
 }
-
-// If this predicate is generated by join runtime filter,
-// We only use it to compute segment row range.
-struct IndexOnlyPredicateChecker {
-    bool operator()(const PredicateColumnNode& node) const {
-        const auto* col_pred = node.col_pred();
-        return col_pred != nullptr && col_pred->is_index_filter_only();
-    }
-
-    template <CompoundNodeType Type>
-    bool operator()(const PredicateCompoundNode<Type>& node) const {
-        return std::all_of(node.children().begin(), node.children().end(),
-                           [&](const auto& child) { return child.visit(*this); });
-    }
-};
 
 struct ExprPredicateChecker {
     bool operator()(const PredicateColumnNode& node) const { return node.col_pred()->is_expr_predicate(); }
@@ -2394,21 +2615,11 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
                                     _vector_index_ctx->vector_slot_id);
     } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
-        // Brute-force fallback: compute distances from raw vector data.
-        //
-        // The vector data column may live in `chunk` (== _final_chunk) or in
-        // _dict_chunk depending on output_schema:
-        //   * If output_schema includes the vector column (FE did not prune it),
-        //     _build_final_chunk has already SWAPPED the column out of _dict_chunk
-        //     into chunk; chunk is the source of truth.
-        //   * If output_schema does NOT include the vector column (FE pruned it,
-        //     and _setup_brute_force_fallback re-added it to _schema after the
-        //     caller's init_output_schema froze output_schema), the swap skipped
-        //     it. The column is still in _dict_chunk; the delete-pred filter
-        //     above re-applies the same selection mask to keep it row-aligned
-        //     with chunk so we can read it directly here.
-        // Either way, the distance column is appended to `chunk`, which always has
-        // the planner-allocated distance slot.
+        // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
+        // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
+        // _setup_brute_force_fallback re-added it to the read schema (the delete-pred filter above keeps
+        // it row-aligned). resolve_brute_force_vector_column picks the right one; the distance is
+        // appended to `chunk`, which always holds the planner-allocated slot.
         auto vec_col_id = _vector_index_ctx->vector_data_column_id;
         ASSIGN_OR_RETURN(ColumnPtr vector_column,
                          resolve_brute_force_vector_column(chunk, _context->_dict_chunk.get(), vec_col_id));
@@ -2431,8 +2642,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             bool ascending = (_vector_index_ctx->result_order == 0);
             Buffer<uint8_t> selection(num);
             for (size_t i = 0; i < num; i++) {
-                selection[i] =
-                        ascending ? (dist_data[i] <= static_cast<float>(vr)) : (dist_data[i] >= static_cast<float>(vr));
+                selection[i] = within_vector_range(dist_data[i], static_cast<float>(vr), ascending);
             }
             chunk->filter_range(selection, 0, num);
             if (rowid != nullptr) {
@@ -2641,7 +2851,7 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
     return std::make_shared<Field>(i, _vector_index_ctx->vector_distance_column_name, get_type_info(TYPE_FLOAT), false);
 }
 
-void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
+FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Column* vector_column) {
     DCHECK(_vector_index_ctx != nullptr);
     const auto& query_vec = _opts.vector_search_option->query_vector;
     const size_t dim = query_vec.size();
@@ -2745,8 +2955,81 @@ void SegmentIterator::_compute_brute_force_distances(const Column* vector_column
         }
     }
 
-    chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
-                                _vector_index_ctx->vector_slot_id);
+    return distance_column;
+}
+
+void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
+    chunk->append_vector_column(_brute_force_distance_column(vector_column),
+                                _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+}
+
+// Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
+// fewer survivors than the exact pre-filter bitmap could supply (selective + scattered residual, where
+// graph reachability misses candidates). The candidate set is small here, so reading the embedding
+// column for just those rows and computing exact distances is cheap and restores completeness.
+Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& candidates) {
+    // Locate the embedding column from the segment's vector index metadata.
+    int32_t vec_ucid = -1;
+    for (const auto& index : *_segment->tablet_schema().indexes()) {
+        if (index.index_type() == VECTOR && !index.col_unique_ids().empty()) {
+            vec_ucid = index.col_unique_ids()[0];
+            break;
+        }
+    }
+    if (vec_ucid < 0) {
+        return Status::InternalError("exact vector rescan: no vector index column in segment metadata");
+    }
+    int32_t col_idx = _segment->tablet_schema().field_index(vec_ucid);
+    if (col_idx < 0) {
+        return Status::InternalError("exact vector rescan: vector column not found in tablet schema");
+    }
+    const ColumnId vec_cid = static_cast<ColumnId>(col_idx);
+
+    // PRE does not add the embedding column to _schema, so create its iterator on demand.
+    if (vec_cid >= _column_iterators.size()) {
+        _column_iterators.resize(vec_cid + 1);
+    }
+    if (_column_iterators[vec_cid] == nullptr) {
+        RETURN_IF_ERROR(_init_column_iterator_by_cid(vec_cid, vec_ucid, false));
+    }
+
+    const auto& tcol = _segment->tablet_schema().column(vec_cid);
+    auto field = std::make_shared<Field>(StorageSchemaHelper::convert_field(vec_cid, tcol));
+
+    _vector_index_ctx->id2distance_map.clear();
+    // Enforce the range-query radius here: the FE folded the distance conjunct out of the scan
+    // predicate, so nothing downstream re-checks it. Same convention as the brute read path
+    // (ascending keeps d <= range, descending keeps d >= range).
+    const bool has_range = _vector_index_ctx->vector_range >= 0;
+    const auto range = static_cast<float>(_vector_index_ctx->vector_range);
+    const bool ascending = _vector_index_ctx->result_order == 0;
+    roaring::Roaring survivors;
+    SparseRange<> rows = roaring2range(candidates);
+    for (auto it = rows.new_iterator(); it.has_more();) {
+        Range<> r = it.next(4096);
+        MutableColumnPtr col = ChunkFactory::column_from_field(*field);
+        // next_batch reads from the current page and does not seek internally; position first.
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->seek_to_ordinal(r.begin()));
+        SparseRange<> sub;
+        sub.add(r);
+        RETURN_IF_ERROR(_column_iterators[vec_cid]->next_batch(sub, col.get()));
+        auto dist = _brute_force_distance_column(col.get());
+        const auto& dvals = dist->get_data();
+        const uint32_t bn = r.end() - r.begin();
+        for (uint32_t i = 0; i < bn; i++) {
+            const float d = dvals[i];
+            if (has_range && !within_vector_range(d, range, ascending)) {
+                continue;
+            }
+            _vector_index_ctx->id2distance_map[r.begin() + i] = d;
+            if (has_range) {
+                survivors.add(r.begin() + i);
+            }
+        }
+    }
+    // Without a radius every candidate survives; skip the bitmap rebuild.
+    _scan_range = has_range ? roaring2range(survivors) : roaring2range(candidates);
+    return Status::OK();
 }
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
@@ -3168,10 +3451,17 @@ Status SegmentIterator::_init_context() {
     _late_materialization_ratio = config::late_materialization_ratio;
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
-    if (_predicate_columns == 0 || _opts.pred_tree.empty() ||
+    // Vector reads carry columns the late-materialization bookkeeping cannot account for (the
+    // post-read distance column; brute's internally added embedding column), so force the eager
+    // context. Refine has no such columns (distance is computed above the scan) and keeps late
+    // materialization.
+    const bool vector_read_active = _vector_index_ctx != nullptr &&
+                                    ((_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) ||
+                                     _vector_index_ctx->use_brute_force);
+    if (_predicate_columns == 0 || _opts.pred_tree.empty() || vector_read_active ||
         (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty() &&
          !_enable_predicate_col_late_materialize)) {
-        // non or all field has predicate, disable late materialization.
+        // none or all fields have a predicate (or a vector-index read is active), disable late materialization.
         RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
     } else {
         // metric column default enable late materialization
@@ -3338,6 +3628,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
 }
 
 Status SegmentIterator::_rewrite_predicates() {
+    RETURN_IF(_scan_range.empty(), Status::OK());
+
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
@@ -3518,10 +3810,19 @@ static void erase_column_pred_from_pred_tree(PredicateTree& pred_tree,
     pred_tree = PredicateTree::create(std::move(new_root));
 }
 
+// Prefer the new double field (which can carry sub-1% values such as 0.5); fall back to the legacy
+// integer field for backward compatibility with an old FE that does not set probability_percent_v2.
+static double sample_probability_percent(const TTableSampleOptions& opts) {
+    if (opts.__isset.probability_percent_v2) {
+        return opts.probability_percent_v2;
+    }
+    return static_cast<double>(opts.probability_percent);
+}
+
 StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_block() {
     size_t rows_per_block = _segment->num_rows_per_block();
     size_t total_rows = _segment->num_rows();
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
 
     auto sampler = DataSample::make_block_sample(probability_percent, random_seed, rows_per_block, total_rows);
@@ -3538,7 +3839,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
     int32_t num_data_pages = column_reader->num_data_pages();
     PageIndexer page_indexer = [&](size_t page_index) { return column_reader->get_page_range(page_index); };
 
-    int64_t probability_percent = _opts.sample_options.probability_percent;
+    double probability_percent = sample_probability_percent(_opts.sample_options);
     int64_t random_seed = _opts.sample_options.random_seed;
     auto sampler = DataSample::make_page_sample(probability_percent, random_seed, num_data_pages, page_indexer);
 
@@ -3556,9 +3857,10 @@ Status SegmentIterator::_apply_data_sampling() {
     RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-    RETURN_IF(_opts.sample_options.probability_percent <= 0, Status::InvalidArgument("probability_percent must > 0"));
+    RETURN_IF(sample_probability_percent(_opts.sample_options) <= 0,
+              Status::InvalidArgument("probability_percent must > 0"));
 
-    DCHECK(_opts.sample_options.__isset.probability_percent);
+    DCHECK(_opts.sample_options.__isset.probability_percent || _opts.sample_options.__isset.probability_percent_v2);
     DCHECK(_opts.sample_options.__isset.random_seed);
     DCHECK(_opts.sample_options.__isset.sample_method);
 

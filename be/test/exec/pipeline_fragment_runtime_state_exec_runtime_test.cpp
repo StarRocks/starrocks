@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "base/time/time.h"
 #include "exec/runtime/fragment_runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -117,6 +118,15 @@ TEST(FragmentRuntimeStateTest, FinalStatusDefaultsOk) {
     FragmentRuntimeState state;
 
     EXPECT_TRUE(state.final_status().ok());
+}
+
+TEST(FragmentRuntimeStateTest, StoresInitialProfileReportTimestamp) {
+    const auto before_ns = MonotonicNanos();
+    FragmentRuntimeState state;
+    const auto after_ns = MonotonicNanos();
+
+    EXPECT_GE(state.last_report_exec_state_ns(), before_ns);
+    EXPECT_LE(state.last_report_exec_state_ns(), after_ns);
 }
 
 } // namespace starrocks::pipeline

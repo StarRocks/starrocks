@@ -39,7 +39,7 @@
 
 namespace starrocks::parquet {
 
-static HdfsScannerStats g_hdfs_stats{};
+static FormatScannerStats g_hdfs_stats{};
 
 class IcebergSchemaEvolutionTest : public testing::Test {
 public:
@@ -99,7 +99,7 @@ protected:
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
-        ctx->stats = &g_hdfs_stats;
+        ctx->format_scan_context.stats = &g_hdfs_stats;
         return ctx;
     }
 

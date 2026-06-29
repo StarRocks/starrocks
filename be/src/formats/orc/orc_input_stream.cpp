@@ -17,6 +17,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 

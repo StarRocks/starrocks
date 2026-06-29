@@ -25,6 +25,8 @@
 
 namespace starrocks {
 
+class HeartbeatFlags;
+class DiagnoseDaemon;
 class MetricRegistry;
 
 class GlobalEnv {
@@ -41,6 +43,9 @@ public:
     void stop();
 
     static bool is_init();
+
+    HeartbeatFlags* heartbeat_flags() const { return _heartbeat_flags.get(); }
+    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon.get(); }
 
     MemTracker* process_mem_tracker() const { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() const { return _query_pool_mem_tracker.get(); }
@@ -158,7 +163,7 @@ private:
     std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
     std::shared_ptr<MemTracker> _builtin_inverted_index_mem_tracker;
 
-    // Memory held by the SR-owned VectorIndexCache
+    // Memory held by the StorageEnv-owned VectorIndexCache
     std::shared_ptr<MemTracker> _vector_index_mem_tracker;
 
     // The memory used for compaction
@@ -190,6 +195,9 @@ private:
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
     GlobalThreadPools _thread_pools;
+
+    std::unique_ptr<HeartbeatFlags> _heartbeat_flags;
+    std::unique_ptr<DiagnoseDaemon> _diagnose_daemon;
 
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };

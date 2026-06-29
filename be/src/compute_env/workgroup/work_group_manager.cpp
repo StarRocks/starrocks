@@ -70,13 +70,22 @@ WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_c
     DCHECK(_driver_queue_factory != nullptr);
 }
 
-WorkGroupManager::~WorkGroupManager() = default;
+WorkGroupManager::~WorkGroupManager() {
+    std::unique_lock write_lock(_mutex);
+    unregister_default_workgroup_unlocked();
+}
 
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
 
+    unregister_default_workgroup_unlocked();
     update_metrics_unlocked();
     _workgroups.clear();
+}
+
+void WorkGroupManager::publish_default_workgroup(const WorkGroupPtr& wg) {
+    _previous_default_workgroup = WorkGroup::default_workgroup();
+    WorkGroup::set_default_workgroup(wg);
 }
 
 WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
@@ -288,6 +297,15 @@ WorkGroupPtr WorkGroupManager::get_default_workgroup_unlocked() {
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
     DCHECK(_workgroups.count(unique_id));
     return _workgroups.at(unique_id);
+}
+
+void WorkGroupManager::unregister_default_workgroup_unlocked() {
+    const auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
+    const auto it = _workgroups.find(unique_id);
+    if (it != _workgroups.end()) {
+        WorkGroup::unset_default_workgroup(it->second.get(), _previous_default_workgroup.lock());
+    }
+    _previous_default_workgroup.reset();
 }
 
 WorkGroupPtr WorkGroupManager::get_default_mv_workgroup() {
@@ -517,8 +535,10 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization(WorkGroupManager*
                                                                int64_t max_executor_threads)
         : _workgroup_manager(workgroup_manager), _max_executor_threads(max_executor_threads) {
     DCHECK(_workgroup_manager != nullptr);
-    auto default_wg = create_default_workgroup();
-    _workgroup_manager->add_workgroup(default_wg);
+    auto default_wg = _workgroup_manager->add_workgroup(create_default_workgroup());
+    // Publish the default workgroup process-wide so ComputeEnv-layer code (e.g. the spill
+    // framework) can resolve a nullptr workgroup to the default without the ExecEnv singleton.
+    _workgroup_manager->publish_default_workgroup(default_wg);
 
     auto default_mv_wg = create_default_mv_workgroup();
     _workgroup_manager->add_workgroup(default_mv_wg);

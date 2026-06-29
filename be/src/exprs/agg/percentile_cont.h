@@ -273,7 +273,12 @@ public:
                 reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
                                                 total_items_size * sizeof(InputCppType)));
 
-        column->get_offset().emplace_back(new_size);
+        auto& offsets = column->get_offset();
+        if (LIKELY(!offsets.is_large() && new_size <= std::numeric_limits<uint32_t>::max())) {
+            offsets.small_storage().emplace_back(static_cast<uint32_t>(new_size));
+        } else {
+            offsets.emplace_back(new_size);
+        }
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,

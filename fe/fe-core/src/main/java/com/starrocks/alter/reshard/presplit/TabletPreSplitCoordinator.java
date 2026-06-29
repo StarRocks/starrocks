@@ -148,6 +148,7 @@ public final class TabletPreSplitCoordinator {
         boolean configEnabled = switch (loadKind) {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
+            case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
@@ -316,7 +317,7 @@ public final class TabletPreSplitCoordinator {
      * Block on {@link PreSplitPipeline#awaitFinished} for the admitted reshard job
      * and record the latency histogram + post-submit hard-cap counter consistently
      * across the two callers ({@link #runPreSplit} for abort-on-timeout semantics,
-     * {@link com.starrocks.alter.reshard.presplit.InsertFromFilesPreSplitHook} for
+     * {@link com.starrocks.alter.reshard.presplit.InsertPreSplitHook} for
      * fail-safe semantics). Translates the generic {@link TimeoutException} the
      * pipeline declares into the package-typed
      * {@link PreSplitPostSubmitTimeoutException}; callers decide whether to abort
@@ -351,9 +352,9 @@ public final class TabletPreSplitCoordinator {
      * the inner helper still updates the latency histogram and bumps the
      * hard-cap counter on timeout.
      *
-     * <p>Used by both load-kind hooks ({@link InsertFromFilesPreSplitHook} and
-     * {@link BrokerLoadPreSplitHook}). Sync-await is deadlock-safe in both
-     * cases — INSERT-from-FILES runs the hook before {@code StatementPlanner.plan()}
+     * <p>Used by both load-kind hooks ({@link InsertPreSplitHook} for INSERT and
+     * {@link BrokerLoadPreSplitHook} for Broker Load). Sync-await is deadlock-safe in both
+     * cases — INSERT runs the hook before {@code StatementPlanner.plan()}
      * begins the load txn; Broker Load defers {@code BrokerLoadJob.beginTxn}
      * until after the hook returns. In neither case can the reshard daemon's
      * cleanup-phase {@code isPreviousTransactionsFinished} wait include the
@@ -473,18 +474,21 @@ public final class TabletPreSplitCoordinator {
     /**
      * Choose how many tablets to pre-split a load into.
      *
-     * <p>Picks the larger of two lower bounds — the cluster's active compute-node
-     * count (so every compute node gets at least one tablet) and the byte-volume
-     * estimate ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)})
-     * — then clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
+     * <p>Takes the byte-volume estimate
+     * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
+     * to a whole multiple of the active compute-node count so tablets spread evenly
+     * across nodes, floors it at the node count (so every node gets at least one
+     * tablet), and clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
      * minimum because a single-tablet result is equivalent to skipping pre-split.
+     * The {@code max_split_count} cap takes precedence, so a clamped result is not
+     * necessarily a multiple of the node count.
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
      *                               Must be {@code >= 1}.
      */
-    static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
@@ -500,7 +504,20 @@ public final class TabletPreSplitCoordinator {
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
+        // Clamp to maxSplitCount before the node-count rounding. The final result is
+        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
+        // Long.MAX_VALUE estimate (tiny target_size + huge input).
+        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        // Round the byte-volume estimate up to a whole multiple of the compute-node
+        // count so the tablets distribute evenly. A count that is not a multiple of
+        // the node count leaves some nodes owning one more tablet than the rest (e.g.
+        // 4 tablets on 3 nodes -> 2/1/1), skewing load-write and scan parallelism
+        // toward the heavier nodes.
+        long nodeAlignedCount =
+                ((boundedByteTarget + activeComputeNodeCount - 1) / activeComputeNodeCount)
+                        * activeComputeNodeCount;
+        long proposed = Math.max(activeComputeNodeCount, nodeAlignedCount);
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }

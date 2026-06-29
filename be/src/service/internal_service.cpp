@@ -52,6 +52,7 @@
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
+#include "column/arrow/record_batch_converter.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -59,41 +60,42 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
+#include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/query_context_manager.h"
 #include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/strings/substitute.h"
+#include "orchestration/fragment_executor.h"
+#include "orchestration/fragment_mgr.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/routine_load_task_executor.h"
+#include "orchestration/runtime_filter_worker.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/load_channel_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/time_guard.h"
 #include "service/service_metrics.h"
-#include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
 #include "types/type_descriptor.h"
-#include "util/arrow/row_batch.h"
-#include "util/time_guard.h"
 
 namespace starrocks {
 
@@ -104,7 +106,9 @@ static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& param
 static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
+                                                      orchestration::OrchestrationEnv* orchestration_env)
+        : _exec_env(exec_env), _orchestration_env(orchestration_env) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -275,7 +279,11 @@ void PInternalServiceImplBase<T>::_transmit_runtime_filter(google::protobuf::Rpc
               << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
               << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
     ClosureGuard closure_guard(done);
-    _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
+    if (_orchestration_env == nullptr || _orchestration_env->runtime_filter_worker() == nullptr) {
+        Status::InternalError("runtime filter worker is not initialized").to_protobuf(response->mutable_status());
+        return;
+    }
+    _orchestration_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
     st.to_protobuf(response->mutable_status());
 }
@@ -387,7 +395,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     SignalTimerGuard guard(config::pipeline_prepare_timeout_guard_ms);
 
     // prepare query context and desc table first
-    pipeline::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     Status status = fragment_executor.prepare_global_state(_exec_env, common_request);
     if (!status.ok()) {
         status.to_protobuf(response->mutable_status());
@@ -398,8 +406,8 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     std::vector<PromiseStatusSharedPtr> promise_statuses;
     std::vector<std::shared_future<Status>> prepare_futures;
     // must use shared_ptr to avoid uaf
-    std::shared_ptr<std::vector<pipeline::FragmentExecutor>> fragment_executors =
-            std::make_shared<std::vector<pipeline::FragmentExecutor>>(unique_requests.size());
+    std::shared_ptr<std::vector<orchestration::FragmentExecutor>> fragment_executors =
+            std::make_shared<std::vector<orchestration::FragmentExecutor>>(unique_requests.size());
     size_t failed_idx = unique_requests.size();
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
@@ -587,7 +595,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }
@@ -627,7 +635,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
     SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
-    pipeline::FragmentExecutor fragment_executor;
+    orchestration::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
         return fragment_executor.execute(_exec_env);
@@ -638,7 +646,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request) {
-    return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
+    DCHECK(_orchestration_env != nullptr);
+    DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+    return _orchestration_env->fragment_mgr()->exec_plan_fragment(t_request);
 }
 
 inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReason reason) {
@@ -740,14 +750,18 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
                         "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
                         print_id(tid));
             } else {
-                fragment_ctx->cancel(Status::Cancelled(reason_string), true);
+                pipeline::cancel_fragment_context(fragment_ctx.get(), Status::Cancelled(reason_string), true);
             }
         }
     } else {
         if (request->has_cancel_reason()) {
-            st = _exec_env->fragment_mgr()->cancel(tid, request->cancel_reason());
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid, request->cancel_reason());
         } else {
-            st = _exec_env->fragment_mgr()->cancel(tid);
+            DCHECK(_orchestration_env != nullptr);
+            DCHECK(_orchestration_env->fragment_mgr() != nullptr);
+            st = _orchestration_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
             LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
@@ -916,10 +930,13 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     std::string group_id;
     MonotonicStopWatch watch;
     watch.start();
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                               &partition_ids, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_meta(request->kafka_meta_request(), &partition_ids,
+                                                                  timeout_ms, &group_id);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -929,8 +946,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
     } else if (request->has_kafka_offset_request()) {
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
-        st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, &group_id);
+        st = routine_load_task_executor->get_kafka_partition_offset(request->kafka_offset_request(), &beginning_offsets,
+                                                                    &latest_offsets, timeout_ms, &group_id);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -950,8 +967,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, P
                 break;
             }
 
-            st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, left_ms, &group_id);
+            st = routine_load_task_executor->get_kafka_partition_offset(offset_req, &beginning_offsets, &latest_offsets,
+                                                                        left_ms, &group_id);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -1009,10 +1026,13 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
         return;
     }
 
+    DCHECK(_orchestration_env != nullptr);
+    auto* routine_load_task_executor = _orchestration_env->routine_load_task_executor();
+    DCHECK(routine_load_task_executor != nullptr);
+
     if (request->has_pulsar_meta_request()) {
         std::vector<std::string> partitions;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_meta(request->pulsar_meta_request(),
-                                                                                       &partitions);
+        Status st = routine_load_task_executor->get_pulsar_partition_meta(request->pulsar_meta_request(), &partitions);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
             for (const std::string& p : partitions) {
@@ -1024,8 +1044,8 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     }
     if (request->has_pulsar_backlog_request()) {
         std::vector<int64_t> backlog_nums;
-        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
-                request->pulsar_backlog_request(), &backlog_nums);
+        Status st = routine_load_task_executor->get_pulsar_partition_backlog(request->pulsar_backlog_request(),
+                                                                             &backlog_nums);
         if (st.ok()) {
             auto result = response->mutable_pulsar_backlog_result();
             for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1039,8 +1059,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(const PPulsarProxyReques
     if (request->has_pulsar_backlog_batch_request()) {
         for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
-            Status st =
-                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            Status st = routine_load_task_executor->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
             auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < backlog_nums.size(); i++) {
@@ -1080,9 +1099,10 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     PProcessDictionaryCacheRequestType request_type = request->type();
+    auto* dictionary_cache_manager = _exec_env->compute_env()->dictionary_cache_manager();
     switch (request_type) {
     case PProcessDictionaryCacheRequestType::BEGIN: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        auto st = dictionary_cache_manager->begin(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1092,7 +1112,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::REFRESH: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        auto st = dictionary_cache_manager->refresh(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1102,7 +1122,7 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::COMMIT: {
-        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        auto st = dictionary_cache_manager->commit(request);
         if (!st.ok()) {
             LOG(WARNING) << st.message();
             Status::InternalError(st.message()).to_protobuf(response->mutable_status());
@@ -1112,12 +1132,12 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
         break;
     }
     case PProcessDictionaryCacheRequestType::CLEAR: {
-        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        dictionary_cache_manager->clear(request->dict_id(), request->is_cancel());
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }
     case PProcessDictionaryCacheRequestType::STATISTIC: {
-        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        dictionary_cache_manager->get_info(request->dict_id(), *response);
         Status::OK().to_protobuf(response->mutable_status());
         break;
     }

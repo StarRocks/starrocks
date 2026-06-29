@@ -47,8 +47,9 @@
 #include "common/system/backend_options.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
+#include "platform/platform_env.h"
+#include "platform/small_file_mgr.h"
 #include "runtime/exec_env.h"
-#include "runtime/small_file_mgr.h"
 
 namespace starrocks {
 
@@ -123,7 +124,11 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             }
             int64_t file_id = std::stol(parts[1]);
             std::string file_path;
-            Status st = ctx->exec_env()->small_file_mgr()->get_file(file_id, parts[2], &file_path);
+            auto* small_file_mgr = PlatformEnv::GetInstance()->small_file_mgr();
+            if (small_file_mgr == nullptr) {
+                return Status::InternalError("PAUSE: PlatformEnv is not initialized");
+            }
+            Status st = small_file_mgr->get_file(file_id, parts[2], &file_path);
             if (!st.ok()) {
                 std::stringstream ss;
                 ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.message();

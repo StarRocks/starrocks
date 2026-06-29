@@ -15,13 +15,14 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state_helper.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"

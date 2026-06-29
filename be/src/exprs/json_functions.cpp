@@ -40,15 +40,14 @@
 #include "exprs/column_ref.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -291,6 +290,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));

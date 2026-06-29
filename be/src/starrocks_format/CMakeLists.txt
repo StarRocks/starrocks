@@ -33,22 +33,22 @@ set(STARROCKS_LIBS
     FileSystem
     FSCore
     Formats
-    orc
     Gutil
     HttpCore
     IO
+    Platform
     Serde
     Storage
-    Rowset
     Runtime
     RuntimeCore
     Types
     Util
     Script
     StarRocksGen
-    Webserver
+    HttpService
     Cache
     ${WL_END_GROUP}
+    FormatOrc
 )
 
 add_library(hdfs_so SHARED IMPORTED GLOBAL)

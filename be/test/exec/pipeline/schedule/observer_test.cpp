@@ -27,17 +27,18 @@
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/utils.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/schedule/event_scheduler.h"
+#include "exec/runtime/schedule/utils.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -273,7 +274,7 @@ TEST_F(PipelineObserverTest, test_cancel) {
     const auto& driver = tx.driver;
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
-    _dummy_fragment_ctx->cancel(Status::InternalError("error"));
+    cancel_fragment_context(_dummy_fragment_ctx.get(), Status::InternalError("error"));
     driver->set_in_blocked(true);
     driver->observer()->all_trigger();
     for (size_t i = 0; i < driver->_operator_stages.size(); ++i) {
@@ -294,6 +295,27 @@ TEST_F(PipelineObserverTest, test_add_blocked_driver) {
 
     driver->set_driver_state(DriverState::INPUT_EMPTY);
     _dummy_fragment_ctx->event_scheduler()->add_blocked_driver(driver.get());
+}
+
+TEST_F(PipelineObserverTest, observer_uses_injected_scheduler_without_runtime_fragment_context) {
+    OpFactories factories;
+    factories.emplace_back(std::make_shared<EmptySetOperatorFactory>(0, 1));
+    factories.emplace_back(std::make_shared<NoopSinkOperatorFactory>(2, 3));
+
+    SimpleTestContext tx(factories, _exec_group.get(), _dummy_fragment_ctx.get(), _dummy_query_ctx.get());
+    ASSERT_OK(tx.driver->prepare(_runtime_state.get()));
+    ASSERT_OK(tx.driver->prepare_local_state(_runtime_state.get()));
+
+    _runtime_state->set_fragment_ctx(nullptr, nullptr);
+
+    const auto& driver = tx.driver;
+    driver->set_in_blocked(true);
+    driver->set_driver_state(DriverState::INPUT_EMPTY);
+
+    driver->observer()->source_trigger();
+    ASSERT_OK(tx.driver_queue->take(false));
+
+    _runtime_state->set_fragment_ctx(_dummy_fragment_ctx.get(), &_dummy_fragment_ctx->fragment_runtime_state());
 }
 
 TEST_F(PipelineObserverTest, race_scheduler_observer) {

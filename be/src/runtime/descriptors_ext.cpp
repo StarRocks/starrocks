@@ -19,17 +19,14 @@
 #include <ios>
 #include <sstream>
 
+#include "base/base64.h"
 #include "base/compression/block_compression.h"
 #include "base/time/timezone_utils.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/util/thrift_util.h"
-#include "exprs/base64.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/arena_allocator.h"
-#include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 // ============== HDFS Table Descriptor ============
@@ -487,131 +484,6 @@ std::string JDBCTableDescriptor::debug_string() const {
         << " jdbc_driver_class=" << _jdbc_driver_class << " jdbc_url=" << _jdbc_url << " jdbc_table=" << _jdbc_table
         << " jdbc_user=" << _jdbc_user << " jdbc_passwd=" << _jdbc_passwd << "}";
     return out.str();
-}
-
-Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
-                             DescriptorTbl** tbl, int32_t chunk_size) {
-    // Only use fragment MemPool when pool is the fragment-level ObjectPool.
-    // When pool is query-level (e.g. _query_ctx->object_pool()), descriptors may
-    // outlive the fragment, so they must be heap-allocated to avoid use-after-free.
-    MemPool* mp = (state != nullptr && pool == state->obj_pool()) ? state->fragment_mem_pool() : nullptr;
-
-    // Build a pmr memory_resource backed by the MemPool (when available).
-    // The MemPoolResource is itself arena-allocated so it outlives the pmr
-    // containers that reference it (MemPool deallocation is a no-op).
-    std::pmr::memory_resource* mr = std::pmr::get_default_resource();
-    if (mp != nullptr) {
-        mr = new (mp->allocate_aligned(sizeof(MemPoolResource), alignof(MemPoolResource))) MemPoolResource(mp);
-    }
-
-// Placement-new T into fragment MemPool; fall back to heap when unavailable.
-#define ALLOC_DESC(T, ...)                                                                      \
-    (mp != nullptr ? pool->emplace<T>(mp->allocate_aligned(sizeof(T), alignof(T)), __VA_ARGS__) \
-                   : pool->add(new T(__VA_ARGS__)))
-
-    if (mp != nullptr) {
-        *tbl = pool->emplace<DescriptorTbl>(mp->allocate_aligned(sizeof(DescriptorTbl), alignof(DescriptorTbl)), mr);
-    } else {
-        *tbl = pool->add(new DescriptorTbl());
-    }
-
-    // deserialize table descriptors first, they are being referenced by tuple descriptors
-    for (const auto& tdesc : thrift_tbl.tableDescriptors) {
-        TableDescriptor* desc = nullptr;
-
-        switch (tdesc.tableType) {
-        case TTableType::MYSQL_TABLE:
-            desc = ALLOC_DESC(MySQLTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::OLAP_TABLE:
-        case TTableType::MATERIALIZED_VIEW:
-            desc = ALLOC_DESC(OlapTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::SCHEMA_TABLE:
-            desc = ALLOC_DESC(SchemaTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::BROKER_TABLE:
-            desc = ALLOC_DESC(BrokerTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::ES_TABLE:
-            desc = ALLOC_DESC(EsTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::HDFS_TABLE:
-            desc = ALLOC_DESC(HdfsTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::FILE_TABLE:
-            desc = ALLOC_DESC(FileTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::ICEBERG_TABLE: {
-            auto* iceberg_desc = ALLOC_DESC(IcebergTableDescriptor, tdesc, pool, mr);
-            RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
-            desc = iceberg_desc;
-            break;
-        }
-        case TTableType::DELTALAKE_TABLE:
-            desc = ALLOC_DESC(DeltaLakeTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::HUDI_TABLE:
-            desc = ALLOC_DESC(HudiTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::PAIMON_TABLE:
-            desc = ALLOC_DESC(PaimonTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::JDBC_TABLE:
-            desc = ALLOC_DESC(JDBCTableDescriptor, tdesc, mr);
-            break;
-        case TTableType::ODPS_TABLE:
-            desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
-        case TTableType::ICEBERG_REFS_TABLE:
-        case TTableType::ICEBERG_HISTORY_TABLE:
-        case TTableType::ICEBERG_METADATA_LOG_ENTRIES_TABLE:
-        case TTableType::ICEBERG_SNAPSHOTS_TABLE:
-        case TTableType::ICEBERG_MANIFESTS_TABLE:
-        case TTableType::ICEBERG_FILES_TABLE:
-        case TTableType::ICEBERG_PARTITIONS_TABLE:
-        case TTableType::ICEBERG_PROPERTIES_TABLE:
-            desc = ALLOC_DESC(IcebergMetadataTableDescriptor, tdesc, pool, mr);
-            break;
-        case TTableType::KUDU_TABLE:
-            desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool, mr);
-            break;
-        default:
-            DCHECK(false) << "invalid table type: " << tdesc.tableType;
-        }
-
-        (*tbl)->_tbl_desc_map[tdesc.id] = desc;
-    }
-
-    for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
-        TupleDescriptor* desc = ALLOC_DESC(TupleDescriptor, tdesc);
-
-        // fix up table pointer
-        if (tdesc.__isset.tableId) {
-            desc->_table_desc = (*tbl)->get_table_descriptor(tdesc.tableId);
-            DCHECK(desc->_table_desc != nullptr);
-        }
-
-        (*tbl)->_tuple_desc_map[tdesc.id] = desc;
-    }
-
-    for (const auto& tdesc : thrift_tbl.slotDescriptors) {
-        SlotDescriptor* slot_d = ALLOC_DESC(SlotDescriptor, tdesc, mr);
-        (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
-        // link to parent
-        auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
-
-        if (entry == (*tbl)->_tuple_desc_map.end()) {
-            return Status::InternalError("unknown tid in slot descriptor msg");
-        }
-
-        entry->second->add_slot(slot_d);
-    }
-
-#undef ALLOC_DESC
-
-    return Status::OK();
 }
 
 } // namespace starrocks

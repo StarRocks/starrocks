@@ -90,6 +90,15 @@ This topic introduces the following types of FE configurations:
 - Description: The timeout duration for the schema change operation (ALTER TABLE).
 - Introduced in: -
 
+### `enable_concurrent_add_partition_during_alter`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When `true`, partition creation (manual `ALTER TABLE ... ADD PARTITION`, automatic creation during loading, and the dynamic partition scheduler) is allowed to proceed concurrently with metadata-only alter operations that are provably safe — currently the shared-data ADD/DROP INDEX fast-path jobs and the transient `UPDATING_META` state of fast schema evolution — instead of rejecting the DDL or cancelling the alter job. Set to `false` to restore the legacy exclusive behavior. This setting only relaxes partition creation; all other alter jobs and all non-`ADD PARTITION` DDL keep the legacy state checks.
+- Introduced in: -
+
 ### `capacity_used_percent_high_water`
 
 - Default: 0.75
@@ -581,6 +590,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable Sample-Based Tablet Pre-Split for Broker Load. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run.
 - Introduced in: v4.1.0
 
+### `enable_tablet_pre_split_for_insert_from_table`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads (INSERT-from-OLAP-table). On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Introduced in: v4.1.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - Default: 300
@@ -630,7 +648,7 @@ This topic introduces the following types of FE configurations:
 
 To disable the feature safely before a downgrade or during a production rollback:
 
-1. Set both `enable_tablet_pre_split_for_insert_from_files = false` and `enable_tablet_pre_split_for_broker_load = false`. New loads will skip pre-split immediately.
+1. Set all three pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, and `enable_tablet_pre_split_for_insert_from_table`. New loads will skip pre-split immediately.
 2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
 

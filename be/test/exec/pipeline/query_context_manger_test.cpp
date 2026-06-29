@@ -18,14 +18,36 @@
 
 #include "base/testutil/assert.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
+#include "exec/runtime/query_context.h"
+#include "exec/runtime/query_context_manager.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
+#include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
+
+TEST(QueryContextManagerTest, QueryCancelReleasesRunningQueryTokenOnce) {
+    auto query_ctx = QueryContext::create();
+    auto workgroup = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    ASSIGN_OR_ASSERT_FAIL(auto token, workgroup->acquire_running_query_token(true));
+    query_ctx->_wg_running_query_token_ptr = std::move(token);
+    query_ctx->_wg_running_query_token_atomic_ptr = query_ctx->_wg_running_query_token_ptr.get();
+    ASSERT_EQ(1, workgroup->num_running_queries());
+
+    query_ctx->cancel(Status::Cancelled("cancelled by fe"), true);
+
+    EXPECT_TRUE(query_ctx->is_cancelled());
+    EXPECT_TRUE(query_ctx->is_cancelled_by_fe());
+    EXPECT_EQ(nullptr, query_ctx->_wg_running_query_token_ptr);
+    EXPECT_EQ(nullptr, query_ctx->_wg_running_query_token_atomic_ptr.load());
+    EXPECT_EQ(0, workgroup->num_running_queries());
+
+    query_ctx->cancel(Status::Cancelled("duplicate cancel"), true);
+    EXPECT_EQ(0, workgroup->num_running_queries());
+}
 
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
@@ -347,6 +369,90 @@ TEST(QueryContextManagerTest, testReadStats) {
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
+class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
+public:
+    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
+                    bool is_pipeline) override {
+        (void)query_options;
+        (void)params;
+        ++num_opened_queries;
+        last_query_id = query_id;
+        last_is_pipeline = is_pipeline;
+    }
+
+    void close_query(const TUniqueId& query_id) override {
+        ++num_closed_queries;
+        last_query_id = query_id;
+    }
+
+    int num_opened_queries = 0;
+    int num_closed_queries = 0;
+    TUniqueId last_query_id;
+    bool last_is_pipeline = false;
+};
+
+TEST(QueryContextManagerTest, testRuntimeFilterCoordinatorClosedOnQueryContextDestruction) {
+    RuntimeFilterCache cache(1);
+    MockRuntimeFilterQueryLifecycle lifecycle;
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_query_lifecycle = &lifecycle;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 1000;
+    query_id.lo = 2000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+        query_ctx->set_is_runtime_filter_coordinator(true);
+    }
+
+    ASSERT_EQ(1, lifecycle.num_closed_queries);
+    ASSERT_EQ(query_id, lifecycle.last_query_id);
+}
+
+TEST(QueryContextManagerTest, testNonRuntimeFilterCoordinatorDoesNotCloseRuntimeFilterQuery) {
+    RuntimeFilterCache cache(1);
+    MockRuntimeFilterQueryLifecycle lifecycle;
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_query_lifecycle = &lifecycle;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 3000;
+    query_id.lo = 4000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+    }
+
+    ASSERT_EQ(0, lifecycle.num_closed_queries);
+}
+
+TEST(QueryContextManagerTest, testRuntimeFilterCoordinatorToleratesMissingLifecycle) {
+    RuntimeFilterCache cache(1);
+    RuntimeServices runtime_services;
+    runtime_services.runtime_filter_cache = &cache;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    TUniqueId query_id;
+    query_id.hi = 5000;
+    query_id.lo = 6000;
+    {
+        auto query_ctx = QueryContext::create();
+        query_ctx->set_query_id(query_id);
+        query_ctx->set_query_execution_services(&query_execution_services);
+        query_ctx->set_is_runtime_filter_coordinator(true);
+    }
+}
+
 class MockQueryLifecycle final : public QueryLifecycle {
 public:
     void on_query_releasable(const TUniqueId& query_id) override {
@@ -522,6 +628,7 @@ TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
 
     ASSERT_EQ(query_ctx.get(), runtime_state.query_ctx());
     ASSERT_EQ(&query_ctx->query_runtime_state(), runtime_state.query_runtime_state());
+    EXPECT_EQ(query_ctx->object_pool(), runtime_state.global_obj_pool());
     EXPECT_EQ(3, runtime_state.query_runtime_state()->query_id().hi);
     EXPECT_EQ(4, runtime_state.query_runtime_state()->query_id().lo);
     EXPECT_FALSE(runtime_state.query_runtime_state()->is_delivery_expired());
