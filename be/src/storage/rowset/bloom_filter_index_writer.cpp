@@ -215,35 +215,33 @@ public:
         size_t gram_num = this->_bf_options.gram_num;
         const auto* cur_slice = reinterpret_cast<const Slice*>(values);
         for (int i = 0; i < count; ++i) {
-            std::vector<size_t> index;
-            size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
-            // slice_gram_num can be used to judge if the cur_slice is an ASCII string or not.
-            // If slice_gram_num == cur_slice->get_size(), then it is.
-            bool is_ascii = (slice_gram_num == cur_slice->get_size());
+            // For a case-insensitive index, lowercase the whole value once and build ngrams from the
+            // folded copy. The reader lowercases the whole needle before splitting it, so the writer
+            // must split in the same order: folding each ngram after slicing would disagree with the
+            // reader for context-dependent or length-changing case mappings (e.g. Turkish 'İ').
+            Slice value = *cur_slice;
+            std::string lower_buf;
+            if (!this->_bf_options.case_sensitive) {
+                if (validate_ascii_fast(value.get_data(), value.get_size())) {
+                    value.tolower(lower_buf);
+                } else {
+                    utf8_tolower(value.get_data(), value.get_size(), lower_buf);
+                }
+                value = Slice(lower_buf.data(), lower_buf.size());
+            }
 
-            size_t j;
-            for (j = 0; j + gram_num <= slice_gram_num; j++) {
+            std::vector<size_t> index;
+            size_t slice_gram_num = get_utf8_index(value, &index);
+
+            for (size_t j = 0; j + gram_num <= slice_gram_num; j++) {
                 // find next ngram
-                size_t cur_ngram_length = j + gram_num < slice_gram_num ? index[j + gram_num] - index[j]
-                                                                        : cur_slice->get_size() - index[j];
-                Slice cur_ngram = Slice(cur_slice->data + index[j], cur_ngram_length);
+                size_t cur_ngram_length =
+                        j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : value.get_size() - index[j];
+                Slice cur_ngram = Slice(value.get_data() + index[j], cur_ngram_length);
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    if (this->_bf_options.case_sensitive) {
-                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
-                    } else {
-                        std::string lower_ngram;
-                        Slice lower_ngram_slice;
-                        if (is_ascii) {
-                            lower_ngram_slice = cur_ngram.tolower(lower_ngram);
-                        } else {
-                            utf8_tolower(cur_ngram.get_data(), cur_ngram.get_size(), lower_ngram);
-                            lower_ngram_slice = Slice(lower_ngram.data(), lower_ngram.size());
-                        }
-                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo,
-                                                             &this->_type_info_allocator));
-                    }
+                    _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
                 }
             }
             // move to next row
