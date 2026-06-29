@@ -377,7 +377,7 @@ public class PreSplitFlowTest {
     private static DefaultPreSplitPipeline stubPipelineFactory(MockedStatic<DefaultPreSplitPipeline> pipelineStatic) {
         DefaultPreSplitPipeline pipeline = mock(DefaultPreSplitPipeline.class);
         pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                        any(), any(), anyLong(), anyLong(), any()))
+                        any(), any(), anyLong(), anyLong(), any(), any()))
                 .thenReturn(pipeline);
         return pipeline;
     }
