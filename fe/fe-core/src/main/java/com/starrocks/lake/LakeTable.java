@@ -160,6 +160,33 @@ public class LakeTable extends OlapTable {
         properties.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
                 String.valueOf(isFastSchemaEvolutionV2()));
 
+        // flat_json: render it like OlapTable.getUniqueProperties() so SHOW CREATE TABLE reflects
+        // the table-level flat_json config for cloud-native tables too.
+        Map<String, String> tableProperties = tableProperty.getProperties();
+        String flatJsonEnable = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE);
+        if (!Strings.isNullOrEmpty(flatJsonEnable)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, flatJsonEnable);
+
+            // Only include the other flat JSON properties when flat_json.enable is true.
+            if (Boolean.parseBoolean(flatJsonEnable)) {
+                String flatJsonNullFactor = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonNullFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, flatJsonNullFactor);
+                }
+
+                String flatJsonSparsityFactor =
+                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR);
+                if (!Strings.isNullOrEmpty(flatJsonSparsityFactor)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, flatJsonSparsityFactor);
+                }
+
+                String flatJsonColumnMax = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+                if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
+                }
+            }
+        }
+
         return properties;
     }
 
