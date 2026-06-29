@@ -784,7 +784,7 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Introduced in: v4.2.0
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
-  - Public probes / observability: `/api/health`, `/api/bootstrap`, `/api/idle_status`, `/api/v2/feature`, `/metrics`, `/api/oauth2`.
+  - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
   - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
 
   Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.

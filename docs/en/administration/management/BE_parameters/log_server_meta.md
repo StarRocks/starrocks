@@ -203,7 +203,6 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Introduced in: v4.2.0
 - Description: When true, most external BE HTTP endpoints require HTTP Basic Auth. Credentials are verified by RPC to the FE leader using the `checkAuth` Thrift method, so the user/password store on the FE side (including LDAP / security-integration) is the source of truth. The following are exempt:
-  - Public probes / observability: `/api/health`, `/metrics`, `/metrics/memory`.
   - Token-gated internal transport (used by FE/BE for tablet clone and load-error file fetch): `/api/_tablet/_download`, `/api/_download_load`. These remain protected by their own token check; setting `enable_http_auth=true` does **not** compensate for `enable_token_check=false`.
   - Stream Load and transaction endpoints that authenticate inside the handler using the load label + table grants: `/api/{db}/{table}/_stream_load`, `/api/transaction/{txn_op}`, `/api/transaction/load`.
 
@@ -617,7 +616,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Percent
 - Is mutable: Yes
-- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when metadata_cache_memory_limit_percent &gt; 0; set it &lt;= 0 to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
+- Description: Sets the metadata LRU cache size as a percentage of the process memory limit. At startup StarRocks computes cache bytes as (process_mem_limit * metadata_cache_memory_limit_percent / 100) and passes that to the metadata cache allocator. The cache is only used for non-PRIMARY_KEYS rowsets (PK tables are not supported) and is enabled only when `metadata_cache_memory_limit_percent > 0`; set it to `<= 0` to disable the metadata cache. Increasing this value raises metadata cache capacity but reduces memory available to other components; tune based on workload and system memory. Not active in BE_TEST builds.
 - Introduced in: v3.2.10
 
 ### retry_apply_interval_second
