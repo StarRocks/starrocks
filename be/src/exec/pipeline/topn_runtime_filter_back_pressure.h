@@ -66,6 +66,12 @@ public:
     // is woken when the window ends, instead of relying on the fallback poller.
     int64_t current_throttle_deadline() const { return _phase == PH_THROTTLE ? _current_throttle_deadline : -1; }
 
+    // True once back-pressure has permanently stopped throttling -- either the RF arrived or the
+    // round/time/row budget was exhausted without it ever arriving. Read-only: unlike
+    // should_throttle() it does not advance the state machine. Used to release the scan IO-task
+    // clamp when there is nothing left to wait for, even though no RF materialized.
+    bool is_pass_through() const { return _phase == PH_PASS_THROUGH; }
+
     bool should_throttle() {
         if (_phase == PH_PASS_THROUGH) {
             return false;

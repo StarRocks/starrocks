@@ -445,9 +445,13 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // of concurrent readers overshoots the back-pressure row budget (which is not concurrency-aware)
     // and floods the downstream aggregation before the RF can prune. The clamp count is tunable via
     // the topn_filter_back_pressure_io_tasks session variable (default 1; <=0 disables the clamp).
-    // Full DOP resumes once the RF arrives (back-pressure transitions to PASS_THROUGH).
+    // Full DOP resumes once the RF arrives, OR once back-pressure gives up (PASS_THROUGH) after
+    // exhausting its round/time/row budget without the RF ever arriving -- otherwise a query whose
+    // TopN RF is never published (e.g. an aggregation whose group count stays below the limit) would
+    // stay clamped to a single IO task for its entire lifetime.
     int effective_io_tasks = _io_tasks_per_scan_operator;
-    if (_topn_filter_back_pressure != nullptr && !_topn_runtime_filter_arrived()) {
+    if (_topn_filter_back_pressure != nullptr && !_topn_runtime_filter_arrived() &&
+        !_topn_filter_back_pressure->is_pass_through()) {
         const auto& opts = state->query_options();
         const int clamp = opts.__isset.topn_filter_back_pressure_io_tasks ? opts.topn_filter_back_pressure_io_tasks : 1;
         if (clamp > 0) {
