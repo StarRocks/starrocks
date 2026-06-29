@@ -30,4 +30,8 @@ CONF_mDouble(connector_sink_mem_urgent_space_ratio, "0.05");
 // Whether enable spill intermediate data for connector sink.
 CONF_mBool(enable_connector_sink_spill, "true");
 
+CONF_mInt64(connector_sink_skew_rebalance_min_data_processed, "209715200" /* 200 MB */);
+
+CONF_mInt64(connector_sink_skew_rebalance_min_partition_data_processed, "125829120" /* 120 MB */);
+
 } // namespace starrocks::config

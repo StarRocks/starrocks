@@ -190,6 +190,8 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
     pipeline/exchange/split_local_exchange.cpp
     pipeline/exchange/sink_buffer.cpp
+    pipeline/exchange/skewed_partition_rebalancer.cpp
+    pipeline/exchange/scale_writer_shuffler.cpp
     pipeline/limit_operator.cpp
     pipeline/offset_operator.cpp
     pipeline/project_operator.cpp

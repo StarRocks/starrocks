@@ -67,6 +67,8 @@ set(EXEC_FILES
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
+        ./exec/pipeline/skewed_partition_rebalancer_test.cpp
+        ./exec/pipeline/scale_writer_shuffler_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
