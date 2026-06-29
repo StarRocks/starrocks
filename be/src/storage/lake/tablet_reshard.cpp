@@ -448,6 +448,28 @@ std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info
                << ", tablet_id_in_txn_log: " << tablet_info.get_tablet_ids_in_txn_logs() << '}';
 }
 
+void convert_op_write_to_op_schema_change(TxnLogPB* log, int64_t alter_version) {
+    // Rewrite a shadow tablet's historical-rewrite op_write into an op_schema_change anchored at
+    // alter_version, in place. The shadow rewrite is an append-only snapshot, so the single op_write rowset
+    // maps 1:1 to the single op_schema_change rowset. apply_schema_change_log requires a rowset id; the shadow
+    // tablet is freshly
+    // created and published from version 1, so its sole pre-conversion rowset id is the create-time
+    // next_rowset_id (1). The single-rowset invariant is asserted (a future >1-rowset shadow would collide
+    // on id 1). No op_write rowset => empty op_schema_change@alter_version (partition empty at W).
+    const bool has_rowset = log->has_op_write() && log->op_write().has_rowset();
+    RowsetMetadataPB rowset;
+    if (has_rowset) rowset.Swap(log->mutable_op_write()->mutable_rowset());
+    log->clear_op_write();
+    auto* schema_change = log->mutable_op_schema_change();
+    schema_change->set_alter_version(alter_version);
+    if (has_rowset) {
+        DCHECK_EQ(0, schema_change->rowsets_size());
+        auto* new_rowset = schema_change->add_rowsets();
+        new_rowset->Swap(&rowset);
+        new_rowset->set_id(1);
+    }
+}
+
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info) {
     const auto type = publish_tablet_info.get_publish_tablet_type();

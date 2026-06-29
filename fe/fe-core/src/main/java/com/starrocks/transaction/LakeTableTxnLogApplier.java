@@ -57,6 +57,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 continue;
             }
 
+            // A shadow-rewrite txn does not allocate or advance any partition version.
+            if (txnState.isShadowRewrite()) {
+                continue;
+            }
+
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
@@ -82,6 +87,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
+                continue;
+            }
+            // A shadow-rewrite txn does not advance the partition's visible version; its rowsets
+            // are anchored later when the schema-change flip publishes the converted op_schema_change log.
+            if (txnState.isShadowRewrite()) {
                 continue;
             }
             long version = partitionCommitInfo.getVersion();

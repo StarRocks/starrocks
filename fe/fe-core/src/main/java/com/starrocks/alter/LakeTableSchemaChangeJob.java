@@ -364,20 +364,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static long getNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-    }
-
-    @VisibleForTesting
-    public static long peekNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
-    }
-
-    public static long getNextGtid() {
-        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
-    }
-
-    @VisibleForTesting
     public void setIsCancelling(boolean isCancelling) {
         this.isCancelling.set(isCancelling);
     }

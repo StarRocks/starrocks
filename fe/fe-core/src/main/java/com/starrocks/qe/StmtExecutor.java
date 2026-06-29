@@ -3722,6 +3722,10 @@ public class StmtExecutor {
                     } else {
                         attachment = new InsertTxnCommitAttachment(loadedRows);
                     }
+                    if (insertStmt.isShadowRewrite()) {
+                        attachment.setShadowRewriteWatershedTxnId(insertStmt.getShadowRewriteWatershedTxnId());
+                        attachment.setShadowRewriteAlterVersion(insertStmt.getShadowRewriteAlterVersion());
+                    }
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows);
                 }

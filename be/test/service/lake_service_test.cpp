@@ -644,6 +644,93 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     }
 }
 
+// Shadow-rewrite publish through the RPC path: shadow tablets now travel in the request's ordinary
+// tablet_ids, and the publish is keyed on a single TxnInfoPB whose txn_type == TXN_SHADOW_REWRITE and
+// whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
+// branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
+// flip publish, including the W == 1 skip-load (empty partition) path.
+TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
+    // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
+    // watershed, independent of the shadow tablet's base_version and always < new_version.
+    auto fresh_tablet = [&]() {
+        auto meta = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
+        return meta->id();
+    };
+    auto shadow_request = [&](int64_t tablet_id, int64_t new_version, int64_t alter_version) {
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(new_version);
+        req.add_tablet_ids(tablet_id);
+        auto* txn = req.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE);
+        txn->set_shadow_rewrite_alter_version(alter_version);
+        return req;
+    };
+
+    // (a) W == 1: empty base at watershed -> BE skips the source load (no 404) and synthesizes an empty
+    //     op_schema_change@1; the tablet advances 1 -> 2 with no rowsets.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/2, /*alter_version=*/1);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(t, 2));
+        EXPECT_EQ(2, metadata->version());
+        EXPECT_EQ(0, metadata->rowsets_size());
+    }
+    // (b) W > 1, source load fails with a non-not-found error -> the tablet fails to publish.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        TEST_ENABLE_ERROR_POINT("TabletManager::load_txn_log", Status::IOError("injected shadow source load error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::load_txn_log");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected shadow source load error"))
+                << response.status().error_msgs(0);
+    }
+    // (c) W > 1, no source op_write present and the target version unpublished -> a non-empty partition's
+    //     shadow tablet always has an op_write, so a missing one means the source was lost. The load's
+    //     not-found propagates and the publish FAILS (so it retries) rather than synthesizing an empty
+    //     op_schema_change@W -- which would silently drop the partition's data by advancing the version.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_NE(0, response.status().status_code()) << "lost source must fail the publish";
+        // Crucially, the version did NOT advance with an empty log (no silent data drop).
+        EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(t, 3).status().is_not_found());
+    }
+    // (d) Invalid request: missing alter_version (defaults to 0) -> InvalidArgument (failed tablet).
+    {
+        int64_t t = fresh_tablet();
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(t);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE); // shadow_rewrite_alter_version intentionally unset (=> 0)
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+    }
+}
+
 // Verifies the publish-time async VI dispatch gate: only async-mode tables
 // (index_build_mode = "async") generate vector_index_build_infos in the publish
 // response. Sync-mode tables build VI inline during write/compaction, so the FE

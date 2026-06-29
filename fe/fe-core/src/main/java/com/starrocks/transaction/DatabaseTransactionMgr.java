@@ -371,9 +371,13 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-            // "No rows were imported from upstream" and abort transaction.
+            // "No rows were imported from upstream" and abort transaction. A shadow-rewrite txn is exempt
+            // too: an empty-partition range rewrite produces zero rows but must still commit so the flip
+            // can anchor an empty op_schema_change@W on that partition (the BE converter tolerates an empty
+            // source). Without this it would abort with ERR_NO_ROWS_IMPORTED and cancel the schema change.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
-                    && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                    && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING
+                    && !transactionState.isShadowRewrite()) {
                 throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
@@ -1027,11 +1031,15 @@ public class DatabaseTransactionMgr {
                     // 1. Replication transactions: may have non-consecutive versions
                     // 2. DELETE transactions: each delete predicate needs its own version
                     //    to ensure proper ordering during tablet merge operations
+                    // 3. Shadow-rewrite transactions: allocate no partition version, so they must
+                    //    never be mixed into a normal-version batch (the version-adjacency check and
+                    //    checkTxnStateBatchConsistent() would otherwise see the sentinel version).
                     // e.g. assume there are 4 txns in `states`: <txn_normal_0, txn_rep_0, txn_normal_1, txn_normal_2>
                     // 3 txn batch will be generated as: <txn_normal_0>, <txn_rep_0>, <txn_normal_1, txn_normal_2>
                     if (tableInfo == null
                             || state.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+                            || state.getSourceType() == TransactionState.LoadJobSourceType.DELETE
+                            || state.isShadowRewrite()) {
                         states = states.subList(0, Math.max(i, 1));
                         break;
                     }
@@ -1110,6 +1118,7 @@ public class DatabaseTransactionMgr {
                     if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                             !txn.isVersionOverwrite() &&
                             !partitionCommitInfo.isDoubleWrite() &&
+                            !txn.isShadowRewrite() &&
                             partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
@@ -1273,6 +1282,7 @@ public class DatabaseTransactionMgr {
                         if (copiedState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
                                 !copiedState.isVersionOverwrite() &&
                                 !partitionCommitInfo.isDoubleWrite() &&
+                                !copiedState.isShadowRewrite() &&
                                 physicalPartition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                             // prevent excessive logging
                             if (copiedState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
@@ -1510,6 +1520,11 @@ public class DatabaseTransactionMgr {
                     LOG.warn("partition {} is dropped, skip and remove it from transaction state {}",
                             partitionId,
                             transactionState);
+                    continue;
+                }
+                // A shadow-rewrite txn allocates no partition version; its PartitionCommitInfo keeps
+                // its sentinel version (-1) and is converted to an op_schema_change log at publish.
+                if (transactionState.isShadowRewrite()) {
                     continue;
                 }
                 long parentPartitionId = partition.getParentId();

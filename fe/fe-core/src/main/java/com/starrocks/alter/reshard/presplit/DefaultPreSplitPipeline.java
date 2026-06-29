@@ -312,8 +312,10 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     }
 
     /** Cuts {@code c1 < c2 < ... < c_{K-1}} → tablet ranges
-     *  {@code (-∞, c1), [c1, c2), [c2, c3), ..., [c_{K-1}, +∞)}. */
-    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
+     *  {@code (-∞, c1), [c1, c2), [c2, c3), ..., [c_{K-1}, +∞)}.
+     *  Requires a non-empty boundary list; callers that need to handle the empty case must guard
+     *  before calling (e.g. return a single {@code Range.all()} tablet). */
+    public static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
         Preconditions.checkArgument(!boundaries.isEmpty(), "boundaries must be non-empty");
         List<TabletRange> ranges = new ArrayList<>(boundaries.size() + 1);
         Tuple previousBoundary = null;
