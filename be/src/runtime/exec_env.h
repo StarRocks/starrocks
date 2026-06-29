@@ -95,6 +95,7 @@ public:
     // Initial exec environment. must call this to init all
     Status init(ProcessMetricsRegistry* process_metrics_registry, GlobalEnv* global_env);
     void stop();
+    void clear_query_contexts();
     void destroy();
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,

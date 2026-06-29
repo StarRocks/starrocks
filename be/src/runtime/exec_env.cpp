@@ -279,12 +279,6 @@ void ExecEnv::stop() {
         _lookup_dispatcher_mgr->close();
     }
 
-    if (_query_context_mgr) {
-        start = MonotonicMillis();
-        _query_context_mgr->clear();
-        component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
-    }
-
     if (_batch_write_mgr) {
         start = MonotonicMillis();
         _batch_write_mgr->stop();
@@ -309,6 +303,15 @@ void ExecEnv::stop() {
         summary += ")";
     }
     LOG(INFO) << summary;
+}
+
+void ExecEnv::clear_query_contexts() {
+    if (_query_context_mgr == nullptr) {
+        return;
+    }
+    int64_t start = MonotonicMillis();
+    _query_context_mgr->clear();
+    LOG(INFO) << strings::Substitute("[ExecEnv::clear_query_contexts] Total: $0 ms", MonotonicMillis() - start);
 }
 
 void ExecEnv::destroy() {

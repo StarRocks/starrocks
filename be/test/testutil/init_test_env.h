@@ -239,6 +239,7 @@ int init_test_env(int argc, char** argv) {
     StorageEnv::GetInstance()->stop();
     exec_env->stop();
     compute_env->stop();
+    exec_env->clear_query_contexts();
     global_env->shutdown_thread_pools();
     engine->stop();
 #ifdef USE_STAROS

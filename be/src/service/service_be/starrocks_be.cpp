@@ -472,6 +472,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     compute_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": compute env stop successfully";
 
+    exec_env->clear_query_contexts();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query contexts clear successfully";
+
     global_env->shutdown_thread_pools();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": global env thread pools shutdown successfully";
 

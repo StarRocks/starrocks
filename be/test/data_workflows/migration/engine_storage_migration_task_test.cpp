@@ -872,6 +872,7 @@ int main(int argc, char** argv) {
     starrocks::StorageEnv::GetInstance()->stop();
     exec_env->stop();
     compute_env->stop();
+    exec_env->clear_query_contexts();
     global_env->shutdown_thread_pools();
 #ifdef USE_STAROS
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
