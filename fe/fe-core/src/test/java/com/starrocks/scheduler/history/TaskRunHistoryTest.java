@@ -109,7 +109,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_state = 'SUCCESS'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         params.setDb(null);
@@ -120,7 +120,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 't1'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         params.setDb(null);
@@ -132,7 +132,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_run_id = 'q1'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         params.setDb(null);
@@ -459,7 +459,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 't1'' OR ''1''=''1'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         TGetTasksParams params = new TGetTasksParams();
@@ -471,7 +471,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_run_id = 'q1'' UNION SELECT 1 -- '" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         TGetTasksParams params2 = new TGetTasksParams();
@@ -494,7 +494,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 'x\\\\' AND  task_run_id = ' UNION SELECT 1 -- '" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number);
             }
         };
         TGetTasksParams params3 = new TGetTasksParams();
