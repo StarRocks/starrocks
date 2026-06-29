@@ -34,6 +34,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -312,9 +313,6 @@ public class KuduMetadata implements ConnectorMetadata {
                                          TvrVersionRange versionRange) {
         Statistics.Builder builder = Statistics.builder()
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
-        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
 
         KuduTable kuduTable = (KuduTable) table;
         long rowCount;
@@ -339,6 +337,17 @@ public class KuduMetadata implements ConnectorMetadata {
             }
         }
         builder.setOutputRowCount(rowCount);
+        for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+            ConnectorNdvEstimator.TypeCategory cat =
+                    ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+            double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+            builder.addColumnStatistic(entry.getKey(), ColumnStatistic.builder()
+                    .setDistinctValuesCount(ndv)
+                    .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build());
+        }
         return builder.build();
     }
 
