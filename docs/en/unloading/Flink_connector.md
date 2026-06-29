@@ -83,7 +83,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    Starting taskexecutor daemon on host.
    ```
 
-You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-stable/docs/try-flink/local_installation/).
+You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation).
 
 ## Before you begin
 
