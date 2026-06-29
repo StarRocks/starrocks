@@ -788,15 +788,15 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
-    CHECK_OK(global_env->init(process_metrics_registry->root_registry()));
     auto* platform_env = starrocks::PlatformEnv::GetInstance();
     starrocks::PlatformEnvOptions platform_env_options;
     platform_env_options.metrics = process_metrics_registry->root_registry();
     platform_env_options.store_paths = paths;
     CHECK_OK(platform_env->init(std::move(platform_env_options)));
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    CHECK_OK(global_env->init(process_metrics_registry->root_registry()));
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
@@ -848,8 +848,8 @@ int main(int argc, char** argv) {
     starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
     starrocks::StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
-    platform_env->destroy();
     global_env->stop();
+    platform_env->destroy();
 
     return r;
 }
