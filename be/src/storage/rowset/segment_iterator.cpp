@@ -1021,11 +1021,8 @@ Status SegmentIterator::_init_scan_range_and_context() {
     // Use indexes and predicates to filter some data page.
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     if (_opts.read_state_cache.scan_range != nullptr) {
+        // The seed already folded every page filter into the prepared range; just apply it.
         RETURN_IF_ERROR(_apply_precomputed_scan_range());
-        if (!_opts.read_state_cache.scan_range_includes_page_filters) {
-            RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-            RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
-        }
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
         RETURN_IF_ERROR(_apply_tablet_range());

@@ -53,8 +53,9 @@ using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 struct SegmentReadStateCache {
     // Optional prepared scan state owned by the caller. SegmentIterator only borrows
     // these ranges while it is initialized, so the owner must outlive the iterator.
+    // The prepared scan_range already has every page filter (zonemap, bloom filter) folded in at
+    // the seed, so a reusing child just applies it and never re-runs a page filter on its sub-range.
     SparseRangePtr scan_range = nullptr;
-    bool scan_range_includes_page_filters = false;
     const std::vector<std::optional<Range<rowid_t>>>* seek_range_rowid_ranges = nullptr;
     const std::optional<Range<rowid_t>>* tablet_rowid_range = nullptr;
 };

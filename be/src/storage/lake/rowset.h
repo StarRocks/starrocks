@@ -47,8 +47,9 @@ class TabletManager;
 class TabletWriter;
 
 struct PreparedSegmentReadState {
+    // The seed folds every page filter (zonemap, bloom filter) into pruned_scan_range, so reusing
+    // children apply it directly without re-running any page filter.
     SparseRangePtr pruned_scan_range;
-    bool pruned_scan_range_includes_page_filters = false;
     std::atomic<bool> pruned_scan_range_cache_disabled{false};
     std::atomic<bool> pruned_scan_range_ready{false};
 
@@ -57,16 +58,14 @@ struct PreparedSegmentReadState {
                pruned_scan_range_ready.load(std::memory_order_acquire) && pruned_scan_range != nullptr;
     }
 
-    void publish_pruned_scan_range(SparseRangePtr range, bool includes_page_filters) {
+    void publish_pruned_scan_range(SparseRangePtr range) {
         pruned_scan_range = std::move(range);
-        pruned_scan_range_includes_page_filters = includes_page_filters;
         pruned_scan_range_ready.store(true, std::memory_order_release);
     }
 
     void clear_pruned_scan_range() {
         pruned_scan_range_ready.store(false, std::memory_order_release);
         pruned_scan_range.reset();
-        pruned_scan_range_includes_page_filters = false;
     }
 
     void disable_pruned_scan_range_cache() {

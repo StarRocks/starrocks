@@ -96,8 +96,8 @@ static Status prepare_segment_pruned_scan_range(const SegmentPtr& segment, const
     if (!range_or.ok()) {
         return range_or.status();
     }
-    prepared_segment_read_state->publish_pruned_scan_range(std::make_shared<SparseRange<>>(std::move(range_or).value()),
-                                                           true /* includes_page_filters */);
+    prepared_segment_read_state->publish_pruned_scan_range(
+            std::make_shared<SparseRange<>>(std::move(range_or).value()));
     return Status::OK();
 }
 
