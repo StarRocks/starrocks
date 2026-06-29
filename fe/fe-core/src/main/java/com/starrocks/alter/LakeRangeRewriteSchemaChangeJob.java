@@ -105,11 +105,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
 
     // for deserialization
     public LakeRangeRewriteSchemaChangeJob() {
-        super();
+        super(JobType.SCHEMA_CHANGE);
     }
 
     public LakeRangeRewriteSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
-        super(jobId, dbId, tableId, tableName, timeoutMs);
+        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
     // Deep-copy constructor used by copyForPersist(): the WAL must record a snapshot, not a live
@@ -174,6 +174,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
             sampler = ReservoirSampler.forInternalPartition();
         }
         return sampler;
+    }
+
+    @Override
+    protected OlapTable.OlapTableState jobTableState() {
+        return OlapTable.OlapTableState.SCHEMA_CHANGE;
     }
 
     @Override

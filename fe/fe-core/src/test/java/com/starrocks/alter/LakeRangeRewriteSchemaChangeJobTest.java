@@ -1538,6 +1538,124 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
     }
 
+    // ---- subclass seams: a sibling online-rewrite job supplies its own JobType / table state -------
+
+    /**
+     * A trivial sibling job exercising the generalized base seams: it passes its own {@code JobType}
+     * to the base constructor and overrides {@link #jobTableState()} to its own working state. The
+     * rewrite-flavor hooks are stubbed because this test only asserts the construction-time seams.
+     */
+    private static final class SeamStubJob extends LakeOnlineRewriteJobBase {
+        SeamStubJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
+            super(jobId, AlterJobV2.JobType.OPTIMIZE, dbId, tableId, tableName, timeoutMs);
+        }
+
+        private SeamStubJob(SeamStubJob other) {
+            super(other);
+        }
+
+        // copyForPersist() is abstract in AlterJobV2 and intentionally NOT implemented by the base
+        // (each concrete job snapshots its own type via its copy constructor), so a concrete in-test
+        // subclass must supply it or the test source will not compile.
+        @Override
+        public AlterJobV2 copyForPersist() {
+            return new SeamStubJob(this);
+        }
+
+        @Override
+        protected OlapTable.OlapTableState jobTableState() {
+            return OlapTable.OlapTableState.OPTIMIZE;
+        }
+
+        @Override
+        protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName) {
+        }
+
+        @Override
+        protected void registerShadowIndexMeta(OlapTable table) {
+        }
+
+        @Override
+        protected void visualiseShadowIndex(OlapTable table) {
+        }
+
+        @Override
+        protected Set<String> affectedColumnsForMvInactivation(OlapTable table) {
+            return Set.of();
+        }
+
+        @Override
+        protected List<String> rewriteSelectColumnNames(OlapTable table) {
+            return List.of();
+        }
+
+        @Override
+        protected void validateRewriteConfig() {
+        }
+    }
+
+    @Test
+    public void testSubclassSuppliesOwnJobTypeAndTableState() {
+        // The base forwards a subclass-supplied JobType and routes its table-state seam through the
+        // overridable jobTableState() accessor.
+        SeamStubJob seamJob = new SeamStubJob(1L, db.getId(), table.getId(), table.getName(), 3600_000L);
+        Assertions.assertEquals(AlterJobV2.JobType.OPTIMIZE, seamJob.getType());
+        Assertions.assertEquals(OlapTable.OlapTableState.OPTIMIZE, seamJob.jobTableState());
+
+        // The range rewrite keeps the SCHEMA_CHANGE defaults unchanged.
+        LakeRangeRewriteSchemaChangeJob rangeJob = newJob(stubSampler(List.of()));
+        Assertions.assertEquals(AlterJobV2.JobType.SCHEMA_CHANGE, rangeJob.getType());
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, rangeJob.jobTableState());
+    }
+
+    @Test
+    public void testPendingApplierUsesOverriddenJobTableState() throws Exception {
+        // Routed-path proof: the PENDING applier must drive the table into the subclass's jobTableState(),
+        // not a hard-coded SCHEMA_CHANGE. A range job overriding jobTableState() -> OPTIMIZE ends PENDING
+        // with the table in OPTIMIZE, proving the routed set-state honors the seam (not just the accessor).
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
+                jobId, db.getId(), table.getId(), table.getName(), 3600_000L) {
+            @Override
+            protected OlapTable.OlapTableState jobTableState() {
+                return OlapTable.OlapTableState.OPTIMIZE;
+            }
+        };
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(table.getBaseIndexMetaId());
+        job.setNewSchema(new ArrayList<>(baseSchema));
+        job.setNewKeysType(KeysType.DUP_KEYS);
+        job.setNewSortKeyIdxes(List.of(1, 0));
+        job.setNewSortKeyColumns(List.of(baseSchema.get(1), baseSchema.get(0)));
+        job.setShadowIndex(shadowIndexMetaId, table.getBaseIndexMetaId(),
+                SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getName(), (short) 2);
+        job.setSampler(stubSampler(List.of()));
+
+        job.runPendingJob();
+
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.OPTIMIZE, table.getState());
+    }
+
+    @Test
+    public void testValidateRewritePartitionShapeRejectsNonOneToOnePartition() {
+        // The watershed-pinned rewrite scans the whole logical parent but pins only one physical
+        // partition, so the default partition-shape guard must reject a >1:1 logical-to-physical mapping
+        // (the invariant a future sibling may relax by overriding the hook).
+        LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(List.of()));
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+        Partition logicalParent = table.getPartition(physicalPartition.getParentId());
+        // Attach a second physical sub-partition to force a >1:1 mapping.
+        logicalParent.addSubPartition(
+                new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(), logicalParent.getId()));
+        Assertions.assertEquals(2, logicalParent.getSubPartitions().size());
+
+        AlterCancelException ex = Assertions.assertThrows(AlterCancelException.class,
+                () -> job.validateRewritePartitionShape(logicalParent));
+        Assertions.assertTrue(ex.getMessage().contains("1:1 logical-to-physical partition"), ex.getMessage());
+    }
+
     // ---- getInfo (SHOW ALTER TABLE COLUMN) ---------------------------------------------
 
     @Test
