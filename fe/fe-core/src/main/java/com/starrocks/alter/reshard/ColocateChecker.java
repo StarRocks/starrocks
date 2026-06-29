@@ -201,7 +201,9 @@ public class ColocateChecker {
         try {
             long workerGroupId = resolveWorkerGroupId(colocateTableIndex, peers);
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-            int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_batch_size);
+            // queryShardGroupStable computes each group's stability server-side, so keep this batch small
+            // to bound per-RPC latency; the full result is assembled across repeated calls.
+            int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_convergence_batch_size);
             for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += batchSize) {
                 List<Long> batch = packGroupIds.subList(batchStart,
                         Math.min(batchStart + batchSize, packGroupIds.size()));
@@ -328,7 +330,7 @@ public class ColocateChecker {
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
         // Query membership in bounded batches so one very large table cannot produce an oversized RPC.
-        int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_batch_size);
+        int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_membership_batch_size);
         for (int batchStart = 0; batchStart < tabletIds.size(); batchStart += batchSize) {
             List<Long> batch = tabletIds.subList(batchStart,
                     Math.min(batchStart + batchSize, tabletIds.size()));
