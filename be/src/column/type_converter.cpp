@@ -29,6 +29,8 @@
 #include "types/storage_type_traits.h"
 #include "types/timestamp_value.h"
 #include "types/type_info.h"
+#include "base/string/string_parser.hpp"
+#include <cmath>
 
 namespace starrocks {
 
@@ -565,12 +567,37 @@ public:
             dst->set_null();
             return Status::OK();
         }
-        std::string source = src.get_slice().to_string();
-
-        CppType value;
-        RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
-        dst->set(value);
-        return Status::OK();
+        Slice slice = src.get_slice();
+        // Match query-time CAST semantics for lossy string->number schema changes: a value that
+        // overflows the target width or is not parseable must become NULL, not a silently wrapped
+        // value ('99999999999'->INT -> 1215752191) or a 0 sentinel ('abc'->INT). TypeInfo::from_string
+        // is lenient and would store those wrong non-NULL values (Bug 15 / numeric part of Bug 22).
+        if constexpr (Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT ||
+                      Type == TYPE_BIGINT || Type == TYPE_LARGEINT) {
+            StringParser::ParseResult presult;
+            CppType value = StringParser::string_to_int<CppType>(slice.data, slice.size, &presult);
+            if (presult != StringParser::PARSE_SUCCESS) {
+                dst->set_null();
+                return Status::OK();
+            }
+            dst->set(value);
+            return Status::OK();
+        } else if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
+            StringParser::ParseResult presult;
+            CppType value = StringParser::string_to_float<CppType>(slice.data, slice.size, &presult);
+            if (presult != StringParser::PARSE_SUCCESS || std::isnan(value) || std::isinf(value)) {
+                dst->set_null();
+                return Status::OK();
+            }
+            dst->set(value);
+            return Status::OK();
+        } else {
+            std::string source = slice.to_string();
+            CppType value;
+            RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
+            dst->set(value);
+            return Status::OK();
+        }
     }
 };
 
