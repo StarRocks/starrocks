@@ -574,7 +574,6 @@ set(STARROCKS_LINK_LIBS
     RuntimeEnv
     RuntimeCore
     Platform
-    $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>

@@ -235,11 +235,7 @@ set(EXEC_FILES
         ./formats/parquet/page_index_test.cpp
         ./formats/parquet/dict_encoding_test.cpp
         ./http/default_path_handlers_test.cpp
-        ./http/ev_http_server_test.cpp
         ./http/handler_required_privilege_test.cpp
-        ./http/http_core_test.cpp
-        ./http/http_metrics_test.cpp
-        ./http/http_client_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
@@ -348,7 +344,6 @@ add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(platform)
-add_subdirectory(http)
 add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(serde)

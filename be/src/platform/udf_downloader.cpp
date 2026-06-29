@@ -27,7 +27,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "http/core/http_client.h"
+#include "platform/http/http_client.h"
 
 namespace starrocks {
 class UDFDownLoader {

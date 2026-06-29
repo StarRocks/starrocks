@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/service/action/transaction_stream_load.h"
+#include "http/action/transaction_stream_load.h"
 
 #include <event2/buffer.h>
 #include <event2/http.h>
@@ -40,14 +40,14 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/core/http_channel.h"
-#include "http/core/http_common.h"
-#include "http/core/http_request.h"
-#include "http/service/download_action.h"
+#include "http/download_action.h"
 #include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/http_load_params.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 
