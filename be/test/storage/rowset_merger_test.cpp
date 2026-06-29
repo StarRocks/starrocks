@@ -23,7 +23,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_tracker.h"
-#include "util/defer_op.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/primary_key_encoder.h"
@@ -39,6 +38,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
