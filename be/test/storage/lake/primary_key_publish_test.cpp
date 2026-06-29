@@ -487,6 +487,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_interleaved_delete_then_reupsert) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
                                                    .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
@@ -552,6 +553,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_delete_only_first_flush_creates_segment) 
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
                                                    .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
