@@ -15,8 +15,8 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.SplitTabletJob;
+import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
@@ -572,7 +572,7 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
-            int activeComputeNodeCount, ConnectContext ctx) {
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
@@ -611,9 +611,10 @@ public final class TabletPreSplitCoordinator {
         try {
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
                     database, table, oldTabletIdToRanges);
-            // Carry the load's warehouse (from the explicitly-passed ConnectContext) so the spread
-            // shards are scheduled where the load runs (no-op under test mocks that are not SplitTabletJob).
-            ComputeResource loadComputeResource = ctx.getCurrentComputeResource();
+            // Carry the load's acquired compute resource (the one that sized the split) so the spread
+            // shards are scheduled in the load's warehouse. NOT ctx.getCurrentComputeResource(): that can
+            // be the session warehouse when the load specifies a different `warehouse` property. No-op
+            // under test mocks whose job is not a SplitTabletJob.
             if (loadComputeResource != null && combinedJob instanceof SplitTabletJob splitJob) {
                 splitJob.setLoadWarehouseId(loadComputeResource.getWarehouseId());
             }
