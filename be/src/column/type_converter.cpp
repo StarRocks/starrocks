@@ -14,12 +14,14 @@
 
 #include "column/type_converter.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
 #include "base/hash/unaligned_access.h"
+#include "base/string/string_parser.hpp"
 #include "column/type_converter_detail.h"
 #include "gutil/strings/substitute.h"
 #include "types/datetime_value.h"
@@ -29,8 +31,6 @@
 #include "types/storage_type_traits.h"
 #include "types/timestamp_value.h"
 #include "types/type_info.h"
-#include "base/string/string_parser.hpp"
-#include <cmath>
 
 namespace starrocks {
 
@@ -572,8 +572,8 @@ public:
         // overflows the target width or is not parseable must become NULL, not a silently wrapped
         // value ('99999999999'->INT -> 1215752191) or a 0 sentinel ('abc'->INT). TypeInfo::from_string
         // is lenient and would store those wrong non-NULL values (Bug 15 / numeric part of Bug 22).
-        if constexpr (Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT ||
-                      Type == TYPE_BIGINT || Type == TYPE_LARGEINT) {
+        if constexpr (Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT || Type == TYPE_BIGINT ||
+                      Type == TYPE_LARGEINT) {
             StringParser::ParseResult presult;
             CppType value = StringParser::string_to_int<CppType>(slice.data, slice.size, &presult);
             if (presult != StringParser::PARSE_SUCCESS) {
