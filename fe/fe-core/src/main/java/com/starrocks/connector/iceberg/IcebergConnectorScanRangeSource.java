@@ -49,6 +49,7 @@ import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergDeletionVectorDescriptor;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -61,6 +62,7 @@ import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -296,6 +298,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         THdfsScanRange hdfsScanRange = buildScanRange(task, task.file(), partitionId);
 
         List<TIcebergDeleteFile> posDeleteFiles = new ArrayList<>();
+        TIcebergDeletionVectorDescriptor dvDescriptor = null;
         for (DeleteFile deleteFile : task.deletes()) {
             FileContent content = deleteFile.content();
             if (content == FileContent.EQUALITY_DELETES) {
@@ -303,9 +306,37 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             }
 
             if (ContentFileUtil.isDV(deleteFile)) {
-                throw new StarRocksConnectorException(
-                        "Iceberg V3 Deletion Vectors are not supported. " +
-                        "Table contains deletion vector file: " + deleteFile.path());
+                if (dvDescriptor != null) {
+                    throw new StarRocksConnectorException(
+                            "At most one deletion vector is allowed per data file, but found multiple for: " +
+                            task.file().location());
+                }
+                String referenced = deleteFile.referencedDataFile();
+                if (referenced == null || !referenced.equals(task.file().location())) {
+                    throw new StarRocksConnectorException(
+                            "Deletion vector referenced_data_file [" + referenced +
+                            "] does not match scanned data file [" + task.file().location() + "]");
+                }
+                if (task.file().format() == FileFormat.ORC) {
+                    throw new StarRocksConnectorException(
+                            "Reading Iceberg deletion vectors on ORC data files is not supported yet: " +
+                            task.file().location());
+                }
+                Long offset = deleteFile.contentOffset();
+                Long size = deleteFile.contentSizeInBytes();
+                if (offset == null || offset < 0 || size == null || size <= 0) {
+                    throw new StarRocksConnectorException(
+                            "Deletion vector for [" + referenced + "] has invalid content_offset/content_size_in_bytes: " +
+                            offset + "/" + size);
+                }
+                dvDescriptor = new TIcebergDeletionVectorDescriptor();
+                dvDescriptor.setPuffin_file_path(deleteFile.path().toString());
+                dvDescriptor.setContent_offset(offset);
+                dvDescriptor.setContent_size_in_bytes(size);
+                dvDescriptor.setRecord_count(deleteFile.recordCount());
+                dvDescriptor.setReferenced_data_file(referenced);
+                dvDescriptor.setPuffin_file_size_in_bytes(deleteFile.fileSizeInBytes());
+                continue;
             }
 
             TIcebergDeleteFile target = new TIcebergDeleteFile();
@@ -317,6 +348,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         if (!posDeleteFiles.isEmpty()) {
             hdfsScanRange.setDelete_files(posDeleteFiles);
+        }
+        if (dvDescriptor != null) {
+            hdfsScanRange.setIceberg_deletion_vector_descriptor(dvDescriptor);
         }
 
         return Lists.newArrayList(buildTScanRangeLocations(hdfsScanRange));

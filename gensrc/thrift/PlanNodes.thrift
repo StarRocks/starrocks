@@ -350,6 +350,19 @@ struct TDeletionVectorDescriptor {
   5: optional i64 cardinality
 }
 
+// Iceberg V3 Deletion Vector descriptor (Puffin blob).
+// Distinct from Delta's TDeletionVectorDescriptor: content_size_in_bytes is the
+// FULL blob length (length prefix + magic + roaring body + crc), and
+// referenced_data_file is required.
+struct TIcebergDeletionVectorDescriptor {
+  1: optional string puffin_file_path
+  2: optional i64 content_offset
+  3: optional i64 content_size_in_bytes
+  4: optional i64 record_count
+  5: optional string referenced_data_file
+  6: optional i64 puffin_file_size_in_bytes
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -466,6 +479,8 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
+
+    41: optional TIcebergDeletionVectorDescriptor iceberg_deletion_vector_descriptor
 }
 
 struct TBinlogScanRange {
