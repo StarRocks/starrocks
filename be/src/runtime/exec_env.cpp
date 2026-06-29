@@ -45,11 +45,7 @@
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
-<<<<<<< HEAD
 #include "common/system/cpu_info.h"
-#include "common/system/master_info.h"
-=======
->>>>>>> 65e1f91c37f... [Refactor] Move broker count metric ownership to BrokerMgr (#75486)
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
