@@ -26,6 +26,7 @@ set(EXEC_FILES
         ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
+        ./exec/iceberg/iceberg_deletion_vector_reader_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp

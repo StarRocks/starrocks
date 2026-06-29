@@ -108,6 +108,7 @@ struct HdfsScannerProfile {
 struct TableSpecificData {
     std::vector<const TIcebergDeleteFile*> iceberg_delete_files;
     std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor;
+    std::shared_ptr<TIcebergDeletionVectorDescriptor> iceberg_deletion_vector_descriptor;
     const TIcebergSchema* iceberg_schema = nullptr;
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
 };

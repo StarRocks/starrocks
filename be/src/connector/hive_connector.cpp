@@ -496,7 +496,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         if (_scanner_ctx.materialize_slots.size() != 1) {
             return false;
         }
-        if (!_scan_range.delete_files.empty()) {
+        if (!_scan_range.delete_files.empty() || _scan_range.__isset.iceberg_deletion_vector_descriptor) {
             return false;
         }
         return true;
@@ -508,8 +508,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
 
     // for min/max optimization, we already check that on FE side this iceberg table
     // is unpartitioned, or all partition columns are constant value.
-    // so we just need to make sure there is no delete file.
-    if (!_scan_range.delete_files.empty()) {
+    // so we just need to make sure there is no delete file. A Puffin deletion vector
+    // is carried separately from delete_files, so it must be checked explicitly.
+    if (!_scan_range.delete_files.empty() || _scan_range.__isset.iceberg_deletion_vector_descriptor) {
         _scanner_ctx.format_scan_context.options.use_min_max_opt = false;
     }
 }
@@ -841,6 +842,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.deletion_vector_descriptor) {
         _scanner_ctx.table_specific.deletion_vector_descriptor =
                 std::make_shared<TDeletionVectorDescriptor>(scan_range.deletion_vector_descriptor);
+    }
+
+    if (scan_range.__isset.iceberg_deletion_vector_descriptor) {
+        _scanner_ctx.table_specific.iceberg_deletion_vector_descriptor =
+                std::make_shared<TIcebergDeletionVectorDescriptor>(scan_range.iceberg_deletion_vector_descriptor);
     }
 
     if (dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {

@@ -18,6 +18,7 @@
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exec/iceberg/iceberg_deletion_vector_reader.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/parquet/file_reader.h"
@@ -31,6 +32,11 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         auto split_ctx = down_cast<const parquet::SplitContext*>(_scanner_ctx->format_scan_context.split_context);
         _skip_rows_ctx = split_ctx->skip_rows_ctx;
         return Status::OK();
+    }
+
+    if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr &&
+        _scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
+        return Status::InternalError("Both Delta and Iceberg deletion vectors are set on one scan range");
     }
 
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
@@ -55,6 +61,11 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
     } else if (_scanner_ctx->table_specific.deletion_vector_descriptor != nullptr) {
         SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
         std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(*_scanner_ctx);
+        RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
+        _app_stats.deletion_vector_build_count += 1;
+    } else if (_scanner_ctx->table_specific.iceberg_deletion_vector_descriptor != nullptr) {
+        SCOPED_RAW_TIMER(&_app_stats.deletion_vector_build_ns);
+        auto dv = std::make_unique<IcebergDeletionVectorReader>(*_scanner_ctx);
         RETURN_IF_ERROR(dv->fill_row_indexes(_skip_rows_ctx));
         _app_stats.deletion_vector_build_count += 1;
     }
