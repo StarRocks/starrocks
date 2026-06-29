@@ -50,12 +50,6 @@ namespace connector {
 class ConnectorSinkSpillExecutor;
 }
 
-namespace lake {
-class ReplicationTxnManager;
-class TabletManager;
-class UpdateManager;
-} // namespace lake
-
 namespace pipeline {
 class DriverLimiter;
 class PipelineTimer;
@@ -108,9 +102,6 @@ struct RpcServices {
 };
 
 struct LakeServices {
-    lake::TabletManager* lake_tablet_manager = nullptr;
-    lake::UpdateManager* lake_update_manager = nullptr;
-    lake::ReplicationTxnManager* lake_replication_txn_manager = nullptr;
     ThreadPool* put_aggregate_metadata_thread_pool = nullptr;
     ThreadPool* lake_metadata_fetch_thread_pool = nullptr;
     ThreadPool* lake_vector_index_build_thread_pool = nullptr;
@@ -149,7 +140,6 @@ struct AgentServices {
 struct QueryExecutionServices {
     const ExecutionEnv* execution = nullptr;
     const RpcServices* rpc = nullptr;
-    const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
     MetricRegistry* process_metrics = nullptr;
 };
@@ -157,7 +147,6 @@ struct QueryExecutionServices {
 struct AdminServices {
     const ExecutionEnv* execution = nullptr;
     const RpcServices* rpc = nullptr;
-    const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
     const AgentServices* agent = nullptr;
 };

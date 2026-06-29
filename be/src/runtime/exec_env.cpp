@@ -40,7 +40,6 @@
 #include "agent/agent_server.h"
 #include "base/time/time.h"
 #include "common/config_exec_env_fwd.h"
-#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
@@ -70,9 +69,6 @@
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "storage/storage_env.h"
-#include "storage/tablet_schema_map.h"
-#include "storage/update_manager.h"
 #include "udf/python/env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -80,6 +76,15 @@
 #endif
 
 namespace starrocks {
+namespace {
+
+template <typename T>
+void delete_and_null(T*& ptr) {
+    delete ptr;
+    ptr = nullptr;
+}
+
+} // namespace
 
 ExecEnv* ExecEnv::GetInstance() {
     static ExecEnv s_exec_env;
@@ -121,10 +126,6 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.broker_mgr = platform_env->broker_mgr();
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
-    auto* storage_env = StorageEnv::GetInstance();
-    _lake_services.lake_tablet_manager = storage_env->lake_tablet_manager();
-    _lake_services.lake_update_manager = storage_env->lake_update_manager();
-    _lake_services.lake_replication_txn_manager = storage_env->lake_replication_txn_manager();
     _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
     _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
     _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
@@ -157,14 +158,12 @@ void ExecEnv::_refresh_service_contexts() {
 
     _query_execution_services.execution = &_execution_services;
     _query_execution_services.rpc = &_rpc_services;
-    _query_execution_services.lake = &_lake_services;
     _query_execution_services.runtime = &_runtime_services;
     _query_execution_services.process_metrics =
             _process_metrics_registry == nullptr ? nullptr : _process_metrics_registry->root_registry();
 
     _admin_services.execution = &_execution_services;
     _admin_services.rpc = &_rpc_services;
-    _admin_services.lake = &_lake_services;
     _admin_services.runtime = &_runtime_services;
     _admin_services.agent = &_agent_services;
 }
@@ -244,21 +243,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
 
-    StorageEnvOptions storage_env_options;
-    storage_env_options.store_path_registry = platform_env->store_path_registry();
-    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
-    storage_env_options.process_mem_limit = global_env->process_mem_limit();
-    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
-    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
-#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
-    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
-#elif defined(BE_TEST)
-    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
-#endif
-    RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(storage_env_options), "init StorageEnv failed");
-
     RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
-    StorageEnv::GetInstance()->set_spill_dir_mgr(_compute_env->spill_dir_mgr());
 
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
@@ -345,12 +330,6 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         global_env->lake_vector_index_build_thread_pool()->shutdown();
         component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (StorageEnv::GetInstance()->parallel_compact_mgr() != nullptr) {
-        start = MonotonicMillis();
-        StorageEnv::GetInstance()->stop();
-        component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
     }
 
     if (global_env->pk_index_execution_thread_pool()) {
@@ -449,23 +428,21 @@ void ExecEnv::destroy() {
     if (_compute_env != nullptr) {
         _compute_env->destroy_profile_report_worker();
     }
-    SAFE_DELETE(_transaction_mgr);
-    SAFE_DELETE(_stream_load_executor);
-    SAFE_DELETE(_connector_sink_spill_executor);
-    SAFE_DELETE(_query_context_mgr);
+    delete_and_null(_transaction_mgr);
+    delete_and_null(_stream_load_executor);
+    delete_and_null(_connector_sink_spill_executor);
+    delete_and_null(_query_context_mgr);
     // Query/workgroup teardown can release FragmentContext state that still uses
     // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.
     if (_compute_env) {
-        StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
         _compute_env->destroy();
     }
 
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
-    SAFE_DELETE(_runtime_filter_cache);
-    SAFE_DELETE(_lookup_dispatcher_mgr);
-    SAFE_DELETE(_batch_write_mgr);
-    StorageEnv::GetInstance()->destroy();
+    delete_and_null(_runtime_filter_cache);
+    delete_and_null(_lookup_dispatcher_mgr);
+    delete_and_null(_batch_write_mgr);
     DCHECK(_global_env != nullptr);
     _global_env->destroy_thread_pools();
     _query_execution_services.process_metrics = nullptr;

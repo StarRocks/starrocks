@@ -24,6 +24,7 @@
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/glog_init.h"
@@ -31,6 +32,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "compute_env/compute_env.h"
 #include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "exec/pipeline/query_context.h"
@@ -150,6 +152,23 @@ int init_test_env(int argc, char** argv) {
     st = exec_env->init(paths, process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = global_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+#endif
+    st = StorageEnv::GetInstance()->init(storage_env_options);
+    CHECK(st.ok()) << st;
+    if (exec_env->compute_env() != nullptr) {
+        StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
+    }
+
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
     st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
@@ -186,6 +205,7 @@ int init_test_env(int argc, char** argv) {
     exec_env->set_agent_server(nullptr);
     orchestration_env->stop();
     data_workflows_env->stop();
+    StorageEnv::GetInstance()->stop();
     exec_env->stop();
     engine->stop();
 #ifdef USE_STAROS
@@ -196,6 +216,8 @@ int init_test_env(int argc, char** argv) {
     orchestration_env->destroy();
     orchestration_env.reset();
     delete engine;
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     agent_server.reset();
     platform_env->destroy();
