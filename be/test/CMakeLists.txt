@@ -48,7 +48,6 @@ set(EXEC_FILES
         ./fs/output_stream_wrapper_test.cpp
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
-        ./platform/key_cache_script_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
@@ -267,7 +266,6 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test_issue_8676.cpp
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./exec/data_sinks/mysql_result_writer_test.cpp
-        ./runtime/command_executor_test.cpp
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
         ./exec/jdbc/type_checker_xml_loader_test.cpp
@@ -347,6 +345,7 @@ add_subdirectory(platform)
 add_subdirectory(geo)
 add_subdirectory(cache)
 add_subdirectory(serde)
+add_subdirectory(script)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
