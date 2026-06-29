@@ -918,12 +918,20 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        // Pre-split drops the WITH_SHARD pin, so scheduleToWorkerGroup becomes the only placement hint
+        // left; schedule to the table's (warehouse) compute resource so the spread shards stay in the
+        // load's warehouse instead of defaulting to the default worker group. An online split keeps
+        // DEFAULT_RESOURCE: its WITH_SHARD pin already co-locates each new shard with the source shard
+        // (and hence the source's warehouse), so the schedule target does not change placement.
+        ComputeResource computeResource = spreadNewShards
+                ? GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(table.getId())
+                : WarehouseManager.DEFAULT_RESOURCE;
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
-                shardProperties, WarehouseManager.DEFAULT_RESOURCE,
+                shardProperties, computeResource,
                 spreadNewShards);
     }
 
