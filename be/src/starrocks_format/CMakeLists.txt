@@ -34,7 +34,6 @@ set(STARROCKS_LIBS
     FSCore
     Formats
     Gutil
-    HttpCore
     IO
     Platform
     Serde

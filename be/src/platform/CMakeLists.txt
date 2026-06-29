@@ -25,6 +25,18 @@ set(PLATFORM_FILES
   fs_broker.cpp
   broker_mgr.cpp
   download_util.cpp
+  http/ev_http_server.cpp
+  http/http_auth.cpp
+  http/http_channel.cpp
+  http/http_client.cpp
+  http/http_headers.cpp
+  http/http_method.cpp
+  http/http_metrics.cpp
+  http/http_parser.cpp
+  http/http_request.cpp
+  http/http_response.cpp
+  http/http_status.cpp
+  http/http_stream_channel.cpp
   key_cache.cpp
   llm/llm_cache.cpp
   llm/llm_query_service.cpp
@@ -45,4 +57,4 @@ ADD_BE_LIB(Platform
     ${PLATFORM_FILES}
 )
 
-target_link_libraries(Platform PUBLIC HttpCore FSCore IO Types Common Base Gutil StarRocksGen)
+target_link_libraries(Platform PUBLIC FSCore IO Types Common Base Gutil StarRocksGen)

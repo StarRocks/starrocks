@@ -72,7 +72,7 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
 
     target_link_libraries(ConnectorElasticsearch PUBLIC
             ConnectorPrimitive
-            HttpCore
+            Platform
             ExprCore
             RuntimeCore
             ChunkCore

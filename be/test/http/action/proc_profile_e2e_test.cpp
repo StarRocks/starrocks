@@ -20,8 +20,8 @@
 #include <string>
 
 #include "common/config_path_fwd.h"
-#include "http/service/action/profile_utils.h"
-#include "http/service/default_path_handlers.h"
+#include "http/action/profile_utils.h"
+#include "http/default_path_handlers.h"
 
 namespace starrocks {
 

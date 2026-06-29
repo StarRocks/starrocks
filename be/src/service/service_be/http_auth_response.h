@@ -20,9 +20,9 @@
 
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "http/core/ev_http_server.h"
-#include "http/core/http_handler.h"
-#include "http/core/http_status.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 

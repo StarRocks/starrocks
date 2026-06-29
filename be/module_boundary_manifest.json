@@ -58,7 +58,7 @@
         "runtime/",
         "storage/",
         "service/",
-        "http/core/",
+        "platform/http/",
         "agent/",
         "exec/",
         "connector/",
@@ -82,28 +82,13 @@
       "remediation": "Keep Cache self-contained within cache engines, scan read-buffer/cache stream wrappers, monitors, metrics, utilities, and injected peer-cache BRPC stubs; keep service startup, storage code, HTTP/admin code, and ExecEnv singleton access outside cache."
     },
     {
-      "id": "httpcore",
-      "doc_label": "HttpCore",
-      "summary": "Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.",
-      "owned_targets": ["HttpCore"],
-      "owned_roots": ["be/src/http/core"],
-      "allowed_include_prefixes": ["http/core/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["http/service/"],
-      "forbidden_includes": [],
-      "allowed_target_deps": ["Common", "Base", "Gutil"],
-      "allowed_test_targets": ["http_core_test"],
-      "allowed_test_link_deps": ["HttpCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward."
-    },
-    {
       "id": "httpservice",
       "doc_label": "HttpService",
-      "summary": "BE HTTP pages, admin actions, load actions, download helpers, and web handlers above HttpCore.",
+      "summary": "BE HTTP pages, admin actions, load actions, download helpers, and web handlers.",
       "owned_targets": ["HttpService"],
-      "owned_roots": ["be/src/http/service"],
+      "owned_roots": ["be/src/http"],
       "allowed_include_prefixes": [
-        "http/service/",
-        "http/core/",
+        "http/",
         "cache/",
         "compute_env/",
         "data_workflows/",
@@ -122,10 +107,10 @@
       ],
       "forbidden_include_prefixes": ["service/", "service_be/", "agent/", "connector/"],
       "forbidden_includes": [],
-      "allowed_target_deps": ["HttpCore", "Storage", "DataWorkflows", "Orchestration", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Storage", "DataWorkflows", "Orchestration", "Runtime", "RuntimeCore", "RuntimeEnv", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
-      "remediation": "Keep HTTP service code above HttpCore; move reusable transport/request primitives down to HttpCore and keep service/bootstrap integration outside HttpService."
+      "remediation": "Keep BE HTTP pages, actions, download helpers, and web handlers in HttpService; keep reusable lower-level helpers in their owning modules such as Platform and Runtime."
     },
     {
       "id": "io",
@@ -174,14 +159,14 @@
     {
       "id": "platform",
       "doc_label": "Platform",
-      "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service.",
+      "summary": "Shared BE platform utilities above IO/FS/Common and below Runtime/Exec/Storage/Service, including reusable HTTP client/server primitives.",
       "owned_targets": ["Platform"],
       "owned_roots": ["be/src/platform"],
-      "allowed_include_prefixes": ["platform/", "http/core/", "fs/", "io/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["HttpCore", "FSCore", "IO", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_include_prefixes": ["platform/", "fs/", "io/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["FSCore", "IO", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["platform_test"],
       "allowed_test_link_deps": ["Platform"],
-      "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, and platform-level helpers; move runtime, exec, storage, and service integration upward."
+      "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, HTTP primitive, and platform-level helpers; move runtime, exec, storage, and service integration upward."
     },
     {
       "id": "typecore",
@@ -462,7 +447,7 @@
     {
       "id": "storage",
       "doc_label": "Storage",
-      "summary": "Concrete storage engine: tablet/rowset/segment management, compaction, persistent index, lake (cloud-native) tablets, binlog, inverted/vector indexes, and sstable, depending only on ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore for replication transport, without Exec/Service/Connector/Agent reach-up or ExecEnv singleton coupling.",
+      "summary": "Concrete storage engine: tablet/rowset/segment management, compaction, persistent index, lake (cloud-native) tablets, binlog, inverted/vector indexes, and sstable, depending only on ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and Platform HTTP helpers for replication transport, without Exec/Service/Connector/Agent reach-up or ExecEnv singleton coupling.",
       "owned_targets": ["Storage"],
       "owned_roots": ["be/src/storage"],
       "excluded_globs": ["be/src/storage/primitive/**", "be/src/storage/base/**"],
@@ -496,15 +481,14 @@
         "common/",
         "base/",
         "gutil/",
-        "gen_cpp/",
-        "http/core/"
+        "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["service/", "connector/", "agent/"],
       "forbidden_includes": ["runtime/exec_env.h"],
-      "allowed_target_deps": ["StorageBase", "StoragePrimitive", "ExecPrimitive", "ComputeEnv", "Cache", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "HttpCore", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["StorageBase", "StoragePrimitive", "ExecPrimitive", "ComputeEnv", "Cache", "ExprCore", "Serde", "RuntimeEnv", "RuntimeCore", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
-      "remediation": "Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and HttpCore; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies."
+      "remediation": "Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and Platform HTTP helpers; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies."
     },
     {
       "id": "computeenv",
@@ -575,7 +559,7 @@
       ],
       "forbidden_include_prefixes": [
         "service/",
-        "http/core/",
+        "platform/http/",
         "connector/",
         "formats/",
         "udf/",
@@ -615,7 +599,6 @@
         "runtime/",
         "compute_env/",
         "serde/",
-        "http/core/",
         "platform/",
         "fs/",
         "io/",
@@ -630,7 +613,7 @@
         "agent/",
         "service/",
         "connector/",
-        "http/service/",
+        "http/",
         "script/",
         "tools/",
         "udf/"
@@ -648,7 +631,6 @@
         "RuntimeEnv",
         "RuntimeCore",
         "Platform",
-        "HttpCore",
         "FSCore",
         "IO",
         "ChunkCore",
@@ -916,7 +898,7 @@
         "connector/connector.h",
         "connector/data_source.h",
         "connector/data_source_provider.h",
-        "http/core/",
+        "platform/",
         "exprs/",
         "runtime/",
         "column/",
@@ -931,9 +913,9 @@
         "connector/connector_registry.h",
         "runtime/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ConnectorPrimitive", "Platform", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_elasticsearch_test"],
-      "allowed_test_link_deps": ["ConnectorElasticsearch", "ConnectorPrimitive", "HttpCore", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ConnectorElasticsearch", "ConnectorPrimitive", "Platform", "ExprCore", "RuntimeCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
@@ -1092,7 +1074,7 @@
         "gen_cpp/",
         "types/"
       ],
-      "forbidden_include_prefixes": ["service/", "http/service/", "agent/"],
+      "forbidden_include_prefixes": ["service/", "http/", "agent/"],
       "allowed_target_deps": ["Runtime", "Exec", "ExecRuntime", "ExecPrimitive", "ComputeEnv", "ConnectorPrimitive", "Platform", "ColumnCore", "RuntimeCore", "Common", "Base", "Gutil", "StarRocksGen", "Types"],
       "allowed_test_targets": ["orchestration_test"],
       "allowed_test_link_deps": ["Orchestration"],
@@ -1118,8 +1100,7 @@
         "fs/",
         "gen_cpp/",
         "gutil/",
-        "http/core/",
-        "http/service/",
+        "http/",
         "io/",
         "platform/",
         "orchestration/",
@@ -1147,7 +1128,6 @@
         "FSCore",
         "FileSystem",
         "IO",
-        "HttpCore",
         "HttpService",
         "Common",
         "Base",

@@ -23,7 +23,7 @@
 #include "common/config_llm_fwd.h"
 #include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
-#include "http/core/http_client.h"
+#include "platform/http/http_client.h"
 #include "platform/llm/llm_cache.h"
 
 namespace starrocks {

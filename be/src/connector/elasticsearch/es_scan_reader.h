@@ -36,7 +36,7 @@
 
 #include <string>
 
-#include "http/core/http_client.h"
+#include "platform/http/http_client.h"
 
 using std::string;
 

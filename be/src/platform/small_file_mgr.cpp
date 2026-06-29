@@ -49,7 +49,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "http/core/http_client.h"
+#include "platform/http/http_client.h"
 
 namespace starrocks {
 

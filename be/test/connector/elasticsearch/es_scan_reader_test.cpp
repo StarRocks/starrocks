@@ -40,11 +40,11 @@
 #include <vector>
 
 #include "connector/elasticsearch/es_scroll_query.h"
-#include "http/core/ev_http_server.h"
-#include "http/core/http_auth.h"
-#include "http/core/http_channel.h"
-#include "http/core/http_handler.h"
-#include "http/core/http_request.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_auth.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_request.h"
 #ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
