@@ -20,7 +20,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 set(UTIL_FILES
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
-  static_asserts.cpp
   system_metrics.cpp
 # coding_util.cpp
   hdfs_util.cpp
