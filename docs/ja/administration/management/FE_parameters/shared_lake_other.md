@@ -712,6 +712,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
 - 導入時期：v4.1.0
 
+<EditonSpecificFEItemSharedLakeOther />
+
 ## その他
 
 ### `agent_task_resend_wait_time_ms`
@@ -1432,5 +1434,3 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：マテリアライズドビュー作成時、固定長の char/varchar 列に string 型を優先するかどうか。
 - 導入時期：v4.0.0
-
-<EditonSpecificFEItemSharedLakeOther />
