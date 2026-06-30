@@ -30,7 +30,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
@@ -380,7 +380,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
     // prevent memory accumulation. In serial mode, batch_size=1 degenerates to original logic.
     const uint32_t batch_size = use_parallel_partial_update
-                                        ? GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
+                                        ? RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
                                         : 1;
 
     for (uint32_t batch_start = 0; batch_start < local_segments; batch_start += batch_size) {
@@ -395,7 +395,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
             std::mutex status_mutex;
             Status shared_status;
-            auto token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
@@ -1005,7 +1005,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
     if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1144,7 +1144,7 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     // Obtain thread pool token for parallel execution if enabled
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
 
@@ -1336,7 +1336,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution &&
         params.op_write.rowset().num_rows() >= config::pk_index_parallel_execution_min_rows) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
     // TRACE_COUNTER_* reads a thread-local current trace that pool worker threads do not
@@ -1548,7 +1548,7 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
@@ -2157,7 +2157,7 @@ int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
 }
 
 Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
     return Status::OK();
@@ -2236,7 +2236,7 @@ void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
                                              const TabletSchemaCSPtr& tablet_schema) {
     // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
     // no need to preload if using light compaction publish

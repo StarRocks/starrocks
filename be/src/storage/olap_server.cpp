@@ -52,8 +52,8 @@
 #include "common/thread/thread.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/local_pk_index_manager.h"
@@ -457,7 +457,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
             }
             auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                             "Compaction-" + std::to_string(tablet->tablet_id()),
-                                                            GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                            RuntimeEnv::GetInstance()->compaction_mem_tracker());
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
                 auto st = tablet->updates()->compaction(mem_tracker.get(), {rowsetid});

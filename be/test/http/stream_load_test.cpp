@@ -67,7 +67,7 @@
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 class mg_connection;
 
@@ -103,7 +103,7 @@ static Status init_platform_env_for_stream_load_test(MetricRegistry* metrics, bo
 
 static ComputeEnvOptions make_stream_load_compute_env_options(MetricRegistry* metrics) {
     ComputeEnvOptions options;
-    options.global_env = GlobalEnv::GetInstance();
+    options.runtime_env = RuntimeEnv::GetInstance();
     options.metrics = metrics;
     options.store_paths = PlatformEnv::GetInstance()->store_path_registry()->store_path_roots();
     options.as_cn = true;

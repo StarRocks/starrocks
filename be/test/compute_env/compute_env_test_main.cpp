@@ -24,7 +24,7 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace {
 
@@ -64,14 +64,14 @@ int main(int argc, char** argv) {
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
 
-    auto global_env_status = starrocks::GlobalEnv::GetInstance()->init(nullptr);
-    if (!global_env_status.ok()) {
-        std::cerr << "failed to initialize GlobalEnv: " << global_env_status << std::endl;
+    auto runtime_env_status = starrocks::RuntimeEnv::GetInstance()->init(nullptr);
+    if (!runtime_env_status.ok()) {
+        std::cerr << "failed to initialize RuntimeEnv: " << runtime_env_status << std::endl;
         return 1;
     }
 
     ::testing::InitGoogleTest(&argc, argv);
     const int result = RUN_ALL_TESTS();
-    starrocks::GlobalEnv::GetInstance()->stop();
+    starrocks::RuntimeEnv::GetInstance()->stop();
     return result;
 }

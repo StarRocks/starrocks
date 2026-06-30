@@ -310,7 +310,7 @@
         "runtime/variable_result_writer.h"
       ],
       "allowed_target_deps": ["Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["runtime_core_test", "runtime_env_test"],
+      "allowed_test_targets": ["runtime_test"],
       "allowed_test_link_deps": ["Runtime", "Platform", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep Runtime restricted to core runtime infrastructure and process-scoped runtime environment resources; move execution, service, storage, stream-load, and connector integration into higher modules."
     },
@@ -455,7 +455,6 @@
         "exec/pipeline/scan/ticketed_morsel_queue.h",
         "storage/primitive/",
         "exprs/",
-        "runtime/env/",
         "runtime/",
         "platform/",
         "fs/",
@@ -498,7 +497,6 @@
         "exec/pipeline/scan/ticketed_morsel_queue.h",
         "storage/primitive/",
         "exprs/",
-        "runtime/env/",
         "runtime/",
         "platform/",
         "fs/",
@@ -779,7 +777,6 @@
         "exec/runtime_filter/",
         "storage/primitive/",
         "exprs/",
-        "runtime/env/",
         "runtime/",
         "platform/",
         "fs/",

@@ -17,7 +17,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -32,7 +32,7 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 

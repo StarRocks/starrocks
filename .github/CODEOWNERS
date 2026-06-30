@@ -94,7 +94,7 @@
 # error message
 # /fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java  @StarRocks/msg-reviewer
 
-# StorageEngine/ExecEnv/GlobalEnv
+# StorageEngine/ExecEnv/RuntimeEnv
 # /be/src/exec/exec_env.h @StarRocks/thread-committer
 # /be/src/exec/exec_env.cpp @StarRocks/thread-committer
 # /be/src/storage/olap_server.cpp @StarRocks/thread-committer

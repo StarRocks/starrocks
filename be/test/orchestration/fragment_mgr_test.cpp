@@ -46,8 +46,8 @@
 #include "exec/exec_env.h"
 #include "gen_cpp/Types_types.h"
 #include "orchestration/plan_fragment_executor.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -83,30 +83,30 @@ public:
     FragmentMgrTest() = default;
 
     static void SetUpTestSuite() {
-        auto* global_env = GlobalEnv::GetInstance();
-        _previous_process_mem_tracker = global_env->_process_mem_tracker;
-        _previous_query_pool_mem_tracker = global_env->_query_pool_mem_tracker;
+        auto* runtime_env = RuntimeEnv::GetInstance();
+        _previous_process_mem_tracker = runtime_env->_process_mem_tracker;
+        _previous_query_pool_mem_tracker = runtime_env->_query_pool_mem_tracker;
 
-        if (global_env->_process_mem_tracker == nullptr) {
+        if (runtime_env->_process_mem_tracker == nullptr) {
             _process_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
-            global_env->_process_mem_tracker = _process_mem_tracker;
+            runtime_env->_process_mem_tracker = _process_mem_tracker;
         }
-        if (global_env->_query_pool_mem_tracker == nullptr) {
+        if (runtime_env->_query_pool_mem_tracker == nullptr) {
             _query_pool_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, -1, "query_pool",
-                                                                   global_env->process_mem_tracker());
-            global_env->_query_pool_mem_tracker = _query_pool_mem_tracker;
+                                                                   runtime_env->process_mem_tracker());
+            runtime_env->_query_pool_mem_tracker = _query_pool_mem_tracker;
         }
 
-        _previous_global_env = ExecEnv::GetInstance()->_global_env;
-        ExecEnv::GetInstance()->_global_env = global_env;
+        _previous_runtime_env = ExecEnv::GetInstance()->_runtime_env;
+        ExecEnv::GetInstance()->_runtime_env = runtime_env;
     }
 
     static void TearDownTestSuite() {
-        auto* global_env = GlobalEnv::GetInstance();
-        ExecEnv::GetInstance()->_global_env = _previous_global_env;
-        _previous_global_env = nullptr;
-        global_env->_query_pool_mem_tracker = _previous_query_pool_mem_tracker;
-        global_env->_process_mem_tracker = _previous_process_mem_tracker;
+        auto* runtime_env = RuntimeEnv::GetInstance();
+        ExecEnv::GetInstance()->_runtime_env = _previous_runtime_env;
+        _previous_runtime_env = nullptr;
+        runtime_env->_query_pool_mem_tracker = _previous_query_pool_mem_tracker;
+        runtime_env->_process_mem_tracker = _previous_process_mem_tracker;
         _previous_query_pool_mem_tracker.reset();
         _previous_process_mem_tracker.reset();
         _query_pool_mem_tracker.reset();
@@ -122,14 +122,14 @@ protected:
     void TearDown() override {}
 
 private:
-    static GlobalEnv* _previous_global_env;
+    static RuntimeEnv* _previous_runtime_env;
     static std::shared_ptr<MemTracker> _previous_process_mem_tracker;
     static std::shared_ptr<MemTracker> _previous_query_pool_mem_tracker;
     static std::shared_ptr<MemTracker> _process_mem_tracker;
     static std::shared_ptr<MemTracker> _query_pool_mem_tracker;
 };
 
-GlobalEnv* FragmentMgrTest::_previous_global_env = nullptr;
+RuntimeEnv* FragmentMgrTest::_previous_runtime_env = nullptr;
 std::shared_ptr<MemTracker> FragmentMgrTest::_previous_process_mem_tracker;
 std::shared_ptr<MemTracker> FragmentMgrTest::_previous_query_pool_mem_tracker;
 std::shared_ptr<MemTracker> FragmentMgrTest::_process_mem_tracker;

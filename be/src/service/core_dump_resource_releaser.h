@@ -21,7 +21,7 @@ namespace starrocks {
 
 class DataCache;
 class ExecEnv;
-class GlobalEnv;
+class RuntimeEnv;
 
 class CoreDumpResourceSelector {
 public:
@@ -37,6 +37,6 @@ private:
 };
 
 void refresh_core_dump_resource_releaser_config();
-void try_release_resources_before_core_dump(ExecEnv* exec_env, GlobalEnv* global_env, DataCache* data_cache);
+void try_release_resources_before_core_dump(ExecEnv* exec_env, RuntimeEnv* runtime_env, DataCache* data_cache);
 
 } // namespace starrocks

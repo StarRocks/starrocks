@@ -45,7 +45,7 @@
 #include "gutil/strings/util.h"
 #include "gutil/walltime.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -86,11 +86,11 @@ public:
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
               _load_channel_mgr(std::make_unique<LoadChannelMgr>(_tablet_mgr,
-                                                                 GlobalEnv::GetInstance()->diagnose_daemon(),
+                                                                 RuntimeEnv::GetInstance()->diagnose_daemon(),
                                                                  PlatformEnv::GetInstance()->brpc_stub_cache())),
               _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager(),
                             _load_channel_mgr.get()) {
-        CHECK_OK(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
+        CHECK_OK(_load_channel_mgr->init(RuntimeEnv::GetInstance()->load_mem_tracker()));
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));

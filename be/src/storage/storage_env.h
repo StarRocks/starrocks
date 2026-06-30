@@ -70,7 +70,7 @@ public:
     void stop();
     void stop_lake_tablet_manager();
     // Keep this explicit: the cache must be destroyed after vector index users
-    // are drained and before GlobalEnv::stop() releases the mem tracker tree.
+    // are drained and before RuntimeEnv::stop() releases the mem tracker tree.
     void destroy_vector_index_cache();
     void destroy();
 

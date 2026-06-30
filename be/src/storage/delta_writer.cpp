@@ -26,8 +26,8 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/memtable.h"
@@ -441,7 +441,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_table == nullptr) {
         // When loading memory usage is larger than hard limit, we will reject new loading task.
         if (!config::enable_new_load_on_memory_limit_exceeded &&
-            is_tracker_hit_hard_limit(GlobalEnv::GetInstance()->load_mem_tracker(),
+            is_tracker_hit_hard_limit(RuntimeEnv::GetInstance()->load_mem_tracker(),
                                       config::load_process_max_memory_hard_limit_ratio)) {
             return Status::MemoryLimitExceeded(
                     "memory limit exceeded, please reduce load frequency or increase config "

@@ -71,7 +71,7 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -151,7 +151,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
 #endif
 #ifndef BE_TEST
-    const int64_t process_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    const int64_t process_limit = RuntimeEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
     MetadataCache::create_cache(lru_cache_limit);
     StorageMetrics::instance()->register_metadata_cache_bytes_total_hook(
@@ -907,7 +907,7 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     }
     auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(tablet->tablet_id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker());
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();

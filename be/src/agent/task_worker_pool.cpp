@@ -331,7 +331,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> tablet_infos;
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
-                                        GlobalEnv::GetInstance()->load_mem_tracker());
+                                        RuntimeEnv::GetInstance()->load_mem_tracker());
         status = StorageEngine::instance()->execute_task(&engine_task);
 
         if (status.is_already_exist()) {
@@ -442,7 +442,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                 << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature,
-                                        GlobalEnv::GetInstance()->load_mem_tracker());
+                                        RuntimeEnv::GetInstance()->load_mem_tracker());
         status = StorageEngine::instance()->execute_task(&engine_task);
 
         if (status.is_already_exist()) {
@@ -799,8 +799,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         TResourceUsage resource_usage;
         resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
-        resource_usage.__set_mem_used_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->consumption());
-        resource_usage.__set_mem_limit_bytes(GlobalEnv::GetInstance()->process_mem_tracker()->limit());
+        resource_usage.__set_mem_used_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->consumption());
+        resource_usage.__set_mem_limit_bytes(RuntimeEnv::GetInstance()->process_mem_tracker()->limit());
         worker_pool_this->_cpu_usage_recorder.update_interval();
         resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
 

@@ -456,7 +456,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                                 "gutil/",
                             ],
                             "allowed_target_deps": ["ColumnCore", "Common", "Base", "Gutil"],
-                            "allowed_test_targets": ["runtime_core_test"],
+                            "allowed_test_targets": ["runtime_test"],
                             "allowed_test_link_deps": ["Runtime", "ColumnCore", "Common", "Base", "Gutil"],
                             "remediation": "Move code down or add an interface instead of pulling unrelated dependencies into Runtime.",
                         }
@@ -514,7 +514,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "test" / "runtime" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
-                set(RUNTIME_CORE_TEST_LINK_LIBS
+                set(RUNTIME_TEST_LINK_LIBS
                     Runtime
                     ColumnCore
                     Common
@@ -522,7 +522,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                     Gutil
                 )
 
-                target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
+                target_link_libraries(runtime_test ${RUNTIME_TEST_LINK_LIBS} gtest_main)
                 """
             )
         )
