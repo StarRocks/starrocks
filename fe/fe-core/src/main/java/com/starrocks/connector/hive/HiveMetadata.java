@@ -342,6 +342,11 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getPartitionKeysByValue(dbName, tblName, partitionValues);
     }
 
+    @Override
+    public List<String> listPartitionNamesByFilter(String dbName, String tblName, String filter) {
+        return hmsOps.getPartitionKeysByFilter(dbName, tblName, filter);
+    }
+
     private List<Partition> buildGetRemoteFilesPartitions(Table table, GetRemoteFilesParams params) {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         if (table.isUnPartitioned()) {

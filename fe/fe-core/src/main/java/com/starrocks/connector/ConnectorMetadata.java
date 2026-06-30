@@ -123,6 +123,13 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * List partition names by HMS filter expression, e.g. {@code dt >= '20260601' AND dt <= '20260607'}.
+     */
+    default List<String> listPartitionNamesByFilter(String databaseName, String tableName, String filter) {
+        return Lists.newArrayList();
+    }
+
+    /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
      * @param dbName  - the string represents the database name
