@@ -14,11 +14,14 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
 #include "base/hash/hash_std.hpp"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -32,6 +35,7 @@
 #include "column/schema.h"
 #include "column/serde/column_array_serde.h"
 #include "column/variant_column.h"
+#include "common/config_local_io_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/memory/mem_chunk_allocator.h"
@@ -48,6 +52,19 @@ DECLARE_FAIL_POINT(mem_chunk_allocator_allocate_fail);
 #endif
 
 namespace starrocks::serde {
+
+static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), Column::MAX_CAPACITY_LIMIT);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
+}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
@@ -757,6 +774,18 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
     }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(ColumnArraySerdeTest, binary_column_serialize_rejects_unrepresentable_payload) {
+    auto column = make_unrepresentable_binary_column();
+    ASSERT_FALSE(column->is_payload_size_representable().ok());
+
+    std::vector<uint8_t> buffer(16);
+    auto st = ColumnArraySerde::serialize(*column, buffer.data());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_capacity_limit_exceeded()) << st.status();
+    ASSERT_NE(std::string::npos, std::string(st.status().message()).find("byte payload size")) << st.status();
 }
 
 // NOLINTNEXTLINE

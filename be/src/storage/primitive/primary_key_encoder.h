@@ -162,6 +162,10 @@ public:
     static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
                                 PrimaryKeyEncodingType encoding_type, bool large_column = false);
 
+    // Check that an encoded primary-key column can be persisted by delete files
+    // without overflowing the BinaryColumn size fields.
+    static Status check_delete_file_binary_column_size(const Column& column);
+
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest,
                        PrimaryKeyEncodingType encoding_type);
 

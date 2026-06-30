@@ -119,6 +119,7 @@ Status DelFileStreamConverter::close() {
     PrimaryKeyEncoder::encode(*_pkey_schema, pk_chunk, /*offset=*/0, /*len=*/row_count, dst_col.get(),
                               _target_pk_encoding);
 
+    RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(*dst_col));
     const int64_t output_capacity = serde::ColumnArraySerde::max_serialized_size(*dst_col);
     if (output_capacity <= 0) {
         return Status::InternalError("ColumnArraySerde::max_serialized_size returned 0 for target column");

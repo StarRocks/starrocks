@@ -19,10 +19,14 @@
 #include <limits>
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_local_io_fwd.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
@@ -45,6 +49,19 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
         sort_key_idxes[i] = i;
     }
     return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+}
+
+static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), Column::MAX_CAPACITY_LIMIT);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
@@ -295,6 +312,47 @@ TEST(PrimaryKeyEncoderTest, testSingleIntV2EncodingRoundTripAndColumnType) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
                   decoded->get_column_by_index(0)->get(i).get_int32());
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
+    std::vector<Slice> strings{{"a"}, {"bb"}, {"ccc"}};
+
+    auto binary = BinaryColumn::create();
+    binary->append_strings(strings.data(), strings.size());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*binary).ok());
+
+    auto sticky_large = BinaryColumn::create();
+    sticky_large->append_strings(strings.data(), strings.size());
+    AdaptiveOffsets::Large large_offsets;
+    large_offsets.resize(sticky_large->get_offset().size());
+    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
+        large_offsets[i] = sticky_large->get_offset()[i];
+    }
+    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
+    ASSERT_TRUE(sticky_large->get_offset().is_large());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*sticky_large).ok());
+
+    auto nullable_data = BinaryColumn::create();
+    nullable_data->append_strings(strings.data(), strings.size());
+    auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
+
+    auto large_binary = LargeBinaryColumn::create();
+    large_binary->append_strings(strings.data(), strings.size());
+    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
+
+    auto overlimit_binary = make_unrepresentable_binary_column();
+    ASSERT_FALSE(overlimit_binary->is_payload_size_representable().ok());
+    auto overlimit_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*overlimit_binary);
+    ASSERT_FALSE(overlimit_status.ok());
+    ASSERT_TRUE(overlimit_status.is_capacity_limit_exceeded()) << overlimit_status;
+    ASSERT_NE(std::string::npos, std::string(overlimit_status.message()).find("byte payload size"))
+            << overlimit_status;
+
+    auto fixed = Int32Column::create();
+    int32_t value = 1;
+    fixed->append_numbers(&value, sizeof(value));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*fixed).ok());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodedTypeAndFixedSizeByEncodingType) {
