@@ -897,15 +897,16 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
         // Pre-split splits a freshly created EMPTY tablet — there is no warm cache to preserve, so
-        // spread the new shards (drop the WITH_SHARD pin) and schedule them to the triggering load's
-        // warehouse so they stay where the load runs instead of the default worker group. An online
-        // split (non-empty source) keeps the WITH_SHARD pin to reuse the source worker's warm cache,
-        // and DEFAULT_RESOURCE since its placement is pinned anyway. Emptiness is the same signal the
-        // pre-split eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
+        // spread the new shards (drop the WITH_SHARD pin) so the following load is not funneled onto
+        // the source tablet's single worker. An online split (non-empty source) keeps the WITH_SHARD
+        // pin to reuse the source worker's warm cache. Emptiness is the same signal the pre-split
+        // eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
         boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
-        ComputeResource computeResource = spreadNewShards
-                ? resolveComputeResource(table.getId())
-                : WarehouseManager.DEFAULT_RESOURCE;
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise DEFAULT_RESOURCE (the original online-split behavior).
+        ComputeResource computeResource = warehouseId == null
+                ? WarehouseManager.DEFAULT_RESOURCE
+                : GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouseId);
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
