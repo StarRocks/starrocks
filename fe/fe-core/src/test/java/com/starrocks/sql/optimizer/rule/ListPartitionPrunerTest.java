@@ -716,6 +716,250 @@ public class ListPartitionPrunerTest {
     }
 
     @Test
+    public void testGetPartitionPruneFilterWithUserReportedSql() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        Column hourCol = new Column("hour", StringType.STRING);
+        Column appCol = new Column("app", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(32, StringType.STRING, "dt", true);
+        ColumnRefOperator hourColumnRef = new ColumnRefOperator(33, StringType.STRING, "hour", true);
+        ColumnRefOperator appColumnRef = new ColumnRefOperator(34, StringType.STRING, "app", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+        columnMetaToColRefMap.put(hourCol, hourColumnRef);
+        columnMetaToColRefMap.put(appCol, appColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt", "hour", "app"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef, ConstantOperator.createVarchar("20260601")),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef, ConstantOperator.createVarchar("20260606")));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator,
+                        ImmutableList.of(dtCol, hourCol, appCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertTrue(filter.useRangeFilter());
+        Assertions.assertEquals("dt >= '20260601' AND dt <= '20260606'", filter.getHmsFilter().get());
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithStringRange() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(10, StringType.STRING, "dt", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef, ConstantOperator.createVarchar("20260601")),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef, ConstantOperator.createVarchar("20260607")));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator, ImmutableList.of(dtCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertTrue(filter.useRangeFilter());
+        Assertions.assertEquals("dt >= '20260601' AND dt <= '20260607'", filter.getHmsFilter().get());
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithEqPredicate() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(12, StringType.STRING, "dt", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, dtColumnRef,
+                ConstantOperator.createVarchar("20260601"));
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator, ImmutableList.of(dtCol), predicate);
+        Assertions.assertTrue(filter.useEqFilter());
+        Assertions.assertFalse(filter.useRangeFilter());
+        Assertions.assertEquals(Optional.of("20260601"), filter.getEqPartitionValues().get(0));
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithoutPushdown() {
+        Column dtCol = new Column("dt", DateType.DATE);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(13, DateType.DATE, "dt", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef,
+                        ConstantOperator.createDate(LocalDateTime.of(2026, 6, 1, 0, 0, 0))),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef,
+                        ConstantOperator.createDate(LocalDateTime.of(2026, 6, 7, 0, 0, 0))));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator, ImmutableList.of(dtCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertFalse(filter.useRangeFilter());
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithMultiColumnDtRangeOnly() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        Column hourCol = new Column("hour", StringType.STRING);
+        Column appCol = new Column("app", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(20, StringType.STRING, "dt", true);
+        ColumnRefOperator hourColumnRef = new ColumnRefOperator(21, StringType.STRING, "hour", true);
+        ColumnRefOperator appColumnRef = new ColumnRefOperator(22, StringType.STRING, "app", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+        columnMetaToColRefMap.put(hourCol, hourColumnRef);
+        columnMetaToColRefMap.put(appCol, appColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt", "hour", "app"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef, ConstantOperator.createVarchar("20260601")),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef, ConstantOperator.createVarchar("20260607")));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator,
+                        ImmutableList.of(dtCol, hourCol, appCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertTrue(filter.useRangeFilter());
+        Assertions.assertEquals("dt >= '20260601' AND dt <= '20260607'", filter.getHmsFilter().get());
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithMultiColumnDtEqOnly() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        Column hourCol = new Column("hour", StringType.STRING);
+        Column appCol = new Column("app", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(23, StringType.STRING, "dt", true);
+        ColumnRefOperator hourColumnRef = new ColumnRefOperator(24, StringType.STRING, "hour", true);
+        ColumnRefOperator appColumnRef = new ColumnRefOperator(25, StringType.STRING, "app", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+        columnMetaToColRefMap.put(hourCol, hourColumnRef);
+        columnMetaToColRefMap.put(appCol, appColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt", "hour", "app"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, dtColumnRef,
+                ConstantOperator.createVarchar("20260601"));
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator,
+                        ImmutableList.of(dtCol, hourCol, appCol), predicate);
+        Assertions.assertTrue(filter.useEqFilter());
+        Assertions.assertFalse(filter.useRangeFilter());
+        Assertions.assertEquals(Optional.of("20260601"), filter.getEqPartitionValues().get(0));
+        Assertions.assertEquals(Optional.empty(), filter.getEqPartitionValues().get(1));
+        Assertions.assertEquals(Optional.empty(), filter.getEqPartitionValues().get(2));
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithMultiColumnDtAndHourRange() {
+        Column dtCol = new Column("dt", StringType.STRING);
+        Column hourCol = new Column("hour", IntegerType.INT);
+        Column appCol = new Column("app", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(26, StringType.STRING, "dt", true);
+        ColumnRefOperator hourColumnRef = new ColumnRefOperator(27, IntegerType.INT, "hour", true);
+        ColumnRefOperator appColumnRef = new ColumnRefOperator(28, StringType.STRING, "app", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+        columnMetaToColRefMap.put(hourCol, hourColumnRef);
+        columnMetaToColRefMap.put(appCol, appColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt", "hour", "app"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef, ConstantOperator.createVarchar("20260601")),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef, ConstantOperator.createVarchar("20260607")),
+                new BinaryPredicateOperator(BinaryType.GE, hourColumnRef, ConstantOperator.createInt(10)),
+                new BinaryPredicateOperator(BinaryType.LE, hourColumnRef, ConstantOperator.createInt(12)));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator,
+                        ImmutableList.of(dtCol, hourCol, appCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertTrue(filter.useRangeFilter());
+        Assertions.assertEquals("dt >= '20260601' AND dt <= '20260607' AND hour >= 10 AND hour <= 12",
+                filter.getHmsFilter().get());
+    }
+
+    @Test
+    public void testGetPartitionPruneFilterWithMultiColumnNoPushdown() {
+        Column dtCol = new Column("dt", DateType.DATE);
+        Column hourCol = new Column("hour", StringType.STRING);
+        Column appCol = new Column("app", StringType.STRING);
+        ColumnRefOperator dtColumnRef = new ColumnRefOperator(29, DateType.DATE, "dt", true);
+        ColumnRefOperator hourColumnRef = new ColumnRefOperator(30, StringType.STRING, "hour", true);
+        ColumnRefOperator appColumnRef = new ColumnRefOperator(31, StringType.STRING, "app", true);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(dtCol, dtColumnRef);
+        columnMetaToColRefMap.put(hourCol, hourColumnRef);
+        columnMetaToColRefMap.put(appCol, appColumnRef);
+
+        HiveTable hiveTable = HiveTable.builder()
+                .setPartitionColumnNames(ImmutableList.of("dt", "hour", "app"))
+                .build();
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(hiveTable, Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        List<ScalarOperator> conjuncts = Lists.newArrayList(
+                new BinaryPredicateOperator(BinaryType.GE, dtColumnRef,
+                        ConstantOperator.createDate(LocalDateTime.of(2026, 6, 1, 0, 0, 0))),
+                new BinaryPredicateOperator(BinaryType.LE, dtColumnRef,
+                        ConstantOperator.createDate(LocalDateTime.of(2026, 6, 7, 0, 0, 0))));
+        ScalarOperator predicate = Utils.compoundAnd(conjuncts);
+
+        OptExternalPartitionPruner.PartitionPruneFilter filter =
+                OptExternalPartitionPruner.getPartitionPruneFilter(scanOperator,
+                        ImmutableList.of(dtCol, hourCol, appCol), predicate);
+        Assertions.assertFalse(filter.useEqFilter());
+        Assertions.assertFalse(filter.useRangeFilter());
+    }
+
+    @Test
     public void testCastTypePredicate() throws AnalysisException {
         // date_col = "2021-01-01"
         conjuncts.clear();

@@ -64,6 +64,7 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -81,6 +82,35 @@ import static com.starrocks.connector.paimon.PaimonMetadata.getRowCount;
 
 public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
+
+    /**
+     * HMS partition filter for metadata pruning: either equality values or a range filter string.
+     */
+    public static class PartitionPruneFilter {
+        private final List<Optional<String>> eqPartitionValues;
+        private final Optional<String> hmsFilter;
+
+        public PartitionPruneFilter(List<Optional<String>> eqPartitionValues, Optional<String> hmsFilter) {
+            this.eqPartitionValues = eqPartitionValues;
+            this.hmsFilter = hmsFilter;
+        }
+
+        public List<Optional<String>> getEqPartitionValues() {
+            return eqPartitionValues;
+        }
+
+        public Optional<String> getHmsFilter() {
+            return hmsFilter;
+        }
+
+        public boolean useEqFilter() {
+            return eqPartitionValues.stream().anyMatch(Optional::isPresent) && hmsFilter.isEmpty();
+        }
+
+        public boolean useRangeFilter() {
+            return hmsFilter.isPresent();
+        }
+    }
 
     public static LogicalScanOperator prunePartitions(OptimizerContext context,
                                                       LogicalScanOperator logicalScanOperator) {
@@ -269,6 +299,155 @@ public class OptExternalPartitionPruner {
         return effectivePartitionPredicate;
     }
 
+    /**
+     * Build partition metadata filter for HMS. Supports equality pushdown via listPartitionNamesByValue,
+     * and range pushdown via listPartitionsByFilter for partition columns that have range predicates.
+     */
+    public static PartitionPruneFilter getPartitionPruneFilter(LogicalScanOperator operator,
+                                                               List<Column> partitionColumns,
+                                                               ScalarOperator predicate) {
+        if (partitionColumns.isEmpty()) {
+            return new PartitionPruneFilter(Lists.newArrayList(), Optional.empty());
+        }
+        List<Optional<ScalarOperator>> effectiveEqPredicates =
+                getEffectivePartitionPredicate(operator, partitionColumns, predicate);
+        if (effectiveEqPredicates.stream().anyMatch(Optional::isPresent)) {
+            return new PartitionPruneFilter(getPartitionValue(effectiveEqPredicates), Optional.empty());
+        }
+        Optional<String> hmsFilter = buildHmsRangeFilter(operator, partitionColumns, predicate);
+        if (hmsFilter.isPresent()) {
+            return new PartitionPruneFilter(
+                    Lists.newArrayList(Optional.empty()), hmsFilter);
+        }
+        return new PartitionPruneFilter(
+                partitionColumns.stream().map(c -> Optional.<String>empty()).collect(Collectors.toList()),
+                Optional.empty());
+    }
+
+    private static BinaryType flipBinaryType(BinaryType type) {
+        switch (type) {
+            case GE:
+                return BinaryType.LE;
+            case GT:
+                return BinaryType.LT;
+            case LE:
+                return BinaryType.GE;
+            case LT:
+                return BinaryType.GT;
+            default:
+                return type;
+        }
+    }
+
+    private static boolean isHmsFilterSupportedPartitionType(Column partitionColumn) {
+        return partitionColumn.getType().isStringType()
+                || partitionColumn.getType().isIntegerType()
+                || partitionColumn.getType().isNumericType();
+    }
+
+    private static Optional<String> buildHmsRangeFilter(LogicalScanOperator operator, List<Column> partitionColumns,
+                                                          ScalarOperator predicate) {
+        if (predicate == null) {
+            return Optional.empty();
+        }
+        List<String> filters = Lists.newArrayList();
+        boolean hasRange = false;
+        for (Column partitionColumn : partitionColumns) {
+            if (!isHmsFilterSupportedPartitionType(partitionColumn)) {
+                continue;
+            }
+            ColumnRefOperator columnRef = operator.getColumnReference(partitionColumn);
+            for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+                Optional<String> filter = toHmsColumnFilter(conjunct, columnRef, partitionColumn.getName());
+                if (filter.isPresent()) {
+                    filters.add(filter.get());
+                    if (filter.get().contains(">") || filter.get().contains("<")) {
+                        hasRange = true;
+                    }
+                }
+            }
+        }
+        if (!hasRange || filters.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(String.join(" AND ", filters));
+    }
+
+    private static Optional<String> toHmsColumnFilter(ScalarOperator conjunct, ColumnRefOperator columnRef,
+                                                      String columnName) {
+        if (!(conjunct instanceof BinaryPredicateOperator)) {
+            return Optional.empty();
+        }
+        BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
+        BinaryType binaryType = binary.getBinaryType();
+        if (!binaryType.isEqual() && !binaryType.isRange()) {
+            return Optional.empty();
+        }
+        ScalarOperator left = binary.getChild(0);
+        ScalarOperator right = binary.getChild(1);
+        if (left.isColumnRef() && columnRef.equals(left) && right.isConstantRef()) {
+            return Optional.of(formatHmsFilter(columnName, binaryType, (ConstantOperator) right));
+        }
+        if (right.isColumnRef() && columnRef.equals(right) && left.isConstantRef()) {
+            return Optional.of(formatHmsFilter(columnName, flipBinaryType(binaryType), (ConstantOperator) left));
+        }
+        return Optional.empty();
+    }
+
+    private static String formatHmsFilter(String columnName, BinaryType binaryType, ConstantOperator constant) {
+        String op;
+        switch (binaryType) {
+            case EQ:
+                op = "=";
+                break;
+            case GE:
+                op = ">=";
+                break;
+            case GT:
+                op = ">";
+                break;
+            case LE:
+                op = "<=";
+                break;
+            case LT:
+                op = "<";
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported binary type: " + binaryType);
+        }
+        String value = getConstantStringValue(constant);
+        if (needsQuoteForHmsFilter(constant)) {
+            return columnName + " " + op + " '" + escapeHmsFilterValue(value) + "'";
+        }
+        return columnName + " " + op + " " + value;
+    }
+
+    private static boolean needsQuoteForHmsFilter(ConstantOperator constant) {
+        return constant.getType().isStringType()
+                || constant.getType().isDate()
+                || constant.getType().isDatetime();
+    }
+
+    private static String getConstantStringValue(ConstantOperator constant) {
+        if (constant.getType().isStringType()) {
+            return constant.getVarchar();
+        }
+        if (constant.getType().isDate()) {
+            LocalDateTime dateTime = constant.getDate();
+            return String.format("%04d-%02d-%02d", dateTime.getYear(), dateTime.getMonthValue(), dateTime.getDayOfMonth());
+        }
+        if (constant.getType().isDatetime()) {
+            LocalDateTime dateTime = constant.getDatetime();
+            return String.format("%04d-%02d-%02d %02d:%02d:%02d", dateTime.getYear(), dateTime.getMonthValue(),
+                    dateTime.getDayOfMonth(), dateTime.getHour(), dateTime.getMinute(), dateTime.getSecond());
+        }
+        return constant.toString();
+    }
+
+    private static String escapeHmsFilterValue(String value) {
+        return value.replace("'", "''");
+    }
+
     private static List<Optional<String>> getPartitionValue(List<Optional<ScalarOperator>> predicates) {
         List<Optional<String>> partitionValues = Lists.newArrayList();
         for (Optional<ScalarOperator> predicate : predicates) {
@@ -322,18 +501,35 @@ public class OptExternalPartitionPruner {
 
                 // get partition names
                 List<String> partitionNames;
-                // check if the partition predicate could be used for filter partition names
-                List<Optional<ScalarOperator>> effectivePartitionPredicate =
-                        getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
-                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
-                    List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
+                PartitionPruneFilter partitionPruneFilter = getPartitionPruneFilter(operator, partitionColumns,
+                        operator.getPredicate());
+                String catalogName = table.getCatalogName();
+                String dbName = table.getCatalogDBName();
+                String tableName = table.getCatalogTableName();
+                if (partitionPruneFilter.useEqFilter()) {
+                    LOG.info("Hive partition prune using eq filter, table: {}.{}.{}, values: {}",
+                            catalogName, dbName, tableName, partitionPruneFilter.getEqPartitionValues());
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
-                                    table.getCatalogTableName(), partitionValues);
+                            .listPartitionNamesByValue(catalogName, dbName, tableName,
+                                    partitionPruneFilter.getEqPartitionValues());
+                    LOG.info("Hive partition prune eq filter returned {} partitions, table: {}.{}.{}",
+                            partitionNames.size(), catalogName, dbName, tableName);
+                } else if (partitionPruneFilter.useRangeFilter()) {
+                    String hmsFilter = partitionPruneFilter.getHmsFilter().get();
+                    LOG.info("Hive partition prune using range filter, table: {}.{}.{}, hmsFilter: {}",
+                            catalogName, dbName, tableName, hmsFilter);
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNamesByFilter(catalogName, dbName, tableName, hmsFilter);
+                    LOG.info("Hive partition prune range filter returned {} partitions, table: {}.{}.{}, hmsFilter: {}",
+                            partitionNames.size(), catalogName, dbName, tableName, hmsFilter);
                 } else {
+                    LOG.info("Hive partition prune using full partition list, table: {}.{}.{}", catalogName, dbName,
+                            tableName);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
-                                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
+                            .listPartitionNames(catalogName, dbName, tableName,
+                                    ConnectorMetadataRequestContext.DEFAULT);
+                    LOG.info("Hive partition prune full list returned {} partitions, table: {}.{}.{}",
+                            partitionNames.size(), catalogName, dbName, tableName);
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
