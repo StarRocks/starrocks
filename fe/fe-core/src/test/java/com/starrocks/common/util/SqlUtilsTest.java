@@ -13,12 +13,12 @@
 // limitations under the License.
 package com.starrocks.common.util;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
