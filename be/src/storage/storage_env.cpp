@@ -54,16 +54,13 @@ StorageEnv* StorageEnv::GetInstance() {
 StorageEnv::StorageEnv() = default;
 
 StorageEnv::~StorageEnv() {
-<<<<<<< HEAD
+    destroy_vector_index_cache();
     _parallel_compact_mgr.reset();
     _lake_replication_txn_manager.reset();
     _lake_tablet_manager.reset();
     _lake_update_manager.reset();
     _remote_starlet_location_provider.reset();
     _lake_location_provider.reset();
-=======
-    destroy_vector_index_cache();
->>>>>>> 01823344d26... [Refactor] Move vector index cache lifecycle to StorageEnv (#75487)
 }
 
 Status StorageEnv::init(const StorageEnvOptions& options) {

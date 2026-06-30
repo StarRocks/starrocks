@@ -75,11 +75,7 @@ public:
     void destroy_vector_index_cache();
     void destroy();
 
-<<<<<<< HEAD
-=======
     VectorIndexCache* vector_index_cache() const { return _vector_index_cache.get(); }
-    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
->>>>>>> 01823344d26... [Refactor] Move vector index cache lifecycle to StorageEnv (#75487)
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager.get(); }
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
     std::shared_ptr<lake::RemoteStarletLocationProvider> remote_starlet_location_provider() const {
