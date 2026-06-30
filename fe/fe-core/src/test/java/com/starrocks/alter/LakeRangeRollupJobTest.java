@@ -30,6 +30,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.proc.RollupProcDir;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -382,6 +383,83 @@ public class LakeRangeRollupJobTest {
         // Guard flipped: rollup is now NORMAL, no longer SHADOW.
         assertFalse(job.flipNotYetApplied(table), "flipNotYetApplied must return false after the flip");
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(), "table state must be NORMAL after flip");
+    }
+
+    // ---- AGG rewrite projection test (Task 10 Step 1) ----------------------
+
+    /**
+     * Build an AGG range table (base sort key (k1,k2), value v SUM). Configure an AGG
+     * {@link LakeRangeRollupJob} whose sort-key-ordered schema is (k2,k1,v) with sort key (k2,k1).
+     * Assert the SELECT column names are backquoted (SELECT list), the target column names are raw
+     * (base backquotes them once in the INSERT target list), and {@code registerShadowIndexMeta}
+     * registers an AGG_KEYS rollup meta with sortKeyIdxes = [0,1] (the (k2,k1) prefix).
+     */
+    @Test
+    public void testAggRollupRewriteProjection() throws Exception {
+        // Create an AGG range table in the test DB. AGG_KEYS requires an explicit distribution clause.
+        String createAgg = "create table t_agg_rollup (k1 int, k2 int, v bigint sum)\n"
+                + "AGGREGATE KEY(k1, k2)\n"
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');";
+        CreateTableStmt aggStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createAgg, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(aggStmt);
+        OlapTable aggTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_agg_rollup");
+        long aggBaseMetaId = aggTable.getBaseIndexMetaId();
+        assertEquals(KeysType.AGG_KEYS, aggTable.getKeysType());
+
+        // Build rollup schema (k2, k1, v) — sort-key order, with v as the AGG column.
+        List<Column> aggBaseSchema = aggTable.getSchemaByIndexMetaId(aggBaseMetaId);
+        Column colK1 = aggBaseSchema.stream().filter(c -> c.getName().equals("k1")).findFirst().orElseThrow();
+        Column colK2 = aggBaseSchema.stream().filter(c -> c.getName().equals("k2")).findFirst().orElseThrow();
+        Column colV = aggBaseSchema.stream().filter(c -> c.getName().equals("v")).findFirst().orElseThrow();
+        // Rollup schema in sort-key order: k2, k1, v.
+        List<Column> rollupSchema = List.of(colK2, colK1, colV);
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeRangeRollupJob job = new LakeRangeRollupJob(jobId, db.getId(), aggTable.getId(),
+                "t_agg_rollup", 3600_000L);
+        job.setRollupSchema(rollupSchema);
+        job.setRollupKeysType(KeysType.AGG_KEYS);
+        // Sort key is (k2, k1) = positions 0,1 in the rollup schema.
+        job.setRollupSortKeyColumns(List.of(colK2, colK1));
+        job.setRollupSortKeyIdxes(List.of(0, 1));
+        job.setRollupSortKeyUniqueIds(List.of(0, 1));
+        job.setShadowIndex(shadowMetaId, aggBaseMetaId, "r_agg", (short) 2);
+
+        // Assert rewriteSelectColumnNames returns backquoted SQL names (the SELECT list).
+        List<String> selectNames = job.rewriteSelectColumnNames(aggTable);
+        assertEquals(List.of(ParseUtil.backquote("k2"), ParseUtil.backquote("k1"), ParseUtil.backquote("v")),
+                selectNames,
+                "SELECT column names must be backquoted");
+
+        // Assert rewriteTargetColumnNames returns RAW names (base backquotes them in INSERT target list).
+        List<String> targetNames = job.rewriteTargetColumnNames(aggTable);
+        assertEquals(List.of("k2", "k1", "v"), targetNames,
+                "INSERT target column names must be raw (not backquoted)");
+
+        // Verify the select names ARE backquoted and the target names are NOT.
+        for (int i = 0; i < selectNames.size(); i++) {
+            assertTrue(selectNames.get(i).startsWith("`") && selectNames.get(i).endsWith("`"),
+                    "select name must be backquoted: " + selectNames.get(i));
+            assertFalse(targetNames.get(i).startsWith("`"),
+                    "target name must NOT be backquoted: " + targetNames.get(i));
+        }
+
+        // Assert registerShadowIndexMeta registers AGG_KEYS meta with sortKeyIdxes = [0,1].
+        job.registerShadowIndexMeta(aggTable);
+        MaterializedIndexMeta rollupMeta = aggTable.getIndexMetaByMetaId(shadowMetaId);
+        assertNotNull(rollupMeta, "rollup meta must be registered");
+        assertEquals(KeysType.AGG_KEYS, rollupMeta.getKeysType(),
+                "rollup meta must carry AGG_KEYS");
+        assertEquals(List.of(0, 1), rollupMeta.getSortKeyIdxes(),
+                "rollup sort key idxes must be [0,1] (the (k2,k1) prefix)");
+        // Base must be untouched.
+        assertNotNull(aggTable.getIndexMetaByMetaId(aggBaseMetaId), "base meta must remain after rollup registration");
+        assertEquals(KeysType.AGG_KEYS, aggTable.getIndexMetaByMetaId(aggBaseMetaId).getKeysType(),
+                "base keys type must remain AGG_KEYS");
     }
 
     /**

@@ -16,13 +16,18 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -37,6 +42,8 @@ import java.util.List;
 import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -538,5 +545,106 @@ public class RangeDistributionGuardTest {
         // widen, so the relaxation must not apply and it must stay rejected.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_flip modify column k1 varchar(40)");
+    }
+
+    /**
+     * Inject a FINISHED range-rollup index directly into the table (simulating the post-FINISHED catalog
+     * state), then {@code ALTER TABLE ... DROP ROLLUP} and assert the rollup meta + index are removed
+     * while the base index is entirely untouched.
+     *
+     * <p>This is the regression for the generic meta-id deletion path
+     * ({@code MaterializedViewHandler.java#processBatchDropRollup}): a {@link LakeRangeRollupJob} that
+     * finished and promoted its shadow to NORMAL must be removable by the standard DROP ROLLUP DDL.
+     */
+    @Test
+    public void testFinishedRangeRollupCanBeDropped() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_drop_finished"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_drop_finished");
+        long baseMetaId = table.getBaseIndexMetaId();
+
+        // Inject a FINISHED rollup: register its meta then add a NORMAL MaterializedIndex
+        // to every physical partition (mirrors what visualiseShadowIndex does after FINISHED).
+        long rollupMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> rollupSchema = table.getSchemaByIndexMetaId(baseMetaId).subList(0, 2);
+        table.setIndexMeta(rollupMetaId, "r_finished", rollupSchema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            MaterializedIndex rollupIdx = new MaterializedIndex(physId, rollupMetaId,
+                    MaterializedIndex.IndexState.NORMAL,
+                    com.starrocks.catalog.PhysicalPartition.INVALID_SHARD_GROUP_ID);
+            pp.createRollupIndex(rollupIdx);
+        }
+        assertTrue(table.hasMaterializedIndex("r_finished"),
+                "rollup must be present after injection");
+        assertNotNull(table.getIndexMetaByMetaId(rollupMetaId),
+                "rollup meta must be registered");
+
+        // DROP ROLLUP via the standard DDL path.
+        starRocksAssert.alterTable("alter table t_guard_drop_finished drop rollup r_finished");
+
+        // Rollup index meta and physical indexes must be gone.
+        assertFalse(table.hasMaterializedIndex("r_finished"),
+                "rollup must be removed after DROP ROLLUP");
+        // The base index meta id and meta must be untouched.
+        assertEquals(baseMetaId, table.getBaseIndexMetaId(),
+                "base meta id must not change after DROP ROLLUP");
+        assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
+                "base meta must remain after DROP ROLLUP");
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            MaterializedIndex base = pp.getLatestIndex(baseMetaId);
+            assertNotNull(base, "base physical index must remain in every partition");
+        }
+    }
+
+    /**
+     * An in-flight {@link LakeRangeRollupJob} (shadow index in SHADOW state) is cancelled via
+     * {@code CANCEL ALTER TABLE MATERIALIZED VIEW <name>}: the job transitions to CANCELLED and the
+     * base index is untouched throughout.
+     *
+     * <p>The existing {@link #testCancelRecognizesLakeRangeRollupJob()} checks that
+     * {@link MaterializedViewHandler#cancelRollupJobsForForceDrop} matches the job by rollup name.
+     * This test additionally verifies that after cancel the job is in CANCELLED state and the base
+     * index remains fully intact, covering the regression that cancel must not damage the base.
+     */
+    @Test
+    public void testInFlightRangeRollupCancelLeavesBaseIntact() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_cancel_base"));
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_cancel_base");
+        long baseMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseMetaId);
+        assertNotNull(baseMeta, "base meta must be present before cancel");
+
+        try {
+            starRocksAssert.alterTable(
+                    "alter table t_guard_cancel_base add rollup r_inflight(k1, k2, v1) order by (k2, k1)");
+            AlterJobV2 job = handler.getAlterJobsV2().values().iterator().next();
+            assertTrue(job instanceof LakeRangeRollupJob,
+                    "constructed job must be a LakeRangeRollupJob");
+            // Cancel via the MATERIALIZED VIEW cancel path (same as cancelMV, routes by rollup name).
+            // cancelRollupJobsForForceDrop drives the cancel path the production force-drop uses.
+            boolean cancelled = handler.cancelRollupJobsForForceDrop(
+                    table.getId(), "r_inflight", "test cancel");
+            assertTrue(cancelled, "cancel must succeed for an in-flight LakeRangeRollupJob");
+            assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState(),
+                    "job must be in CANCELLED state after cancel");
+            // Base index must be untouched.
+            assertEquals(baseMetaId, table.getBaseIndexMetaId(),
+                    "base meta id must not change after cancel");
+            assertNotNull(table.getIndexMetaByMetaId(baseMetaId),
+                    "base meta must remain after cancel");
+            for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+                assertNotNull(pp.getLatestIndex(baseMetaId),
+                        "base physical index must remain in every partition after cancel");
+            }
+            // Table state must return to NORMAL after cancel.
+            assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(),
+                    "table state must be NORMAL after cancel");
+        } finally {
+            handler.clearJobs();
+        }
     }
 }
