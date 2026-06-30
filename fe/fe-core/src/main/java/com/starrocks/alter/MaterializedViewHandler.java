@@ -274,10 +274,19 @@ public class MaterializedViewHandler extends AlterHandler {
                         checkAndPrepareMaterializedView(addRollupClause, olapTable, baseIndexMetaId);
 
                 // step 3 create rollup job
-                AlterJobV2 alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
-                        null, addRollupClause.getProperties(),
-                        olapTable, db, baseIndexMetaId, olapTable.getKeysType(), null,
-                        null);
+                AlterJobV2 alterJobV2;
+                if (isRangeRollupRoutable(olapTable)) {
+                    // Shared-data range table: build the additive K-tablet range-rollup job directly.
+                    // Any range table that is NOT routable (sync MV, shared-nothing, colocate,
+                    // auto-increment, primary-key) keeps the existing rejection in createMaterializedViewJob.
+                    alterJobV2 = createRangeRollupJob(addRollupClause, olapTable, db, baseIndexMetaId,
+                            rollupIndexName, rollupSchema);
+                } else {
+                    alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
+                            null, addRollupClause.getProperties(),
+                            olapTable, db, baseIndexMetaId, olapTable.getKeysType(), null,
+                            null);
+                }
 
                 rollupNameJobMap.put(addRollupClause.getRollupName(), alterJobV2);
                 logJobIdSet.add(alterJobV2.getJobId());
@@ -310,6 +319,168 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     /**
+     * Whether an {@code ADD ROLLUP} on a range-distribution table is routed to the additive
+     * {@link LakeRangeRollupJob} (instead of being rejected by {@code createMaterializedViewJob}).
+     * Only a shared-data, non-colocate, non-auto-increment, non-primary-key range table qualifies.
+     * (The caller is {@code processBatchAddRollup}, so this is always a plain rollup, never a
+     * synchronous materialized view, which carries a query statement.)
+     */
+    static boolean isRangeRollupRoutable(OlapTable olapTable) {
+        return olapTable.isRangeDistribution()
+                && olapTable.isCloudNativeTable()
+                && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
+                && !olapTable.hasAutoIncrementColumn()
+                && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+    }
+
+    /**
+     * Build the additive range-rollup job for a shared-data range table. The rollup schema is stored
+     * in SORT-KEY order ({@code [ORDER BY columns in declared order, then the remaining selected
+     * columns]}) so the leading prefix is the sort key: the optimizer's prefix-index scorer scores
+     * candidates by schema column order, so storing the schema in sort-key order makes the rollup
+     * selectable for {@code WHERE <sort-key-prefix> = ...} with no optimizer-rule change. Column order
+     * is an internal layout detail (queries reference columns by name), so the reorder is safe.
+     *
+     * <p>The model key rules are validated on this FINAL order; for AGG/UNIQUE the ORDER BY column set
+     * must equal the rollup key-column set (mirrors {@code CreateTableAnalyzer} for range base tables).
+     */
+    private AlterJobV2 createRangeRollupJob(AddRollupClause addRollupClause, OlapTable olapTable, Database db,
+                                            long baseIndexMetaId, String rollupIndexName,
+                                            List<Column> rollupSchema) throws DdlException, AnalysisException {
+        List<String> sortKeyNames = addRollupClause.getSortKeys();
+        if (sortKeyNames == null || sortKeyNames.isEmpty()) {
+            throw new DdlException("A range-distribution rollup requires an explicit ORDER BY (sort key)");
+        }
+
+        // Index the validated rollup columns by name (case-insensitive). These already carry the base
+        // column identities (uniqueId / type / aggregation) from checkAndPrepareMaterializedView.
+        Map<String, Column> rollupColumnByName = new LinkedHashMap<>();
+        for (Column column : rollupSchema) {
+            rollupColumnByName.put(column.getName().toLowerCase(), column);
+        }
+
+        // Resolve the ORDER BY columns and validate they are a subset of the rollup columns
+        // (defense-in-depth beyond the analyzer's same check).
+        List<Column> sortKeyColumns = new ArrayList<>(sortKeyNames.size());
+        Set<String> sortKeyNameSet = new HashSet<>();
+        for (String sortKeyName : sortKeyNames) {
+            Column column = rollupColumnByName.get(sortKeyName.toLowerCase());
+            if (column == null) {
+                throw new DdlException("ORDER BY column[" + sortKeyName + "] is not in the rollup column list");
+            }
+            sortKeyNameSet.add(column.getName().toLowerCase());
+            sortKeyColumns.add(column);
+        }
+
+        KeysType keysType = olapTable.getKeysType();
+        if (keysType.isAggregationFamily()) {
+            // AGG / UNIQUE range rule: the sort-key set must equal the rollup key-column set.
+            Set<String> keyColumnNames = new HashSet<>();
+            for (Column column : rollupSchema) {
+                if (column.isKey()) {
+                    keyColumnNames.add(column.getName().toLowerCase());
+                }
+            }
+            if (!sortKeyNameSet.equals(keyColumnNames)) {
+                throw new DdlException("The ORDER BY columns must be the same as the rollup key columns "
+                        + "for an aggregate / unique range rollup");
+            }
+        } else {
+            // DUP: an explicit DUPLICATE KEY (...) must equal the ORDER BY prefix of the final schema.
+            List<String> dupKeys = addRollupClause.getDupKeys();
+            if (dupKeys != null && !dupKeys.isEmpty()) {
+                if (dupKeys.size() > sortKeyNames.size()) {
+                    throw new DdlException("DUPLICATE KEY columns must be a prefix of the ORDER BY columns");
+                }
+                for (int i = 0; i < dupKeys.size(); i++) {
+                    if (!dupKeys.get(i).equalsIgnoreCase(sortKeyNames.get(i))) {
+                        throw new DdlException("DUPLICATE KEY columns must be a prefix of the ORDER BY columns");
+                    }
+                }
+            }
+        }
+
+        // Build the final schema in sort-key order: ORDER BY columns first (declared order), then the
+        // remaining selected columns in their selection order. Assign key flags on this final order:
+        // for DUP the sort-key columns are the keys; for AGG/UNIQUE the existing key flags already
+        // match the sort-key set (validated above), so they are preserved by reordering.
+        List<Column> finalSchema = new ArrayList<>(rollupSchema.size());
+        for (Column sortKeyColumn : sortKeyColumns) {
+            Column column = new Column(sortKeyColumn);
+            if (!keysType.isAggregationFamily()) {
+                column.setIsKey(true);
+                column.setAggregationType(null, false);
+            }
+            finalSchema.add(column);
+        }
+        for (Column column : rollupSchema) {
+            if (sortKeyNameSet.contains(column.getName().toLowerCase())) {
+                continue;
+            }
+            Column copy = new Column(column);
+            if (!keysType.isAggregationFamily()) {
+                copy.setIsKey(false);
+                copy.setAggregationType(AggregateType.NONE, true);
+            }
+            finalSchema.add(copy);
+        }
+
+        // The sort key is the leading prefix of the final schema.
+        List<Integer> sortKeyIdxes = new ArrayList<>(sortKeyColumns.size());
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            sortKeyIdxes.add(i);
+        }
+        // sortKeyUniqueIds: the uniqueId of each sort-key column. The rollup reuses base column
+        // identities; if any sort-key column lacks a real uniqueId, drop the list entirely (the sink
+        // then falls back to positional sort-key handling). Mirrors processModifySortKeyColumn.
+        List<Integer> sortKeyUniqueIds = new ArrayList<>(sortKeyIdxes.size());
+        boolean useSortKeyUniqueId = true;
+        for (int idx : sortKeyIdxes) {
+            Column column = finalSchema.get(idx);
+            if (useSortKeyUniqueId && column.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                sortKeyUniqueIds.add(column.getUniqueId());
+            } else {
+                useSortKeyUniqueId = false;
+                sortKeyUniqueIds.clear();
+            }
+        }
+
+        // Short key count must be computed with the sort-key-aware path (the sort key is the leading
+        // prefix), not the plain key-prefix default.
+        short rollupShortKeyColumnCount =
+                GlobalStateMgr.calcShortKeyColumnCount(finalSchema, addRollupClause.getProperties(), sortKeyIdxes);
+        List<Column> rollupSortKeyColumns = new ArrayList<>(sortKeyIdxes.size());
+        for (int idx : sortKeyIdxes) {
+            rollupSortKeyColumns.add(finalSchema.get(idx));
+        }
+
+        long timeoutMs = PropertyAnalyzer.analyzeTimeout(addRollupClause.getProperties(),
+                Config.alter_table_timeout_second) * 1000;
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        final ConnectContext connectContext = ConnectContext.get();
+        ComputeResource computeResource = connectContext != null
+                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+        }
+
+        long shadowIndexMetaId = globalStateMgr.getNextId();
+        LakeRangeRollupJob job = new LakeRangeRollupJob(
+                globalStateMgr.getNextId(), db.getId(), olapTable.getId(), olapTable.getName(), timeoutMs);
+        job.setRollupSchema(finalSchema);
+        job.setRollupKeysType(keysType);
+        job.setRollupSortKeyColumns(rollupSortKeyColumns);
+        job.setRollupSortKeyIdxes(sortKeyIdxes);
+        job.setRollupSortKeyUniqueIds(sortKeyUniqueIds);
+        job.setShadowIndex(shadowIndexMetaId, baseIndexMetaId, rollupIndexName, rollupShortKeyColumnCount);
+        job.setComputeResource(computeResource);
+        return job;
+    }
+
+    /**
      * Step1: All replicas of the materialized view index will be created in meta and added to TabletInvertedIndex
      * Step2: Set table's state to ROLLUP.
      *
@@ -330,6 +501,11 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   QueryStatement queryStatement)
             throws DdlException, AnalysisException {
         if (olapTable.isRangeDistribution()) {
+            // A shared-data range-distribution rollup that satisfies isRangeRollupRoutable is
+            // intercepted in processBatchAddRollup and routed to LakeRangeRollupJob before reaching
+            // this method. Everything else on a range table -- a synchronous materialized view (which
+            // carries a query statement), a shared-nothing table, a colocate / auto-increment /
+            // primary-key table -- is rejected here.
             throw new DdlException(
                 "Synchronous materialized view / rollup is not supported on " +
                 "tables with range distribution. Use an asynchronous " +
@@ -1126,6 +1302,10 @@ public class MaterializedViewHandler extends AlterHandler {
                             if (((LakeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
                                 materializedViewJob = alterJobV2;
                             }
+                        } else if (alterJobV2 instanceof LakeRangeRollupJob) {
+                            if (((LakeRangeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
+                                materializedViewJob = alterJobV2;
+                            }
                         }
                     }
                 }
@@ -1160,6 +1340,10 @@ public class MaterializedViewHandler extends AlterHandler {
                 }
             } else if (alterJob instanceof LakeRollupJob) {
                 if (!((LakeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRangeRollupJob) {
+                if (!((LakeRangeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
                     continue;
                 }
             } else {
