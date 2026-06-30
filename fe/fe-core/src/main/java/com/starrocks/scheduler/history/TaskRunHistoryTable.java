@@ -20,6 +20,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
@@ -190,6 +191,17 @@ public class TaskRunHistoryTable {
         }
     }
 
+    /**
+     * Quote a value as a SQL string literal, escaping embedded backslashes and quotes so a value
+     * carrying a quote (or a backslash that would escape the closing quote) cannot close the literal
+     * and inject additional SQL. These predicates are concatenated into a query executed over the
+     * privileged internal repository connection, so an unescaped value here is a second-order SQL
+     * injection. See {@link SqlUtils#escapeSqlString} for why quote-doubling alone is insufficient.
+     */
+    private static String quoteLiteral(String value) {
+        return "'" + SqlUtils.escapeSqlString(value) + "'";
+    }
+
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
         if (params == null) {
             return Lists.newArrayList();
@@ -198,16 +210,16 @@ public class TaskRunHistoryTable {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
             predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(params.getDb())));
+                    + quoteLiteral(ClusterNamespace.getFullName(params.getDb())));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
-            predicates.add(" task_name = " + Strings.quote(params.getTask_name()));
+            predicates.add(" task_name = " + quoteLiteral(params.getTask_name()));
         }
         if (StringUtils.isNotEmpty(params.getQuery_id())) {
-            predicates.add(" task_run_id = " + Strings.quote(params.getQuery_id()));
+            predicates.add(" task_run_id = " + quoteLiteral(params.getQuery_id()));
         }
         if (StringUtils.isNotEmpty(params.getState())) {
-            predicates.add(" task_state = " + Strings.quote(params.getState()));
+            predicates.add(" task_state = " + quoteLiteral(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
         // If user explicitly specify the LIMIT in sql, we don't apply default limit
@@ -228,10 +240,10 @@ public class TaskRunHistoryTable {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
             predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(dbName)));
+                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
-            String values = taskNames.stream().sorted().map(Strings::quote).collect(Collectors.joining(","));
+            String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
             predicates.add(" task_name IN (" + values + ")");
         }
 
@@ -267,10 +279,10 @@ public class TaskRunHistoryTable {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
             predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(dbName)));
+                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
-            String values = taskNames.stream().sorted().map(Strings::quote).collect(Collectors.joining(","));
+            String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
             predicates.add(" task_name IN (" + values + ")");
         }
         String where = Joiner.on(" AND ").join(predicates);
