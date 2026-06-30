@@ -40,7 +40,6 @@
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/service_contexts.h"
 #include "runtime/time_guard.h"
 
