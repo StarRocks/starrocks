@@ -263,6 +263,19 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
     return ret;
 }
 
+Status PrimaryKeyEncoder::check_delete_file_binary_column_size(const Column& column) {
+    const auto* data_column = ColumnHelper::get_data_column(&column);
+    if (data_column->is_large_binary()) {
+        return Status::NotSupported("LargeBinaryColumn cannot be serialized with legacy BinaryColumn format");
+    }
+    if (!data_column->is_binary()) {
+        return Status::OK();
+    }
+
+    const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
+    return binary_column->is_payload_size_representable();
+}
+
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
                                         PrimaryKeyEncodingType encoding_type, bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
