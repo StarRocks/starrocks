@@ -48,5 +48,5 @@ ADD_BE_LIB(Cache
 )
 
 target_link_libraries(Cache
-    PUBLIC RuntimeCore FSCore IO Common Base Gutil StarRocksGen
+    PUBLIC Runtime FSCore IO Common Base Gutil StarRocksGen
 )

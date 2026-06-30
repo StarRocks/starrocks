@@ -77,7 +77,7 @@ DEFAULT_CHANGED_FULL_CHECK_PATHS = {
     "build-support/render_be_agents.py",
     "build-support/runtime_state_header_include_allowlist.txt",
 }
-EXEC_ENV_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]runtime/exec_env\.h[>"]')
+EXEC_ENV_INCLUDE_PATTERN = re.compile(r'#include\s*[<"]exec/exec_env\.h[>"]')
 EXEC_ENV_SINGLETON_PATTERN = re.compile(r"\bExecEnv::GetInstance\s*\(")
 SERVICE_LAYERING_REMEDIATION = (
     "Keep Service as the shared service layer and ServiceBE as the BE-specific top layer; move the dependency upward "

@@ -36,8 +36,12 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_pipe.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
+#include "exec/stream_load/transaction_mgr.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/download_action.h"
@@ -46,10 +50,6 @@
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
 
 class mg_connection;
 

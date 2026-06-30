@@ -42,7 +42,7 @@
 #include "common/config_network_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_server.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 

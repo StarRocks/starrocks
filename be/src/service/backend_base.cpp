@@ -40,11 +40,11 @@
 #include "common/status.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/result/result_buffer_mgr.h"
+#include "exec/exec_env.h"
 #include "orchestration/external_scan_orchestrator.h"
 #include "orchestration/fragment_mgr.h"
 #include "orchestration/orchestration_env.h"
 #include "orchestration/routine_load_task_executor.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

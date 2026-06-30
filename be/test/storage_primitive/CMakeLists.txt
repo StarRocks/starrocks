@@ -42,7 +42,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
 set(STORAGE_PRIMITIVE_TEST_LINK_LIBS
     StoragePrimitive
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

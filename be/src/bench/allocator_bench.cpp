@@ -21,8 +21,8 @@
 #include <cstring>
 #include <vector>
 
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/tracked_allocator.h"
 

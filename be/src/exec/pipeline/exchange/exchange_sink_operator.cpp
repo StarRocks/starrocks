@@ -31,6 +31,7 @@
 #include "common/system/backend_options.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/local_pass_through_buffer.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/exchange_compression_strategy.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -41,7 +42,6 @@
 #include "runtime/bucket_aware_partition.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 

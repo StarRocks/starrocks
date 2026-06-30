@@ -14,10 +14,10 @@
 
 #include "exprs/jit/expr_jit_pass.h"
 
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/expr_jit_rewriter.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 

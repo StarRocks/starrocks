@@ -15,7 +15,7 @@
 #include "connector/sink_memory_manager.h"
 
 #include "common/config_connector_sink_fwd.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks::connector {
 

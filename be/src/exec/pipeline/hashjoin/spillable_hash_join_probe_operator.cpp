@@ -35,10 +35,10 @@
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/lookup_stream_mgr.h"
+#include "exec/lookup_stream_mgr.h"
 
 #include <vector>
 

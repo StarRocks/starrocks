@@ -38,7 +38,6 @@ set(STARROCKS_LIBS
     Platform
     Storage
     Runtime
-    RuntimeCore
     Types
     Util
     Script

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/stream_load/transaction_mgr.h"
+#include "exec/stream_load/transaction_mgr.h"
 
 #include <deque>
 #include <future>
@@ -42,6 +42,9 @@
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/http_load_params.h"
+#include "exec/stream_load/stream_load_executor.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -53,10 +56,7 @@
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
-#include "runtime/stream_load/http_load_params.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 

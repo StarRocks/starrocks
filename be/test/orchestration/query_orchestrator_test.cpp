@@ -23,6 +23,7 @@
 #include "base/url_coding.h"
 #include "common/config_thrift_server_fwd.h"
 #include "common/util/thrift_util.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -30,7 +31,6 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::orchestration {
 

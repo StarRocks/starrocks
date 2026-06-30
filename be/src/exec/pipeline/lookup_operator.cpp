@@ -28,6 +28,7 @@
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/scan_task.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/lookup_stream_mgr.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/lookup_request.h"
@@ -35,7 +36,6 @@
 #include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/lookup_stream_mgr.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/segment_options.h"
 

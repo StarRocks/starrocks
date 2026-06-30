@@ -22,8 +22,8 @@
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "common/statusor.h"
 #include "common/util/bthreads/executor.h"
-#include "runtime/batch_write/isomorphic_batch_write.h"
-#include "runtime/batch_write/txn_state_cache.h"
+#include "exec/batch_write/isomorphic_batch_write.h"
+#include "exec/batch_write/txn_state_cache.h"
 
 namespace brpc {
 class Controller;

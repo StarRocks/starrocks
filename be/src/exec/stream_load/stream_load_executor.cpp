@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/stream_load/stream_load_executor.h"
+#include "exec/stream_load/stream_load_executor.h"
 
 #include <fmt/format.h>
 
@@ -48,10 +48,10 @@
 #include "common/util/thrift_client_cache.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/walltime.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "storage/non_retryable_load_errors.h"
 
 namespace starrocks {

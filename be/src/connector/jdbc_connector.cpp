@@ -17,10 +17,10 @@
 #include <sstream>
 
 #include "base/string/slice.h"
+#include "exec/jdbc/jdbc_driver_manager.h"
 #include "exec/jdbc_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/jdbc_driver_manager.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 

@@ -30,7 +30,7 @@ target_link_libraries(FormatCore PUBLIC
         ComputeEnv
         ExecPrimitive
         ExprCore
-        RuntimeCore
+        Runtime
         FSCore
         ChunkCore
         ColumnCore

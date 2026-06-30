@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks {
 

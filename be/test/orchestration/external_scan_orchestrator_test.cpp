@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/compute_env.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/runtime/query_context_manager.h"
@@ -34,7 +35,6 @@
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/fragment_mgr.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env_test_util.h"
 

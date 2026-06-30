@@ -4,7 +4,7 @@ src/agent/task_worker_pool.cpp
 src/orchestration/fragment_executor.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
 src/service/service_be/config_update_hooks.cpp
-src/runtime/exec_env.cpp
+src/exec/exec_env.cpp
 src/service/failure_handler.cpp
 src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp

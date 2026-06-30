@@ -24,7 +24,7 @@
 #include "base/utility/defer_op.h"
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load/stream_load_context.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "runtime/message_body_sink.h"
 
 namespace starrocks {

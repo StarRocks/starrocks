@@ -24,8 +24,8 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

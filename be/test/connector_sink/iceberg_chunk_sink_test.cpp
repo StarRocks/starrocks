@@ -29,10 +29,10 @@
 #include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {

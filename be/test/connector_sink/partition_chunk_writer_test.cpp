@@ -30,12 +30,12 @@
 #include "connector/connector_sink_executor.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
 #include "runtime/chunk_helper.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {

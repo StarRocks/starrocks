@@ -36,12 +36,12 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 

@@ -24,8 +24,8 @@
 
 #include "column/buffer.h"
 #include "common/memory/column_allocator.h"
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/memory_allocator.h"
 

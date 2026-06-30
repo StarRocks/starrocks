@@ -20,8 +20,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {

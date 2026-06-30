@@ -21,7 +21,7 @@ set(CONNECTOR_PRIMITIVE_TEST_LINK_LIBS
     ConnectorPrimitive
     ExecPrimitive
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

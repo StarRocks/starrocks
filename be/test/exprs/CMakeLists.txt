@@ -52,7 +52,7 @@ set(EXPR_CORE_TEST_FILES
 
 set(EXPR_CORE_TEST_LINK_LIBS
     ExprCore
-    RuntimeCore
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore

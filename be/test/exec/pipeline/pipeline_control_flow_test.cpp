@@ -25,6 +25,7 @@
 #include "compute_env/spill/dir_manager.h"
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -35,7 +36,6 @@
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "pipeline_test_base.h"
-#include "runtime/exec_env.h"
 #include "runtime/service_contexts.h"
 
 #define ASSERT_COUNTER_LIFETIME(counter, dop)       \

@@ -28,7 +28,7 @@
 #include "runtime/memory/counting_allocator.h"
 
 #ifndef BE_TEST
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #endif
 
 #endif

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_rpc.h"
+#include "exec/runtime_filter_compat/runtime_filter_rpc.h"
 
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"

@@ -25,7 +25,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "exec/arrow_flight_batch_reader.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks {
 

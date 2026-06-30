@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_serde.h"
+#include "exec/runtime_filter_compat/runtime_filter_serde.h"
 
 #include "column/column_helper.h"
 #include "column/serde/column_array_serde.h"

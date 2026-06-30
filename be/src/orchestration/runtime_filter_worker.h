@@ -20,12 +20,12 @@
 #include <vector>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "exec/runtime_filter_compat/runtime_filter_merger.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "orchestration/runtime_filter_delivery.h"
 #include "orchestration/runtime_filter_worker_event.h"
-#include "runtime/runtime_filter_merger.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
 #include "runtime/runtime_filter_sender.h"
 

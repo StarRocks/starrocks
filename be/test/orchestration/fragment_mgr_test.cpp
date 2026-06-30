@@ -43,10 +43,10 @@
 #include "base/time/monotime.h"
 #include "common/config_runtime_fwd.h"
 #include "exec/data_sink.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/Types_types.h"
 #include "orchestration/plan_fragment_executor.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 

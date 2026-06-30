@@ -47,7 +47,7 @@ namespace {
 // building the `raw_record` object. We intentionally do not try to preserve
 // numeric vs string distinction here -- replay uses
 // `CAST(raw_record->>'col' AS <type>)` anyway, and always-string values
-// keep this writer free of ExprCore dependencies (RuntimeCore is not
+// keep this writer free of ExprCore dependencies (Runtime is not
 // allowed to take those per the BE module boundary manifest).
 std::string cell_to_string(const Column& col, size_t row_idx) {
     if (col.is_null(row_idx)) {

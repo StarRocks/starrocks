@@ -21,8 +21,8 @@
 #include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/sorted_streaming_aggregator.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 bool SpillableAggregateDistinctBlockingSinkOperator::need_input() const {

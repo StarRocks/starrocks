@@ -17,12 +17,12 @@
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "glog/logging.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {

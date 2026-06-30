@@ -15,10 +15,10 @@
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 
 #include "common/system/master_info.h"
+#include "exec/exec_env.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"

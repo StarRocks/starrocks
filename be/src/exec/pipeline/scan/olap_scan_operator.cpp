@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
@@ -22,7 +23,6 @@
 #include "fmt/format.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 

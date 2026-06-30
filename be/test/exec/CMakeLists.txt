@@ -32,7 +32,7 @@ set(EXEC_PRIMITIVE_TEST_FILES
 set(EXEC_PRIMITIVE_TEST_LINK_LIBS
     ExecPrimitive
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -73,8 +73,7 @@ set(EXEC_RUNTIME_TEST_LINK_LIBS
     ExecPrimitive
     StoragePrimitive
     ExprCore
-    RuntimeEnv
-    RuntimeCore
+    Runtime
     Platform
     FSCore
     IO
@@ -108,7 +107,7 @@ set(SCHEMA_SCANNER_CORE_TEST_FILES
 set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     ExecSchemaScannerCore
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -139,7 +138,7 @@ set(EXEC_SCHEMA_SCANNERS_TEST_FILES
 set(EXEC_SCHEMA_SCANNERS_TEST_LINK_LIBS
     ExecSchemaScanners
     ExecSchemaScannerCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -171,7 +170,7 @@ set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
     ComputeEnv
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

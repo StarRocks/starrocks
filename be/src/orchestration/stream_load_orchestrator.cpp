@@ -24,9 +24,9 @@
 #include "common/util/debug_util.h"
 #include "compute_env/load/stream_load_context.h"
 #include "compute_env/load/stream_load_metrics.h"
+#include "exec/exec_env.h"
 #include "orchestration/fragment_mgr.h"
 #include "orchestration/plan_fragment_executor.h"
-#include "runtime/exec_env.h"
 #include "runtime/message_body_sink.h"
 #include "runtime/runtime_state.h"
 

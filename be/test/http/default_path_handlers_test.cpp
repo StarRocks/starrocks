@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks {
 

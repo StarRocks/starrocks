@@ -15,8 +15,8 @@
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
 
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {

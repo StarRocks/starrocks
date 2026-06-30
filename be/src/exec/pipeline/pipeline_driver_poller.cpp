@@ -16,6 +16,7 @@
 
 #include <chrono>
 
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -29,7 +30,6 @@
 #include "exec/runtime/schedule/event_scheduler.h"
 #include "platform/query_timeout_hook.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {

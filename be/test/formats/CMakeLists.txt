@@ -71,7 +71,7 @@ set(FORMAT_TEST_LINK_LIBS
     FormatCsv
     FormatCore
     ExprCore
-    RuntimeCore
+    Runtime
     FSCore
     ChunkCore
     ColumnCore

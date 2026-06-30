@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_state_helper.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
@@ -25,8 +25,8 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 #include "runtime/query_statistics.h"
-#include "runtime/runtime_filter_port.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE

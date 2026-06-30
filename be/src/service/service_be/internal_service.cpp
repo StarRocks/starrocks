@@ -40,11 +40,11 @@
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"
-#include "runtime/exec_env.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 

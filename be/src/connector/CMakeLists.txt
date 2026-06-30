@@ -23,7 +23,7 @@ ADD_BE_LIB(ConnectorPrimitive
 target_link_libraries(ConnectorPrimitive PUBLIC
         ExecPrimitive
         ExprCore
-        RuntimeCore
+        Runtime
         ChunkCore
         ColumnCore
         Types
@@ -74,7 +74,7 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
             ConnectorPrimitive
             Platform
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -94,7 +94,7 @@ if (WITH_CONNECTOR_MYSQL)
     target_link_libraries(ConnectorMySQL PUBLIC
             ConnectorPrimitive
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -118,7 +118,7 @@ if (WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(ConnectorBenchmark PUBLIC
             ConnectorPrimitive
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types

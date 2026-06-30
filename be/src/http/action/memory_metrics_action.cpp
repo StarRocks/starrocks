@@ -17,7 +17,7 @@
 
 #include "http/action/memory_metrics_action.h"
 
-#include <runtime/exec_env.h>
+#include <exec/exec_env.h>
 #include <runtime/mem_tracker.h>
 
 #include "common/tracer.h"

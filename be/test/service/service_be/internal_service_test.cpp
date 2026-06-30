@@ -24,9 +24,9 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/data_sinks/tablet_sink_index_channel.h"
+#include "exec/exec_env.h"
 #include "platform/platform_env.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
 
 namespace starrocks {
