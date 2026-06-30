@@ -227,14 +227,20 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Additive flip: promotes the rollup index from SHADOW to NORMAL. If any physical partition still
-     * holds it in SHADOW state, the flip has not yet been applied.
+     * Additive flip: promotes the rollup index from SHADOW to NORMAL in every physical partition. The
+     * flip counts as already applied only when every partition exposes the rollup as a NORMAL (visible)
+     * index. A partition where it is still SHADOW -- or, on an inconsistent recovered image, missing
+     * entirely -- means the flip has not (fully) run, so return true. Unlike the replace-flavored job
+     * (whose guard checks the origin index meta, deleted at flip), a rollup keeps its own meta on both
+     * sides of the flip, so the per-partition visibility state is the only signal. Treating a missing
+     * shadow as "not yet applied" lets visualiseShadowIndex re-run and fail loudly via
+     * Preconditions.checkNotNull rather than silently dropping the rollup.
      */
     @Override
     protected boolean flipNotYetApplied(@NotNull OlapTable table) {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             MaterializedIndex idx = physicalPartition.getLatestIndex(shadowIndexMetaId);
-            if (idx != null && idx.getState() == MaterializedIndex.IndexState.SHADOW) {
+            if (idx == null || idx.getState() != MaterializedIndex.IndexState.NORMAL) {
                 return true;
             }
         }

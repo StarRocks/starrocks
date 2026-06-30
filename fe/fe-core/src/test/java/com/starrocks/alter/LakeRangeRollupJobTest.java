@@ -167,11 +167,13 @@ public class LakeRangeRollupJobTest {
     }
 
     @Test
-    public void testFlipNotYetAppliedFalseWhenIndexAbsent() {
-        // No rollup index added to any partition -> absent -> already flipped (NORMAL).
+    public void testFlipNotYetAppliedTrueWhenShadowAbsent() {
+        // No rollup index added to any partition -> absent -> not yet applied (treat as not-flipped so
+        // visualiseShadowIndex re-runs and fails loudly via Preconditions.checkNotNull instead of silently
+        // dropping the rollup).
         LakeRangeRollupJob job = new LakeRangeRollupJob(10L, dbId, tableId, "t", 3600_000L);
         job.setShadowIndex(9999L, baseIndexMetaId, "r_absent", (short) 1);
-        assertFalse(job.flipNotYetApplied(table));
+        assertTrue(job.flipNotYetApplied(table));
     }
 
     // ---- getInfo size test --------------------------------------------------
