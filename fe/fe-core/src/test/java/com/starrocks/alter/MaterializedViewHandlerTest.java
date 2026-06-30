@@ -290,9 +290,6 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void checkInvalidPartitionKeyMV(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
-=======
     public void testRollupRejectsJsonKeyColumn(@Injectable OlapTable olapTable, @Injectable Database db) {
         // Explicit DUPLICATE KEY listing a JSON column must be rejected, mirroring
         // base-table key validation. Otherwise the JSON column becomes a rollup sort
@@ -360,7 +357,6 @@ public class MaterializedViewHandlerTest {
 
     @Test
     public void checkInvalidPartitionKeyMV(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
->>>>>>> 0151e67121 ([BugFix] Reject non-sortable (JSON) columns as rollup key columns (#74758))
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
