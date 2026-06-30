@@ -917,6 +917,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v4.1.0
 
+### enable_topn_filter_back_pressure
+
+* 描述: Scan 是否自动启用 TopN Runtime Filter（RF）背压。当一个 TopN/流式构建的 RF（来自 `ORDER BY ... LIMIT` 查询，或聚合 in-filter）作用于某个 Scan 时,背压会在该 RF 真正到达之前,将 Scan 的预读 IO 任务数钳制到较小的值,避免大量并发读取超出(非并发感知的)行预算、在 RF 生效前就淹没下游聚合。该机制对 shared-nothing（OLAP）和 shared-data（湖仓/connector）Scan 均生效。设为 `false` 时,Scan 仅在 FE 的 `topn_filter_back_pressure_mode` 开启时才启用背压。
+* 默认值: true
+* 引入版本: v4.1
+
+以下变量用于调节背压行为,仅在 `enable_topn_filter_back_pressure` 为 `true` 时生效:
+
+| 变量 | 默认值 | 描述 |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | TopN RF 尚未到达期间,Scan 预读的 IO 任务数上限。设为 `<= 0` 可关闭钳制（Scan 使用完整的 `io_tasks_per_scan_operator`）。 |
+| `topn_back_pressure_num_rows` | 1024 | 第一个节流轮次中,背压开始节流前 Scan 可读取的行数。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_ms` | 8 | 第一个节流窗口的时长（毫秒）。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | 背压节流某个 Scan 的总时长上限（毫秒）；达到上限后即使 RF 仍未到达,也会放行 Scan 以完整预读运行。 |
+| `topn_back_pressure_max_rounds` | 8 | 背压放弃前的最大节流轮次数。 |
+
 ### enable_topn_runtime_filter
 
 * 描述: 是否启用 TopN Runtime Filter。如果启用此功能，对于 ORDER BY LIMIT 查询，将动态构建一个 Runtime Filter 并将其下推到 Scan 阶段进行过滤。
