@@ -1256,6 +1256,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         List<String> sortKeys = clause.getSortKeys();
         if (sortKeys != null && !sortKeys.isEmpty()) {
+            if (!(table instanceof OlapTable
+                    && ((OlapTable) table).isRangeDistribution()
+                    && table.isCloudNativeTable())) {
+                throw new SemanticException(
+                        "ORDER BY on ADD ROLLUP is only supported for shared-data range-distribution tables");
+            }
             Set<String> rollupColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             rollupColSet.addAll(columnNames);
             Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);

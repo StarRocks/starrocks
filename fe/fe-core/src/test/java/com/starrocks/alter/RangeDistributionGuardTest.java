@@ -647,4 +647,88 @@ public class RangeDistributionGuardTest {
             handler.clearJobs();
         }
     }
+
+    /**
+     * A range DUP rollup may declare a DUPLICATE KEY that is a strict prefix of its ORDER BY (sort key),
+     * mirroring CreateTableAnalyzer's exemption for DUP base tables. The existing
+     * {@code checkAndPrepareMaterializedView} requires the DUPLICATE KEY to be a prefix of the rollup
+     * column list, so the column list leads with {@code k2}. For
+     * {@code ADD ROLLUP r(k2, k1, v1) DUPLICATE KEY(k2) ORDER BY(k2, k1)} the built schema is stored in
+     * sort-key order {@code [k2, k1, v1]} but only {@code k2} (the declared DUPLICATE KEY) is a key; the
+     * trailing sort-key column {@code k1} is a value (AggregateType.NONE). Without this fix the rollup
+     * path would have widened the key set to every ORDER BY column. The sort key still spans the full
+     * ORDER BY {@code (k2, k1)} so storage order is unchanged.
+     */
+    @Test
+    public void testRangeDupRollupHonorsNarrowerDuplicateKey() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_dupkey"));
+        starRocksAssert.alterTable(
+                "alter table t_guard_dupkey add rollup r_dup(k2, k1, v1) duplicate key(k2) order by (k2, k1)");
+        LakeRangeRollupJob job = (LakeRangeRollupJob) fetchAndClearRollupJob();
+
+        List<Column> rollupSchema = Deencapsulation.getField(job, "rollupSchema");
+        List<String> schemaNames = rollupSchema.stream().map(Column::getName).collect(
+                java.util.stream.Collectors.toList());
+        assertEquals(List.of("k2", "k1", "v1"), schemaNames, "rollup schema must be in sort-key order");
+        // Only the declared DUPLICATE KEY (k2) is a key; k1 (trailing sort-key col) and v1 are values.
+        assertTrue(rollupSchema.get(0).isKey(), "k2 (the DUPLICATE KEY) must be a key");
+        assertFalse(rollupSchema.get(1).isKey(), "k1 must NOT be a key (DUPLICATE KEY is a strict prefix)");
+        assertFalse(rollupSchema.get(2).isKey(), "v1 must NOT be a key");
+        assertEquals(com.starrocks.sql.ast.AggregateType.NONE, rollupSchema.get(1).getAggregationType(),
+                "non-key k1 must be a value column (AggregateType.NONE)");
+
+        // The sort key still spans the FULL ORDER BY (k2, k1): storage order is unchanged.
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "rollupSortKeyIdxes");
+        assertEquals(List.of(0, 1), sortKeyIdxes, "sort key must span both ORDER BY columns (k2, k1)");
+    }
+
+    /**
+     * A range-distribution table supports at most one routable rollup per ALTER TABLE statement (the
+     * additive path promotes its shadow to NORMAL directly and cannot share a multi-job ROLLUP-state
+     * batch). A batch with two ADD ROLLUP clauses must be rejected up front.
+     */
+    @Test
+    public void testRangeRollupBatchWithMultipleClausesRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_batch"));
+        // A single ADD ROLLUP may list multiple rollupItems (comma-separated), each becoming its own
+        // AddRollupClause: "add rollup r1(...) ..., r2(...) ...".
+        DdlException exception = assertThrowsDdlException(() ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_batch "
+                                + "add rollup r1(k1, k2, v1) order by (k2, k1), "
+                                + "r2(k1, k2, v1) order by (k1, k2)"));
+        assertTrue(exception.getMessage().toLowerCase(Locale.ROOT).contains("at most one rollup"),
+                "Expected 'at most one rollup' in: " + exception.getMessage());
+        // No job should have been constructed.
+        GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
+    }
+
+    /**
+     * A range table that already carries a secondary index/rollup ({@code getIndexMetaIdToMeta().size() > 1})
+     * is no longer routable to {@link LakeRangeRollupJob}: it falls through to the existing range rejection
+     * in {@code createMaterializedViewJob}. Asserted on the routing predicate directly (and via a real
+     * ALTER) since the additive path's shadow promotion bypasses the multi-job ROLLUP coordination.
+     */
+    @Test
+    public void testRangeRollupWithExistingRollupNotRouted() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_existing"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_existing");
+        // Sanity: a fresh range table (only the base index) IS routable.
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table));
+
+        // Inject a second index meta so the table now has two indexes.
+        long baseMetaId = table.getBaseIndexMetaId();
+        long extraMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        List<Column> rollupSchema = table.getSchemaByIndexMetaId(baseMetaId).subList(0, 2);
+        table.setIndexMeta(extraMetaId, "r_existing", rollupSchema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+
+        // With a second index present the table is no longer routable.
+        assertFalse(MaterializedViewHandler.isRangeRollupRoutable(table),
+                "a range table with an existing rollup must not be routed to LakeRangeRollupJob");
+        // A real ADD ROLLUP now falls through to the existing range rejection.
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_rollup_existing add rollup r_new(k1, k2, v1) order by (k2, k1)");
+    }
 }

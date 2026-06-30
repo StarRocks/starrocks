@@ -305,7 +305,12 @@ public class InsertAnalyzer {
             }
         }
 
-        if (!insertStmt.usePartialUpdate()) {
+        // An internal shadow-rewrite INSERT writes only the target rollup index with a column-subset
+        // target list, so a base required column that the rollup does not carry must not be required
+        // here. This branch only fires for the internal rewrite (no user INSERT sets isShadowRewrite).
+        boolean shadowRewriteSubsetWrite =
+                insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+        if (!insertStmt.usePartialUpdate() && !shadowRewriteSubsetWrite) {
             for (Column column : table.getBaseSchema()) {
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL &&

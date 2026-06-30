@@ -247,6 +247,19 @@ public class MaterializedViewHandler extends AlterHandler {
         // save job id for log
         Set<Long> logJobIdSet = new HashSet<>();
 
+        // A routable range rollup promotes its shadow to NORMAL directly, so it cannot share the
+        // multi-job ROLLUP-state batch the existing rollup path uses; reject more than one in one
+        // statement before any job is built.
+        if (isRangeRollupRoutable(olapTable)) {
+            long rollupClauseCount = alterClauses.stream()
+                    .filter(clause -> clause instanceof AddRollupClause)
+                    .count();
+            if (rollupClauseCount > 1) {
+                throw new DdlException(
+                        "A range-distribution table supports at most one rollup per ALTER TABLE statement");
+            }
+        }
+
         try {
             // 1 check and make rollup job
             for (AlterClause alterClause : alterClauses) {
@@ -326,8 +339,13 @@ public class MaterializedViewHandler extends AlterHandler {
      * synchronous materialized view, which carries a query statement.)
      */
     static boolean isRangeRollupRoutable(OlapTable olapTable) {
+        // Only the base index may exist. The additive range-rollup path promotes its shadow to NORMAL
+        // directly (bypassing the multi-job ROLLUP-state coordination the existing path relies on), so a
+        // table that already carries a secondary index/rollup is not routable; it falls through to the
+        // existing range rejection in createMaterializedViewJob.
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
+                && olapTable.getIndexMetaIdToMeta().size() == 1
                 && !GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())
                 && !olapTable.hasAutoIncrementColumn()
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
@@ -373,6 +391,11 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         KeysType keysType = olapTable.getKeysType();
+        // For DUP, the number of leading ORDER BY columns that are keys. A range DUP rollup may declare
+        // a DUPLICATE KEY that is a strict prefix of its sort key (mirrors CreateTableAnalyzer, which
+        // exempts DUP_KEYS from the keys==sort-key rule); without an explicit DUPLICATE KEY every ORDER
+        // BY column is a key. Unused for AGG/UNIQUE (their key flags are validated against the sort key).
+        int dupKeyCount = sortKeyNames.size();
         if (keysType.isAggregationFamily()) {
             // AGG / UNIQUE range rule: the sort-key set must equal the rollup key-column set.
             Set<String> keyColumnNames = new HashSet<>();
@@ -397,19 +420,22 @@ public class MaterializedViewHandler extends AlterHandler {
                         throw new DdlException("DUPLICATE KEY columns must be a prefix of the ORDER BY columns");
                     }
                 }
+                dupKeyCount = dupKeys.size();
             }
         }
 
         // Build the final schema in sort-key order: ORDER BY columns first (declared order), then the
         // remaining selected columns in their selection order. Assign key flags on this final order:
-        // for DUP the sort-key columns are the keys; for AGG/UNIQUE the existing key flags already
-        // match the sort-key set (validated above), so they are preserved by reordering.
+        // for DUP the leading dupKeyCount sort-key columns are the keys (a DUPLICATE KEY may be a strict
+        // prefix of the sort key); for AGG/UNIQUE the existing key flags already match the sort-key set
+        // (validated above), so they are preserved by reordering.
         List<Column> finalSchema = new ArrayList<>(rollupSchema.size());
-        for (Column sortKeyColumn : sortKeyColumns) {
-            Column column = new Column(sortKeyColumn);
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            Column column = new Column(sortKeyColumns.get(i));
             if (!keysType.isAggregationFamily()) {
-                column.setIsKey(true);
-                column.setAggregationType(null, false);
+                boolean isKey = i < dupKeyCount;
+                column.setIsKey(isKey);
+                column.setAggregationType(isKey ? null : AggregateType.NONE, !isKey);
             }
             finalSchema.add(column);
         }

@@ -15,9 +15,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -30,13 +33,32 @@ public class AddRollupOrderByAnalyzerTest {
                 com.starrocks.sql.parser.NodePosition.ZERO);
     }
 
+    /**
+     * An OlapTable that reports itself as a shared-data range-distribution table, so the ORDER BY-on-
+     * ADD-ROLLUP support guard passes through to the subset/dup validation under test.
+     */
+    private static OlapTable rangeCloudNativeTable() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isRangeDistribution() {
+                return true;
+            }
+
+            @Mock
+            public boolean isCloudNativeTable() {
+                return true;
+            }
+        };
+        return new OlapTable();
+    }
+
     @Test
     public void testRollupOrderByColumnNotInRollup() {
         SemanticException ex = assertThrows(SemanticException.class, () -> {
             AddRollupClause clause = makeClause(
                     Lists.newArrayList("k1", "k2"),
                     Lists.newArrayList("k3"));
-            new AlterTableClauseAnalyzer(null).analyze(null, clause);
+            new AlterTableClauseAnalyzer(rangeCloudNativeTable()).analyze(null, clause);
         });
         assertTrue(ex.getMessage().contains("ORDER BY column 'k3' is not in the rollup column list"),
                 "expected column-not-in-list message, got: " + ex.getMessage());
@@ -48,7 +70,7 @@ public class AddRollupOrderByAnalyzerTest {
             AddRollupClause clause = makeClause(
                     Lists.newArrayList("k1", "k2"),
                     Lists.newArrayList("k1", "k1"));
-            new AlterTableClauseAnalyzer(null).analyze(null, clause);
+            new AlterTableClauseAnalyzer(rangeCloudNativeTable()).analyze(null, clause);
         });
         assertTrue(ex.getMessage().contains("Duplicate ORDER BY column"),
                 "expected duplicate-column message, got: " + ex.getMessage());
@@ -60,7 +82,7 @@ public class AddRollupOrderByAnalyzerTest {
         AddRollupClause clause = makeClause(
                 Lists.newArrayList("k1", "k2"),
                 Lists.newArrayList("k2", "k1"));
-        new AlterTableClauseAnalyzer(null).analyze(null, clause);
+        new AlterTableClauseAnalyzer(rangeCloudNativeTable()).analyze(null, clause);
         // no exception expected
     }
 
@@ -70,15 +92,33 @@ public class AddRollupOrderByAnalyzerTest {
         AddRollupClause clause = makeClause(
                 Lists.newArrayList("K1", "k2"),
                 Lists.newArrayList("k1"));
-        new AlterTableClauseAnalyzer(null).analyze(null, clause);
+        new AlterTableClauseAnalyzer(rangeCloudNativeTable()).analyze(null, clause);
     }
 
     @Test
     public void testRollupOrderByEmpty() {
-        // empty sort keys → no validation, no exception
+        // empty sort keys → no validation, no exception (and the support guard never fires)
         AddRollupClause clause = makeClause(
                 Lists.newArrayList("k1", "k2"),
                 Lists.newArrayList());
         new AlterTableClauseAnalyzer(null).analyze(null, clause);
+    }
+
+    /**
+     * ORDER BY on ADD ROLLUP is only supported for shared-data range-distribution tables. A plain
+     * HASH-distributed (non-range, non-cloud-native) table must be rejected before the subset/dup
+     * validation runs. A default {@code new OlapTable()} is neither range-distributed nor cloud-native,
+     * so it stands in for any unsupported table here.
+     */
+    @Test
+    public void testRollupOrderByOnNonRangeTableRejected() {
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            AddRollupClause clause = makeClause(
+                    Lists.newArrayList("k1", "k2"),
+                    Lists.newArrayList("k2", "k1"));
+            new AlterTableClauseAnalyzer(new OlapTable()).analyze(null, clause);
+        });
+        assertTrue(ex.getMessage().contains("only supported for shared-data range-distribution"),
+                "expected range-distribution-only message, got: " + ex.getMessage());
     }
 }
