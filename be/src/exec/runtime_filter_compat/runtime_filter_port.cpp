@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_port.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 
 #include <algorithm>
 
@@ -22,10 +22,10 @@
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_registry.h"
+#include "exec/runtime_filter_compat/runtime_filter_serde.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_sender.h"
-#include "runtime/runtime_filter_serde.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/type_descriptor.h"

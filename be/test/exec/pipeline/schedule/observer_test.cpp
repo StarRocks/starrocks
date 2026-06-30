@@ -25,6 +25,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "compute_env/pipeline/pipeline_timer.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
@@ -40,7 +41,6 @@
 #include "exec/runtime/schedule/event_scheduler.h"
 #include "exec/runtime/schedule/utils.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 #pragma GCC push_options

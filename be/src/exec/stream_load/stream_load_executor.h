@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/stream_load/stream_load_executor.h
+//   https://github.com/apache/incubator-doris/blob/master/be/src/exec/stream_load/stream_load_executor.h
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file

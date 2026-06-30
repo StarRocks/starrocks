@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log_applier.h"

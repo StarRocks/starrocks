@@ -47,13 +47,13 @@
 #include "compute_env/load/stream_load_context.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "data_workflows/load/routine_load/kafka_consumer_pipe.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/stream_load_executor.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks::orchestration {
 

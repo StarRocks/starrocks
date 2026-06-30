@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_state_helper.h"
+#include "exec/exec_env.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
@@ -39,7 +40,6 @@
 #include "io/compressed_input_stream.h"
 #include "platform/fs_broker.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

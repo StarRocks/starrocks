@@ -58,6 +58,7 @@
 #endif
 #include "common/metrics/process_metrics_registry.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/exec_env.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -85,7 +86,6 @@
 #include "platform/http/http_method.h"
 #include "platform/store_path.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "service/service_be/http_auth_response.h"
 

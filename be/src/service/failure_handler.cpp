@@ -47,11 +47,11 @@
 #include "common/config_diagnostic_fwd.h"
 #include "common/process_exit.h"
 #include "common/util/debug_util.h"
+#include "exec/exec_env.h"
 #include "gutil/endian.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "service/core_dump_resource_releaser.h"
 
 namespace starrocks {

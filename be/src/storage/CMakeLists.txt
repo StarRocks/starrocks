@@ -53,7 +53,7 @@ ADD_BE_LIB(StoragePrimitive
 
 target_link_libraries(StoragePrimitive PUBLIC
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -72,7 +72,7 @@ ADD_BE_LIB(StorageBase
 target_link_libraries(StorageBase PUBLIC
     ComputeEnv
     StoragePrimitive
-    RuntimeCore
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore

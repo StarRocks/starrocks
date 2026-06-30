@@ -96,7 +96,7 @@ set(COMPUTE_ENV_SORTING_TEST_FILES
 set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
     ComputeEnv
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

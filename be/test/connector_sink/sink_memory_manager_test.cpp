@@ -25,11 +25,11 @@
 #include "base/utility/integer_util.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {

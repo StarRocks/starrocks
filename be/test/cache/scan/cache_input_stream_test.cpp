@@ -21,9 +21,9 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_cache_fwd.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

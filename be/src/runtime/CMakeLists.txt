@@ -17,7 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
-set(RUNTIME_CORE_FILES
+set(RUNTIME_SRCS
     byte_buffer.cpp
     message_body_sink.cpp
     current_thread.cpp
@@ -47,13 +47,18 @@ set(RUNTIME_CORE_FILES
     prof/heap_prof.cpp
     serde/chunk_encode_context.cpp
     serde/protobuf_chunk_serde.cpp
+    env/diagnose_daemon.cpp
+    env/global_env.cpp
+    env/global_thread_pools.cpp
+    env/java/java_env.cpp
 )
 
-ADD_BE_LIB(RuntimeCore
-    ${RUNTIME_CORE_FILES}
+ADD_BE_LIB(Runtime
+    ${RUNTIME_SRCS}
 )
 
-target_link_libraries(RuntimeCore PRIVATE
+target_link_libraries(Runtime PUBLIC
+    Platform
     ChunkCore
     ColumnCore
     Types
@@ -62,51 +67,3 @@ target_link_libraries(RuntimeCore PRIVATE
     Gutil
     StarRocksGen
 )
-
-set(RUNTIME_ENV_FILES
-    env/diagnose_daemon.cpp
-    env/global_env.cpp
-    env/global_thread_pools.cpp
-    env/java/java_env.cpp
-)
-
-ADD_BE_LIB(RuntimeEnv
-    ${RUNTIME_ENV_FILES}
-)
-
-target_link_libraries(RuntimeEnv PUBLIC
-    Platform
-    RuntimeCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
-set(RUNTIME_FILES
-    lookup_stream_mgr.cpp
-    exec_env.cpp
-    jdbc_driver_manager.cpp
-    pipeline_fragment_reporter.cpp
-    runtime_state_helper.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_executor.cpp
-    batch_write/isomorphic_batch_write.cpp
-    batch_write/batch_write_mgr.cpp
-    batch_write/batch_write_util.cpp
-    batch_write/txn_state_cache.cpp
-    runtime_filter_merger.cpp
-    runtime_filter_port.cpp
-    runtime_filter_rpc.cpp
-    runtime_filter_worker_context.cpp
-    runtime_filter_serde.cpp
-)
-
-ADD_BE_LIB(Runtime
-    ${RUNTIME_FILES}
-    )
-
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive Platform Cache)
-target_link_libraries(Runtime PRIVATE ExecRuntime)
-target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

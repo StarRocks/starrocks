@@ -19,6 +19,7 @@
 #include "connector/lake_connector.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -28,7 +29,6 @@
 #include "gutil/casts.h"
 #include "gutil/walltime.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

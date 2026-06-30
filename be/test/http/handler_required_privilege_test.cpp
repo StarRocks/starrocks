@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/exec_env.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
@@ -50,7 +51,6 @@
 #include "platform/http/ev_http_server.h"
 #include "platform/http/http_handler.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"

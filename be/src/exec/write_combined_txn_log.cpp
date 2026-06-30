@@ -17,8 +17,8 @@
 #include <vector>
 
 #include "base/concurrency/countdown_latch.h"
+#include "exec/exec_env.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_env.h"
 

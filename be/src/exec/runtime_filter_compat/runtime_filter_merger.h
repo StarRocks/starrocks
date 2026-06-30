@@ -23,10 +23,10 @@
 #include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exec/runtime_filter_compat/runtime_filter_serde.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/runtime_filter_serde.h"
 
 namespace starrocks {
 

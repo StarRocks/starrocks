@@ -39,10 +39,10 @@
 
 #include "boost/lexical_cast.hpp"
 #include "common/logging.h"
+#include "exec/exec_env.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
-#include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {

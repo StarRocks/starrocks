@@ -20,13 +20,13 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/arrow/result_to_arrow_converter.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 

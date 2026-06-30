@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/pipeline_fragment_reporter.h"
+#include "exec/pipeline/pipeline_fragment_reporter.h"
 
 #include <memory>
 #include <vector>
@@ -27,12 +27,12 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_context_manager.h"
 #include "exec/runtime/query_context_manager.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 

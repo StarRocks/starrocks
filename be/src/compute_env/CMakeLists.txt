@@ -140,8 +140,7 @@ target_link_libraries(ComputeEnv PUBLIC
     StoragePrimitive
     ExecPrimitive
     ExprCore
-    RuntimeEnv
-    RuntimeCore
+    Runtime
     Platform
     FSCore
     IO

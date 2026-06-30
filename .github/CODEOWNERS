@@ -95,8 +95,8 @@
 # /fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java  @StarRocks/msg-reviewer
 
 # StorageEngine/ExecEnv/GlobalEnv
-# /be/src/runtime/exec_env.h @StarRocks/thread-committer
-# /be/src/runtime/exec_env.cpp @StarRocks/thread-committer
+# /be/src/exec/exec_env.h @StarRocks/thread-committer
+# /be/src/exec/exec_env.cpp @StarRocks/thread-committer
 # /be/src/storage/olap_server.cpp @StarRocks/thread-committer
 # /be/src/storage/storage_engine.h @StarRocks/thread-committer
 # /be/src/storage/storage_engine.cpp @StarRocks/thread-committer
@@ -130,9 +130,9 @@
 # /be/src/http/action/compaction_action.cpp       @StarRocks/load-unload-maintainer
 # /be/src/http/action/*stream_load.cpp    @StarRocks/load-unload-maintainer
 # /be/src/http/action/restore*            @StarRocks/load-unload-maintainer
-# /be/src/runtime/batch_write/*           @StarRocks/load-unload-maintainer
+# /be/src/exec/batch_write/*              @StarRocks/load-unload-maintainer
 # /be/src/runtime/routine_load/*          @StarRocks/load-unload-maintainer
-# /be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
+# /be/src/exec/stream_load/*              @StarRocks/load-unload-maintainer
 # /be/src/runtime/load*                   @StarRocks/load-unload-maintainer
 # /be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
 # /be/src/runtime/local_tablets_channel*  @StarRocks/load-unload-maintainer
@@ -140,5 +140,3 @@
 
 # meta upgrade/downgrade compatibility
 # /fe/fe-core/src/main/java/com/starrocks/persist/gson/GsonUtils.java @StarRocks/meta-compatibility-maintainer
-
-
