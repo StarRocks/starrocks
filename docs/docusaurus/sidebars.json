@@ -185,6 +185,7 @@
                 "loading/Stream_Load_transaction_interface",
                 "loading/Flink_cdc_load",
                 "loading/Flink-connector-starrocks",
+                "loading/Flink_multi_table_transaction",
                 "loading/load_from_pulsar",
                 "loading/Load_to_Primary_Key_tables",
                 "loading/Etl_in_loading",
