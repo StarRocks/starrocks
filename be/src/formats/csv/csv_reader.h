@@ -214,6 +214,11 @@ protected:
     std::unordered_set<size_t> _escape_pos;
     std::vector<CSVColumn> _columns;
 
+    // Reset the consumed-byte counter. A derived reader calls this when it
+    // re-seeks to a new scan-range start so the _limit/_parsed_bytes boundary
+    // begins fresh.
+    void reset_parsed_bytes() { _parsed_bytes = 0; }
+
 private:
     Status _expand_buffer();
     Status _expand_buffer_loosely();

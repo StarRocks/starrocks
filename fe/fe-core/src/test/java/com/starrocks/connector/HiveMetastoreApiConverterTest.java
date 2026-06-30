@@ -23,9 +23,11 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.thrift.TTextFileDesc;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -75,6 +77,52 @@ public class HiveMetastoreApiConverterTest {
         hudiFields.add(new Schema.Field("col3",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiSchema = Schema.createRecord(hudiFields);
+    }
+
+    @Test
+    public void testToTextFileFormatDescForOpenCSVSerde() {
+        String openCSVSerde = "org.apache.hadoop.hive.serde2.OpenCSVSerde";
+
+        // OpenCSVSerde applies separator/quote/escape defaults even when unset.
+        TextFileFormatDesc def = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>(), openCSVSerde);
+        Assertions.assertEquals(",", def.getFieldDelim());
+        Assertions.assertEquals('"', def.getEnclose());
+        Assertions.assertEquals('\\', def.getEscape());
+
+        // Explicit separator/quote/escape are honored.
+        Map<String, String> params = new HashMap<>();
+        params.put("separatorChar", "|");
+        params.put("quoteChar", "'");
+        params.put("escapeChar", "/");
+        TextFileFormatDesc explicit = HiveMetastoreApiConverter.toTextFileFormatDesc(params, openCSVSerde);
+        Assertions.assertEquals("|", explicit.getFieldDelim());
+        Assertions.assertEquals('\'', explicit.getEnclose());
+        Assertions.assertEquals('/', explicit.getEscape());
+
+        // enclose/escape are carried over thrift.
+        TTextFileDesc thrift = def.toThrift();
+        Assertions.assertEquals('"', thrift.getEnclose());
+        Assertions.assertEquals('\\', thrift.getEscape());
+
+        // Non-OpenCSVSerde (LazySimpleSerDe): no enclose/escape, naive path stays.
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals(0, lazy.getEscape());
+
+        // Backward-compatible single-arg overload behaves like the non-OpenCSVSerde case.
+        TextFileFormatDesc legacy = HiveMetastoreApiConverter.toTextFileFormatDesc(new HashMap<>());
+        Assertions.assertEquals(0, legacy.getEnclose());
+        Assertions.assertEquals(0, legacy.getEscape());
+
+        // Explicitly empty quote/escape disables that char (the !isEmpty guard): a
+        // degenerate OpenCSVSerde config then falls back to the naive (v1) path.
+        Map<String, String> emptyParams = new HashMap<>();
+        emptyParams.put("quoteChar", "");
+        emptyParams.put("escapeChar", "");
+        TextFileFormatDesc empty = HiveMetastoreApiConverter.toTextFileFormatDesc(emptyParams, openCSVSerde);
+        Assertions.assertEquals(0, empty.getEnclose());
+        Assertions.assertEquals(0, empty.getEscape());
     }
 
     @Test

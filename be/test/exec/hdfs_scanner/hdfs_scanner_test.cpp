@@ -2103,6 +2103,134 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
 
 // =============================================================================
 /*
+1,"INFANTS, PETS",ok
+2,"a,b,c",done
+3,plain,end
+4,"she said ""hi""",quoted
+*/
+// OpenCSVSerde (enclose/escape set): separators inside quoted fields must NOT be
+// treated as column delimiters, and doubled quotes ("") must be de-escaped.
+TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"name", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 50)},
+                            {"status", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string quote_file = "./be/test/exec/test_data/csv_scanner/quote_escape.csv";
+    Status status;
+
+    // 1) explicit line.delim: quote-aware parsing only.
+    {
+        auto* range = _create_scan_range(quote_file, 0, 0);
+        range->text_file_desc.__set_enclose('"');
+        range->text_file_desc.__set_escape('\\');
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* ctx = _create_ctx(quote_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, ctx);
+        ASSERT_TRUE(status.ok()) << status.message();
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok()) << status.message();
+        EXPECT_EQ(4, chunk->num_rows());
+        EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
+        EXPECT_EQ("['2', 'a,b,c', 'done']", chunk->debug_row(1));
+        EXPECT_EQ("['3', 'plain', 'end']", chunk->debug_row(2));
+        EXPECT_EQ("['4', 'she said \"hi\"', 'quoted']", chunk->debug_row(3));
+        scanner->close();
+    }
+
+    // 2) no line.delim from HMS: exercises probe_row_delimiter together with v2.
+    {
+        auto* range = _create_scan_range(quote_file, 0, 0);
+        range->text_file_desc.__set_enclose('"');
+        range->text_file_desc.__isset.line_delim = false;
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* ctx = _create_ctx(quote_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, ctx);
+        ASSERT_TRUE(status.ok()) << status.message();
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok()) << status.message();
+        EXPECT_EQ(4, chunk->num_rows());
+        EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
+        scanner->close();
+    }
+
+    // 3) splittable: read in two ranges; total rows must stay 4 regardless of
+    //    the split point (validates the set_limit/_parsed_bytes boundary in v2).
+    for (int offset = 8; offset < 30; offset++) {
+        int records = 0;
+        auto read_range = [&](int start, int end) {
+            auto* range0 = _create_scan_range(quote_file, start, end);
+            range0->text_file_desc.__set_enclose('"');
+            range0->text_file_desc.__set_escape('\\');
+            auto* tuple_desc = _create_tuple_desc(csv_descs);
+            auto* ctx = _create_ctx(quote_file, range0, tuple_desc);
+            build_hive_column_names(ctx, tuple_desc);
+            auto scanner = std::make_shared<HdfsTextScanner>();
+            status = scanner->init(_runtime_state, ctx);
+            ASSERT_TRUE(status.ok()) << status.message();
+            status = scanner->open(_runtime_state);
+            ASSERT_TRUE(status.ok()) << status.message();
+            READ_SCANNER_RETURN_ROWS(scanner, records);
+            scanner->close();
+        };
+        read_range(0, offset);
+        read_range(offset, 0);
+        ASSERT_EQ(records, 4) << "offset=" << offset;
+    }
+
+    // 4) One combined fixture (BOM + CRLF + backslash escape) to keep the number
+    //    of test-data files down. It exercises three orthogonal v2 concerns at once:
+    //    - UTF-8 BOM at file start: the BOM-skip probe must not pollute the
+    //      _parsed_bytes boundary (reset_parsed_bytes) and the first column must
+    //      not retain the BOM bytes;
+    //    - CRLF with no explicit line.delim: probe_row_delimiter must detect "\r\n"
+    //      so the last (unquoted) column does not keep a trailing '\r';
+    //    - backslash-escaped enclose char (\") must de-escape to a literal '"',
+    //      exercising the ESCAPE state of more_rows (not just the doubled-quote path).
+    {
+        const std::string combo_file = "./be/test/exec/test_data/csv_scanner/quote_escape_crlf_bom.csv";
+        auto* range = _create_scan_range(combo_file, 0, 0);
+        range->text_file_desc.__set_enclose('"');
+        range->text_file_desc.__set_escape('\\');
+        range->text_file_desc.__isset.line_delim = false; // force the probe path
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* ctx = _create_ctx(combo_file, range, tuple_desc);
+        build_hive_column_names(ctx, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, ctx);
+        ASSERT_TRUE(status.ok()) << status.message();
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
+        status = scanner->get_next(_runtime_state, &chunk);
+        ASSERT_TRUE(status.ok()) << status.message();
+        EXPECT_EQ(2, chunk->num_rows());
+        // BOM stripped (first col '1'), embedded comma kept, last col has no '\r'.
+        EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
+        // Backslash-escaped quotes de-escape to a literal '"'.
+        EXPECT_EQ("['2', 'she said \"hi\"', 'quoted']", chunk->debug_row(1));
+        scanner->close();
+    }
+}
+
+// =============================================================================
+/*
 UID0,ACTION0
 UID1,ACTION1
 */

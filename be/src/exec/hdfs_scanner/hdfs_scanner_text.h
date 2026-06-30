@@ -41,12 +41,19 @@ private:
     StatusOr<bool> _has_utf8_bom() const;
     Status _build_hive_column_name_2_index();
     Status _parse_csv(int chunk_size, ChunkPtr* chunk);
+    // Quote/escape-aware parsing path for OpenCSVSerde, backed by CSVReader::more_rows.
+    Status _parse_csv_v2(int chunk_size, ChunkPtr* chunk);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     std::string _line_delimiter;
     std::string _field_delimiter;
     char _collection_delimiter;
     char _mapkey_delimiter;
+    // OpenCSVSerde quote/escape characters (0 means unset). When either is set,
+    // _use_v2 is true and parsing goes through _parse_csv_v2.
+    char _enclose = 0;
+    char _escape = 0;
+    bool _use_v2 = false;
     int32_t _skip_header_line_count = 0;
     bool _need_probe_line_delimiter = false;
     // Always set true in data lake now.
