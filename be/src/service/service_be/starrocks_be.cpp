@@ -155,15 +155,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
 
-<<<<<<< HEAD
-    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
-    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
-=======
-    EXIT_IF_ERROR(init_storage_env(global_env, platform_env, exec_env));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": storage env init successfully";
->>>>>>> cc5ed88c56a... [Refactor] Reorder BE environment lifecycle (#75499)
-
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
     data_workflows_env_options.exec_env = exec_env;
@@ -431,17 +422,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     orchestration_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
 
-<<<<<<< HEAD
-=======
     data_workflows_env->destroy();
     data_workflows_env.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
 
-    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
-    StorageEnv::GetInstance()->destroy();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
-
->>>>>>> cc5ed88c56a... [Refactor] Reorder BE environment lifecycle (#75499)
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
