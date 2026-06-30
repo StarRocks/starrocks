@@ -40,6 +40,19 @@ class VectorIndexFileWriter;
 // valid_input_vector logic in tenann_index_builder.cpp.
 Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, bool is_input_normalized);
 
+// Resolve the row-count threshold at/above which a real vector index is built for a
+// segment (below it the build is skipped and reads fall back to brute-force). Single
+// source of truth shared by the inline build (VectorIndexWriter::init, sync OLAP/lake
+// path) and the async build registration (lake::get_vector_index_build_threshold), so
+// the two never diverge.
+//
+// Precedence:
+//   1. config_vector_index_default_build_threshold
+//   2. user property `index_build_threshold` overrides (1)
+//   3. for IVFPQ, floor at `nlist` -- applied LAST so a user override can never drop
+//      below nlist (faiss requires at least nlist training points or it throws).
+uint32_t resolve_vector_index_build_threshold(const TabletIndex& index);
+
 class VectorIndexWriter {
 public:
     static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,
