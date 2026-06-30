@@ -74,14 +74,16 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
 }
 
-uint32_t resolve_del_op_offset(int64_t op_offset, const RowsetMetadataPB& rowset_meta) {
-    if (op_offset >= 0) {
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta) {
+    if (!column_mode && op_offset >= 0) {
         // op_offset is a local segment position; map it to the segment index used for rssid so it is
         // consistent with the get_max_segment_idx() fallback (handles segment_idx remapping/bundles).
         return get_segment_idx(rowset_meta, static_cast<int32_t>(op_offset));
     }
-    // Not recorded (op_offset < 0): fall back to the max segment id, i.e. legacy "delete after all
-    // upserts". Callers pass < 0 when OpWrite.del_op_offsets is absent or holds kUnknownDelOpOffset.
+    // Fall back to the max segment id (legacy "delete after all upserts") when:
+    //  - column_mode: column-mode partial update applies its deletes after all column upserts /
+    //    synthesized rows, never interleaved, so the persisted offset must match that apply order; or
+    //  - op_offset < 0: not recorded (OpWrite.del_op_offsets absent or holds kUnknownDelOpOffset).
     return get_max_segment_idx(rowset_meta);
 }
 
@@ -246,8 +248,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         const int64_t op_offset = (has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset)
                                           ? static_cast<int64_t>(op_write.del_op_offsets(del_id))
                                           : -1;
-        del_file_with_rid.set_op_offset(column_mode ? get_max_segment_idx(*rowset)
-                                                    : resolve_del_op_offset(op_offset, *rowset));
+        del_file_with_rid.set_op_offset(resolve_del_op_offset(op_offset, column_mode, *rowset));
         if (del_meta.has_encryption_meta()) {
             del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
@@ -1338,7 +1339,8 @@ Status MetaFileBuilder::set_final_rowset() {
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
         // fall back to the max segment id (delete after all upserts).
-        del_file_with_rid.set_op_offset(resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], *rowset));
+        del_file_with_rid.set_op_offset(
+                resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], /*column_mode=*/false, *rowset));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }

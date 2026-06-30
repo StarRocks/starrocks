@@ -49,10 +49,11 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 // Resolve the segment index a del file logically follows (the delete's rssid is
 // `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
 // `op_offset` is the writer-provided local segment position (from OpWrite.del_op_offsets); it is
-// mapped through get_segment_idx() so it lands in the same index space as segment rssids. A value
-// < 0 means "not recorded" (absent array or kUnknownDelOpOffset) and falls back to the max segment
-// index, i.e. the legacy "apply all deletes after all upserts" behavior.
-uint32_t resolve_del_op_offset(int64_t op_offset, const RowsetMetadataPB& rowset_meta);
+// mapped through get_segment_idx() so it lands in the same index space as segment rssids.
+// Falls back to the max segment index -- the legacy "apply all deletes after all upserts" behavior --
+// when `column_mode` is true (column-mode partial update applies deletes after all column upserts,
+// never interleaved) or when `op_offset` < 0 ("not recorded": absent array or kUnknownDelOpOffset).
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta);
 
 class MetaFileBuilder {
 public:
