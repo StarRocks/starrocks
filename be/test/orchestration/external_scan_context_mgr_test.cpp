@@ -52,8 +52,8 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
 #include "orchestration/fragment_mgr.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks::orchestration {
@@ -67,17 +67,17 @@ protected:
     static void SetUpTestSuite() {
         static auto* metrics = new MetricRegistry("external_scan_context_mgr_global_test");
         CpuInfo::init();
-        auto* global_env = GlobalEnv::GetInstance();
-        _previous_process_mem_tracker = global_env->_process_mem_tracker;
-        _previous_query_pool_mem_tracker = global_env->_query_pool_mem_tracker;
-        if (global_env->_process_mem_tracker == nullptr) {
+        auto* runtime_env = RuntimeEnv::GetInstance();
+        _previous_process_mem_tracker = runtime_env->_process_mem_tracker;
+        _previous_query_pool_mem_tracker = runtime_env->_query_pool_mem_tracker;
+        if (runtime_env->_process_mem_tracker == nullptr) {
             _process_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
-            global_env->_process_mem_tracker = _process_mem_tracker;
+            runtime_env->_process_mem_tracker = _process_mem_tracker;
         }
-        if (global_env->_query_pool_mem_tracker == nullptr) {
+        if (runtime_env->_query_pool_mem_tracker == nullptr) {
             _query_pool_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, -1, "query_pool",
-                                                                   global_env->process_mem_tracker());
-            global_env->_query_pool_mem_tracker = _query_pool_mem_tracker;
+                                                                   runtime_env->process_mem_tracker());
+            runtime_env->_query_pool_mem_tracker = _query_pool_mem_tracker;
         }
 
         runtime_env_test::set_small_thread_pool_configs();
@@ -93,13 +93,13 @@ protected:
         std::error_code ec;
         std::filesystem::create_directories(spill_path, ec);
         ASSERT_FALSE(ec) << ec.message();
-        ASSERT_TRUE(global_env->init_execution_thread_pools(metrics).ok());
+        ASSERT_TRUE(runtime_env->init_execution_thread_pools(metrics).ok());
     }
 
     static void TearDownTestSuite() {
-        auto* global_env = GlobalEnv::GetInstance();
-        global_env->_query_pool_mem_tracker = _previous_query_pool_mem_tracker;
-        global_env->_process_mem_tracker = _previous_process_mem_tracker;
+        auto* runtime_env = RuntimeEnv::GetInstance();
+        runtime_env->_query_pool_mem_tracker = _previous_query_pool_mem_tracker;
+        runtime_env->_process_mem_tracker = _previous_process_mem_tracker;
         _previous_query_pool_mem_tracker.reset();
         _previous_process_mem_tracker.reset();
         _query_pool_mem_tracker.reset();
@@ -108,7 +108,7 @@ protected:
 
     void SetUp() override {
         ComputeEnvOptions options;
-        options.global_env = GlobalEnv::GetInstance();
+        options.runtime_env = RuntimeEnv::GetInstance();
         options.as_cn = true;
         options.query_cache_capacity = 4 * 1024 * 1024;
         options.driver_queue_factory = pipeline::create_query_shared_driver_queue;

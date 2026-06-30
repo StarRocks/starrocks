@@ -58,8 +58,8 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     _query_ctx->query_runtime_state().extend_delivery_lifetime();
     _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
-    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     auto fragment_ctx = std::make_shared<FragmentContext>();
     _fragment_ctx = fragment_ctx.get();
@@ -131,8 +131,8 @@ TEST(ExportSinkOperatorTest, test_export_with_header) {
     _query_ctx->query_runtime_state().extend_delivery_lifetime();
     _query_ctx->query_runtime_state().extend_query_lifetime();
     _query_ctx->set_final_sink();
-    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     auto fragment_ctx = std::make_shared<FragmentContext>();
     _fragment_ctx = fragment_ctx.get();

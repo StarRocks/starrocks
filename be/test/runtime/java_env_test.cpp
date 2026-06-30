@@ -25,7 +25,7 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/system/cpu_info.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
@@ -83,16 +83,16 @@ TEST_F(JavaEnvTest, JavaGlobalRefCanClearFromBthread) {
     CpuInfo::init();
     runtime_env_test::set_small_thread_pool_configs();
 
-    auto* global_env = GlobalEnv::GetInstance();
-    global_env->destroy_thread_pools();
-    DeferOp cleanup([global_env]() {
-        global_env->shutdown_thread_pools();
-        global_env->destroy_thread_pools();
+    auto* runtime_env = RuntimeEnv::GetInstance();
+    runtime_env->destroy_thread_pools();
+    DeferOp cleanup([runtime_env]() {
+        runtime_env->shutdown_thread_pools();
+        runtime_env->destroy_thread_pools();
     });
 
     MetricRegistry metrics("java_env_test");
-    ASSERT_OK(global_env->init_execution_thread_pools(&metrics));
-    ASSERT_NE(global_env->jvm_call_pool(), nullptr);
+    ASSERT_OK(runtime_env->init_execution_thread_pools(&metrics));
+    ASSERT_NE(runtime_env->jvm_call_pool(), nullptr);
 
     jclass local_clazz = env()->FindClass("java/lang/StringBuilder");
     ASSERT_NE(local_clazz, nullptr);

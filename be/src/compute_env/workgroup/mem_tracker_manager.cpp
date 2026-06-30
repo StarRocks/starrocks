@@ -17,22 +17,22 @@
 #include <memory>
 
 #include "base/metrics.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "work_group.h"
 
 namespace starrocks::workgroup {
 
 MemTrackerPtr MemTrackerManager::register_workgroup(const WorkGroupPtr& wg) {
     if (WorkGroup::DEFAULT_MEM_POOL == wg->mem_pool()) {
-        return GlobalEnv::GetInstance()->query_pool_mem_tracker_shared();
+        return RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared();
     }
 
     std::unique_lock write_lock(_mutex);
 
     const double mem_limit_fraction = wg->mem_limit();
     const int64_t memory_limit_bytes =
-            static_cast<int64_t>(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * mem_limit_fraction);
+            static_cast<int64_t>(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit() * mem_limit_fraction);
 
     // Frontend (FE) validation ensures that active resource groups (RGs) sharing
     // the same mem_pool also have the same mem_limit.
@@ -52,7 +52,7 @@ MemTrackerPtr MemTrackerManager::register_workgroup(const WorkGroupPtr& wg) {
 
     auto shared_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL, memory_limit_bytes,
-                                         wg->mem_pool(), GlobalEnv::GetInstance()->query_pool_mem_tracker());
+                                         wg->mem_pool(), RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
     _shared_mem_trackers[wg->mem_pool()].tracker = shared_mem_tracker;
     _shared_mem_trackers[wg->mem_pool()].child_count++; // also handles orphaned children

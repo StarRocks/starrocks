@@ -85,19 +85,19 @@
 #include "platform/http/ev_http_server.h"
 #include "platform/http/http_method.h"
 #include "platform/store_path.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
 HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
-                             const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
+                             const RuntimeEnv& runtime_env, ProcessMetricsRegistry* process_metrics_registry,
                              LoadChannelMgr* load_channel_mgr, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
           _orchestration_env(orchestration_env),
-          _global_env(global_env),
+          _runtime_env(runtime_env),
           _process_metrics_registry(process_metrics_registry),
           _load_channel_mgr(load_channel_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
@@ -123,10 +123,10 @@ Status HttpServiceBE::start() {
     auto* stream_load_orchestrator = _orchestration_env->stream_load_orchestrator();
     DCHECK(stream_load_orchestrator != nullptr);
 
-    register_config_update_hooks(_env, _global_env, _load_channel_mgr);
+    register_config_update_hooks(_env, _runtime_env, _load_channel_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
-    add_default_path_handlers(_web_page_handler.get(), _global_env);
+    add_default_path_handlers(_web_page_handler.get(), _runtime_env);
 
     _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
@@ -233,7 +233,7 @@ Status HttpServiceBE::start() {
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
-        auto memory_metric_action = new MemoryMetricsAction(_global_env);
+        auto memory_metric_action = new MemoryMetricsAction(_runtime_env);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
         _http_handlers.emplace_back(memory_metric_action);
     }
@@ -244,7 +244,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction(_global_env);
+    auto* checksum_action = new ChecksumAction(_runtime_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 

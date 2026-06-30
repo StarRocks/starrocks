@@ -39,7 +39,7 @@
 #include "cache/mem_cache/page_handle.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/primitive/key_coder.h"
 #include "storage/rowset/page_io.h"
 
@@ -77,11 +77,11 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
 }
 
 OrdinalIndexReader::OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
 }
 
 OrdinalIndexReader::~OrdinalIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const OrdinalIndexPB& meta,
@@ -89,7 +89,7 @@ StatusOr<bool> OrdinalIndexReader::load(const IndexReadOptions& opts, const Ordi
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta, num_values);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                      mem_usage() - sizeof(OrdinalIndexReader))
         } else {
             _reset();

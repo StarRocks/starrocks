@@ -50,7 +50,7 @@
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/batch_write/txn_state_cache.h"
 #include "exec/exec_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
 #include "storage/compaction_manager.h"
 #include "storage/index/vector/vector_index_cache.h"
@@ -77,9 +77,9 @@
 
 namespace starrocks {
 
-void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env, LoadChannelMgr* load_channel_mgr) {
+void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
-    const auto* global_env_ptr = &global_env;
+    const auto* runtime_env_ptr = &runtime_env;
 
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();
@@ -88,7 +88,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
 
     registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {
         LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
-        global_env_ptr->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+        runtime_env_ptr->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
         return Status::OK();
     });
 #ifndef __APPLE__
@@ -109,7 +109,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         if (cache == nullptr) {
             return Status::InternalError("Vector index cache is not initialized");
         }
-        const int64_t proc_mem = GlobalEnv::GetInstance()->process_mem_limit();
+        const int64_t proc_mem = RuntimeEnv::GetInstance()->process_mem_limit();
         ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
         if (limit < 0) limit = 0;
         if (static_cast<size_t>(limit) == cache->capacity()) {
@@ -147,7 +147,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
 
         size_t mem_size = 0;
         Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size,
-                                                                  global_env_ptr->process_mem_limit(), &mem_size);
+                                                                  runtime_env_ptr->process_mem_limit(), &mem_size);
         if (!st.ok()) {
             LOG(WARNING) << "Failed to update datacache mem size";
             return st;
@@ -232,7 +232,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return st;
     });
     registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
-        auto* thread_pool = global_env_ptr->dictionary_cache_pool();
+        auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(config::dictionary_cache_refresh_threadpool_size);
         }
@@ -244,7 +244,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
                              ->get_thread_pool(TTaskType::PUBLISH_VERSION)
                              ->update_max_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                                            config::transaction_publish_version_worker_count));
-        Status st2 = global_env_ptr->put_aggregate_metadata_thread_pool()->update_max_threads(
+        Status st2 = runtime_env_ptr->put_aggregate_metadata_thread_pool()->update_max_threads(
                 std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         if (!st1.ok() || !st2.ok()) {
             return Status::InvalidArgument("Failed to update transaction_publish_version_worker_count.");
@@ -257,7 +257,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
                                                         config::transaction_publish_version_thread_pool_num_min));
     });
     registry->register_callback("lake_metadata_fetch_thread_count", [=]() -> Status {
-        auto* thread_pool = global_env_ptr->lake_metadata_fetch_thread_pool();
+        auto* thread_pool = runtime_env_ptr->lake_metadata_fetch_thread_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(std::max(1, config::lake_metadata_fetch_thread_count));
         }
@@ -313,14 +313,14 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
-        auto thread_pool = global_env_ptr->pk_index_execution_thread_pool();
+        auto thread_pool = runtime_env_ptr->pk_index_execution_thread_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
         }
         return Status::OK();
     });
     registry->register_callback("lake_partial_update_thread_pool_max_threads", [=]() -> Status {
-        auto thread_pool = global_env_ptr->lake_partial_update_thread_pool();
+        auto thread_pool = runtime_env_ptr->lake_partial_update_thread_pool();
         if (thread_pool != nullptr) {
             int max_thread_count = config::lake_partial_update_thread_pool_max_threads;
             if (max_thread_count <= 0) {
@@ -331,7 +331,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const GlobalEnv& global_env
         return Status::OK();
     });
     registry->register_callback("pk_index_memtable_flush_threadpool_max_threads", [=]() -> Status {
-        auto thread_pool = global_env_ptr->pk_index_memtable_flush_thread_pool();
+        auto thread_pool = runtime_env_ptr->pk_index_memtable_flush_thread_pool();
         if (thread_pool != nullptr) {
             return thread_pool->update_max_threads(config::pk_index_memtable_flush_threadpool_max_threads);
         }

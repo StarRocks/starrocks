@@ -28,7 +28,7 @@ namespace starrocks {
 class BaseLoadPathMgr;
 class DataStreamMgr;
 class DictionaryCacheManager;
-class GlobalEnv;
+class RuntimeEnv;
 class LoadStreamMgr;
 class MetricRegistry;
 class ProfileReportWorker;
@@ -53,7 +53,7 @@ using CacheManagerRawPtr = CacheManager*;
 } // namespace query_cache
 
 struct ComputeEnvOptions {
-    GlobalEnv* global_env = nullptr;
+    RuntimeEnv* runtime_env = nullptr;
     MetricRegistry* metrics = nullptr;
     std::vector<std::string> store_paths;
     bool as_cn = false;

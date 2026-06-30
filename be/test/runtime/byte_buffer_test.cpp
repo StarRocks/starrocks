@@ -48,7 +48,7 @@ public:
 
 protected:
     // ByteBuffer::allocate_with_tracker() requires a non-null CurrentThread mem tracker. Under the
-    // legacy be_test binary GlobalEnv supplied one; runtime_core_test uses the stock gtest_main, so
+    // legacy be_test binary RuntimeEnv supplied one; runtime_test uses the stock gtest_main, so
     // install a process mem tracker source for the duration of each test.
     void SetUp() override {
         _process_mem_tracker = std::make_unique<MemTracker>();

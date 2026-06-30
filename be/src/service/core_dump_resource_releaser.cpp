@@ -28,7 +28,7 @@
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/primitives/driver_executor.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
@@ -150,25 +150,25 @@ void try_release_exec_env_resources_before_core_dump(ExecEnv* exec_env, uint32_t
     }
 }
 
-void try_release_global_env_resources_before_core_dump(GlobalEnv* global_env, uint32_t mask) {
-    if (global_env == nullptr) {
+void try_release_runtime_env_resources_before_core_dump(RuntimeEnv* runtime_env, uint32_t mask) {
+    if (runtime_env == nullptr) {
         return;
     }
 
-    if (global_env->thread_pool() != nullptr && mask_should_release(mask, kNonPipelineScanThreadPool)) {
-        global_env->thread_pool()->shutdown();
+    if (runtime_env->thread_pool() != nullptr && mask_should_release(mask, kNonPipelineScanThreadPool)) {
+        runtime_env->thread_pool()->shutdown();
     }
-    if (global_env->pipeline_prepare_pool() != nullptr && mask_should_release(mask, kPipelinePrepareThreadPool)) {
-        global_env->pipeline_prepare_pool()->shutdown();
+    if (runtime_env->pipeline_prepare_pool() != nullptr && mask_should_release(mask, kPipelinePrepareThreadPool)) {
+        runtime_env->pipeline_prepare_pool()->shutdown();
     }
-    if (global_env->pipeline_sink_io_pool() != nullptr && mask_should_release(mask, kPipelineSinkIoThreadPool)) {
-        global_env->pipeline_sink_io_pool()->shutdown();
+    if (runtime_env->pipeline_sink_io_pool() != nullptr && mask_should_release(mask, kPipelineSinkIoThreadPool)) {
+        runtime_env->pipeline_sink_io_pool()->shutdown();
     }
-    if (global_env->query_rpc_pool() != nullptr && mask_should_release(mask, kQueryRpcThreadPool)) {
-        global_env->query_rpc_pool()->shutdown();
+    if (runtime_env->query_rpc_pool() != nullptr && mask_should_release(mask, kQueryRpcThreadPool)) {
+        runtime_env->query_rpc_pool()->shutdown();
     }
-    if (global_env->datacache_rpc_pool() != nullptr && mask_should_release(mask, kDatacacheRpcThreadPool)) {
-        global_env->datacache_rpc_pool()->shutdown();
+    if (runtime_env->datacache_rpc_pool() != nullptr && mask_should_release(mask, kDatacacheRpcThreadPool)) {
+        runtime_env->datacache_rpc_pool()->shutdown();
     }
 }
 
@@ -187,14 +187,14 @@ void refresh_core_dump_resource_releaser_config() {
     g_core_dump_resource_mask.store(selector.mask(), std::memory_order_relaxed);
 }
 
-void try_release_resources_before_core_dump(ExecEnv* exec_env, GlobalEnv* global_env, DataCache* data_cache) {
+void try_release_resources_before_core_dump(ExecEnv* exec_env, RuntimeEnv* runtime_env, DataCache* data_cache) {
     const uint32_t mask = g_core_dump_resource_mask.load(std::memory_order_relaxed);
     if (mask == 0) {
         return;
     }
 
     try_release_exec_env_resources_before_core_dump(exec_env, mask);
-    try_release_global_env_resources_before_core_dump(global_env, mask);
+    try_release_runtime_env_resources_before_core_dump(runtime_env, mask);
 
 #ifndef __APPLE__
     if (data_cache != nullptr && mask_should_release(mask, kDataCache)) {

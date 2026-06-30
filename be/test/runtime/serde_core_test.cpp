@@ -38,7 +38,6 @@
 #include "common/config_local_io_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
@@ -1052,31 +1051,3 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
 }
 
 } // namespace starrocks::serde
-
-namespace {
-
-bool allocate_hll_registers_with_mem_chunk_allocator(size_t size, void* /*ctx*/, starrocks::MemChunk* chunk) {
-    return starrocks::MemChunkAllocator::allocate(size, chunk);
-}
-
-void free_hll_registers_with_mem_chunk_allocator(const starrocks::MemChunk& chunk, void* /*ctx*/) {
-    starrocks::MemChunkAllocator::free(chunk);
-}
-
-class HllRegistersAllocatorEnvironment final : public ::testing::Environment {
-public:
-    void SetUp() override {
-        starrocks::HyperLogLog::RegistersAllocator allocator;
-        allocator.allocate = allocate_hll_registers_with_mem_chunk_allocator;
-        allocator.free = free_hll_registers_with_mem_chunk_allocator;
-        auto st = starrocks::HyperLogLog::set_registers_allocator(allocator);
-        if (!st.ok()) {
-            FAIL() << "failed to register HLL registers allocator: " << st.to_string();
-        }
-    }
-};
-
-[[maybe_unused]] ::testing::Environment* hll_registers_allocator_environment =
-        ::testing::AddGlobalTestEnvironment(new HllRegistersAllocatorEnvironment);
-
-} // namespace

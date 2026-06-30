@@ -31,9 +31,9 @@ namespace starrocks {
 constexpr int64_t kBytesPerOp = 1024;
 constexpr int kAllocsPerIteration = 10000;
 
-void ensure_global_env() {
-    if (!GlobalEnv::is_init()) {
-        auto env = GlobalEnv::GetInstance();
+void ensure_runtime_env() {
+    if (!RuntimeEnv::is_init()) {
+        auto env = RuntimeEnv::GetInstance();
         env->_process_mem_tracker = std::make_shared<MemTracker>(-1, "allocator_bench_root");
         env->_is_init = true;
     }
@@ -43,7 +43,7 @@ namespace {
 
 template <typename Alloc>
 void BM_allocator_alloc_free(benchmark::State& state) {
-    MemTracker* tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    MemTracker* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     if (state.thread_index == 0) {
         tracker->set(0);
     }
@@ -97,7 +97,7 @@ BENCHMARK_TEMPLATE(BM_allocator_alloc_free, MallocAllocator)->Unit(benchmark::kM
 } // namespace starrocks
 
 int main(int argc, char** argv) {
-    starrocks::ensure_global_env();
+    starrocks::ensure_runtime_env();
     benchmark::Initialize(&argc, argv);
     if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
         return 1;

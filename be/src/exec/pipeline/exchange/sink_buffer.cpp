@@ -85,7 +85,7 @@ DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
     return DeferOp<std::function<void()>>([this]() {
         _observable.notify_sink_observers();
         if (bthread_self()) {
-            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+            CHECK(tls_thread_status.mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
         }
     });
 }
@@ -417,7 +417,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
@@ -440,7 +440,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             if (!status.ok()) {
                 _is_finishing = true;

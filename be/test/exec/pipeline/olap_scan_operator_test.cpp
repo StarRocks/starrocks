@@ -63,7 +63,7 @@ void OlapScanOperatorTest::SetUp() {
     _runtime_state.set_fragment_dict_state(_fragment_dict_state.get());
     _chunk_buffer_limiter = std::make_unique<UnlimitedChunkBufferLimiter>();
 
-    _query_ctx.init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+    _query_ctx.init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
     _runtime_state.set_query_ctx(&_query_ctx, &_query_ctx.query_runtime_state(), _query_ctx.object_pool());
 }
 

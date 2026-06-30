@@ -23,7 +23,7 @@
 #include "base/logging.h"
 #include "base/status.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 namespace {
@@ -36,7 +36,7 @@ void run_jvm_cleanup_in_pthread(std::function<void()> func) {
 
     std::promise<void> promise;
     auto future = promise.get_future();
-    if (!GlobalEnv::GetInstance()->jvm_call_pool()->offer([func = std::move(func), &promise]() mutable {
+    if (!RuntimeEnv::GetInstance()->jvm_call_pool()->offer([func = std::move(func), &promise]() mutable {
             func();
             promise.set_value();
         })) {

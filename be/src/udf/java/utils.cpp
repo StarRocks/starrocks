@@ -26,14 +26,14 @@
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        GlobalEnv::GetInstance()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
+        RuntimeEnv::GetInstance()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
             Status st;
             {
                 MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());

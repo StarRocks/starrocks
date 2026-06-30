@@ -801,13 +801,13 @@ int main(int argc, char** argv) {
     platform_env_options.metrics = process_metrics_registry->root_registry();
     platform_env_options.store_paths = paths;
     CHECK_OK(platform_env->init(std::move(platform_env_options)));
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
-    CHECK_OK(global_env->init(process_metrics_registry->root_registry()));
+    auto* runtime_env = starrocks::RuntimeEnv::GetInstance();
+    CHECK_OK(runtime_env->init(process_metrics_registry->root_registry()));
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = global_env->process_mem_tracker();
-    options.update_mem_tracker = global_env->update_mem_tracker();
+    options.compaction_mem_tracker = runtime_env->process_mem_tracker();
+    options.update_mem_tracker = runtime_env->update_mem_tracker();
     options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
@@ -819,9 +819,9 @@ int main(int argc, char** argv) {
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     auto* process_metrics = process_metrics_registry->root_registry();
-    CHECK_OK(global_env->init_execution_thread_pools(process_metrics));
-    starrocks::pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
-        auto pool = global_env->pipeline_prepare_pool();
+    CHECK_OK(runtime_env->init_execution_thread_pools(process_metrics));
+    starrocks::pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([runtime_env] {
+        auto pool = runtime_env->pipeline_prepare_pool();
         return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
     });
 
@@ -831,7 +831,7 @@ int main(int argc, char** argv) {
         compute_store_paths.emplace_back(path.path);
     }
     starrocks::ComputeEnvOptions compute_env_options;
-    compute_env_options.global_env = global_env;
+    compute_env_options.runtime_env = runtime_env;
     compute_env_options.metrics = process_metrics;
     compute_env_options.store_paths = std::move(compute_store_paths);
     compute_env_options.query_cache_capacity =
@@ -842,13 +842,13 @@ int main(int argc, char** argv) {
     CHECK_OK(compute_env->init(compute_env_options));
 
     exec_env->set_compute_env(compute_env.get());
-    CHECK_OK(global_env->init_lake_thread_pools(process_metrics));
-    CHECK_OK(exec_env->init(process_metrics_registry, global_env));
+    CHECK_OK(runtime_env->init_lake_thread_pools(process_metrics));
+    CHECK_OK(exec_env->init(process_metrics_registry, runtime_env));
     starrocks::StorageEnvOptions storage_env_options;
     storage_env_options.store_path_registry = platform_env->store_path_registry();
-    storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
-    storage_env_options.process_mem_limit = global_env->process_mem_limit();
-    storage_env_options.vector_index_mem_tracker = global_env->vector_index_mem_tracker();
+    storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
     storage_env_options.lake_metadata_cache_limit = starrocks::config::lake_metadata_cache_limit;
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kStarlet;
@@ -873,7 +873,7 @@ int main(int argc, char** argv) {
     exec_env->stop();
     compute_env->stop();
     exec_env->clear_query_contexts();
-    global_env->shutdown_thread_pools();
+    runtime_env->shutdown_thread_pools();
 #ifdef USE_STAROS
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
@@ -882,7 +882,7 @@ int main(int argc, char** argv) {
     exec_env->destroy();
     compute_env->destroy();
     compute_env.reset();
-    global_env->stop();
+    runtime_env->stop();
     platform_env->destroy();
 
     return r;

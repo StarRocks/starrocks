@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 #include <algorithm>
 #include <sstream>
@@ -34,13 +34,13 @@
 
 namespace starrocks {
 
-GlobalEnv::GlobalEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
+RuntimeEnv::RuntimeEnv() : _heartbeat_flags(std::make_unique<HeartbeatFlags>()) {}
 
-GlobalEnv::~GlobalEnv() {
+RuntimeEnv::~RuntimeEnv() {
     _is_init = false;
 }
 
-int64_t GlobalEnv::process_mem_limit() const {
+int64_t RuntimeEnv::process_mem_limit() const {
     return _process_mem_tracker->limit();
 }
 
@@ -110,22 +110,22 @@ void register_hll_registers_allocator() {
 }
 
 MemTracker* process_mem_tracker_provider() {
-    return GlobalEnv::GetInstance()->process_mem_tracker();
+    return RuntimeEnv::GetInstance()->process_mem_tracker();
 }
 
 } // namespace
 
-bool GlobalEnv::_is_init = false;
+bool RuntimeEnv::_is_init = false;
 
-bool GlobalEnv::is_init() {
+bool RuntimeEnv::is_init() {
     return _is_init;
 }
 
-Status GlobalEnv::init(MetricRegistry* metrics) {
+Status RuntimeEnv::init(MetricRegistry* metrics) {
     _heartbeat_flags->update(0);
     RETURN_IF_ERROR(_init_mem_tracker(metrics));
     RETURN_IF_ERROR(global_python_env_registry().init(config::python_envs));
-    CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
+    CurrentThread::set_mem_tracker_source(&RuntimeEnv::is_init, process_mem_tracker_provider);
     if (_diagnose_daemon != nullptr) {
         _diagnose_daemon->stop();
         _diagnose_daemon.reset();
@@ -137,7 +137,7 @@ Status GlobalEnv::init(MetricRegistry* metrics) {
     return Status::OK();
 }
 
-void GlobalEnv::stop() {
+void RuntimeEnv::stop() {
     if (_diagnose_daemon != nullptr) {
         _diagnose_daemon->stop();
         _diagnose_daemon.reset();
@@ -148,15 +148,15 @@ void GlobalEnv::stop() {
     _reset_tracker();
 }
 
-Status GlobalEnv::init_execution_thread_pools(MetricRegistry* metrics) {
+Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
     return _thread_pools.init_execution_thread_pools(metrics);
 }
 
-Status GlobalEnv::init_lake_thread_pools(MetricRegistry* metrics) {
+Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {
     return _thread_pools.init_lake_thread_pools(metrics);
 }
 
-Status GlobalEnv::_init_mem_tracker(MetricRegistry* metrics) {
+Status RuntimeEnv::_init_mem_tracker(MetricRegistry* metrics) {
     MemTracker::init_type_label_map();
 
     int64_t bytes_limit = 0;
@@ -244,7 +244,7 @@ Status GlobalEnv::_init_mem_tracker(MetricRegistry* metrics) {
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
+std::vector<std::shared_ptr<MemTracker>> RuntimeEnv::mem_trackers() const {
     std::vector<std::shared_ptr<MemTracker>> mem_trackers;
     mem_trackers.reserve(_mem_tracker_map.size());
     for (auto& item : _mem_tracker_map) {
@@ -253,7 +253,7 @@ std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
     return mem_trackers;
 }
 
-std::shared_ptr<MemTracker> GlobalEnv::get_mem_tracker_by_type(MemTrackerType type) const {
+std::shared_ptr<MemTracker> RuntimeEnv::get_mem_tracker_by_type(MemTrackerType type) const {
     auto iter = _mem_tracker_map.find(type);
     if (iter != _mem_tracker_map.end()) {
         return iter->second;
@@ -262,19 +262,19 @@ std::shared_ptr<MemTracker> GlobalEnv::get_mem_tracker_by_type(MemTrackerType ty
     }
 }
 
-void GlobalEnv::_reset_tracker() {
+void RuntimeEnv::_reset_tracker() {
     for (auto& iter : _mem_tracker_map) {
         iter.second.reset();
     }
 }
 
-std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
+std::shared_ptr<MemTracker> RuntimeEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
     auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
     _mem_tracker_map[type] = mem_tracker;
     return mem_tracker;
 }
 
-int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+int64_t RuntimeEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
     if (process_mem_limit <= 0) {
         // -1 means no limit
         return -1;

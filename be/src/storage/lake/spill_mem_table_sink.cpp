@@ -22,7 +22,7 @@
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
@@ -45,7 +45,7 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
-                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                      RuntimeEnv::GetInstance()->compaction_mem_tracker());
 }
 
 SpillMemTableSink::~SpillMemTableSink() {

@@ -217,42 +217,42 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&key_cache_info>("key_cache_info");
     }
     {
-        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
-        REG_STATIC_METHOD(GlobalEnv, GetInstance);
+        auto& cls = m.klass<RuntimeEnv>("RuntimeEnv");
+        REG_STATIC_METHOD(RuntimeEnv, GetInstance);
 
         // level 0
-        REG_METHOD(GlobalEnv, process_mem_tracker);
+        REG_METHOD(RuntimeEnv, process_mem_tracker);
 
         // level 1
-        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, load_mem_tracker);
-        REG_METHOD(GlobalEnv, metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, compaction_mem_tracker);
-        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
-        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
-        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
-        REG_METHOD(GlobalEnv, update_mem_tracker);
-        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
-        REG_METHOD(GlobalEnv, clone_mem_tracker);
-        REG_METHOD(GlobalEnv, consistency_mem_tracker);
-        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, datacache_mem_tracker);
+        REG_METHOD(RuntimeEnv, query_pool_mem_tracker);
+        REG_METHOD(RuntimeEnv, load_mem_tracker);
+        REG_METHOD(RuntimeEnv, metadata_mem_tracker);
+        REG_METHOD(RuntimeEnv, compaction_mem_tracker);
+        REG_METHOD(RuntimeEnv, schema_change_mem_tracker);
+        REG_METHOD(RuntimeEnv, page_cache_mem_tracker);
+        REG_METHOD(RuntimeEnv, jit_cache_mem_tracker);
+        REG_METHOD(RuntimeEnv, update_mem_tracker);
+        REG_METHOD(RuntimeEnv, passthrough_mem_tracker);
+        REG_METHOD(RuntimeEnv, clone_mem_tracker);
+        REG_METHOD(RuntimeEnv, consistency_mem_tracker);
+        REG_METHOD(RuntimeEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(RuntimeEnv, datacache_mem_tracker);
 
         // level 2
-        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
+        REG_METHOD(RuntimeEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(RuntimeEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(RuntimeEnv, segment_metadata_mem_tracker);
+        REG_METHOD(RuntimeEnv, column_metadata_mem_tracker);
 
         // level 3
-        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
-        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
-        REG_METHOD(GlobalEnv, builtin_inverted_index_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
-        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, tablet_schema_mem_tracker);
+        REG_METHOD(RuntimeEnv, column_zonemap_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, ordinal_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, bitmap_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, builtin_inverted_index_mem_tracker);
+        REG_METHOD(RuntimeEnv, segment_zonemap_mem_tracker);
+        REG_METHOD(RuntimeEnv, short_key_index_mem_tracker);
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
@@ -623,7 +623,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, RuntimeEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

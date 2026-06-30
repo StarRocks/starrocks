@@ -86,31 +86,31 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()) {
+ExecEnv::ExecEnv() : _runtime_env(RuntimeEnv::GetInstance()) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
 
 void ExecEnv::_refresh_service_contexts() {
-    auto* global_env = _global_env;
-    DCHECK(global_env != nullptr);
-    _execution_services.thread_pool = global_env->thread_pool();
-    _execution_services.streaming_load_thread_pool = global_env->streaming_load_thread_pool();
-    _execution_services.load_rowset_thread_pool = global_env->load_rowset_thread_pool();
-    _execution_services.load_segment_thread_pool = global_env->load_segment_thread_pool();
-    _execution_services.put_combined_txn_log_thread_pool = global_env->put_combined_txn_log_thread_pool();
-    _execution_services.udf_call_pool = global_env->udf_call_pool();
-    _execution_services.pipeline_prepare_pool = global_env->pipeline_prepare_pool();
-    _execution_services.pipeline_sink_io_pool = global_env->pipeline_sink_io_pool();
-    _execution_services.query_rpc_pool = global_env->query_rpc_pool();
-    _execution_services.datacache_rpc_pool = global_env->datacache_rpc_pool();
-    _execution_services.load_rpc_pool = global_env->load_rpc_pool();
-    _execution_services.dictionary_cache_pool = global_env->dictionary_cache_pool();
-    _execution_services.automatic_partition_pool = global_env->automatic_partition_pool();
+    auto* runtime_env = _runtime_env;
+    DCHECK(runtime_env != nullptr);
+    _execution_services.thread_pool = runtime_env->thread_pool();
+    _execution_services.streaming_load_thread_pool = runtime_env->streaming_load_thread_pool();
+    _execution_services.load_rowset_thread_pool = runtime_env->load_rowset_thread_pool();
+    _execution_services.load_segment_thread_pool = runtime_env->load_segment_thread_pool();
+    _execution_services.put_combined_txn_log_thread_pool = runtime_env->put_combined_txn_log_thread_pool();
+    _execution_services.udf_call_pool = runtime_env->udf_call_pool();
+    _execution_services.pipeline_prepare_pool = runtime_env->pipeline_prepare_pool();
+    _execution_services.pipeline_sink_io_pool = runtime_env->pipeline_sink_io_pool();
+    _execution_services.query_rpc_pool = runtime_env->query_rpc_pool();
+    _execution_services.datacache_rpc_pool = runtime_env->datacache_rpc_pool();
+    _execution_services.load_rpc_pool = runtime_env->load_rpc_pool();
+    _execution_services.dictionary_cache_pool = runtime_env->dictionary_cache_pool();
+    _execution_services.automatic_partition_pool = runtime_env->automatic_partition_pool();
     _execution_services.workgroup_manager = workgroup_manager();
     _execution_services.driver_limiter = _compute_env == nullptr ? nullptr : _compute_env->driver_limiter();
     _execution_services.pipeline_timer = _compute_env == nullptr ? nullptr : _compute_env->pipeline_timer();
-    _execution_services.max_executor_threads = global_env->max_executor_threads();
+    _execution_services.max_executor_threads = runtime_env->max_executor_threads();
 
     auto* platform_env = PlatformEnv::GetInstance();
     _platform_services.store_path_registry = platform_env->store_path_registry();
@@ -121,12 +121,12 @@ void ExecEnv::_refresh_service_contexts() {
     _rpc_services.broker_mgr = platform_env->broker_mgr();
     _rpc_services.brpc_stub_cache = platform_env->brpc_stub_cache();
 
-    _lake_services.put_aggregate_metadata_thread_pool = global_env->put_aggregate_metadata_thread_pool();
-    _lake_services.lake_metadata_fetch_thread_pool = global_env->lake_metadata_fetch_thread_pool();
-    _lake_services.lake_vector_index_build_thread_pool = global_env->lake_vector_index_build_thread_pool();
-    _lake_services.pk_index_execution_thread_pool = global_env->pk_index_execution_thread_pool();
-    _lake_services.pk_index_memtable_flush_thread_pool = global_env->pk_index_memtable_flush_thread_pool();
-    _lake_services.lake_partial_update_thread_pool = global_env->lake_partial_update_thread_pool();
+    _lake_services.put_aggregate_metadata_thread_pool = runtime_env->put_aggregate_metadata_thread_pool();
+    _lake_services.lake_metadata_fetch_thread_pool = runtime_env->lake_metadata_fetch_thread_pool();
+    _lake_services.lake_vector_index_build_thread_pool = runtime_env->lake_vector_index_build_thread_pool();
+    _lake_services.pk_index_execution_thread_pool = runtime_env->pk_index_execution_thread_pool();
+    _lake_services.pk_index_memtable_flush_thread_pool = runtime_env->pk_index_memtable_flush_thread_pool();
+    _lake_services.lake_partial_update_thread_pool = runtime_env->lake_partial_update_thread_pool();
 
     _runtime_services.stream_mgr = stream_mgr();
     _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
@@ -147,7 +147,7 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
     _runtime_services.global_spill_manager = _compute_env == nullptr ? nullptr : _compute_env->global_spill_manager();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
-    _runtime_services.diagnose_daemon = global_env->diagnose_daemon();
+    _runtime_services.diagnose_daemon = runtime_env->diagnose_daemon();
 
     _agent_services.agent_server = _agent_server;
 
@@ -179,10 +179,10 @@ void ExecEnv::set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFi
     _refresh_service_contexts();
 }
 
-Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, GlobalEnv* global_env) {
+Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env) {
     DCHECK(process_metrics_registry != nullptr);
-    DCHECK(global_env != nullptr);
-    _global_env = global_env;
+    DCHECK(runtime_env != nullptr);
+    _runtime_env = runtime_env;
     auto* platform_env = PlatformEnv::GetInstance();
     if (platform_env->backend_client_cache() == nullptr || platform_env->frontend_client_cache() == nullptr ||
         platform_env->broker_client_cache() == nullptr || platform_env->broker_mgr() == nullptr ||

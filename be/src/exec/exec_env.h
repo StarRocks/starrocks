@@ -41,8 +41,8 @@
 #include "compute_env/query_cache/cache_manager_fwd.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker_fwd.h"
+#include "runtime/runtime_env.h"
 #include "runtime/service_contexts.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
 // Unnecessary includes will cause compilation very slow.
@@ -93,7 +93,7 @@ class ConnectorSinkSpillExecutor;
 class ExecEnv {
 public:
     // Initial exec environment. must call this to init all
-    Status init(ProcessMetricsRegistry* process_metrics_registry, GlobalEnv* global_env);
+    Status init(ProcessMetricsRegistry* process_metrics_registry, RuntimeEnv* runtime_env);
     void stop();
     void clear_query_contexts();
     void destroy();
@@ -140,7 +140,7 @@ public:
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor() { return _connector_sink_spill_executor; }
 
     void set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFilterQueryLifecycle* query_lifecycle);
-    MemTracker* query_pool_mem_tracker() { return _global_env->query_pool_mem_tracker(); }
+    MemTracker* query_pool_mem_tracker() { return _runtime_env->query_pool_mem_tracker(); }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
 
@@ -150,7 +150,7 @@ public:
 
     ComputeEnv* compute_env() const { return _compute_env; }
 
-    int64_t max_executor_threads() const { return _global_env->max_executor_threads(); }
+    int64_t max_executor_threads() const { return _runtime_env->max_executor_threads(); }
 
     uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
@@ -165,7 +165,7 @@ public:
 private:
     void _refresh_service_contexts();
 
-    GlobalEnv* _global_env = nullptr;
+    RuntimeEnv* _runtime_env = nullptr;
     ProcessMetricsRegistry* _process_metrics_registry = nullptr;
     TableMetricsManager* _table_metrics_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;

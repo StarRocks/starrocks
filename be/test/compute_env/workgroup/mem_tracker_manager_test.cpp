@@ -18,7 +18,7 @@
 
 #include "base/testutil/parallel_test.h"
 #include "compute_env/workgroup/work_group.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::workgroup {
 PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_default_mem_pool) {
@@ -27,7 +27,7 @@ PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_default_mem_pool) {
                                                       WorkGroupType::WG_DEFAULT, WorkGroup::DEFAULT_MEM_POOL)};
 
     const auto tracker{manager.register_workgroup(work_group)};
-    ASSERT_EQ(tracker, GlobalEnv::GetInstance()->query_pool_mem_tracker_shared());
+    ASSERT_EQ(tracker, RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared());
 }
 
 PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_custom_mem_pool) {

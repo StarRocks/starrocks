@@ -38,7 +38,7 @@
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
@@ -47,8 +47,8 @@ ComputeEnv::ComputeEnv() = default;
 ComputeEnv::~ComputeEnv() = default;
 
 Status ComputeEnv::init(const ComputeEnvOptions& options) {
-    if (options.global_env == nullptr) {
-        return Status::InternalError("ComputeEnv GlobalEnv is null");
+    if (options.runtime_env == nullptr) {
+        return Status::InternalError("ComputeEnv RuntimeEnv is null");
     }
     if (!options.driver_queue_factory || !options.driver_executor_factory) {
         return Status::InternalError("ComputeEnv workgroup driver factories must be set");
@@ -57,9 +57,9 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
         return Status::InternalError("ComputeEnv has been initialized");
     }
 
-    const int64_t max_executor_threads = options.global_env->max_executor_threads();
+    const int64_t max_executor_threads = options.runtime_env->max_executor_threads();
     if (max_executor_threads <= 0) {
-        return Status::InternalError("GlobalEnv execution thread pools are not initialized");
+        return Status::InternalError("RuntimeEnv execution thread pools are not initialized");
     }
     const int max_num_pipeline_drivers = max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
 
