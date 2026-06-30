@@ -717,6 +717,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
 
+<EditonSpecificFEItemSharedLakeOther />
+
 ## 其他
 
 ### `agent_task_resend_wait_time_ms`
@@ -1464,5 +1466,3 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在物化视图创建中，是否更倾向于为固定长度的 char/varchar 列使用 string 类型。
 - 引入版本: v4.0.0
-
-<EditonSpecificFEItemSharedLakeOther />
