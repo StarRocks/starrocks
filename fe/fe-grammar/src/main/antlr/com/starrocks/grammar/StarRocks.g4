@@ -537,7 +537,11 @@ rollupDesc
     ;
 
 rollupItem
-    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    : rollupName=identifier identifierList (dupKeys)? (rollupOrderByDesc)? (fromRollup)? properties?
+    ;
+
+rollupOrderByDesc
+    : ORDER BY identifierList
     ;
 
 dupKeys
