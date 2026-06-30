@@ -63,10 +63,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 /**
@@ -93,7 +95,9 @@ public abstract class LakeOnlineRewriteJobBase
     // The shadow index meta id shared across all physical partitions (one new index per table).
     @SerializedName(value = "shadowIndexMetaId")
     protected long shadowIndexMetaId = -1;
-    // The origin (base) index meta id this shadow replaces at flip.
+    // The source/base index meta id this shadow derives its data from. For a replace-flavored job it is also the
+    // index dropped at flip; for an additive (rollup) job the base is kept. The serialized name stays
+    // "originIndexMetaId" for journal compatibility.
     @SerializedName(value = "originIndexMetaId")
     protected long originIndexMetaId = -1;
     // The shadow index name (__starrocks_shadow_xxx).
@@ -225,6 +229,15 @@ public abstract class LakeOnlineRewriteJobBase
      *  partitions, assert each has a reserved commitVersion, and be idempotent (guard a second replay). */
     protected abstract void visualiseShadowIndex(OlapTable table);
 
+    /**
+     * Whether the FINISHED atomic flip ({@link #visualiseShadowIndex}) has NOT yet been applied to the
+     * live catalog. Consulted only on FINISHED-state journal replay so the flip runs at most once (no
+     * double-flip). A replace-flavored job answers "is the origin index meta still present?" (the flip
+     * drops it); an additive (rollup) job answers "is the new index still in SHADOW state?" (the flip
+     * promotes it). Must be true before the flip and false after, for any number of replays.
+     */
+    protected abstract boolean flipNotYetApplied(OlapTable table);
+
     /** Columns whose dependent async MVs are inactivated at the flip (empty if none). */
     protected abstract Set<String> affectedColumnsForMvInactivation(OlapTable table);
 
@@ -264,6 +277,16 @@ public abstract class LakeOnlineRewriteJobBase
                     + "mapping, but logical partition " + logicalParent.getId() + " has "
                     + logicalParent.getSubPartitions().size() + " physical partitions");
         }
+    }
+
+    /**
+     * Explicit target column list for the rewrite INSERT (the columns the SELECT maps into the shadow
+     * index). Default empty = no target list, so the INSERT writes the full base schema (the behavior the
+     * column-set-unchanged range schema change relies on). A subclass that rewrites a COLUMN SUBSET (a
+     * rollup) overrides this to return that subset, so InsertAnalyzer's source/target count check passes.
+     */
+    protected List<String> rewriteTargetColumnNames(OlapTable table) {
+        return Collections.emptyList();
     }
 
     // ---- PENDING ---------------------------------------------------------------------------------
@@ -662,6 +685,7 @@ public abstract class LakeOnlineRewriteJobBase
             }
 
             List<String> selectColumnNames = rewriteSelectColumnNames(table);
+            List<String> targetColumnNames = rewriteTargetColumnNames(table);
 
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -682,7 +706,8 @@ public abstract class LakeOnlineRewriteJobBase
                 // (default: a 1:1 mapping). Extracted to an overridable hook so a sibling job can relax it.
                 validateRewritePartitionShape(logicalParent);
                 String partitionName = logicalParent.getName();
-                plans.add(new RewritePlan(physicalPartitionId, partitionName, watershedVersion, selectColumnNames));
+                plans.add(new RewritePlan(physicalPartitionId, partitionName, watershedVersion,
+                        selectColumnNames, targetColumnNames));
             }
         }
 
@@ -778,8 +803,11 @@ public abstract class LakeOnlineRewriteJobBase
      * {@code finally}.
      */
     private void runPartitionRewrite(String dbName, RewritePlan plan) throws AlterCancelException {
+        String targetCols = plan.targetColumnNames == null || plan.targetColumnNames.isEmpty()
+                ? ""
+                : " (" + plan.targetColumnNames.stream().map(ParseUtil::backquote).collect(Collectors.joining(", ")) + ")";
         String sql = "insert into " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
-                + " partition (" + ParseUtil.backquote(plan.partitionName) + ") select "
+                + " partition (" + ParseUtil.backquote(plan.partitionName) + ")" + targetCols + " select "
                 + String.join(", ", plan.selectColumnNames)
                 + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                 + " partition (" + ParseUtil.backquote(plan.partitionName) + ")";
@@ -882,13 +910,15 @@ public abstract class LakeOnlineRewriteJobBase
         final String partitionName;
         final long watershedVersion;
         final List<String> selectColumnNames;
+        final List<String> targetColumnNames;
 
         RewritePlan(long physicalPartitionId, String partitionName, long watershedVersion,
-                    List<String> selectColumnNames) {
+                    List<String> selectColumnNames, List<String> targetColumnNames) {
             this.physicalPartitionId = physicalPartitionId;
             this.partitionName = partitionName;
             this.watershedVersion = watershedVersion;
             this.selectColumnNames = selectColumnNames;
+            this.targetColumnNames = targetColumnNames;
         }
     }
 
@@ -1492,13 +1522,10 @@ public abstract class LakeOnlineRewriteJobBase
                 // reclaim versions below W on the recovered leader.
                 releaseWatershedGcPinForReservedPartitions(table);
             } else if (jobState == JobState.FINISHED) {
-                // Re-apply the atomic flip from the journaled image: the catalog state (commit versions,
-                // the exposed shadow index, baseIndexMetaId) is what visualiseShadowIndex consumes, all
-                // journaled. onReload first, exactly as the standard lake schema change does. The flip
-                // drops the origin index meta and repoints the base meta at the shadow, so if it has
-                // already been applied (a second replay of the same FINISHED log entry) the origin index
-                // meta is gone; guard on that so the flip runs at most once (no double-flip).
-                if (table.getIndexMetaByMetaId(originIndexMetaId) != null) {
+                // Re-apply the atomic flip from the journaled image. Guard so the flip runs at most once
+                // on a second replay of the same FINISHED log entry (no double-flip); the predicate is
+                // flavor-specific (replace: origin meta gone; add: shadow already promoted).
+                if (flipNotYetApplied(table)) {
                     table.onReload();
                     visualiseShadowIndex(table);
                 }

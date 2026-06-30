@@ -1590,6 +1590,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         }
 
         @Override
+        protected boolean flipNotYetApplied(OlapTable table) {
+            return false;
+        }
+
+        @Override
         protected void validateRewriteConfig() {
         }
     }
