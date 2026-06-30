@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "connector/connector.h"
+#include "connector/hive/scanner/hdfs_scanner_context.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks {
 class JniScanner;
@@ -69,6 +70,7 @@ public:
 private:
     const LanceDataSourceProvider* _provider;
     THdfsScanRange _scan_range;
+    HdfsScannerContext _scanner_ctx;
     std::unique_ptr<JniScanner> _scanner;
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;

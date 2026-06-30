@@ -1291,6 +1291,35 @@
       "remediation": "Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectorlance",
+      "doc_label": "ConnectorLance",
+      "summary": "Lance dataset connector implementation that delegates scan reads to the shared JNI scanner above connector contracts and without registry composition, storage, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/lance/AGENTS.md",
+      "owned_targets": ["ConnectorLance"],
+      "owned_roots": ["be/src/connector/lance"],
+      "allowed_include_prefixes": [
+        "connector/lance/",
+        "connector/hive/scanner/hdfs_scanner_context.h",
+        "connector/hive/scanner/jni_scanner.h",
+        "connector_primitive/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "cache/", "agent/", "script/", "tools/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorHive", "ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorLance limited to Lance read-side scan logic that delegates to the shared JNI scanner; keep registration in ModuleBootstrap and avoid registry, storage, service, or full Exec dependencies."
+    },
+    {
       "id": "modulebootstrap",
       "doc_label": "ModuleBootstrap",
       "summary": "Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and connector registration.",
