@@ -22,10 +22,12 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
@@ -38,9 +40,23 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/service_contexts.h"
 #include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+// The pipeline timer used to wake a throttled scan driver when its TopN back-pressure window ends.
+// Mirrors wait_operator.cpp: the timer lives on the per-query ExecutionEnv, reached through the
+// runtime state's query-execution services (FragmentContext exposes no direct accessor).
+PipelineTimer* scan_pipeline_timer(RuntimeState* state) {
+    const auto* services = state == nullptr ? nullptr : state->query_execution_services();
+    if (services == nullptr || services->execution == nullptr) {
+        return nullptr;
+    }
+    return services->execution->pipeline_timer;
+}
+} // namespace
 
 // ========== ScanOperator ==========
 
@@ -99,16 +115,40 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
-    if (_scan_node->is_enable_topn_filter_back_pressure()) {
+    const bool fe_enable_back_pressure = _scan_node->is_enable_topn_filter_back_pressure();
+    // FE suppresses back-pressure for this scan when the TopN RF only reaches it across a
+    // non-aggregation deterministic pipeline breaker (blocking sort, analytic/window): the RF can't
+    // arrive while the scan is still reading, so throttling would only stall it.
+    if ((fe_enable_back_pressure || _self_enable_topn_back_pressure(state)) &&
+        !_scan_node->is_topn_filter_back_pressure_disabled()) {
         if (auto* runtime_filters = get_factory()->get_runtime_bloom_filters(); runtime_filters != nullptr) {
             auto has_topn_filters =
                     std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
                                 [](const auto& e) { return e.second->is_stream_build_filter(); });
             if (has_topn_filters) {
-                _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
-                        0.1, _scan_node->get_back_pressure_throttle_time_upper_bound(),
-                        _scan_node->get_back_pressure_max_rounds(), _scan_node->get_back_pressure_throttle_time(),
-                        _scan_node->get_back_pressure_num_rows());
+                if (fe_enable_back_pressure) {
+                    // FE-driven path: honor the per-scan-node throttle parameters sent over thrift.
+                    _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
+                            0.1, _scan_node->get_back_pressure_throttle_time_upper_bound(),
+                            _scan_node->get_back_pressure_max_rounds(), _scan_node->get_back_pressure_throttle_time(),
+                            _scan_node->get_back_pressure_num_rows());
+                } else {
+                    // Lake/connector self-enabled path: throttle parameters are session-tunable via
+                    // TQueryOptions (defaults match the tuned values).
+                    const auto& opts = state->query_options();
+                    const int64_t upper_bound_ms = opts.__isset.topn_back_pressure_throttle_time_upper_bound_ms
+                                                           ? opts.topn_back_pressure_throttle_time_upper_bound_ms
+                                                           : 100;
+                    const int max_rounds =
+                            opts.__isset.topn_back_pressure_max_rounds ? opts.topn_back_pressure_max_rounds : 8;
+                    const int64_t throttle_time_ms = opts.__isset.topn_back_pressure_throttle_time_ms
+                                                             ? opts.topn_back_pressure_throttle_time_ms
+                                                             : 8;
+                    const int64_t num_rows =
+                            opts.__isset.topn_back_pressure_num_rows ? opts.topn_back_pressure_num_rows : 1024;
+                    _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
+                            0.1, upper_bound_ms, max_rounds, throttle_time_ms, static_cast<size_t>(num_rows));
+                }
             }
         }
     }
@@ -139,8 +179,66 @@ void ScanOperator::close(RuntimeState* state) {
 
     _merge_chunk_source_profiles(state);
 
+    if (_bp_throttle_timer != nullptr) {
+        if (auto* timer = scan_pipeline_timer(state); timer != nullptr) {
+            _bp_throttle_timer->unschedule_and_join(timer);
+        }
+        _bp_throttle_timer.reset();
+    }
+
     do_close(state);
     Operator::close(state);
+}
+
+void ScanOperator::_arm_back_pressure_throttle_timer() const {
+    auto* factory = get_factory();
+    auto* state = factory != nullptr ? factory->runtime_state() : nullptr;
+    if (state == nullptr || !state->enable_event_scheduler()) {
+        return;
+    }
+    const int64_t deadline = _topn_filter_back_pressure->current_throttle_deadline();
+    if (deadline <= 0 || deadline == _bp_throttle_timer_deadline) {
+        // Not throttling, or a timer is already armed for this window.
+        return;
+    }
+    auto* timer = scan_pipeline_timer(state);
+    if (timer == nullptr) {
+        return;
+    }
+    if (_bp_throttle_timer != nullptr) {
+        _bp_throttle_timer->unschedule_and_join(timer);
+    }
+    const int64_t now_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                    .count();
+    const int64_t delay_ns = std::max<int64_t>(0, deadline - now_ms) * 1000000;
+    auto timer_task = std::make_shared<RFScanWaitTimeout>(false);
+    timer_task->add_observer(state, observer());
+    const timespec abstime = butil::nanoseconds_from_now(delay_ns);
+    WARN_IF_ERROR(timer->schedule(timer_task.get(), abstime), "schedule topn back-pressure throttle timer");
+    _bp_throttle_timer = std::move(timer_task);
+    _bp_throttle_timer_deadline = deadline;
+}
+
+bool ScanOperator::_topn_runtime_filter_arrived() const {
+    auto* runtime_filters = get_factory()->get_runtime_bloom_filters();
+    if (runtime_filters == nullptr) {
+        return false;
+    }
+    for (const auto& [_, desc] : runtime_filters->descriptors()) {
+        if (desc->is_stream_build_filter() && desc->runtime_filter(_runtime_filter_probe_sequence) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ScanOperator::_self_enable_topn_back_pressure(RuntimeState* state) const {
+    // Self-enable TopN back-pressure for any scan that a TopN RF targets, even when the FE
+    // topn_filter_back_pressure_mode is 0. Gated by the enable_topn_filter_back_pressure session
+    // variable (default true); applies to both shared-nothing olap and shared-data lake/connector.
+    const auto* opts = state == nullptr ? nullptr : &state->query_options();
+    return opts == nullptr || !opts->__isset.enable_topn_filter_back_pressure || opts->enable_topn_filter_back_pressure;
 }
 
 size_t ScanOperator::_buffer_unplug_threshold() const {
@@ -162,7 +260,11 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
+    if (_topn_filter_back_pressure != nullptr && _topn_runtime_filter_arrived()) {
+        _topn_filter_back_pressure->notify_rf_arrived();
+    }
     if (!_morsel_queue->empty() && _topn_filter_back_pressure && _topn_filter_back_pressure->should_throttle()) {
+        _arm_back_pressure_throttle_timer();
         return false;
     }
 
@@ -338,7 +440,27 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // because we want to update state based on raw data.
     int total_cnt = available_pickup_morsel_count();
 
-    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
+    // TopN-RF back-pressure: until the runtime filter actually arrives at the scan, clamp
+    // read-ahead to a small number of IO tasks regardless of io_tasks_per_scan_operator. A burst
+    // of concurrent readers overshoots the back-pressure row budget (which is not concurrency-aware)
+    // and floods the downstream aggregation before the RF can prune. The clamp count is tunable via
+    // the topn_filter_back_pressure_io_tasks session variable (default 1; <=0 disables the clamp).
+    // Full DOP resumes once the RF arrives, OR once back-pressure gives up (PASS_THROUGH) after
+    // exhausting its round/time/row budget without the RF ever arriving -- otherwise a query whose
+    // TopN RF is never published (e.g. an aggregation whose group count stays below the limit) would
+    // stay clamped to a single IO task for its entire lifetime.
+    int effective_io_tasks = _io_tasks_per_scan_operator;
+    if (_topn_filter_back_pressure != nullptr && !_topn_runtime_filter_arrived() &&
+        !_topn_filter_back_pressure->is_pass_through()) {
+        const auto& opts = state->query_options();
+        const int clamp = opts.__isset.topn_filter_back_pressure_io_tasks ? opts.topn_filter_back_pressure_io_tasks : 1;
+        if (clamp > 0) {
+            effective_io_tasks = std::min(effective_io_tasks, clamp);
+        }
+    }
+    total_cnt = std::min(total_cnt, effective_io_tasks);
+
+    if (_num_running_io_tasks >= effective_io_tasks) {
         return Status::OK();
     }
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {

@@ -1112,6 +1112,22 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v4.1.0
 
+### enable_topn_filter_back_pressure
+
+* **Description**: Whether a scan self-enables TopN runtime-filter (RF) back-pressure. When a TopN/stream-build RF (from an `ORDER BY ... LIMIT` query, or an aggregate runtime in-filter) targets a scan, back-pressure clamps the scan's read-ahead to a small number of IO tasks until the RF actually arrives. This prevents a burst of concurrent readers from overshooting the (non-concurrency-aware) row budget and flooding the downstream aggregation before the RF can prune. Applies to both shared-nothing (OLAP) and shared-data (lake/connector) scans. When set to `false`, a scan only back-pressures if the FE `topn_filter_back_pressure_mode` is enabled.
+* **Default**: true
+* **Introduced in**: v4.1
+
+The following variables tune the back-pressure behavior and only take effect when `enable_topn_filter_back_pressure` is `true`:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | Read-ahead IO-task cap applied while the TopN RF is still pending. Set it to `<= 0` to disable the clamp (the scan uses the full `io_tasks_per_scan_operator`). |
+| `topn_back_pressure_num_rows` | 1024 | Number of rows a scan may read in the first throttle round before back-pressure starts throttling. The allowance doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_ms` | 8 | Duration (in milliseconds) of the first throttle window. The window doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | Upper bound (in milliseconds) on the total time back-pressure throttles a scan before giving up and letting it proceed at full read-ahead, even if the RF never arrived. |
+| `topn_back_pressure_max_rounds` | 8 | Maximum number of throttle rounds before back-pressure gives up. |
+
 ### enable_topn_runtime_filter
 
 * **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.

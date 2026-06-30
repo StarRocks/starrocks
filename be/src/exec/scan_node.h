@@ -147,6 +147,10 @@ public:
     void set_back_pressure_throttle_time_upper_bound(int64_t value) {
         this->_back_pressure_throttle_time_upper_bound = value;
     }
+    // True when FE detected a non-aggregation deterministic pipeline breaker between the TopN RF
+    // builder and this scan: suppress TopN back-pressure (incl. the lake/connector self-enable path).
+    bool is_topn_filter_back_pressure_disabled() const { return this->_topn_filter_back_pressure_disabled; }
+    void set_topn_filter_back_pressure_disabled(bool value) { this->_topn_filter_back_pressure_disabled = value; }
 
     void set_heavy_expr_slot_ids(std::vector<SlotId>&& slot_ids) { _heavy_expr_slot_ids = std::move(slot_ids); }
 
@@ -185,10 +189,13 @@ protected:
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _enable_topn_filter_back_pressure = false;
+    // Defaults for the FE-driven olap path (upstream values). The lake/connector self-enabled path
+    // takes its throttle parameters from session variables (TQueryOptions) instead, see ScanOperator.
     int _back_pressure_max_rounds = 5;
     size_t _back_pressure_num_rows = 10240;
     int64_t _back_pressure_throttle_time = 500;
     int64_t _back_pressure_throttle_time_upper_bound = 5000;
+    bool _topn_filter_back_pressure_disabled = false;
 
     std::vector<SlotId> _heavy_expr_slot_ids;
     std::vector<ExprContext*> _heavy_expr_ctxs;

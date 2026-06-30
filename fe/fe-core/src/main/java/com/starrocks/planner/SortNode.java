@@ -400,6 +400,20 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     }
 
     @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        // A full (non-TopN) blocking sort is a deterministic pipeline breaker: a TopN runtime filter
+        // pushed through it cannot reach a scan below in time, so mark the path so the scan skips
+        // back-pressure. (TopN sorts return false in canPushDownRuntimeFilter and never push below.)
+        context.enterNonAggPipelineBreaker();
+        try {
+            return super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
+        } finally {
+            context.exitNonAggPipelineBreaker();
+        }
+    }
+
+    @Override
     public boolean extractConjunctsToNormalize(FragmentNormalizer normalizer) {
         if (!useTopN) {
             return super.extractConjunctsToNormalize(normalizer);
