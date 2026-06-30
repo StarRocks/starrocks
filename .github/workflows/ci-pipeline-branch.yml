@@ -255,7 +255,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        linux: [centos7, ubuntu]
+        linux: [centos7, ubuntu, rocky9]
     steps:
       - name: clean
         run: |
