@@ -129,7 +129,7 @@ public class DeltaLakeMetadataTest {
         ColumnVector[] addFileCols = new ColumnVector[2];
         addFileCols[0] = new DefaultBinaryVector(BasePrimitiveType.createPrimitive("string"),
                 3, new byte[][] {new byte[] {'0', '0', '0', '0'},
-                new byte[] {'0', '0', '0', '1'}, new byte[] {'0', '0', '0', '2'}});
+                    new byte[] {'0', '0', '0', '1'}, new byte[] {'0', '0', '0', '2'}});
 
         int[] offsets = new int[] {0, 1, 2, 3};
         DataType mapType = new MapType(StringType.STRING, StringType.STRING, true);
@@ -138,7 +138,7 @@ public class DeltaLakeMetadataTest {
                         3, new byte[][] {new byte[] {'t', 's'}, new byte[] {'t', 's'}, new byte[] {'t', 's'}}),
                 new DefaultBinaryVector(BasePrimitiveType.createPrimitive("string"),
                         3, new byte[][] {new byte[] {'1', '9', '9', '9'}, new byte[] {'2', '0', '0', '0'},
-                        new byte[] {'2', '0', '0', '1'}})
+                            new byte[] {'2', '0', '0', '1'}})
         );
         // addFile schema, here we only care about the partitionValues, so not use all fields
         StructType addFileSchema = new StructType(Lists.newArrayList(
