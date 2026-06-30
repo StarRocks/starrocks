@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -93,6 +94,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -139,9 +141,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -727,6 +731,8 @@ public class AnalyzerUtils {
 
     private static class TableCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Table> tables;
+        private final Deque<Set<String>> cteNameScopes = new ArrayDeque<>();
+        private final Deque<Boolean> recursiveCteScopes = new ArrayDeque<>();
 
         public TableCollector() {
             this.tables = Maps.newHashMap();
@@ -741,6 +747,36 @@ public class AnalyzerUtils {
         @Override
         public Void visitQueryStatement(QueryStatement statement, Void context) {
             return visit(statement.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSelect(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(node.isHasRecursiveCTE());
+            try {
+                return super.visitSelect(node, context);
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSetOp(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(node.isHasRecursiveCTE());
+            try {
+                return super.visitSetOp(node, context);
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
         }
 
         // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -771,9 +807,84 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (isUnresolvedCteReference(node)) {
+                return null;
+            }
             Table table = node.getTable();
             tables.put(node.getName(), table);
             return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            if (node.isRecursive() && !node.isAnchor()) {
+                // An analyzed recursive member consumes the current CTE through a non-anchor CTERelation.
+                // Do not expand its definition again, or the collector will revisit the same recursive member.
+                return null;
+            }
+            if (cteNameScopes.isEmpty()) {
+                return super.visitCTE(node, context);
+            }
+            if (isInRecursiveCteScope() && node.getCteQueryStatement().getQueryRelation()
+                    instanceof UnionRelation unionRelation) {
+                visitRecursiveCteDefinition(node, unionRelation, context);
+            } else {
+                visit(node.getCteQueryStatement(), context);
+            }
+            addCteName(cteNameScopes.peek(), node);
+            return null;
+        }
+
+        private void visitRecursiveCteDefinition(CTERelation cteRelation, SetOperationRelation setOperationRelation,
+                                                 Void context) {
+            List<QueryRelation> relations = setOperationRelation.getRelations();
+            if (relations.isEmpty()) {
+                return;
+            }
+            // Mirror QueryAnalyzer.tryProcessRecursiveCte: the first set-op child is the anchor.
+            // The current CTE name is not visible there, so a same-named table must still be collected.
+            visit(relations.get(0), context);
+
+            // Only recursive members can see the current CTE name. Keep that visibility in a temporary
+            // scope so unresolved self-references are skipped without hiding anchor base tables.
+            Set<String> recursiveNames = new HashSet<>();
+            addCteName(recursiveNames, cteRelation);
+            cteNameScopes.push(recursiveNames);
+            try {
+                for (int i = 1; i < relations.size(); i++) {
+                    visit(relations.get(i), context);
+                }
+            } finally {
+                cteNameScopes.pop();
+            }
+        }
+
+        private boolean isInRecursiveCteScope() {
+            return !recursiveCteScopes.isEmpty() && recursiveCteScopes.peek();
+        }
+
+        private void addCteName(Set<String> names, CTERelation cteRelation) {
+            if (!Strings.isNullOrEmpty(cteRelation.getName())) {
+                names.add(cteRelation.getName());
+            }
+        }
+
+        private boolean isUnresolvedCteReference(TableRelation node) {
+            if (node.getTable() != null || cteNameScopes.isEmpty()) {
+                return false;
+            }
+            TableName tableName = node.getName();
+            if (tableName == null || !Strings.isNullOrEmpty(tableName.getCatalog()) ||
+                    !Strings.isNullOrEmpty(tableName.getDb()) || Strings.isNullOrEmpty(tableName.getTbl())) {
+                return false;
+            }
+            String tableNameWithoutDb = tableName.getTbl();
+            for (Set<String> cteNames : cteNameScopes) {
+                if (cteNames.contains(tableNameWithoutDb)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
