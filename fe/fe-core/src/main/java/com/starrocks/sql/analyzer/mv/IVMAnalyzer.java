@@ -128,6 +128,9 @@ public class IVMAnalyzer {
                     // approx_count_distinct / ndv: HLL state union is well-defined.
                     .put(FunctionSet.APPROX_COUNT_DISTINCT,  args -> args.length == 1)
                     .put(FunctionSet.NDV,                    args -> args.length == 1)
+                    // bitmap_agg: exact distinct count. bitmap_union(to_bitmap(col)) normalizes to this;
+                    // BITMAP state unions associatively, so the delta merge is well-defined.
+                    .put(FunctionSet.BITMAP_AGG,             args -> args.length == 1)
                     .build();
 
     private static boolean isFixedOrFloat(Type t) {
