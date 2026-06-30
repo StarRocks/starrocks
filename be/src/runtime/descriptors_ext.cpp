@@ -434,6 +434,18 @@ std::string OlapTableDescriptor::debug_string() const {
     return out.str();
 }
 
+LanceTableDescriptor::LanceTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr),
+          _lance_dataset_uri(tdesc.__isset.lanceTable && tdesc.lanceTable.__isset.lance_dataset_uri
+                                     ? std::pmr::string(tdesc.lanceTable.lance_dataset_uri, mr)
+                                     : std::pmr::string(mr)) {}
+
+std::string LanceTableDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "LanceTable(" << TableDescriptor::debug_string() << ", uri=" << _lance_dataset_uri << ")";
+    return out.str();
+}
+
 SchemaTableDescriptor::SchemaTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
         : TableDescriptor(tdesc, mr), _schema_table_type(tdesc.schemaTable.tableType) {}
 SchemaTableDescriptor::~SchemaTableDescriptor() = default;
