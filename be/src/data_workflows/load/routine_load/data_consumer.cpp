@@ -45,11 +45,11 @@
 #include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "exec/exec_env.h"
 #include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "platform/platform_env.h"
 #include "platform/small_file_mgr.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

@@ -22,11 +22,11 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "gutil/casts.h"
-#include "runtime/exec_env.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 

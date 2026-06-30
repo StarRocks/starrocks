@@ -19,6 +19,7 @@
 #include "base/uid_util.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/driver_observer.h"
 #include "exec/pipeline/query_context.h"
@@ -30,7 +31,6 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

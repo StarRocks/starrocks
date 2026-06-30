@@ -96,7 +96,7 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore ColumnSortCore)
+target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore)
 
 set(EXPR_FILES
   agg/combinator/agg_state_utils.cpp
@@ -144,5 +144,5 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv RuntimeEnv)
+target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv Runtime)
 target_link_libraries(Exprs PRIVATE Platform StoragePrimitive)

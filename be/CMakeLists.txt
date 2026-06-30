@@ -570,8 +570,7 @@ set(STARROCKS_LINK_LIBS
     StoragePrimitive
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
-    RuntimeEnv
-    RuntimeCore
+    Runtime
     Platform
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>

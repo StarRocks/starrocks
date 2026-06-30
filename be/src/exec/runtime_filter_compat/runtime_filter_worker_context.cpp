@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_worker_context.h"
+#include "exec/runtime_filter_compat/runtime_filter_worker_context.h"
 
 #include "exec/runtime/query_context.h"
 #include "exec/runtime/query_context_manager.h"

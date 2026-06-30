@@ -39,12 +39,12 @@
 #include "base/logging.h"
 #include "common/config_ingest_fwd.h"
 #include "common/system/cpu_info.h"
+#include "exec/exec_env.h"
+#include "exec/stream_load/stream_load_executor.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "orchestration/stream_load_orchestrator.h"
-#include "runtime/exec_env.h"
-#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 

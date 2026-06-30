@@ -32,6 +32,7 @@
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
 #include "common/util/thrift_util.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -39,7 +40,6 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "orchestration/fragment_executor.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "types/logical_type.h"
 
 namespace starrocks::orchestration {

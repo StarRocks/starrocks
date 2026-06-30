@@ -49,7 +49,7 @@ ADD_BE_LIB(ExecPrimitive
 
 target_link_libraries(ExecPrimitive PUBLIC
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -70,7 +70,7 @@ ADD_BE_LIB(ExecSchemaScannerCore
 
 target_link_libraries(ExecSchemaScannerCore PUBLIC
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -99,7 +99,7 @@ ADD_BE_LIB(ExecSchemaScanners
 
 target_link_libraries(ExecSchemaScanners PUBLIC
     ExecSchemaScannerCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -127,7 +127,7 @@ ADD_BE_LIB(ExecJoinCore
 target_link_libraries(ExecJoinCore PUBLIC
     ComputeEnv
     ExprCore
-    RuntimeCore
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore
@@ -471,6 +471,25 @@ set(EXEC_DATA_SINK_FILES
     data_sinks/variable_result_writer.cpp
 )
 
+set(EXEC_RUNTIME_COMPAT_FILES
+    lookup_stream_mgr.cpp
+    exec_env.cpp
+    jdbc/jdbc_driver_manager.cpp
+    pipeline/pipeline_fragment_reporter.cpp
+    runtime_compat/runtime_state_helper.cpp
+    stream_load/transaction_mgr.cpp
+    stream_load/stream_load_executor.cpp
+    batch_write/isomorphic_batch_write.cpp
+    batch_write/batch_write_mgr.cpp
+    batch_write/batch_write_util.cpp
+    batch_write/txn_state_cache.cpp
+    runtime_filter_compat/runtime_filter_merger.cpp
+    runtime_filter_compat/runtime_filter_port.cpp
+    runtime_filter_compat/runtime_filter_rpc.cpp
+    runtime_filter_compat/runtime_filter_worker_context.cpp
+    runtime_filter_compat/runtime_filter_serde.cpp
+)
+
 # `pipeline/aggregate/aggregate_operators.cpp` intentionally includes the
 # aggregate operator implementation .cpp files to control template
 # instantiation. Do not add those implementation files separately here.
@@ -517,8 +536,7 @@ target_link_libraries(ExecRuntime PUBLIC
     ExecPrimitive
     StoragePrimitive
     ExprCore
-    RuntimeEnv
-    RuntimeCore
+    Runtime
     Platform
     FSCore
     IO
@@ -535,10 +553,11 @@ target_link_libraries(ExecRuntime PUBLIC
 ADD_BE_LIB(Exec
     ${EXEC_NON_PIPELINE_FILES}
     ${EXEC_DATA_SINK_FILES}
+    ${EXEC_RUNTIME_COMPAT_FILES}
     $<TARGET_OBJECTS:pipeline_runtime_compat_exec_objs>
     $<TARGET_OBJECTS:pipeline_operators_batch_exec_objs>
     $<TARGET_OBJECTS:pipeline_extensions_exec_objs>
 )
 
-target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatCore Platform)
+target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
+target_link_libraries(Exec PRIVATE FormatCore Platform ConnectorBuiltinRegistry)

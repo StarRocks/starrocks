@@ -39,6 +39,7 @@
 #include "common/runtime_profile.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_parallel_merge_source_operator.h"
@@ -49,7 +50,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

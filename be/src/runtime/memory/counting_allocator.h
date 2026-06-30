@@ -14,13 +14,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 
 #include "common/compiler_util.h"
+#include "common/logging.h"
 #include "common/memory/allocator.h"
 #include "common/memory/mem_hook_allocator.h"
-#include "exprs/expr_context.h"
 
 namespace starrocks {
 

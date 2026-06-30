@@ -24,9 +24,9 @@
 #include "compute_env/workgroup/scan_task.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

@@ -34,6 +34,7 @@
 #include "common/util/thrift_util.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -55,7 +56,6 @@
 #include "pipeline_test_base.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 

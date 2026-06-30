@@ -32,12 +32,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 #include <algorithm>
 #include <memory>
 
-#include "agent/agent_server.h"
 #include "base/time/time.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/logging.h"
@@ -53,18 +52,18 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
+#include "exec/batch_write/batch_write_mgr.h"
+#include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
+#include "exec/stream_load/stream_load_executor.h"
+#include "exec/stream_load/transaction_mgr.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/transaction_mgr.h"
 #include "udf/python/env.h"
 
 #ifdef STARROCKS_JIT_ENABLE

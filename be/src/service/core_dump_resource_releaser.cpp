@@ -26,9 +26,9 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

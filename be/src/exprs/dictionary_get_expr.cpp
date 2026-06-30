@@ -21,7 +21,7 @@
 #include "column/column_helper.h"
 #include "column/struct_column.h"
 #include "compute_env/compute_env.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

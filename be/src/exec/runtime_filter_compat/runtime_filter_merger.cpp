@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/runtime_filter_merger.h"
+#include "exec/runtime_filter_compat/runtime_filter_merger.h"
 
 #include <exec/pipeline/hashjoin/hash_joiner_fwd.h>
 
@@ -22,13 +22,13 @@
 #include "common/config_network_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/system/backend_options.h"
+#include "exec/runtime_filter_compat/runtime_filter_rpc.h"
+#include "exec/runtime_filter_compat/runtime_filter_worker_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_filter_builder.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_factory.h"
-#include "runtime/runtime_filter_rpc.h"
-#include "runtime/runtime_filter_worker_context.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks {

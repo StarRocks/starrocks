@@ -25,6 +25,7 @@
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
@@ -39,7 +40,6 @@
 #include "exprs/expr_executor.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/service_contexts.h"
 #include "runtime/time_guard.h"
 

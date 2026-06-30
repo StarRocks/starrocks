@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
@@ -33,7 +34,6 @@
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

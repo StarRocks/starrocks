@@ -39,7 +39,7 @@ set(RUNTIME_CORE_TEST_FILES
 )
 
 set(RUNTIME_CORE_TEST_LINK_LIBS
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
@@ -63,8 +63,7 @@ add_executable(runtime_core_test $<TARGET_OBJECTS:starrocks_runtime_core_test_ob
 target_link_libraries(runtime_core_test ${RUNTIME_CORE_TEST_LINK_LIBS} gtest_main)
 
 set(RUNTIME_ENV_TEST_LINK_LIBS
-    RuntimeEnv
-    RuntimeCore
+    Runtime
     Types
     Common
     Base

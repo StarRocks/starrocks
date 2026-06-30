@@ -27,10 +27,10 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "compute_env/result/result_queue_mgr.h"
+#include "exec/exec_env.h"
 #include "gutil/strings/substitute.h"
 #include "orchestration/external_scan_context_mgr.h"
 #include "orchestration/query_orchestrator.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::orchestration {
 

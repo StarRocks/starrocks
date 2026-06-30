@@ -22,12 +22,12 @@
 
 #include "common/logging.h"
 #include "compute_env/query_cache/cache_manager.h"
+#include "exec/exec_env.h"
 #include "gutil/strings/substitute.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

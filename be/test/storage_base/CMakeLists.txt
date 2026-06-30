@@ -30,7 +30,7 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     StoragePrimitive
     FSCore
     IO
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types
