@@ -207,8 +207,7 @@ public class MergeTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());

@@ -257,8 +257,6 @@ public class SplitTabletJobFactoryMultiTabletTest {
                 "factory must not invoke StarOSAgent.createShardsForSplit (parity with forExternalBoundaries)");
         Assertions.assertEquals(TabletReshardJob.JobState.PENDING, job.getJobState(),
                 "multi-tablet factory must return a PENDING job (no shard allocation yet)");
-        Assertions.assertTrue(((SplitTabletJob) job).isSpreadNewShards(),
-                "multi-tablet pre-split must spread new shards across compute nodes");
     }
 
     @Test

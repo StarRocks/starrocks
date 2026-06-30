@@ -37,7 +37,6 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.SplitTabletClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -201,9 +200,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
         // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
-        // The triggering load's warehouse is applied by the caller via SplitTabletJob#setLoadWarehouseId.
-        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
-                true /* spreadNewShards */, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        // The triggering load's warehouse is applied by the caller via TabletReshardJob#setWarehouseId.
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
     }
 
     /**
@@ -355,9 +353,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         // Pre-split: spread the new shards across compute nodes rather than PACKing them onto the
         // (empty) source tablet's single worker, so the load that follows parallelizes across BEs.
-        // The triggering load's warehouse is applied by the caller via SplitTabletJob#setLoadWarehouseId.
-        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions,
-                true /* spreadNewShards */, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        // The triggering load's warehouse is applied by the caller via TabletReshardJob#setWarehouseId.
+        return new SplitTabletJob(jobId, db.getId(), table.getId(), reshardingPhysicalPartitions);
     }
 
     /**

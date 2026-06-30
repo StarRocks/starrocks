@@ -14,7 +14,6 @@
 
 package com.starrocks.alter.reshard;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.PlacementPolicy;
@@ -92,59 +91,16 @@ public class SplitTabletJob extends TabletReshardJob {
     @SerializedName(value = "endTransactionId")
     protected long endTransactionId;
 
-    // When true, new shards are spread across compute nodes instead of being PACKed onto the
-    // source tablet's worker. Set only by the pre-split entry points (the source tablet is empty,
-    // so there is no warm cache to reuse and PACK would funnel the whole load onto one node). An
-    // online split leaves this false to keep its data-locality PACK. Persisted so a leader-switch
-    // re-run of createShardsOnStarOS uses the same placement.
-    @SerializedName(value = "spreadNewShards")
-    protected final boolean spreadNewShards;
-
-    // The warehouse the triggering load runs in. When spreading (the WITH_SHARD pin is dropped), this
-    // is the only thing that keeps the new shards in the load's warehouse worker group instead of the
-    // default one. Set by the pre-split caller right after construction via setLoadWarehouseId, before
-    // the job is journaled; persisted so a leader-switch re-run of createShardsOnStarOS targets the same
-    // warehouse. Defaults to DEFAULT_WAREHOUSE_ID for online split (where it is unused).
-    @SerializedName(value = "loadWarehouseId")
-    protected long loadWarehouseId;
-
     public SplitTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        this(jobId, dbId, tableId, reshardingPhysicalPartitions, false, WarehouseManager.DEFAULT_WAREHOUSE_ID);
-    }
-
-    public SplitTabletJob(long jobId, long dbId, long tableId,
-            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions,
-            boolean spreadNewShards, long loadWarehouseId) {
         super(jobId, JobType.SPLIT_TABLET);
         this.dbId = dbId;
         this.tableId = tableId;
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
-        this.spreadNewShards = spreadNewShards;
-        this.loadWarehouseId = loadWarehouseId;
     }
 
     public long getDbId() {
         return dbId;
-    }
-
-    @VisibleForTesting
-    public boolean isSpreadNewShards() {
-        return spreadNewShards;
-    }
-
-    @VisibleForTesting
-    public long getLoadWarehouseId() {
-        return loadWarehouseId;
-    }
-
-    /**
-     * Set the triggering load's warehouse for a pre-split job. Called by the pre-split caller right
-     * after the factory builds the job and before it is journaled, so the spread shards are scheduled
-     * in the load's warehouse rather than the default one.
-     */
-    public void setLoadWarehouseId(long loadWarehouseId) {
-        this.loadWarehouseId = loadWarehouseId;
     }
 
     public long getTableId() {
@@ -263,8 +219,7 @@ public class SplitTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -941,13 +896,15 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-        // Pre-split drops the WITH_SHARD pin, so scheduleToWorkerGroup becomes the only placement hint
-        // left; schedule to the triggering load's warehouse so the spread shards stay where the load
-        // runs instead of defaulting to the default worker group. An online split keeps DEFAULT_RESOURCE:
-        // its WITH_SHARD pin already co-locates each new shard with the source shard (and hence the
-        // source's warehouse), so the schedule target does not change placement.
+        // Pre-split splits a freshly created EMPTY tablet — there is no warm cache to preserve, so
+        // spread the new shards (drop the WITH_SHARD pin) and schedule them to the triggering load's
+        // warehouse so they stay where the load runs instead of the default worker group. An online
+        // split (non-empty source) keeps the WITH_SHARD pin to reuse the source worker's warm cache,
+        // and DEFAULT_RESOURCE since its placement is pinned anyway. Emptiness is the same signal the
+        // pre-split eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
+        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
         ComputeResource computeResource = spreadNewShards
-                ? GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(loadWarehouseId)
+                ? resolveComputeResource(table.getId())
                 : WarehouseManager.DEFAULT_RESOURCE;
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
