@@ -346,8 +346,7 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
     auto overlimit_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*overlimit_binary);
     ASSERT_FALSE(overlimit_status.ok());
     ASSERT_TRUE(overlimit_status.is_capacity_limit_exceeded()) << overlimit_status;
-    ASSERT_NE(std::string::npos, std::string(overlimit_status.message()).find("byte payload size"))
-            << overlimit_status;
+    ASSERT_NE(std::string::npos, std::string(overlimit_status.message()).find("byte payload size")) << overlimit_status;
 
     auto fixed = Int32Column::create();
     int32_t value = 1;

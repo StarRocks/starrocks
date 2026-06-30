@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <exception>
 #include <memory>
 #include <sstream>
 #include <type_traits>
-
-#include <fmt/format.h>
 
 #include "base/string/slice.h"
 #include "column/adaptive_offsets.h"
@@ -143,10 +143,10 @@ public:
 
             const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
             if (offset_bytes_size >= Column::MAX_CAPACITY_LIMIT) {
-                return Status::CapacityLimitExceed(fmt::format(
-                        "Binary column offset payload size is not representable with legacy u32 format, "
-                        "offset_bytes_size: {}, limit: {}",
-                        offset_bytes_size, Column::MAX_CAPACITY_LIMIT));
+                return Status::CapacityLimitExceed(
+                        fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
+                                    "offset_bytes_size: {}, limit: {}",
+                                    offset_bytes_size, Column::MAX_CAPACITY_LIMIT));
             }
 
             return Status::OK();
