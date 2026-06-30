@@ -592,7 +592,9 @@ public class MaterializedViewHandler extends AlterHandler {
                         }
                         break;
                     }
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    if (!column.getType().canDistributedBy()) {
+                        // JSON and other non-sortable types must not become rollup sort-key
+                        // columns (mirrors base-table key derivation in CreateTableAnalyzer).
                         break;
                     }
                     if (column.getType().isVarchar()) {
@@ -656,6 +658,12 @@ public class MaterializedViewHandler extends AlterHandler {
 
                     Column oneColumn = new Column(baseColumn);
                     if (isKey) {
+                        if (!baseColumn.getType().canDistributedBy()) {
+                            // JSON and other non-sortable types cannot be rollup key columns
+                            // (mirrors base-table key validation in ColumnDefAnalyzer).
+                            throw new DdlException(String.format(
+                                    "Invalid data type of key column '%s': '%s'", rollupColName, baseColumn.getType()));
+                        }
                         hasKey = true;
                         oneColumn.setIsKey(true);
                         oneColumn.setAggregationType(null, false);
