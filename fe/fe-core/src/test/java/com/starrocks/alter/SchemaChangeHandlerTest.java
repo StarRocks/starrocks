@@ -1041,22 +1041,23 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 "v1", "pk value comment");
     }
 
-    // The KEY designation is table-level and is not repeated in MODIFY COLUMN k1 INT COMMENT '...', so the
-    // rebuilt column comes back with isKey=false; isCommentOnlyModification must inherit the key flag from the
-    // stored column, otherwise a comment-only change on a key column would fall through and be rejected on a
-    // single-key table (leaving no key column) or create an unnecessary schema change job.
+    // A full-definition MODIFY COLUMN on a non-aggregation key column must repeat the KEY keyword to keep the
+    // column a key (per the ALTER TABLE reference: omitting KEY flips it to a value). With KEY repeated the
+    // rebuilt column matches the stored one except for the comment, so it still takes the lightweight
+    // comment-only path on a single-key table instead of rebuilding the schema. (A pure metadata comment edit
+    // that does not repeat the definition uses the bare `MODIFY COLUMN <col> COMMENT "..."` form.)
     @Test
     public void testModifyColumnCommentOnlyForKeyColumnOfDuplicateAndUniqueTables() throws Exception {
         createTable("CREATE TABLE test.cmt_dup_key (k1 INT, v1 INT) DUPLICATE KEY(k1) "
                 + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
         assertCommentOnlyModify("cmt_dup_key",
-                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT COMMENT 'dup key comment';",
+                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT KEY COMMENT 'dup key comment';",
                 "k1", "dup key comment");
 
         createTable("CREATE TABLE test.cmt_uniq_key (k1 INT, v1 INT) UNIQUE KEY(k1) "
                 + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
         assertCommentOnlyModify("cmt_uniq_key",
-                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT COMMENT 'uniq key comment';",
+                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT KEY COMMENT 'uniq key comment';",
                 "k1", "uniq key comment");
     }
 

@@ -741,11 +741,13 @@ public class SchemaChangeHandler extends AlterHandler {
             // Leave the "column does not exist" error to processModifyColumn.
             return false;
         }
-        // The KEY designation is table-level and is not repeated in the MODIFY COLUMN clause, so a rebuilt
-        // column inherits the stored key flag the same way processModifyColumn does.
-        if (!modColumn.isKey()) {
-            modColumn.setIsKey(oriColumn.isKey());
-        }
+        // Resolve the post-modify keyness exactly as processModifyColumn does (PK inherits an existing key;
+        // AGG with no aggregation method is a key; DUP/UNIQUE take the clause's KEY flag), so that a keyness
+        // flip is surfaced to the comparison below as a real change instead of being masked as comment-only.
+        // Per the ALTER TABLE reference, a full-definition MODIFY COLUMN on a non-aggregation key column must
+        // repeat KEY to keep the column a key; the bare `MODIFY COLUMN <col> COMMENT "..."` form remains the
+        // metadata-only comment path.
+        modColumn.setIsKey(resolveModifyColumnKeyness(olapTable, alterClause.getColumnDef(), oriColumn));
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             // AlterTableClauseAnalyzer force-injects REPLACE on PK value columns (and keeps key columns as
             // keys), so modColumn always carries an aggregation type here. Mirror the PK branch in
@@ -1068,10 +1070,14 @@ public class SchemaChangeHandler extends AlterHandler {
             // A keyness flip (value <-> key) changes the key column set, which shifts
             // the key-derived range sort key on AGG/UNIQUE tables and on tables without
             // an explicit ORDER BY, even when the column itself is not in the sort key.
-            // On shared-data tables an eligible keyness flip that shifts the range sort key is
-            // routed to LakeRangeRewriteSchemaChangeJob (handled in analyzeAndCreateJob); the
-            // throw is kept for every other case.
-            boolean isRoutedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, alterClause);
+            // On shared-data tables an eligible keyness flip that shifts the range sort key is routed to
+            // LakeRangeRewriteSchemaChangeJob (handled in analyzeAndCreateJob); the throw is kept for every
+            // other case. The suppression uses the same routesModifyColumnToRangeRewrite condition that
+            // analyzeAndCreateJob routes on, so a flip that shifts the sort key but leaves an invalid schema
+            // (no key column, or a value before a key) is rejected synchronously here rather than suppressed
+            // yet never routed.
+            boolean isRoutedRangeRewrite = routesModifyColumnToRangeRewrite(
+                    olapTable, alterClause, indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
             if (oriColumn.isKey() != modColumn.isKey() && !isRoutedRangeRewrite) {
                 throw new DdlException("MODIFY COLUMN that changes keyness is not supported on tables with " +
                         "range distribution, because adding to or removing from the key column set shifts the " +
@@ -2483,8 +2489,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
                                                            alterIndexMetaIdToIncrVarcharLenColNames);
                 List<Column> postFlipBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
-                if (needsRangeRewriteSchemaChange(olapTable, modifyColumnClause)
-                        && rangeRewriteKeySchemaIsValid(postFlipBaseSchema)) {
+                if (routesModifyColumnToRangeRewrite(olapTable, modifyColumnClause, postFlipBaseSchema)) {
                     // A keyness flip on a shared-data range table whose flip shifts the range sort key:
                     // re-route/re-sort/re-aggregate all data into a freshly sampled K-tablet shadow
                     // index and flip. Routed here (early return), bypassing finalAnalyze, because a
@@ -4313,6 +4318,21 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
         return hasKey;
+    }
+
+    /**
+     * Whether a MODIFY COLUMN keyness flip on this table is routed to {@link LakeRangeRewriteSchemaChangeJob}.
+     * This is the single routing condition shared by {@link #processModifyColumn} -- which keeps the existing
+     * keyness-flip rejection for every flip NOT routed -- and {@link #analyzeAndCreateJob} -- which builds the
+     * rewrite job for the flips that are. A flip is routed only when it shifts the range sort key
+     * ({@link #needsRangeRewriteSchemaChange}) AND the post-flip base schema still satisfies the key invariants
+     * ({@link #rangeRewriteKeySchemaIsValid}); an invalid flip (no key column left, or a value before a key) is
+     * therefore rejected synchronously instead of being suppressed yet never routed. Keeping both call sites on
+     * this one predicate prevents the two conditions from drifting apart.
+     */
+    private static boolean routesModifyColumnToRangeRewrite(OlapTable table, ModifyColumnClause clause,
+                                                            List<Column> postFlipBaseSchema) {
+        return needsRangeRewriteSchemaChange(table, clause) && rangeRewriteKeySchemaIsValid(postFlipBaseSchema);
     }
 
     /**
