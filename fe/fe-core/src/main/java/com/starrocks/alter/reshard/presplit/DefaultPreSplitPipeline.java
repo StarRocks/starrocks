@@ -15,7 +15,6 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
@@ -225,10 +224,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         List<TabletRange> tabletRanges = buildTabletRanges(outcome.result.getBoundaries());
         TabletReshardJob job = SplitTabletJobFactory.forExternalBoundaries(
                 database, table, oldTabletId, tabletRanges);
-        // Carry the triggering load's warehouse so the spread shards are scheduled where the load runs
-        // (production always returns a SplitTabletJob; the instanceof guard is a no-op under test mocks).
-        if (loadComputeResource != null && job instanceof SplitTabletJob splitJob) {
-            splitJob.setLoadWarehouseId(loadComputeResource.getWarehouseId());
+        // Carry the triggering load's warehouse so the job's shard creation + publish run there.
+        if (loadComputeResource != null) {
+            job.setWarehouseId(loadComputeResource.getWarehouseId());
         }
         return Optional.of(new PreparedReshardJob(job));
     }

@@ -320,38 +320,53 @@ public class SplitTabletJobTest {
         }
     }
 
-    // Clean separation of the two split flavors: an online split (SPLIT TABLET clause) keeps the
-    // PACK-to-old placement for warm-cache reuse, while a pre-split spreads its new shards across
-    // compute nodes so the load that follows is not funneled onto the source tablet's single worker.
+    // The job's warehouse defaults to "unset" (background) and is settable by the pre-split caller
+    // (base-class TabletReshardJob#setWarehouseId, also used by the merge job).
     @Test
-    public void testPreSplitSpreadsNewShardsWhileOnlineSplitPacks() throws Exception {
-        SplitTabletJob onlineSplit = (SplitTabletJob) createTabletReshardJob();
-        Assertions.assertFalse(onlineSplit.isSpreadNewShards(),
-                "online split must keep PACK-to-old placement");
+    public void testWarehouseIdDefaultsUnsetAndIsSettable() throws Exception {
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
+        Assertions.assertEquals(TabletReshardJob.INVALID_WAREHOUSE_ID, job.getWarehouseId(),
+                "warehouse defaults to unset (-> background warehouse)");
+        job.setWarehouseId(12345L);
+        Assertions.assertEquals(12345L, job.getWarehouseId(),
+                "caller applies the load's warehouse id");
+    }
 
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
-        Tablet oldTablet = materializedIndex.getTablets().get(0);
-        // Reset to Range.all() so the K=3 external boundaries below are valid regardless of test order.
-        oldTablet.setRange(new TabletRange());
-        List<TabletRange> newTabletRanges = List.of(
-                tabletRangeUpperOnly(100),
-                tabletRange(100, 200),
-                tabletRangeLowerOnly(200));
+    // Spread is derived from the source tablet being empty (the same signal the pre-split eligibility
+    // gate uses), not from a stored flag: an empty source spreads the new shards (drop WITH_SHARD),
+    // a non-empty source keeps the PACK pin for warm-cache reuse.
+    @Test
+    public void testSpreadIsDerivedFromEmptySource() throws Exception {
+        AtomicReference<Boolean> capturedSpread = new AtomicReference<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+                capturedSpread.set(spreadNewShards);
+            }
+        };
 
-        SplitTabletJob preSplit = (SplitTabletJob) SplitTabletJobFactory.forExternalBoundaries(
-                db, table, oldTablet.getId(), newTabletRanges);
-        Assertions.assertTrue(preSplit.isSpreadNewShards(),
-                "pre-split must spread new shards across compute nodes");
-        // The factory builds the job with the default warehouse; the pre-split caller applies the
-        // load's warehouse via setLoadWarehouseId before the job is journaled.
-        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, preSplit.getLoadWarehouseId(),
-                "factory defaults to the default warehouse");
-        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, onlineSplit.getLoadWarehouseId(),
-                "online split does not carry a load warehouse");
-        preSplit.setLoadWarehouseId(12345L);
-        Assertions.assertEquals(12345L, preSplit.getLoadWarehouseId(),
-                "pre-split caller applies the load's warehouse id");
+        // Empty source (the UT table has no rows) -> spread.
+        SplitTabletJob emptySrc = (SplitTabletJob) createTabletReshardJob();
+        emptySrc.createShardsOnStarOS();
+        Assertions.assertEquals(Boolean.TRUE, capturedSpread.get(), "empty source must spread");
+
+        // Non-empty source -> PACK (no spread).
+        capturedSpread.set(null);
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public long getRowCount() {
+                return 100L;
+            }
+        };
+        SplitTabletJob nonEmptySrc = (SplitTabletJob) createTabletReshardJob();
+        nonEmptySrc.createShardsOnStarOS();
+        Assertions.assertEquals(Boolean.FALSE, capturedSpread.get(), "non-empty source must PACK");
     }
 
     // -------------------------------------------------------------------------
