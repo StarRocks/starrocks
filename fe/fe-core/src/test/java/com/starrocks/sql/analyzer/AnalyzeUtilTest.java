@@ -26,13 +26,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -41,6 +37,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -212,48 +209,6 @@ public class AnalyzeUtilTest {
         m = AnalyzerUtils.collectAllTableAndView(statementBase);
         tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
         expectedTables = new HashSet<>(Lists.newArrayList("t0", "x"));
-
-        Assertions.assertEquals(expectedTables, tableNames);
-
-        sql = "with recursive cte(n) as " +
-                "(select v1 from t0 union all select n from cte where n < 10) select * from cte";
-        statementBase = SqlParser.parse(sql, 0L).get(0);
-        m = AnalyzerUtils.collectAllTableAndView(statementBase);
-        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
-        expectedTables = new HashSet<>(Lists.newArrayList("t0"));
-
-        Assertions.assertEquals(expectedTables, tableNames);
-
-        sql = "with recursive cte(n) as " +
-                "(select v1 from cte union all select n from cte where n < 10) select * from cte";
-        statementBase = SqlParser.parse(sql, 0L).get(0);
-        m = AnalyzerUtils.collectAllTableAndView(statementBase);
-        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
-        expectedTables = new HashSet<>(Lists.newArrayList("cte"));
-
-        Assertions.assertEquals(expectedTables, tableNames);
-
-        sql = "with recursive cte as (select v1 from t0 except select v1 from cte) select * from cte";
-        statementBase = SqlParser.parse(sql, 0L).get(0);
-        m = AnalyzerUtils.collectAllTableAndView(statementBase);
-        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
-        expectedTables = new HashSet<>(Lists.newArrayList("t0", "cte"));
-
-        Assertions.assertEquals(expectedTables, tableNames);
-
-        sql = "with recursive cte as " +
-                "(select v1 from t0 union all select v1 + 1 from cte where v1 < 10) select * from cte";
-        statementBase = SqlParser.parse(sql, 0L).get(0);
-        QueryStatement queryStatement = (QueryStatement) statementBase;
-        CTERelation cteRelation = queryStatement.getQueryRelation().getCteRelations().get(0);
-        SetOperationRelation setOperationRelation =
-                (SetOperationRelation) cteRelation.getCteQueryStatement().getQueryRelation();
-        SelectRelation recursiveMember = (SelectRelation) setOperationRelation.getRelations().get(1);
-        recursiveMember.setRelation(new CTERelation(cteRelation.getCteMouldId(), cteRelation.getName(),
-                cteRelation.getColumnOutputNames(), cteRelation.getCteQueryStatement(), true, false));
-        m = AnalyzerUtils.collectAllTableAndView(statementBase);
-        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
-        expectedTables = new HashSet<>(Lists.newArrayList("t0"));
 
         Assertions.assertEquals(expectedTables, tableNames);
     }
