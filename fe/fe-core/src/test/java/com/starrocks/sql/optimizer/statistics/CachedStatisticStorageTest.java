@@ -48,6 +48,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -57,6 +58,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -510,5 +512,128 @@ public class CachedStatisticStorageTest {
         Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(0, columnStatistic.getAverageRowSize(), 0.001);
         Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureTimeout() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        // Create a future that will never complete
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100; // 100ms timeout
+
+            // WHEN
+            // The method should return without throwing despite the future not completing
+            Supplier<String> contextSupplier = () -> "context";
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    contextSupplier);
+
+            // THEN
+            // Future should still not be done (timeout was caught internally)
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testWaitForStatsFutureDisabled() {
+        // GIVEN
+        final var storage = new CachedStatisticStorage();
+        final var neverCompletingFuture = new CompletableFuture<>();
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        try {
+            Config.enable_sync_statistics_load = false;
+
+            // WHEN
+            // Should return immediately without waiting
+            Supplier<String> contextSupplier = () -> "context";
+            Deencapsulation.invoke(storage, "waitForStatsFutureIfWaitEnabled", neverCompletingFuture,
+                    contextSupplier);
+
+            // THEN
+            Assertions.assertFalse(neverCompletingFuture.isDone());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testGetColumnStatisticReturnsUnknownOnTimeout() {
+        // GIVEN
+        final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        final var table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0");
+
+        boolean originalEnabled = Config.enable_sync_statistics_load;
+        int originalTimeout = Config.sync_statistics_load_timeout_ms;
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+
+            // Install a cache that returns a never-completing future
+            final var storage = new CachedStatisticStorage();
+            final var slowCache = Caffeine.newBuilder()
+                    .maximumSize(100)
+                    .buildAsync((key, executor) -> new CompletableFuture<>());
+            Deencapsulation.setField(storage, "columnStatistics", slowCache);
+
+            // WHEN
+            // Should return unknown after timeout, not block forever
+            ColumnStatistic result = storage.getColumnStatistic(table, "v1");
+
+            // THEN
+            Assertions.assertTrue(result.isUnknown());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    public void testGetColumnStatisticsTimeoutWithSyncStats() {
+        // GIVEN
+        final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        final var table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t0");
+
+        final var originalEnabled = Config.enable_sync_statistics_load;
+        final var originalTimeout = Config.sync_statistics_load_timeout_ms;
+
+        try {
+            Config.enable_sync_statistics_load = true;
+            Config.sync_statistics_load_timeout_ms = 100;
+
+            // Install a cache whose loader returns a future that never completes
+            final var storage = new CachedStatisticStorage();
+            final AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> slowCache =
+                    Caffeine.newBuilder()
+                            .maximumSize(100)
+                            .buildAsync((key, executor) -> new CompletableFuture<>());
+            Deencapsulation.setField(storage, "columnStatistics", slowCache);
+
+            // WHEN
+            final var stats = storage.getColumnStatistics(table, ImmutableList.of("v1", "v2"));
+
+            // THEN
+            // Each column resolves to the default unknown statistic.
+            Assertions.assertEquals(2, stats.size());
+            Assertions.assertTrue(stats.get(0).isUnknown());
+            Assertions.assertTrue(stats.get(1).isUnknown());
+        } finally {
+            Config.enable_sync_statistics_load = originalEnabled;
+            Config.sync_statistics_load_timeout_ms = originalTimeout;
+        }
     }
 }
