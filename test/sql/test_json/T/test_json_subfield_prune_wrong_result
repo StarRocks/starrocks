@@ -1,0 +1,37 @@
+-- name: test_json_subfield_prune_wrong_result
+-- The FE subfield-prune rule (cbo_prune_json_subfield) pushes a typed flat-JSON sub-field
+-- read into the scan. A JSON key whose name contains a literal '.' cannot be a flat
+-- sub-column (the flat scheme uses '.' as the level separator), so it is kept in `remain`.
+-- The BE flat read must still serve such a key from `remain`; before the fix it returned
+-- NULL, which -- because the read also drives the pushed-down predicate -- silently dropped
+-- rows. This test asserts rule-on == rule-off for the dotted key (cases b / b').
+--
+-- NOTE: case (a) below (a path ending at an intermediate OBJECT, $.o) is a SEPARATE,
+-- still-open issue: rule-on returns NULL where rule-off returns the sub-object. The
+-- rule-on result recorded here is the current (incorrect) behavior, NOT the desired one;
+-- it is kept only to pin the contrast and will be updated when the intermediate-object
+-- case is fixed.
+create table t(id int, j json) duplicate key(id)
+  distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into t values
+ (1, parse_json('{"o":{"inner":10},"a.b":7}')),
+ (2, parse_json('{"o":{"inner":20},"a.b":8}'));
+
+-- (a) intermediate-object extraction. Correct answer = the sub-object.
+--     KNOWN OPEN: rule-on still returns NULL (intermediate-object prune bug, out of scope here).
+set cbo_prune_json_subfield = false;
+select id, cast(json_query(j,'$.o') as string) from t order by id;
+set cbo_prune_json_subfield = true;
+select id, cast(json_query(j,'$.o') as string) from t order by id;
+
+-- (b) dotted-key extraction. Correct answer = 7, 8 (rule-on must match rule-off).
+set cbo_prune_json_subfield = false;
+select id, get_json_int(j,'$."a.b"') from t order by id;
+set cbo_prune_json_subfield = true;
+select id, get_json_int(j,'$."a.b"') from t order by id;
+
+-- (b') dotted-key predicate -> must NOT drop rows. Correct answer = 2.
+set cbo_prune_json_subfield = false;
+select count(*) from t where get_json_int(j,'$."a.b"') > 0;
+set cbo_prune_json_subfield = true;
+select count(*) from t where get_json_int(j,'$."a.b"') > 0;
