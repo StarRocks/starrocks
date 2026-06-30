@@ -18,13 +18,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
-import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -129,7 +129,7 @@ public class DeltaLakeMetadataTest {
         ColumnVector[] addFileCols = new ColumnVector[2];
         addFileCols[0] = new DefaultBinaryVector(BasePrimitiveType.createPrimitive("string"),
                 3, new byte[][] {new byte[] {'0', '0', '0', '0'},
-                    new byte[] {'0', '0', '0', '1'}, new byte[] {'0', '0', '0', '2'}});
+                new byte[] {'0', '0', '0', '1'}, new byte[] {'0', '0', '0', '2'}});
 
         int[] offsets = new int[] {0, 1, 2, 3};
         DataType mapType = new MapType(StringType.STRING, StringType.STRING, true);
@@ -138,7 +138,7 @@ public class DeltaLakeMetadataTest {
                         3, new byte[][] {new byte[] {'t', 's'}, new byte[] {'t', 's'}, new byte[] {'t', 's'}}),
                 new DefaultBinaryVector(BasePrimitiveType.createPrimitive("string"),
                         3, new byte[][] {new byte[] {'1', '9', '9', '9'}, new byte[] {'2', '0', '0', '0'},
-                            new byte[] {'2', '0', '0', '1'}})
+                        new byte[] {'2', '0', '0', '1'}})
         );
         // addFile schema, here we only care about the partitionValues, so not use all fields
         StructType addFileSchema = new StructType(Lists.newArrayList(
@@ -214,8 +214,7 @@ public class DeltaLakeMetadataTest {
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, null,
-                        new MetastoreTable("db1", "table1", "path/to/table",
-                        123));
+                        new MetastoreTable("db1", "table1", "path/to/table", 123));
             }
         };
         DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");

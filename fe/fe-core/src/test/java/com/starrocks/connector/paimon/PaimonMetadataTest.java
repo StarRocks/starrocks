@@ -416,7 +416,7 @@ public class PaimonMetadataTest {
                 cachingCatalog.refreshPartitions(new Identifier("db", "object_tbl"));
                 result = new ClassCastException(
                         "class org.apache.paimon.table.object.ObjectTableImpl cannot be cast to " +
-                        "class org.apache.paimon.table.FileStoreTable");
+                                "class org.apache.paimon.table.FileStoreTable");
                 cachingCatalog.refreshPartitions(new Identifier("db", "normal_tbl"));
             }
         };
@@ -1914,6 +1914,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class, () -> metadata.dropTable(connectContext, dropStmt));
+        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.dropTable(connectContext, dropStmt));
     }
 }
