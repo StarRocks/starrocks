@@ -831,18 +831,20 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         for (const auto& f : _tablet_writer->dels()) {
             auto* del_meta = op_write->add_dels_meta();
             to_file_meta_pb(f, del_meta);
-            // Carry the per-del op_offset so the apply/persist path can preserve upsert/delete
-            // ordering. Left unset when unknown (spill path), which falls back to the max segment id.
-            // Downgrade-safety gate: only persist op_offset when explicitly enabled. While disabled
-            // (the default), op_offset stays unset so apply/persist/rebuild uniformly fall back to the
-            // legacy "delete after all segments" path -- this never writes the new on-disk state that a
-            // pre-fix BE (rollback / not-yet-upgraded node / cross-version OpReplication target) would
-            // misread into a duplicate primary key. See config::lake_enable_pk_preserve_txn_delete_order.
-            if (config::lake_enable_pk_preserve_txn_delete_order && del_idx < del_op_offsets.size() &&
-                del_op_offsets[del_idx] != kUnknownDelOpOffset) {
-                del_meta->set_op_offset(del_op_offsets[del_idx]);
-            }
             ++del_idx;
+        }
+        // Carry the per-del op_offset (parallel to dels_meta, index by del_id) so the apply/persist
+        // path can preserve in-transaction upsert/delete ordering. A kUnknownDelOpOffset entry (spill /
+        // concurrent flush) keeps the array aligned and is read as "not recorded" -> max segment id.
+        // Downgrade-safety gate: only emit the array when explicitly enabled. While disabled (the
+        // default), it stays empty so apply/persist/rebuild uniformly fall back to the legacy "delete
+        // after all segments" path -- this never writes the new on-disk state that a pre-fix BE
+        // (rollback / not-yet-upgraded node / cross-version OpReplication target) would misread into a
+        // duplicate primary key. See config::lake_enable_pk_preserve_txn_delete_order.
+        if (config::lake_enable_pk_preserve_txn_delete_order) {
+            for (size_t i = 0; i < del_idx; ++i) {
+                op_write->add_del_op_offsets(i < del_op_offsets.size() ? del_op_offsets[i] : kUnknownDelOpOffset);
+            }
         }
     }
     for (const auto& sst : _tablet_writer->ssts()) {

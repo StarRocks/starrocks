@@ -34,6 +34,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/storage_metrics.h"
@@ -73,12 +74,14 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
 }
 
-uint32_t resolve_del_op_offset(const FileMetaPB& del_meta, const RowsetMetadataPB& rowset_meta) {
-    if (del_meta.has_op_offset()) {
+uint32_t resolve_del_op_offset(int64_t op_offset, const RowsetMetadataPB& rowset_meta) {
+    if (op_offset >= 0) {
         // op_offset is a local segment position; map it to the segment index used for rssid so it is
         // consistent with the get_max_segment_idx() fallback (handles segment_idx remapping/bundles).
-        return get_segment_idx(rowset_meta, static_cast<int32_t>(del_meta.op_offset()));
+        return get_segment_idx(rowset_meta, static_cast<int32_t>(op_offset));
     }
+    // Not recorded (op_offset < 0): fall back to the max segment id, i.e. legacy "delete after all
+    // upserts". Callers pass < 0 when OpWrite.del_op_offsets is absent or holds kUnknownDelOpOffset.
     return get_max_segment_idx(rowset_meta);
 }
 
@@ -230,15 +233,21 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     const bool column_mode = op_write.has_txn_meta() &&
                              (op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE ||
                               op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
-    // collect del files
-    for (const auto& del_meta : op_write.dels_meta()) {
+    // collect del files. op_offset is carried parallel to dels_meta in op_write.del_op_offsets
+    // (index by del_id); an absent array or a kUnknownDelOpOffset entry means "not recorded".
+    const bool has_del_op_offsets = op_write.del_op_offsets_size() == op_write.dels_meta_size();
+    for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
+        const auto& del_meta = op_write.dels_meta(del_id);
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del_meta.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
         // fall back to the max segment id (delete after all upserts).
+        const int64_t op_offset = (has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset)
+                                          ? static_cast<int64_t>(op_write.del_op_offsets(del_id))
+                                          : -1;
         del_file_with_rid.set_op_offset(column_mode ? get_max_segment_idx(*rowset)
-                                                    : resolve_del_op_offset(del_meta, *rowset));
+                                                    : resolve_del_op_offset(op_offset, *rowset));
         if (del_meta.has_encryption_meta()) {
             del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
@@ -1219,7 +1228,8 @@ bool is_primary_key(const TabletMetadata& metadata) {
 }
 
 void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
+                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
+                                 const std::vector<int64_t>& del_op_offsets) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1266,11 +1276,10 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     // earlier statement's segment at persist time and diverge from apply (which uses
     // assigned_global_segments) on rebuild/recover.
     const uint32_t seg_base = _pending_rowset_data.assigned_segment_idx;
-    for (const auto& del : dels) {
-        auto& merged_del = _pending_rowset_data.dels.emplace_back(del);
-        if (merged_del.has_op_offset()) {
-            merged_del.set_op_offset(merged_del.op_offset() + seg_base);
-        }
+    for (size_t i = 0; i < dels.size(); ++i) {
+        _pending_rowset_data.dels.emplace_back(dels[i]);
+        const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
+        _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
     }
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
@@ -1320,14 +1329,16 @@ Status MetaFileBuilder::set_final_rowset() {
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
 
-    // Handle delete files (same logic as apply_opwrite)
-    for (const auto& del : _pending_rowset_data.dels) {
+    // Handle delete files (same logic as apply_opwrite). op_offset is carried parallel in
+    // _pending_rowset_data.del_op_offsets (already rebased into the merged rowset's segment space).
+    for (size_t i = 0; i < _pending_rowset_data.dels.size(); ++i) {
+        const auto& del = _pending_rowset_data.dels[i];
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
         // fall back to the max segment id (delete after all upserts).
-        del_file_with_rid.set_op_offset(resolve_del_op_offset(del, *rowset));
+        del_file_with_rid.set_op_offset(resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], *rowset));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
@@ -1363,15 +1374,23 @@ Status MetaFileBuilder::set_final_rowset() {
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
                                           const std::map<int, FileInfo>& replace_segments,
                                           const std::vector<FileMetaPB>& orphan_files) {
-    // Each del already carries name + shared + encryption_meta together in its FileMetaPB.
+    // Each del already carries name + shared + encryption_meta together in its FileMetaPB; its
+    // op_offset is carried parallel in op_write.del_op_offsets (index by del_id), normalized to a
+    // signed value where < 0 means "not recorded" (absent array or kUnknownDelOpOffset).
     std::vector<FileMetaPB> dels;
+    std::vector<int64_t> del_op_offsets;
     dels.reserve(op_write.dels_meta_size());
-    for (const auto& del_meta : op_write.dels_meta()) {
-        dels.emplace_back(del_meta);
+    del_op_offsets.reserve(op_write.dels_meta_size());
+    const bool has_del_op_offsets = op_write.del_op_offsets_size() == op_write.dels_meta_size();
+    for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
+        dels.emplace_back(op_write.dels_meta(del_id));
+        del_op_offsets.push_back((has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset)
+                                         ? static_cast<int64_t>(op_write.del_op_offsets(del_id))
+                                         : -1);
     }
 
     // Accumulate into pending rowset
-    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels);
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_op_offsets);
 }
 
 } // namespace starrocks::lake

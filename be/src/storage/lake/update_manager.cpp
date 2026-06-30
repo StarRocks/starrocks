@@ -44,6 +44,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
 #include "storage/lake/update_compaction_state.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primitive/primary_key_encoder.h"
@@ -308,15 +309,17 @@ static DelInterleavePlan build_del_interleave_plan(const TxnLogPB_OpWrite& op_wr
                                                    uint32_t assigned_global_segments, uint32_t max_segment_id,
                                                    uint32_t del_rebuild_rssid) {
     const uint32_t num_del_files = op_write.dels_meta_size();
+    // op_offset is carried parallel to dels_meta in op_write.del_op_offsets (index by del_id). An
+    // absent array, or a kUnknownDelOpOffset entry, means "not recorded" -> fall back to max segment.
+    const bool has_del_op_offsets = op_write.del_op_offsets_size() == static_cast<int>(num_del_files);
     DelInterleavePlan plan;
     plan.del_rssids.assign(num_del_files, del_rebuild_rssid);
     plan.del_applied.assign(num_del_files, false);
     for (uint32_t del_id = 0; del_id < num_del_files; ++del_id) {
         uint32_t target_segment = max_segment_id;
-        const auto& del_meta = op_write.dels_meta(del_id);
-        if (del_meta.has_op_offset()) {
+        if (has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset) {
             target_segment = assigned_global_segments +
-                             get_segment_idx(op_write.rowset(), static_cast<int32_t>(del_meta.op_offset()));
+                             get_segment_idx(op_write.rowset(), static_cast<int32_t>(op_write.del_op_offsets(del_id)));
         }
         plan.del_rssids[del_id] = rowset_id + target_segment;
         plan.dels_after_segment[target_segment].push_back(del_id);
@@ -915,15 +918,12 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     // would be written into rowset.del_files with shared=false, exposing it to
     // premature deletion by vacuum on sibling split tablets.
     for (const auto& del_meta : op_write.dels_meta()) {
-        auto* copied = new_rows_op.add_dels_meta();
-        copied->CopyFrom(del_meta);
-        // Column-upsert mode applies these deletes after all synthesized new-row segments
-        // (new_del_rebuild_rssid below), not interleaved by op_offset. Drop the writer's op_offset so
-        // the persisted metadata falls back to the max segment id, keeping rebuild/recover consistent
-        // with this apply path. (new_rows_op carries no txn_meta, so the column-mode guard in
-        // meta_file would otherwise persist the raw interleaved op_offset.)
-        copied->clear_op_offset();
+        new_rows_op.add_dels_meta()->CopyFrom(del_meta);
     }
+    // Column-upsert mode applies these deletes after all synthesized new-row segments
+    // (new_del_rebuild_rssid below), not interleaved by op_offset. new_rows_op intentionally carries
+    // no del_op_offsets array, so apply/persist fall back to the max segment id, keeping
+    // rebuild/recover consistent with this apply path.
     if (new_rows_op.rowset().segment_metas_size() > 0 || new_rows_op.dels_meta_size() > 0) {
         // Give the synthesized new_rows rowset a uid. In COLUMN_UPSERT_MODE the
         // original op_write.rowset() never enters tablet metadata as a top-level

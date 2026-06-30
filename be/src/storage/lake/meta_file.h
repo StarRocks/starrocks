@@ -48,10 +48,11 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 
 // Resolve the segment index a del file logically follows (the delete's rssid is
 // `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
-// Uses the writer-provided op_offset (a local segment position) when present, mapped through
-// get_segment_idx() so it lands in the same index space as segment rssids; otherwise falls back to
-// the max segment index, i.e. the legacy "apply all deletes after all upserts" behavior.
-uint32_t resolve_del_op_offset(const FileMetaPB& del_meta, const RowsetMetadataPB& rowset_meta);
+// `op_offset` is the writer-provided local segment position (from OpWrite.del_op_offsets); it is
+// mapped through get_segment_idx() so it lands in the same index space as segment rssids. A value
+// < 0 means "not recorded" (absent array or kUnknownDelOpOffset) and falls back to the max segment
+// index, i.e. the legacy "apply all deletes after all upserts" behavior.
+uint32_t resolve_del_op_offset(int64_t op_offset, const RowsetMetadataPB& rowset_meta);
 
 class MetaFileBuilder {
 public:
@@ -90,7 +91,8 @@ public:
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
+                    const std::vector<int64_t>& del_op_offsets);
     Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
@@ -150,6 +152,9 @@ private:
         // parallel-array invariant between filename / shared / encryption can't drift.
         // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
         std::vector<FileMetaPB> dels;
+        // Parallel to `dels`: each del's op_offset already rebased into the merged rowset's segment
+        // space, or < 0 when not recorded (falls back to the max segment id at persist time).
+        std::vector<int64_t> del_op_offsets;
         uint32_t assigned_segment_idx = 0;
     };
 
