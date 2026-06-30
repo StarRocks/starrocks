@@ -20,10 +20,10 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及更高版本 | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及更高版本 | 8    | 2.11,2.12 |
 
 ## 获取 Flink connector
 
@@ -79,13 +79,13 @@ Flink connector JAR 文件的命名格式如下：
     sh build.sh <flink_version>
     ```
 
-    例如，如果您的环境中的 Flink 版本为1.15，您需要执行以下命令：
+    例如，如果您的环境中的 Flink 版本为1.16，您需要执行以下命令：
 
     ```Bash
-    sh build.sh 1.15
+    sh build.sh 1.16
     ```
 
-3. 前往 `target/` 目录，找到编译完成的 Flink connector JAR 文件，例如 `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`，该文件在编译过程中生成。
+3. 前往 `target/` 目录，找到编译完成的 Flink connector JAR 文件，例如 `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`，该文件在编译过程中生成。
 
     > **注意**：
     >
