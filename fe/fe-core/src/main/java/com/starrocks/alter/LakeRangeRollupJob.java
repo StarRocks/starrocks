@@ -35,6 +35,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
@@ -46,6 +49,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -347,11 +351,45 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Promote the shadow rollup index to NORMAL as an additional (not replacing) index. Implemented in Task 4.
+     * Promote the shadow rollup index to NORMAL as an additional (not replacing) index. The base index,
+     * {@code baseIndexMetaId}, and all sibling indexes are untouched; only the rollup shadow is promoted.
+     * Derived from {@link LakeRangeRewriteSchemaChangeJob#visualiseShadowIndex} with the origin-delete and
+     * base-repoint steps omitted.
      */
     @Override
     protected void visualiseShadowIndex(@NotNull OlapTable table) {
-        throw new UnsupportedOperationException("implemented in Task 3/4");
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            PartitionRewriteState partitionState = partitionStates.get(physicalPartition.getId());
+            Preconditions.checkState(partitionState != null && partitionState.commitVersion != null,
+                    physicalPartition.getId());
+            long commitVersion = partitionState.commitVersion;
+
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    commitVersion + " vs " + physicalPartition.getVisibleVersion());
+            physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+
+            TStorageMedium medium =
+                    table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+
+            MaterializedIndex shadowIndex = physicalPartition.getLatestIndex(shadowIndexMetaId);
+            Preconditions.checkNotNull(shadowIndex, shadowIndexMetaId);
+
+            TabletMeta shadowTabletMeta =
+                    new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIndex.getId(), medium, true);
+            for (Tablet tablet : shadowIndex.getTablets()) {
+                invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
+            }
+
+            // Additive: promote the rollup shadow to NORMAL but do NOT repoint the base index meta.
+            physicalPartition.visualiseShadowIndex(shadowIndex.getId(), /* isBaseIndex = */ false);
+        }
+
+        // Strip any shadow column-name prefix and rebuild the union schema to include the new rollup.
+        table.renameColumnNamePrefix(shadowIndexMetaId);
+        table.rebuildFullSchema();
+        table.setState(OlapTable.OlapTableState.NORMAL);
     }
 
     /**

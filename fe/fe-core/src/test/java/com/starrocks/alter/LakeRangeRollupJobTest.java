@@ -25,6 +25,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.proc.RollupProcDir;
@@ -44,6 +46,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -316,6 +319,28 @@ public class LakeRangeRollupJobTest {
         }
     }
 
+    /**
+     * Build a fully-configured rollup job, register its shadow index meta on the table, add the rollup
+     * shadow MaterializedIndex to each physical partition (via {@code createRollupIndex}), and seed a
+     * {@code commitVersion = visibleVersion + 1} in {@code partitionStates} so
+     * {@code visualiseShadowIndex} can be called directly without driving the full state machine.
+     */
+    private LakeRangeRollupJob newConfiguredRollupJobWithReservedCommit(List<Column> rollupSortKeyColumns) {
+        LakeRangeRollupJob job = newConfiguredRollupJob(rollupSortKeyColumns);
+        job.registerShadowIndexMeta(table);
+
+        long shadowMetaId = job.getShadowIndexMetaId();
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            MaterializedIndex shadowIdx = new MaterializedIndex(physId, shadowMetaId,
+                    MaterializedIndex.IndexState.SHADOW, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+            pp.createRollupIndex(shadowIdx);
+            // Reserve commitVersion = visibleVersion + 1 so visualiseShadowIndex's precondition holds.
+            job.stateOf(pp.getId()).commitVersion = pp.getVisibleVersion() + 1;
+        }
+        return job;
+    }
+
     // ---- registerShadowIndexMeta test (Task 3 Step 5 / Step 6 / Step 7 / Step 8) ---
 
     @Test
@@ -333,5 +358,78 @@ public class LakeRangeRollupJobTest {
         assertEquals(List.of(1, 0), rollupMeta.getSortKeyIdxes());
         // base index meta must be untouched (identity check).
         assertSame(baseBefore, table.getIndexMetaByMetaId(baseIndexMetaId));
+    }
+
+    // ---- visualiseShadowIndex tests (Task 4) ----------------------------------------
+
+    @Test
+    public void testVisualiseShadowIndexAddsRollupAndKeepsBase() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Column colK1 = baseSchema.get(0);
+        Column colK2 = baseSchema.get(1);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(List.of(colK2, colK1));
+        long baseMetaBefore = table.getBaseIndexMetaId();
+
+        job.visualiseShadowIndex(table);
+
+        // Rollup is now visible and NORMAL.
+        assertTrue(table.getVisibleIndexMetas().stream()
+                        .anyMatch(m -> m.getIndexMetaId() == job.getShadowIndexMetaId()),
+                "rollup index must appear in getVisibleIndexMetas after flip");
+        // Base index meta untouched.
+        assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must remain after flip");
+        assertEquals(baseMetaBefore, table.getBaseIndexMetaId(), "base meta id must not change after flip");
+        // Guard flipped: rollup is now NORMAL, no longer SHADOW.
+        assertFalse(job.flipNotYetApplied(table), "flipNotYetApplied must return false after the flip");
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState(), "table state must be NORMAL after flip");
+    }
+
+    /**
+     * Drive the FINISHED replay path twice to assert idempotency. The first replay applies the flip;
+     * the second is a no-op because {@code flipNotYetApplied} returns false.
+     */
+    @Test
+    public void testVisualiseShadowIndexReplayIsIdempotent() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Column colK1 = baseSchema.get(0);
+        Column colK2 = baseSchema.get(1);
+
+        // Build a rollup job with the shadow in SHADOW state and a reserved commitVersion.
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(List.of(colK2, colK1));
+
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long visibleBeforeFlip = physicalPartition.getVisibleVersion();
+
+        // Add shadow tablets to the inverted index (as the live job would have done in WAITING_TXN).
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(job.getShadowIndexMetaId());
+        assertNotNull(shadowIdx, "shadow index must be present before replay");
+        for (Tablet t : shadowIdx.getTablets()) {
+            invertedIndex.addTablet(t.getId(),
+                    new TabletMeta(dbId, tableId, physicalPartition.getId(),
+                            shadowIdx.getId(), com.starrocks.thrift.TStorageMedium.HDD, true));
+        }
+
+        // Relabel as FINISHED with a finishedTimeMs so the replay branch calls visualiseShadowIndex.
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        AlterJobV2 persistCopy = job.copyForPersist();
+        String text = GsonUtils.GSON.toJson(persistCopy);
+
+        LakeRangeRollupJob replayed = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+        LakeRangeRollupJob inMemory = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+
+        // First replay: the flip is applied.
+        assertDoesNotThrow(() -> inMemory.replay(replayed), "first replay must not throw");
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertFalse(inMemory.flipNotYetApplied(table), "after first replay flipNotYetApplied must be false");
+        assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
+                "first replay must advance visibleVersion by one");
+
+        // Second replay: flipNotYetApplied is false -> the flip is skipped, no version double-bump.
+        assertDoesNotThrow(() -> inMemory.replay(replayed), "second replay must not throw");
+        assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion(),
+                "second replay must not advance visibleVersion again");
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 }
