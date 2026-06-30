@@ -93,7 +93,7 @@ public class OptDistributionPruner {
                 return pruner.prune();
             } else {
                 RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
-                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable()),
+                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable(), index.getMetaId()),
                         filters);
                 return pruner.prune();
             }
