@@ -182,7 +182,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
         } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Paimon createView error for %s.%s", dbName, viewName), e);
         }
     }
@@ -202,7 +202,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
         } catch (Exception e) {
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
         }
     }

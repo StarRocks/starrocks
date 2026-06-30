@@ -80,6 +80,7 @@ import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -1282,7 +1283,7 @@ public class StmtExecutor {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", SqlCredentialRedactor.redact(sql), e.getMessage());
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
@@ -1305,7 +1306,7 @@ public class StmtExecutor {
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
-            context.getState().setError(e.getMessage());
+            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();

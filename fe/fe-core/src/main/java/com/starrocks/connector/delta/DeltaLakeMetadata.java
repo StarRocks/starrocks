@@ -382,7 +382,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             return deltaOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get deltalake table {}.{}.{}", catalogName, dbName, tblName, e);
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Failed to get Delta Lake table %s.%s.%s", catalogName, dbName, tblName), e);
         }
     }

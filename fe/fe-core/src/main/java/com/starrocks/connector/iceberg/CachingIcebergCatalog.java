@@ -285,7 +285,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Failed to get iceberg table %s.%s.%s", catalogName, dbName, tableName), e);
         } finally {
             TABLE_LOAD_CONTEXT.remove();

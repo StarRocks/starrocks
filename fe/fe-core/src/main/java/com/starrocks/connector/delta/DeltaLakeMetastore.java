@@ -146,11 +146,11 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
         } catch (TableNotFoundException e) {
             LOG.error("Failed to find Delta table for {}.{}.{}", catalogName, dbName, tableName, e);
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Failed to find Delta table %s.%s.%s", catalogName, dbName, tableName), e);
         } catch (Exception e) {
             LOG.error("Failed to get latest snapshot for {}.{}.{}", catalogName, dbName, tableName, e);
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Failed to get latest snapshot for %s.%s.%s", catalogName, dbName, tableName), e);
         }
         return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);

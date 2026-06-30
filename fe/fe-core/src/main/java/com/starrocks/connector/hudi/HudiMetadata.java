@@ -131,7 +131,7 @@ public class HudiMetadata implements ConnectorMetadata {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            throw StarRocksConnectorException.fromExternalException(
+            throw new StarRocksConnectorException(
                     String.format("Failed to get hudi table %s.%s.%s", catalogName, dbName, tblName), e);
         }
 

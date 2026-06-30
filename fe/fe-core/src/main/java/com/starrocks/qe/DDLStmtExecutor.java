@@ -34,7 +34,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -211,10 +210,6 @@ public class DDLStmtExecutor {
                 throw (DdlException) re.getCause();
             } else if (re.getCause() instanceof IOException) {
                 throw (IOException) re.getCause();
-            } else if (re instanceof StarRocksConnectorException) {
-                // StarRocksConnectorException already carries a full chain message built by fromExternalException;
-                // prefer it over re.getCause().getMessage() which would show only one level.
-                throw new DdlException(re.getMessage(), re);
             } else if (re.getCause() != null) {
                 throw new DdlException(re.getCause().getMessage() != null ?
                         re.getCause().getMessage() : re.getMessage(), re);
