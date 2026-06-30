@@ -108,7 +108,6 @@ _grammar_text = None
 _data_type_parser = None
 _TYPE_COMMENT_PATTERN = re.compile(r"\s+COMMENT\s+'(?:''|[^'])*'", flags=re.IGNORECASE)
 _TYPE_BACKTICK_PATTERN = re.compile(r"`([^`]+)`")
-_REFRESH_SCHEDULE_PATTERN = re.compile(r"^(\s*REFRESH\s+)SCHEDULE\b", flags=re.IGNORECASE)
 
 
 def _get_grammar_text() -> str:
@@ -217,5 +216,4 @@ def parse_mv_refresh_clause(refresh_clause_str: str) -> dict:
         - "refresh_moment": "IMMEDIATE" | "DEFERRED" | None,
         - "refresh_type": "ASYNC" | "MANUAL" | "INCREMENTAL" | None,
     """
-    normalized_clause = _REFRESH_SCHEDULE_PATTERN.sub(r"\1ASYNC", refresh_clause_str)
-    return _get_mv_refresh_parser().parse(normalized_clause)
+    return _get_mv_refresh_parser().parse(refresh_clause_str)

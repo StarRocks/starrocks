@@ -236,6 +236,7 @@ class TestMVRefreshParser:
             ("REFRESH IMMEDIATE MANUAL", {"refresh_moment": "IMMEDIATE", "refresh_type": "MANUAL"}),
             ("REFRESH ASYNC EVERY (INTERVAL 1 DAY)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
             ("REFRESH SCHEDULE EVERY (INTERVAL 1 DAY)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
+            ("REFRESH DEFERRED SCHEDULE EVERY (INTERVAL 1 DAY)", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
             ("REFRESH ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)", {"refresh_moment": None, "refresh_type": "ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)"}),
             ("REFRESH SCHEDULE START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)", {"refresh_moment": None, "refresh_type": "ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)"}),
             ("refresh deferred async", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}), # Case-insensitivity

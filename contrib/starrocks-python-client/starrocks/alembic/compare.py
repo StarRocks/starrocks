@@ -1784,6 +1784,7 @@ def _compare_table_properties_impl(
     default_cls: Union[Type[ReflectionTableDefaults], Type[ReflectionMVDefaults]] = ReflectionTableDefaults,
     object_label: str = "Table",
     add_default_prefix: bool = True,
+    skip_implicit_bucket_size: bool = False,
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Compare properties changes and add AlterTablePropertiesOp if needed.
 
@@ -1819,6 +1820,11 @@ def _compare_table_properties_impl(
     for key in all_keys:
         conn_value = normalized_conn.get(key)
         meta_value = normalized_meta.get(key)
+
+        # Only diff bucket_size when metadata declares it; its implicit default is version-dependent.
+        if skip_implicit_bucket_size and key == "bucket_size" and meta_value is None:
+            continue
+
         default_value = default_cls.properties(run_mode).get(key)
 
         # Convert all to strings for comparison to avoid type issues (e.g., int vs str)
@@ -1894,7 +1900,8 @@ def _compare_table_properties(
 ) -> None:
     properties_to_set, properties_for_reverse = _compare_table_properties_impl(
         schema, table_name, conn_table_attributes, meta_table_attributes, run_mode,
-        default_cls=ReflectionTableDefaults, object_label="Table")
+        default_cls=ReflectionTableDefaults, object_label="Table",
+        skip_implicit_bucket_size=True)
     if properties_to_set:
         table_fqn = utils.gen_simple_qualified_name(table_name, schema)
         ops_list.append(
