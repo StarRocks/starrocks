@@ -2192,13 +2192,16 @@ TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
         ASSERT_EQ(records, 4) << "offset=" << offset;
     }
 
-    // 4) One combined fixture (BOM + CRLF + backslash escape) to keep the number
-    //    of test-data files down. It exercises three orthogonal v2 concerns at once:
+    // 4) One combined fixture (BOM + CRLF + a blank line + backslash escape) to keep
+    //    the number of test-data files down. It exercises four orthogonal v2 concerns:
     //    - UTF-8 BOM at file start: the BOM-skip probe must not pollute the
     //      _parsed_bytes boundary (reset_parsed_bytes) and the first column must
     //      not retain the BOM bytes;
     //    - CRLF with no explicit line.delim: probe_row_delimiter must detect "\r\n"
     //      so the last (unquoted) column does not keep a trailing '\r';
+    //    - a blank line between the two records must be KEPT as an all-null row (to
+    //      match Hive, whose OpenCSVSerde turns a blank line into an all-null row),
+    //      not dropped the way the load path drops blank lines;
     //    - backslash-escaped enclose char (\") must de-escape to a literal '"',
     //      exercising the ESCAPE state of more_rows (not just the doubled-quote path).
     {
@@ -2220,11 +2223,13 @@ TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
         ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
         status = scanner->get_next(_runtime_state, &chunk);
         ASSERT_TRUE(status.ok()) << status.message();
-        EXPECT_EQ(2, chunk->num_rows());
+        EXPECT_EQ(3, chunk->num_rows());
         // BOM stripped (first col '1'), embedded comma kept, last col has no '\r'.
         EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
+        // The blank line is kept as an all-null row (matches Hive), not dropped.
+        EXPECT_EQ("[NULL, NULL, NULL]", chunk->debug_row(1));
         // Backslash-escaped quotes de-escape to a literal '"'.
-        EXPECT_EQ("['2', 'she said \"hi\"', 'quoted']", chunk->debug_row(1));
+        EXPECT_EQ("['2', 'she said \"hi\"', 'quoted']", chunk->debug_row(2));
         scanner->close();
     }
 }

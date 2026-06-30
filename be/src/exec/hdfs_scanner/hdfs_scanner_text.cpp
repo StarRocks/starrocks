@@ -39,6 +39,9 @@ public:
         _row_delimiter_length = row_delimiter.size();
         _column_delimiter_length = column_separator.size();
         _need_probe_line_delimiter = need_probe_line_delimiter;
+        // Match Hive: a blank line is an all-null row, not a dropped row. Only affects the
+        // quote-aware more_rows (v2) path; the Record* (v1) path keeps empty rows already.
+        _parse_options.keep_empty_row = true;
     }
 
     Status reset(size_t offset, size_t remain_length);
@@ -84,25 +87,33 @@ Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
 }
 
 Status HdfsScannerCSVReader::probe_row_delimiter() {
-    // Make sure there are bytes to inspect, without consuming them.
-    if (_buff.available() == 0) {
-        RETURN_IF_ERROR(_fill_buffer());
-    }
-    // Probe '\n' first (the common case). If the byte right before it is '\r',
-    // treat "\r\n" as the row delimiter -- the engine supports multi-char row
-    // delimiters, so this avoids leaving a stray '\r' on the last column (which
-    // a single-char '\n' delimiter would, since more_rows does not trim '\r' for
-    // non-enclosed columns). Fall back to a lone '\r' (old Mac style). If neither
-    // is present yet, keep the default and rely on _fill_buffer padding at EOF.
-    char* lf = _buff.find(csv::LINE_DELIM_LF, 0);
-    if (lf != nullptr) {
-        if (lf > _buff.position() && *(lf - 1) == '\r') {
-            _parse_options.row_delimiter = csv::LINE_DELIM_CR_LF;
-        } else {
-            _parse_options.row_delimiter = csv::LINE_DELIM_LF;
+    // more_rows reads _parse_options.row_delimiter directly, so detect it here first.
+    // Read ahead (without consuming) across fills until a delimiter appears, and only
+    // disable probing once one is found: giving up after a single (possibly partial)
+    // fill would lock in the default '\n' and mis-parse CR-only/CRLF data. Bounded to the
+    // initial buffer -- if no delimiter is found within it (a row larger than the buffer,
+    // or a single-line input) the default '\n' is harmless and we stop.
+    while (true) {
+        if (_buff.available() == 0 && !_fill_buffer().ok()) {
+            break; // EOF, no data
         }
-    } else if (_buff.find(csv::LINE_DELIM_CR, 0) != nullptr) {
-        _parse_options.row_delimiter = csv::LINE_DELIM_CR;
+        // '\r\n' if the byte before '\n' is '\r' (avoids a stray '\r' on a column).
+        if (char* lf = _buff.find(csv::LINE_DELIM_LF, 0); lf != nullptr) {
+            _parse_options.row_delimiter =
+                    (lf > _buff.position() && *(lf - 1) == '\r') ? csv::LINE_DELIM_CR_LF : csv::LINE_DELIM_LF;
+            break;
+        }
+        // Commit to a lone '\r' only when it is not the last byte (or we are at EOF);
+        // otherwise its '\n' (for CRLF) may be unread, so fall through and read more.
+        if (char* cr = _buff.find(csv::LINE_DELIM_CR, 0);
+            cr != nullptr && (_should_stop_scan || cr != _buff.position() + _buff.available() - 1)) {
+            _parse_options.row_delimiter = csv::LINE_DELIM_CR;
+            break;
+        }
+        // No delimiter yet. Stop at EOF or when the buffer is full (keep the default).
+        if (_should_stop_scan || _buff.free_space() == 0 || !_fill_buffer().ok()) {
+            break;
+        }
     }
     _row_delimiter_length = _parse_options.row_delimiter.size();
     _need_probe_line_delimiter = false;

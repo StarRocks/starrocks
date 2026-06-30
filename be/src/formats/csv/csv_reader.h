@@ -133,6 +133,10 @@ struct CSVParseOptions {
     bool trim_space;
     char escape;
     char enclose;
+    // When true, more_rows() keeps a blank line as a zero-column row instead of skipping
+    // it. The load path leaves it false; the Hive reader sets it true to match Hive, which
+    // turns a blank line into an all-null row.
+    bool keep_empty_row = false;
     CSVParseOptions(const std::string& row_delimiter_, const std::string& column_delimiter_, int64_t skip_header_ = 0,
                     bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
         row_delimiter = row_delimiter_;
