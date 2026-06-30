@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from 'Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## FE 設定項目の表示
@@ -1430,3 +1432,5 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：マテリアライズドビュー作成時、固定長の char/varchar 列に string 型を優先するかどうか。
 - 導入時期：v4.0.0
+
+<EditonSpecificFEItemSharedLakeOther />
