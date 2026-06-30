@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <exception>
 #include <memory>
 #include <sstream>
@@ -126,6 +128,33 @@ public:
     StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override;
+
+    // Whether the byte payload size and offset payload byte size fit the size
+    // representation used by this BinaryColumnBase instance.
+    Status is_payload_size_representable() const {
+        if constexpr (std::is_same_v<T, uint32_t>) {
+            const auto bytes_size = get_immutable_bytes().size();
+            if (bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+                return Status::CapacityLimitExceed(fmt::format(
+                        "Binary column byte payload size is not representable with legacy u32 format, bytes_size: {}, "
+                        "limit: {}",
+                        bytes_size, Column::MAX_CAPACITY_LIMIT));
+            }
+
+            const auto offset_bytes_size = static_cast<uint64_t>(_offsets.size()) * sizeof(uint32_t);
+            if (offset_bytes_size >= Column::MAX_CAPACITY_LIMIT) {
+                return Status::CapacityLimitExceed(
+                        fmt::format("Binary column offset payload size is not representable with legacy u32 format, "
+                                    "offset_bytes_size: {}, limit: {}",
+                                    offset_bytes_size, Column::MAX_CAPACITY_LIMIT));
+            }
+
+            return Status::OK();
+        } else {
+            static_assert(std::is_same_v<T, uint64_t>);
+            return Status::OK();
+        }
+    }
 
     ~BinaryColumnBase() override {
 #ifndef NDEBUG
