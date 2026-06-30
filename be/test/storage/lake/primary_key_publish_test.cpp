@@ -467,16 +467,20 @@ TEST_P(LakePrimaryKeyPublishTest, test_interleaved_delete_then_reupsert) {
     auto tablet_id = _tablet_metadata->id();
     const int64_t old_size = config::write_buffer_size;
     const bool old_spill = config::enable_load_spill;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
     // Force every write() to flush separately so the upsert/delete/re-upsert land in distinct
     // segments and del files (segment0, del-after-segment0, segment1) within one transaction. Force
     // the serial (non-spill) flush path: the spill/merge path collapses flushes into a single merged
     // segment and orders deletes differently (handled separately), so it would not exercise the
-    // per-flush op_offset interleaving this test targets.
+    // per-flush op_offset interleaving this test targets. Enable op_offset persistence (off by
+    // default for downgrade safety) so this test exercises the interleaving it targets.
     config::write_buffer_size = 1;
     config::enable_load_spill = false;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
     DeferOp reset_cfg([&]() {
         config::write_buffer_size = old_size;
         config::enable_load_spill = old_spill;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
     });
     int64_t txn_id = next_id();
     {
@@ -577,12 +581,18 @@ TEST_P(LakePrimaryKeyPublishTest, test_delete_only_first_flush_creates_segment) 
     // ordering is handled separately), so it would not exercise this mechanism.
     const int64_t old_size = config::write_buffer_size;
     const bool old_spill = config::enable_load_spill;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
     config::write_buffer_size = 1;
     config::enable_load_spill = false;
+    // Enable op_offset persistence (off by default for downgrade safety) so the delete-only first
+    // flush records its op_offset; otherwise the gate leaves it unset and the metadata assertions
+    // below (del file op_offset==0) would not hold.
+    config::lake_enable_pk_preserve_txn_delete_order = true;
     write_one_txn(3,
                   {make_chunk(/*value_shift=*/0, /*upsert=*/false), make_chunk(/*value_shift=*/1000, /*upsert=*/true)});
     config::write_buffer_size = old_size;
     config::enable_load_spill = old_spill;
+    config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
 
     // Correctness: all keys survive with the re-upserted value (the trailing upsert wins).
     ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 3));

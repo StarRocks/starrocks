@@ -802,7 +802,8 @@
         "enable_pk_strict_memcheck",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
-        "column_mode_partial_update_insert_batch_size"
+        "column_mode_partial_update_insert_batch_size",
+        "lake_enable_pk_preserve_txn_delete_order"
       ]
     },
     {
