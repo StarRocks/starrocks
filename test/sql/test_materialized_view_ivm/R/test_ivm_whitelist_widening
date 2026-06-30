@@ -119,7 +119,7 @@ AS SELECT k, dt, HLL_UNION(HLL_HASH(s_short)) AS h
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
+E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: hll_union. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv, bitmap_agg].')
 -- !result
 CREATE MATERIALIZED VIEW mv_bmp PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -128,7 +128,12 @@ AS SELECT k, dt, BITMAP_UNION(TO_BITMAP(k)) AS b
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: IVMAnalyzer does not support aggregate function: bitmap_agg. Supported functions: [count, sum, avg, min, max, array_agg, bool_or, approx_count_distinct, ndv].')
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_bmp WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b) AS dc FROM mv_bmp ORDER BY k, dt;
+-- result:
+1	2023-12-01	1
+2	2023-12-02	1
 -- !result
 drop database db_${uuid0} force;
 -- result:
