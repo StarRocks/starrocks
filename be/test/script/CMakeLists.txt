@@ -16,6 +16,7 @@ set(SCRIPT_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     command_executor_test.cpp
     key_cache_script_test.cpp
+    runtime_env_script_test.cpp
 )
 
 set(SCRIPT_TEST_LINK_LIBS

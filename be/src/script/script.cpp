@@ -182,6 +182,44 @@ static std::string key_cache_info() {
     return KeyCache::instance().to_string();
 }
 
+static void bind_runtime_env_class(ForeignKlassImpl<RuntimeEnv>& cls) {
+    REG_STATIC_METHOD(RuntimeEnv, GetInstance);
+
+    // level 0
+    REG_METHOD(RuntimeEnv, process_mem_tracker);
+
+    // level 1
+    REG_METHOD(RuntimeEnv, query_pool_mem_tracker);
+    REG_METHOD(RuntimeEnv, load_mem_tracker);
+    REG_METHOD(RuntimeEnv, metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, compaction_mem_tracker);
+    REG_METHOD(RuntimeEnv, schema_change_mem_tracker);
+    REG_METHOD(RuntimeEnv, page_cache_mem_tracker);
+    REG_METHOD(RuntimeEnv, jit_cache_mem_tracker);
+    REG_METHOD(RuntimeEnv, update_mem_tracker);
+    REG_METHOD(RuntimeEnv, passthrough_mem_tracker);
+    REG_METHOD(RuntimeEnv, clone_mem_tracker);
+    REG_METHOD(RuntimeEnv, consistency_mem_tracker);
+    REG_METHOD(RuntimeEnv, connector_scan_pool_mem_tracker);
+    REG_METHOD(RuntimeEnv, datacache_mem_tracker);
+
+    // level 2
+    REG_METHOD(RuntimeEnv, tablet_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, rowset_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, segment_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, column_metadata_mem_tracker);
+
+    // level 3
+    REG_METHOD(RuntimeEnv, tablet_schema_mem_tracker);
+    REG_METHOD(RuntimeEnv, column_zonemap_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, ordinal_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, bitmap_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, bloom_filter_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, builtin_inverted_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, segment_zonemap_mem_tracker);
+    REG_METHOD(RuntimeEnv, short_key_index_mem_tracker);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -218,41 +256,11 @@ void bind_exec_env(ForeignModule& m) {
     }
     {
         auto& cls = m.klass<RuntimeEnv>("RuntimeEnv");
-        REG_STATIC_METHOD(RuntimeEnv, GetInstance);
-
-        // level 0
-        REG_METHOD(RuntimeEnv, process_mem_tracker);
-
-        // level 1
-        REG_METHOD(RuntimeEnv, query_pool_mem_tracker);
-        REG_METHOD(RuntimeEnv, load_mem_tracker);
-        REG_METHOD(RuntimeEnv, metadata_mem_tracker);
-        REG_METHOD(RuntimeEnv, compaction_mem_tracker);
-        REG_METHOD(RuntimeEnv, schema_change_mem_tracker);
-        REG_METHOD(RuntimeEnv, page_cache_mem_tracker);
-        REG_METHOD(RuntimeEnv, jit_cache_mem_tracker);
-        REG_METHOD(RuntimeEnv, update_mem_tracker);
-        REG_METHOD(RuntimeEnv, passthrough_mem_tracker);
-        REG_METHOD(RuntimeEnv, clone_mem_tracker);
-        REG_METHOD(RuntimeEnv, consistency_mem_tracker);
-        REG_METHOD(RuntimeEnv, connector_scan_pool_mem_tracker);
-        REG_METHOD(RuntimeEnv, datacache_mem_tracker);
-
-        // level 2
-        REG_METHOD(RuntimeEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(RuntimeEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(RuntimeEnv, segment_metadata_mem_tracker);
-        REG_METHOD(RuntimeEnv, column_metadata_mem_tracker);
-
-        // level 3
-        REG_METHOD(RuntimeEnv, tablet_schema_mem_tracker);
-        REG_METHOD(RuntimeEnv, column_zonemap_index_mem_tracker);
-        REG_METHOD(RuntimeEnv, ordinal_index_mem_tracker);
-        REG_METHOD(RuntimeEnv, bitmap_index_mem_tracker);
-        REG_METHOD(RuntimeEnv, bloom_filter_index_mem_tracker);
-        REG_METHOD(RuntimeEnv, builtin_inverted_index_mem_tracker);
-        REG_METHOD(RuntimeEnv, segment_zonemap_mem_tracker);
-        REG_METHOD(RuntimeEnv, short_key_index_mem_tracker);
+        bind_runtime_env_class(cls);
+    }
+    {
+        auto& cls = m.klass<RuntimeEnv>("GlobalEnv");
+        bind_runtime_env_class(cls);
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
@@ -623,7 +631,8 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, RuntimeEnv, HeapProf, StorageEngine, VLogCntl)");
+    vm.runFromSource("main",
+                     R"(import "starrocks" for ExecEnv, RuntimeEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {
