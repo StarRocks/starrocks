@@ -45,7 +45,7 @@
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
 
@@ -79,7 +79,7 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(GlobalEnv::GetInstance()->clone_mem_tracker());
+            _s_instance = new SnapshotManager(RuntimeEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;

@@ -138,7 +138,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
           _data_sink_provider(std::move(data_sink_provider)),
           _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
-    MemTracker* query_pool_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+    MemTracker* query_pool_tracker = RuntimeEnv::GetInstance()->query_pool_mem_tracker();
     MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
 

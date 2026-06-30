@@ -74,8 +74,8 @@ void starrocks_format_initialize(void) {
 
         TimezoneUtils::init_time_zones();
 
-        auto ge_init_stat = GlobalEnv::GetInstance()->init(process_metrics_registry()->root_registry());
-        CHECK(ge_init_stat.ok()) << "init global env error";
+        auto ge_init_stat = RuntimeEnv::GetInstance()->init(process_metrics_registry()->root_registry());
+        CHECK(ge_init_stat.ok()) << "init runtime env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
         _lake_tablet_manager = new lake::TabletManager(lake_location_provider, config::lake_metadata_cache_limit);

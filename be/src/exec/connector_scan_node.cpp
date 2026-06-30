@@ -80,7 +80,7 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
 
         // we don't want scan mem limit to exceed global memory limit.
-        int64_t global_lowest = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
+        int64_t global_lowest = RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
         if (global_lowest > 0) {
             _scan_mem_limit = std::min(_scan_mem_limit, global_lowest);
         }

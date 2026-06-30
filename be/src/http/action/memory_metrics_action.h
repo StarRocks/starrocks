@@ -43,12 +43,12 @@
 namespace starrocks {
 
 class ExecEnv;
-class GlobalEnv;
+class RuntimeEnv;
 class HttpRequest;
 
 class MemoryMetricsAction : public HttpHandler {
 public:
-    explicit MemoryMetricsAction(const GlobalEnv& global_env) : _global_env(global_env) {}
+    explicit MemoryMetricsAction(const RuntimeEnv& runtime_env) : _runtime_env(runtime_env) {}
 
     ~MemoryMetricsAction() override = default;
 
@@ -62,7 +62,7 @@ public:
     bool need_auth() const override;
 
 private:
-    const GlobalEnv& _global_env;
+    const RuntimeEnv& _runtime_env;
 
     void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size);
 };

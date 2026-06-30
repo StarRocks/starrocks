@@ -203,8 +203,8 @@ void jemalloc_tracker_daemon(void* arg_this) {
         retrieve_jemalloc_stats(&stats);
 
         // Jemalloc metadata
-        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
-            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+        if (RuntimeEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = RuntimeEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
         }

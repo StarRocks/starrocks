@@ -659,7 +659,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Percent
 - 是否动态：否
-- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`GlobalEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
+- 描述：BE 进程内存中为更新相关内存和缓存保留的比例。在启动期间，`RuntimeEnv` 将更新的 `MemTracker` 计算为 process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100。`UpdateManager` 也使用该百分比来确定其 primary-index/index-cache 的容量（index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP 配置更新逻辑会注册一个回调，在配置更改时调用 update managers 的 `update_primary_index_memory_limit`，因此配置更改会应用到更新子系统。增加此值会为更新/primary-index 路径分配更多内存（减少其他内存池可用内存）；减少它会降低更新内存和缓存容量。值会被限定在 0–100 范围内。
 - 引入版本：v3.2.0
 
 ### enable_vector_adaptive_search

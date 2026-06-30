@@ -43,26 +43,26 @@
 #include "column/column_viewer.h"
 #include "common/bloom_filter.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/types.h"
 
 namespace starrocks {
 
 BloomFilterIndexReader::BloomFilterIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                              sizeof(BloomFilterIndexReader));
 }
 
 BloomFilterIndexReader::~BloomFilterIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                      mem_usage() - sizeof(BloomFilterIndexReader));
         } else {
             _reset();

@@ -18,7 +18,7 @@
 
 #include "base/concurrency/countdown_latch.h"
 #include "exec/exec_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_env.h"
 
@@ -80,7 +80,7 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
                 continue;
             }
 
-            Status submit_status = GlobalEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
+            Status submit_status = RuntimeEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(task);
             if (!submit_status.ok()) {
                 submit_failed = true;
                 mark_failure(submit_status, &has_error, &final_status);

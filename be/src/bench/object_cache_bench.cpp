@@ -101,7 +101,7 @@ void ObjectCacheBench::init_env() {
         CpuInfo::init();
         DiskInfo::init();
         MemInfo::init();
-        GlobalEnv* env = GlobalEnv::GetInstance();
+        RuntimeEnv* env = RuntimeEnv::GetInstance();
         Status st = env->init();
         is_init = true;
         LOG(INFO) << "int env: " << st;

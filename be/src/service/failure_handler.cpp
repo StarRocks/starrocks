@@ -51,7 +51,7 @@
 #include "gutil/endian.h"
 #include "gutil/sysinfo.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
 
 namespace starrocks {
@@ -187,7 +187,7 @@ static void failure_handler_after_output_log() {
         // Best-effort core-size optimization: release selected large pools/caches before
         // marking unused jemalloc pages as dontdump. Keep this path allocation/log free
         // because it may run after OOM or heap corruption.
-        try_release_resources_before_core_dump(ExecEnv::GetInstance(), GlobalEnv::GetInstance(), data_cache);
+        try_release_resources_before_core_dump(ExecEnv::GetInstance(), RuntimeEnv::GetInstance(), data_cache);
 #ifndef __APPLE__
         dontdump_unused_pages();
 #endif

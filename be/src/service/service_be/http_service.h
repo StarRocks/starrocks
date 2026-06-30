@@ -44,7 +44,7 @@ namespace starrocks {
 class ExecEnv;
 class DataCache;
 class EvHttpServer;
-class GlobalEnv;
+class RuntimeEnv;
 class HttpHandler;
 class LoadChannelMgr;
 class ProcessMetricsRegistry;
@@ -58,7 +58,7 @@ class OrchestrationEnv;
 class HttpServiceBE {
 public:
     HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
-                  const GlobalEnv& global_env, ProcessMetricsRegistry* process_metrics_registry,
+                  const RuntimeEnv& runtime_env, ProcessMetricsRegistry* process_metrics_registry,
                   LoadChannelMgr* load_channel_mgr, int port, int num_threads);
     ~HttpServiceBE();
 
@@ -70,7 +70,7 @@ private:
     [[maybe_unused]] DataCache* _cache_env;
     ExecEnv* _env;
     orchestration::OrchestrationEnv* _orchestration_env;
-    const GlobalEnv& _global_env;
+    const RuntimeEnv& _runtime_env;
     ProcessMetricsRegistry* _process_metrics_registry;
     LoadChannelMgr* _load_channel_mgr;
 

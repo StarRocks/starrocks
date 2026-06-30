@@ -27,7 +27,7 @@
 #include "compute_env/pipeline/driver_limiter.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/driver_queue.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
@@ -105,13 +105,13 @@ void init_compute_env_test_context() {
     std::error_code ec;
     std::filesystem::create_directories(spill_path, ec);
     ASSERT_FALSE(ec) << ec.message();
-    ASSERT_OK(GlobalEnv::GetInstance()->init_execution_thread_pools(metrics));
+    ASSERT_OK(RuntimeEnv::GetInstance()->init_execution_thread_pools(metrics));
     initialized = true;
 }
 
 ComputeEnvOptions make_compute_env_options(MetricRegistry* metrics = nullptr) {
     ComputeEnvOptions options;
-    options.global_env = GlobalEnv::GetInstance();
+    options.runtime_env = RuntimeEnv::GetInstance();
     options.metrics = metrics;
     options.as_cn = true;
     options.query_cache_capacity = 4 * 1024 * 1024;

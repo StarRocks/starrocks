@@ -26,7 +26,7 @@
 #include "exec/data_sinks/tablet_sink_index_channel.h"
 #include "exec/exec_env.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
 
 namespace starrocks {
@@ -34,9 +34,9 @@ namespace starrocks {
 class InternalServiceTest : public testing::Test {
 public:
     void SetUp() override {
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, GlobalEnv::GetInstance()->diagnose_daemon(),
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, RuntimeEnv::GetInstance()->diagnose_daemon(),
                                                              PlatformEnv::GetInstance()->brpc_stub_cache());
-        ASSERT_OK(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
+        ASSERT_OK(_load_channel_mgr->init(RuntimeEnv::GetInstance()->load_mem_tracker()));
     }
 
     void TearDown() override {

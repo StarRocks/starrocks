@@ -29,15 +29,15 @@ class HeartbeatFlags;
 class DiagnoseDaemon;
 class MetricRegistry;
 
-class GlobalEnv {
+class RuntimeEnv {
 public:
-    static GlobalEnv* GetInstance() {
-        static GlobalEnv s_global_env;
-        return &s_global_env;
+    static RuntimeEnv* GetInstance() {
+        static RuntimeEnv s_runtime_env;
+        return &s_runtime_env;
     }
 
-    GlobalEnv();
-    ~GlobalEnv();
+    RuntimeEnv();
+    ~RuntimeEnv();
 
     Status init(MetricRegistry* metrics);
     void stop();

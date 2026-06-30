@@ -30,8 +30,8 @@
 #include "common/status.h"
 #include "fs/fs_memory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/vector/empty_index_reader.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
@@ -502,8 +502,8 @@ public:
 // Reverting the loader to vector_index_mem_tracker() -> captured == vi -> fails.
 // Dropping the scoped setter entirely -> captured == the ambient query tracker -> fails.
 TEST(TenANNReaderTest, InitSearcher_ChargesLoadToProcessNotVectorIndex) {
-    auto* process = GlobalEnv::GetInstance()->process_mem_tracker();
-    auto* vi = GlobalEnv::GetInstance()->vector_index_mem_tracker();
+    auto* process = RuntimeEnv::GetInstance()->process_mem_tracker();
+    auto* vi = RuntimeEnv::GetInstance()->vector_index_mem_tracker();
     ASSERT_NE(nullptr, process);
     ASSERT_NE(nullptr, vi);
 

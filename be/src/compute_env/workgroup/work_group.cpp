@@ -24,8 +24,8 @@
 #include "compute_env/workgroup/scan_task_queue_factory.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "glog/logging.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::workgroup {
 
@@ -221,7 +221,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::
 
     _connector_scan_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, _memory_limit_bytes, _name + "/connector_scan",
-                                         GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
+                                         RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker());
 }
 
 std::string WorkGroup::to_string() const {

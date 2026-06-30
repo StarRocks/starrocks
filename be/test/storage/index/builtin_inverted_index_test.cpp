@@ -906,7 +906,7 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
 // Verify that BuiltinInvertedReader correctly tracks memory via the builtin_inverted_index_mem_tracker.
 // The tracker balance should be zero after the reader is destroyed.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"alpha", "beta", "gamma"};
@@ -968,7 +968,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
 
 // Verify that load failure does not cause a tracker imbalance.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     {
@@ -992,7 +992,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
 // does not cause a tracker imbalance. This covers the error path in load() where
 // _bitmap_index->load() fails and _bitmap_index is reset.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_bitmap_load_failure) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     {
@@ -1087,7 +1087,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_usage_before_and_after_load) {
 // Verify that multiple BuiltinInvertedReaders cumulatively track their memory,
 // and that the tracker returns to baseline after all readers are destroyed.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_multiple_readers) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"x", "y", "z"};
@@ -1164,7 +1164,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_multiple_readers) {
 
 // Verify memory tracking works correctly with the English parser path (tokenized index).
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_english_parser) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"hello world", "foo bar baz"};

@@ -40,8 +40,8 @@
 #include "gen_cpp/FrontendService.h"
 #include "platform/thrift_rpc_helper.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::pipeline {
 
@@ -297,7 +297,7 @@ void ExecStateReporter::report_exec_state(QueryContext* query_ctx, FragmentConte
         int64_t delta = CurrentThread::current().get_consumed_bytes() - before_bytes;
 
         CurrentThread::current().mem_release(delta);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta);
+        RuntimeEnv::GetInstance()->process_mem_tracker()->consume(delta);
     }
 
     auto instance_id = fragment_ctx->fragment_instance_id();

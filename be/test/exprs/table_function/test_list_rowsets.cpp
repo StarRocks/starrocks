@@ -17,7 +17,7 @@
 #include "exprs/table_function/list_rowsets.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_env.h"
 
@@ -37,7 +37,7 @@ public:
         delete _runtimeState;
         StorageEnvOptions storage_env_options;
         storage_env_options.store_path_registry = PlatformEnv::GetInstance()->store_path_registry();
-        storage_env_options.update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+        storage_env_options.update_mem_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();
         storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
         storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
         ASSERT_OK(StorageEnv::GetInstance()->init(storage_env_options));

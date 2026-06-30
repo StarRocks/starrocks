@@ -47,7 +47,7 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/base/merge_iterator.h"
@@ -80,7 +80,7 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
           _refs_by_reader(0) {
     _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
     _keys_type = _schema->keys_type();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Rowset::~Rowset() {
@@ -91,7 +91,7 @@ Rowset::~Rowset() {
         MetadataCache::instance()->evict_rowset(this);
     }
 #endif
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Rowset::load() {

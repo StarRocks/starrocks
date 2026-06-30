@@ -576,7 +576,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 // Verify that BitmapIndexReader with owned_mem_tracker=false does NOT affect the
 // bitmap_index_mem_tracker during construction, load, or destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;
@@ -620,7 +620,7 @@ TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
 // Verify that BitmapIndexReader with owned_mem_tracker=true (default) properly tracks
 // memory via bitmap_index_mem_tracker during construction, load, and destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_true_tracks_memory) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;

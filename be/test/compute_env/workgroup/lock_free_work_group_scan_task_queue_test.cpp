@@ -26,7 +26,7 @@
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/pipeline/primitives/driver_queue.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::workgroup {
 
@@ -57,7 +57,7 @@ public:
 };
 
 WorkGroupPtr init_workgroup(WorkGroupPtr wg) {
-    auto parent = GlobalEnv::GetInstance()->query_pool_mem_tracker_shared();
+    auto parent = RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared();
     wg->init(parent, std::make_unique<FakeDriverQueue>());
     return wg;
 }

@@ -44,8 +44,8 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/like_predicate.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/primitive/bitmap_range_iterator.h"
 #include "storage/primitive/range.h"
@@ -58,13 +58,13 @@ using Roaring = roaring::Roaring;
 BitmapIndexReader::BitmapIndexReader(int32_t gram_num, bool owned_mem_tracker)
         : _gram_num(gram_num), _owned_mem_tracker(owned_mem_tracker) {
     if (_owned_mem_tracker) {
-        MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
+        MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
     }
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
     if (_owned_mem_tracker) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
     }
 }
 
@@ -73,7 +73,7 @@ StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const Bitma
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             if (_owned_mem_tracker) {
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          mem_usage() - sizeof(BitmapIndexReader));
             }
         } else {

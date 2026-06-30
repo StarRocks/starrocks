@@ -29,7 +29,7 @@
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "gutil/stl_util.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/aggregate_iterator.h"
@@ -426,7 +426,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

@@ -48,7 +48,7 @@ set(RUNTIME_SRCS
     serde/chunk_encode_context.cpp
     serde/protobuf_chunk_serde.cpp
     env/diagnose_daemon.cpp
-    env/global_env.cpp
+    runtime_env.cpp
     env/global_thread_pools.cpp
     env/java/java_env.cpp
 )

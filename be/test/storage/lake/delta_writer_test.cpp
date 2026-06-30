@@ -696,9 +696,9 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
     // Create and open DeltaWriter
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    int64_t old_limit = GlobalEnv::GetInstance()->load_mem_tracker()->limit();
-    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(1);
-    GlobalEnv::GetInstance()->load_mem_tracker()->consume(100);
+    int64_t old_limit = RuntimeEnv::GetInstance()->load_mem_tracker()->limit();
+    RuntimeEnv::GetInstance()->load_mem_tracker()->set_limit(1);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->consume(100);
     ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
@@ -712,8 +712,8 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
     ASSERT_OK(delta_writer->open());
     // Write and flush
     ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-    GlobalEnv::GetInstance()->load_mem_tracker()->release(100);
-    GlobalEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->release(100);
+    RuntimeEnv::GetInstance()->load_mem_tracker()->set_limit(old_limit);
 }
 
 // Test parallel memtable finalize feature

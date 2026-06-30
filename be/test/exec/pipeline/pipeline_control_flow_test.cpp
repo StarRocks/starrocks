@@ -698,8 +698,8 @@ struct SpillDriverTestHarness {
         query_execution_services.runtime = &runtime_services;
         query_ctx.set_query_id(generate_uuid());
         query_ctx.set_query_execution_services(&query_execution_services);
-        query_ctx.init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                   GlobalEnv::GetInstance()->query_pool_mem_tracker());
+        query_ctx.init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                   RuntimeEnv::GetInstance()->query_pool_mem_tracker());
         EXPECT_OK(query_ctx.init_spill_manager(TQueryOptions{}));
         EXPECT_EQ(query_ctx.spill_manager(), query_ctx.query_runtime_state().query_spill_manager());
         query_ctx.set_query_execution_services(nullptr);

@@ -145,7 +145,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 
 void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
-    auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
+    auto* datacache_mem_tracker = RuntimeEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
         LocalMemCacheEngine* local_cache = DataCache::GetInstance()->local_mem_cache();
         if (local_cache != nullptr && local_cache->is_initialized()) {
@@ -162,7 +162,7 @@ void SystemMetrics::_update_datacache_mem_tracker() {
 }
 
 void SystemMetrics::_update_pagecache_mem_tracker() {
-    auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
+    auto* pagecache_mem_tracker = RuntimeEnv::GetInstance()->page_cache_mem_tracker();
     auto* page_cache = StoragePageCache::instance();
     if (pagecache_mem_tracker && page_cache != nullptr && page_cache->is_initialized()) {
         pagecache_mem_tracker->set(page_cache->memory_usage());
@@ -205,9 +205,9 @@ void SystemMetrics::update_memory_metrics() {
     _update_datacache_mem_tracker();
     _update_pagecache_mem_tracker();
 
-#define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
-    if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
-        _memory_metrics->key.set_value(GlobalEnv::GetInstance()->tracker()->consumption()); \
+#define SET_MEM_METRIC_VALUE(tracker, key)                                                   \
+    if (RuntimeEnv::GetInstance()->tracker() != nullptr) {                                   \
+        _memory_metrics->key.set_value(RuntimeEnv::GetInstance()->tracker()->consumption()); \
     }
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)

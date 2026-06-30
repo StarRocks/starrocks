@@ -30,7 +30,7 @@
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
@@ -446,7 +446,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 

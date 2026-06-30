@@ -45,7 +45,7 @@ public:
         auto fs = FileSystem::Default();
         ASSERT_OK(fs->create_dir_recursive(path));
         LOG(INFO) << "path: " << path;
-        auto parent = GlobalEnv::GetInstance()->query_pool_mem_tracker_shared();
+        auto parent = RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared();
         dummy_wg = std::make_shared<workgroup::WorkGroup>(
                 "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0,
                 1.0, workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);
