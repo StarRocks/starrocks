@@ -1718,25 +1718,25 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
-    // The enough number of tablets shouldn't use tablet internal parallel.
-    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
+    // Enough tablets to fill pipeline_dop normally means no split is needed. But that count-based gate is
+    // blind to tablet-size skew: a single oversized tablet becomes an un-splittable morsel that one driver
+    // scans with a single io task (its sibling io-task slots idle), turning it into a long-tail straggler.
+    // Only the lake prepared-physical-split scan can break such a tablet into parallel sub-range morsels,
+    // so the skew override is gated on that optimization; with it off we keep the original count-based gate
+    // verbatim (and pay no extra tablet-metadata lookups).
+    if (!force_split && num_total_scan_ranges >= pipeline_dop && !_enable_lake_prepared_physical_split_scan) {
         return false;
     }
 
     int64_t num_table_rows = 0;
+    int64_t max_tablet_rows = 0;
     for (const auto& tablet_scan_range : scan_ranges) {
         int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
-#ifdef BE_TEST
         ASSIGN_OR_RETURN(auto tablet_num_rows,
                          _tablet_manager->get_tablet_num_rows(
                                  tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
-#else
-        ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         _tablet_manager->get_tablet_num_rows(
-                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
-        num_table_rows += static_cast<int64_t>(tablet_num_rows);
-#endif
+        max_tablet_rows = std::max(max_tablet_rows, static_cast<int64_t>(tablet_num_rows));
     }
 
     // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -1745,14 +1745,36 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     *splitted_scan_rows =
             std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+
+    // Skew detection (only meaningful under prepared-physical-split, see the gate above). A tablet is a
+    // straggler worth splitting when it is BOTH (a) big enough that TabletReader::open will actually split
+    // it -- same lake_tablet_rows_splitted_ratio threshold, so "gate lets it through" matches "reader
+    // really splits it", no wasted pass; AND (b) larger than its per-driver ideal share by skew_split_ratio.
+    // The ideal-share denominator is min(num_scan_ranges, pipeline_dop) -- the real number of drivers these
+    // ranges are spread over when NOT split (an un-split tablet uses only one io task, so io_tasks does not
+    // enter the denominator); under the count-based gate (num_total >= dop) it equals pipeline_dop.
+    const int64_t effective_dop = std::max<int64_t>(1, std::min<int64_t>(num_total_scan_ranges, pipeline_dop));
+    const int64_t ideal_share_rows = num_table_rows / effective_dop;
+    const bool has_skewed_big_tablet =
+            _enable_lake_prepared_physical_split_scan &&
+            max_tablet_rows >= *splitted_scan_rows * config::lake_tablet_rows_splitted_ratio &&
+            max_tablet_rows > ideal_share_rows * _runtime_state->lake_tablet_internal_parallel_skew_split_ratio();
+
+    // Count-based gate, now overridable by a skewed big tablet.
+    if (!force_split && num_total_scan_ranges >= pipeline_dop && !has_skewed_big_tablet) {
+        return false;
+    }
+
     *scan_parallelism = num_table_rows / *splitted_scan_rows;
 
     if (force_split) {
         return true;
     }
 
-    bool could =
-            *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
+    // A skewed big tablet justifies split on its own, even if the row-sum-based scan_parallelism is low
+    // (e.g. the straggler plus many tiny tablets); the sum would otherwise average the single peak away.
+    bool could = *scan_parallelism >= pipeline_dop ||
+                 *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop || has_skewed_big_tablet;
     // if don't use tablet internal parallel scan, we choose the number of tablets as the dop of scan node
     // which is the same as olap scan
     if (!could) {
