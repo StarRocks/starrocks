@@ -62,8 +62,8 @@ public class StatisticsCalcUtils {
     }
 
     public static Statistics.Builder estimateScanColumns(Table table,
-                                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                         OptimizerContext optimizerContext) {
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          OptimizerContext optimizerContext) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())

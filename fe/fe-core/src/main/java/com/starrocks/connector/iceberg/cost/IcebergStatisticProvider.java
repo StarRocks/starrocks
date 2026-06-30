@@ -94,6 +94,7 @@ public class IcebergStatisticProvider {
 
         statisticsBuilder.setOutputRowCount(cardinality);
         statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         return statisticsBuilder.build();
     }
 
@@ -138,6 +139,7 @@ public class IcebergStatisticProvider {
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
             statisticsBuilder.addColumnStatistics(buildColumnStatistics(
                     nativeTable, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
+            statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         } else {
             // empty table
             statisticsBuilder.setOutputRowCount(1);
