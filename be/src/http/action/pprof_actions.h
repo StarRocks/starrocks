@@ -38,9 +38,19 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class BfdParser;
 
 class HeapAction : public HttpHandler {
+=======
+// Shared base for pprof/profile handlers: requires System OPERATE privilege on top of identity AuthN.
+class PprofBaseHandler : public HttpHandler {
+public:
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+};
+
+class HeapAction : public PprofBaseHandler {
+>>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 public:
     HeapAction() = default;
     ~HeapAction() override = default;
@@ -48,7 +58,7 @@ public:
     void handle(HttpRequest* req) override;
 };
 
-class GrowthAction : public HttpHandler {
+class GrowthAction : public PprofBaseHandler {
 public:
     GrowthAction() = default;
     ~GrowthAction() override = default;
@@ -56,7 +66,7 @@ public:
     void handle(HttpRequest* req) override;
 };
 
-class ProfileAction : public HttpHandler {
+class ProfileAction : public PprofBaseHandler {
 public:
     ProfileAction() = default;
     ~ProfileAction() override = default;
@@ -64,7 +74,7 @@ public:
     void handle(HttpRequest* req) override;
 };
 
-class IOProfileAction : public HttpHandler {
+class IOProfileAction : public PprofBaseHandler {
 public:
     IOProfileAction() = default;
     ~IOProfileAction() override = default;
@@ -72,14 +82,14 @@ public:
     void handle(HttpRequest* req) override;
 };
 
-class PmuProfileAction : public HttpHandler {
+class PmuProfileAction : public PprofBaseHandler {
 public:
     PmuProfileAction() = default;
     ~PmuProfileAction() override = default;
     void handle(HttpRequest* req) override {}
 };
 
-class ContentionAction : public HttpHandler {
+class ContentionAction : public PprofBaseHandler {
 public:
     ContentionAction() = default;
     ~ContentionAction() override = default;
@@ -87,14 +97,14 @@ public:
     void handle(HttpRequest* req) override {}
 };
 
-class CmdlineAction : public HttpHandler {
+class CmdlineAction : public PprofBaseHandler {
 public:
     CmdlineAction() = default;
     ~CmdlineAction() override = default;
     void handle(HttpRequest* req) override;
 };
 
-class SymbolAction : public HttpHandler {
+class SymbolAction : public PprofBaseHandler {
 public:
     SymbolAction(BfdParser* parser) : _parser(parser) {}
     ~SymbolAction() override = default;

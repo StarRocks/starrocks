@@ -37,6 +37,11 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.authorization.AccessDeniedException;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
+>>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -123,8 +128,18 @@ public class MetricsAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, API_PATH, new MetricsAction(controller));
     }
 
+    // Prometheus-style metrics. Historically anonymous; gated for backward compatibility
+    // so it requires Basic auth (AuthN-only, no privilege check) only when the operator
+    // opts in via `enable_http_auth`. The per-table / per-MV / per-user-connection
+    // breakdowns still do their own admin check inside parseRequestParams() and
+    // gracefully fall back when the caller lacks admin.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
         // parse visitor type
         String type = request.getSingleParameter(TYPE_PARAM);
         MetricVisitor visitor = null;

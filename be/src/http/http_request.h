@@ -53,6 +53,15 @@ public:
 
     const std::string& header(const std::string& key) const;
 
+<<<<<<< HEAD
+=======
+    // Set an input request header. Production code populates `_headers` via
+    // `init_from_evhttp()` reading from libevent; this setter lets tests
+    // synthesize headers on an HttpRequest that wasn't fed through libevent.
+    void set_header(const std::string& key, const std::string& value) { _headers[key] = value; }
+
+    void add_param(const std::string& key, const std::string& value) { _params.emplace(key, value); }
+>>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
     const std::string& param(const std::string& key) const;
 
     // return params

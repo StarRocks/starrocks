@@ -64,6 +64,11 @@ public:
     void on_chunk_data(HttpRequest* req) override;
     void free_handler_ctx(void* ctx) override;
 
+    // Auth (identity + table-level INSERT priv) is performed by FE as part of the
+    // loadTxnBegin/streamLoadPut RPC flow; skip the framework-level pre-check to
+    // avoid an extra FE round-trip per stream-load request.
+    bool need_auth() const override { return false; }
+
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _handle(StreamLoadContext* ctx);

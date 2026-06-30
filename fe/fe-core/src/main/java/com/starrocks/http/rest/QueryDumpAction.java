@@ -15,6 +15,7 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -54,7 +55,9 @@ public class QueryDumpAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         ConnectContext context = ConnectContext.get();
         String catalogDbName = request.getSingleParameter(DB);
         boolean enableMock = request.getSingleParameter(MOCK) == null ||

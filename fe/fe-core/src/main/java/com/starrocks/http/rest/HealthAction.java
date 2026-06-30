@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -53,8 +54,16 @@ public class HealthAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/health", new HealthAction(controller));
     }
 
+    // Liveness probe. Historically anonymous; gated for backward compatibility so it
+    // requires Basic auth (AuthN-only, no privilege check) only when the operator opts
+    // in via `enable_http_auth`.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         if (GracefulExitFlag.isGracefulExit()) {
             sendResult(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
         } else {
