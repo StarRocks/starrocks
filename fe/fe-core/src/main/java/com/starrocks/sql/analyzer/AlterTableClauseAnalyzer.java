@@ -1254,6 +1254,20 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, col);
             }
         }
+        List<String> sortKeys = clause.getSortKeys();
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            Set<String> rollupColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            rollupColSet.addAll(columnNames);
+            Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String sk : sortKeys) {
+                if (!rollupColSet.contains(sk)) {
+                    throw new SemanticException("ORDER BY column '" + sk + "' is not in the rollup column list");
+                }
+                if (!seen.add(sk)) {
+                    throw new SemanticException("Duplicate ORDER BY column '" + sk + "'");
+                }
+            }
+        }
         clause.setBaseRollupName(Strings.emptyToNull(clause.getBaseRollupName()));
         return null;
     }
