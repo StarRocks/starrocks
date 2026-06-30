@@ -115,7 +115,8 @@ public:
         config::streaming_load_max_mb = 1;
 
         ASSERT_OK(init_platform_env_for_stream_load_test(&_metrics, &_owns_platform_env));
-        ASSERT_OK(_env.compute_env()->init(make_stream_load_compute_env_options(&_metrics)));
+        ASSERT_OK(_compute_env.init(make_stream_load_compute_env_options(&_metrics)));
+        _env.set_compute_env(&_compute_env);
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._transaction_mgr = new TransactionMgr(&_env);
         _env._refresh_service_contexts();
@@ -130,7 +131,8 @@ public:
         _env._transaction_mgr = nullptr;
         delete _env._stream_load_executor;
         _env._stream_load_executor = nullptr;
-        _env.compute_env()->destroy();
+        _env.set_compute_env(nullptr);
+        _compute_env.destroy();
         if (_owns_platform_env) {
             PlatformEnv::GetInstance()->destroy();
             PlatformEnv::GetInstance()->reset_store_paths_for_test();
@@ -144,6 +146,7 @@ public:
 
 protected:
     ExecEnv _env;
+    ComputeEnv _compute_env;
     orchestration::StreamLoadOrchestrator _stream_load_orchestrator{&_env, nullptr};
     evhttp_request* _evhttp_req = nullptr;
     MetricRegistry _metrics{"transaction_stream_load_action_test"};
