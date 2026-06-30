@@ -485,7 +485,6 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
-<<<<<<< HEAD
 // CDC: per-tablet scan range for CHANGES query
 struct TChangesScanRange {
     1: optional i64 db_id
@@ -509,10 +508,6 @@ struct TChangesScanNode {
     // name matches one tuple slot; if no slot matches, the metadata column
     // was dropped by projection pruning and is skipped.
     3: optional list<Descriptors.TChangesMetaDescriptor> meta_descriptors
-=======
-struct TChangesScanNode {
-    // no implementation, only used for placeholder in TPlanNode
->>>>>>> 50ca61bbaae... [Enhancement] Reserve proto/thrift placeholders for CDC metadata and changes scan (#75537)
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -1617,16 +1612,9 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
-<<<<<<< HEAD
-  86: optional TChangesScanNode changes_scan_node;
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
 
-  87: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
-=======
-  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
-
-  // just a placeholder
   150: optional TChangesScanNode changes_scan_node;
->>>>>>> 50ca61bbaae... [Enhancement] Reserve proto/thrift placeholders for CDC metadata and changes scan (#75537)
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
