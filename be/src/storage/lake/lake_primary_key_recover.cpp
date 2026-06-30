@@ -108,12 +108,12 @@ Status LakePrimaryKeyRecover::rowset_iterator(
         }
         // Position of each del file in the merged (segments + dels) replay sequence consumed by the
         // handler. A del file logically follows segment index op_offset, so the segments preceding it
-        // are [0, op_offset] (op_offset + 1 of them) and the del files preceding it are the j already
-        // collected; hence its merged position is op_offset + 1 + j. This interleaves deletes at the
-        // same point the apply path does, so recover reproduces the same delvec. del_rfs only holds
-        // origin del files (the loop above breaks on non-origin), so op_offset is in this rowset's
-        // segment-index space. Reduces to the legacy "after all segments" (num_segments + j) when
-        // op_offset is the max segment index.
+        // are this rowset's iterators with segment index <= op_offset (segs_before, counted below) and
+        // the del files preceding it are the j already collected; hence its merged position is
+        // segs_before + j. This interleaves deletes at the same point the apply path does, so recover
+        // reproduces the same delvec. del_rfs only holds origin del files (the loop above breaks on
+        // non-origin), so op_offset is in this rowset's segment-index space. Reduces to the legacy
+        // "after all segments" when op_offset is the max segment index.
         std::vector<uint32_t> delidxs;
         delidxs.reserve(del_rfs.size());
         for (uint32_t j = 0; j < del_rfs.size(); ++j) {
@@ -122,13 +122,20 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             // delete then sorts after all segments (num_segments + j), i.e. the legacy recover
             // behavior. Matches the apply/persist fallback in resolve_del_op_offset().
             const uint32_t op_offset = del.has_op_offset() ? del.op_offset() : get_max_segment_idx(rowset->metadata());
-            // Segments preceding this del = op_offset + 1, but clamp to the actual segment count: a
-            // delete-only rowset (metadata allows segment_metas_size()==0 with del files) has no
-            // segment iterators, so the del must land at a position the handler reaches (< total_size).
-            // Without the clamp a one-delete segmentless rowset gets delidxs[0]==1 while total_size==1,
-            // skipping the delete on recover (deleted rows would reappear). No-op for rowsets with
-            // segments, where op_offset+1 <= num_segments.
-            const uint32_t segs_before = std::min<uint32_t>(op_offset + 1, static_cast<uint32_t>(itrs.size()));
+            // Segments preceding this del in the replay = this rowset's segment iterators whose segment
+            // index is <= op_offset. Counting them (rather than using op_offset + 1) stays correct when
+            // segment_idx is no longer contiguous -- e.g. after tablet split/pruning a rowset can retain
+            // sparse segment indices, where op_offset + 1 would over- or under-count and replay the
+            // delete at the wrong point (erasing a row live publish kept, or vice versa). It also covers
+            // a segmentless delete-only rowset (count == 0, so the del lands at a position the handler
+            // reaches) and reduces to op_offset + 1 for the common contiguous case. itrs[k] corresponds
+            // to the k-th segment_meta, whose index is get_segment_idx(metadata, k).
+            uint32_t segs_before = 0;
+            for (uint32_t k = 0; k < itrs.size(); ++k) {
+                if (get_segment_idx(rowset->metadata(), static_cast<int32_t>(k)) <= op_offset) {
+                    ++segs_before;
+                }
+            }
             delidxs.push_back(segs_before + j);
         }
         RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->id()));
