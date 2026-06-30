@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/memory_lock.h"
+#include "runtime/memory/memory_lock.h"
 
 #if defined(__linux__)
 #include <link.h>
@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "common/config_diagnostic_fwd.h"

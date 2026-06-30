@@ -23,7 +23,6 @@ set(UTIL_FILES
   static_asserts.cpp
   system_metrics.cpp
 # coding_util.cpp
-  memory_lock.cpp
   hdfs_util.cpp
   jvm_metrics.cpp
 )
