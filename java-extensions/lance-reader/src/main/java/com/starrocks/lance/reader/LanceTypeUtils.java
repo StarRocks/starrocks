@@ -15,6 +15,7 @@
 package com.starrocks.lance.reader;
 
 import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
@@ -64,7 +65,11 @@ public class LanceTypeUtils {
         } else if (arrowType instanceof ArrowType.Date) {
             return "date";
         } else if (arrowType instanceof ArrowType.Timestamp) {
-            return "timestamp-micros";
+            // jni-connector ColumnType recognizes timestamp-millis and timestamp-micros.
+            // Map MILLISECOND vectors directly; SECOND and NANOSECOND fall back to micros
+            // (the native StarRocks DATETIME precision) since they have no first-class encoding.
+            ArrowType.Timestamp tsType = (ArrowType.Timestamp) arrowType;
+            return tsType.getUnit() == TimeUnit.MILLISECOND ? "timestamp-millis" : "timestamp-micros";
         } else if (arrowType instanceof ArrowType.Decimal) {
             ArrowType.Decimal decType = (ArrowType.Decimal) arrowType;
             return "decimal(" + decType.getPrecision() + "," + decType.getScale() + ")";

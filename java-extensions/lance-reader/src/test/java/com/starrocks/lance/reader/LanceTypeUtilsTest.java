@@ -74,6 +74,18 @@ public class LanceTypeUtilsTest {
                 LanceTypeUtils.fromArrowType(
                         new ArrowType.Timestamp(
                                 org.apache.arrow.vector.types.TimeUnit.MICROSECOND, "UTC")));
+        assertEquals("timestamp-millis",
+                LanceTypeUtils.fromArrowType(
+                        new ArrowType.Timestamp(
+                                org.apache.arrow.vector.types.TimeUnit.MILLISECOND, null)));
+        assertEquals("timestamp-micros",
+                LanceTypeUtils.fromArrowType(
+                        new ArrowType.Timestamp(
+                                org.apache.arrow.vector.types.TimeUnit.NANOSECOND, "UTC")));
+        assertEquals("timestamp-micros",
+                LanceTypeUtils.fromArrowType(
+                        new ArrowType.Timestamp(
+                                org.apache.arrow.vector.types.TimeUnit.SECOND, null)));
     }
 
     @Test
