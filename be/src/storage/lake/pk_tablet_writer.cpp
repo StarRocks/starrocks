@@ -27,7 +27,11 @@
 #include "storage/lake/pk_tablet_sst_writer.h"
 #include "storage/lake/pk_tablet_unsort_sst_writer.h"
 #include "storage/lake/tablet_manager.h"
+<<<<<<< HEAD
 #include "storage/primary_key_encoder.h"
+=======
+#include "storage/primitive/primary_key_encoder.h"
+>>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment_writer.h"
 #include "util/crc32c.h"
@@ -156,6 +160,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t 
         wopts.encryption_info = pair.info;
         encryption_meta.swap(pair.encryption_meta);
     }
+    RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
     std::unique_ptr<WritableFile> of;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(of, _fs->new_writable_file(_location_provider->del_location(_tablet_id, name)));

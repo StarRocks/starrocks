@@ -262,7 +262,9 @@ public:
     }
 
     template <typename T>
-    static uint8_t* serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+    static StatusOr<uint8_t*> serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+        RETURN_IF_ERROR(column.is_payload_size_representable());
+
         auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
 
@@ -279,8 +281,12 @@ public:
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
 
+<<<<<<< HEAD:be/src/serde/column_array_serde.cpp
         //TODO: if T is uint32_t, `offsets_size` may be overflow
         T offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
+=======
+        T offsets_size = offsets.size() * sizeof(T);
+>>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504)):be/src/column/serde/column_array_serde.cpp
         if constexpr (std::is_same_v<T, uint32_t>) {
             buff = write_little_endian_32(offsets_size, buff);
         } else {
@@ -695,7 +701,7 @@ public:
 
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
-        _cur = BinaryColumnSerde::serialize(column, _cur, _encode_level);
+        ASSIGN_OR_RETURN(_cur, BinaryColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
 

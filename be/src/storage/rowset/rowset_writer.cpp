@@ -58,8 +58,15 @@
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
+<<<<<<< HEAD
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
+=======
+#include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/primary_key_encoder.h"
+#include "storage/primitive/storage_define.h"
+#include "storage/primitive/type_utils.h"
+>>>>>>> ab166f6 ([Enhancement] Check Large BinaryColumn Serde (#75504))
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -692,6 +699,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             wopts.encryption_info = pair.info;
             encryption_meta = std::move(pair.encryption_meta);
         }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
         auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
