@@ -765,6 +765,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             if (Config.enable_sync_statistics_load) {
                 final var timeoutMs = Config.sync_statistics_load_timeout_ms;
+                if (timeoutMs <= 0) {
+                    return;
+                }
                 future.get(timeoutMs, TimeUnit.MILLISECONDS);
             }
         } catch (TimeoutException e) {

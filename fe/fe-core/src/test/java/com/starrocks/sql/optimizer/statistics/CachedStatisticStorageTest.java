@@ -48,6 +48,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -541,6 +542,7 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    @Timeout(5)
     public void testWaitForStatsFutureTimeout() {
         // GIVEN
         final var storage = new CachedStatisticStorage();
@@ -569,6 +571,7 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    @Timeout(5)
     public void testWaitForStatsFutureDisabled() {
         // GIVEN
         final var storage = new CachedStatisticStorage();
@@ -592,6 +595,7 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    @Timeout(5)
     public void testGetColumnStatisticReturnsUnknownOnTimeout() {
         // GIVEN
         final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
@@ -624,6 +628,7 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
+    @Timeout(5)
     public void testGetColumnStatisticsTimeoutWithSyncStats() {
         // GIVEN
         final var db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
