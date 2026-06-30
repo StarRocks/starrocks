@@ -146,12 +146,13 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     // for deserialization
-    public LakeOnlineRewriteJobBase() {
-        super(JobType.SCHEMA_CHANGE);
+    public LakeOnlineRewriteJobBase(JobType jobType) {
+        super(jobType);
     }
 
-    public LakeOnlineRewriteJobBase(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
-        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
+    public LakeOnlineRewriteJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
+                                    long timeoutMs) {
+        super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
     // Deep-copy constructor used by copyForPersist(): the WAL must record a snapshot, not a live
@@ -237,6 +238,34 @@ public abstract class LakeOnlineRewriteJobBase
      *  before stage 1 — the base cannot see subclass config fields. */
     protected abstract void validateRewriteConfig() throws AlterCancelException;
 
+    // ---- Overridable defaults: the range rewrite keeps these; a sibling job may override -----------
+
+    /**
+     * The {@link OlapTable.OlapTableState} this job holds the table in while it runs (asserted and set
+     * across the PENDING -&gt; RUNNING phases and re-applied on replay). Each subclass declares its own
+     * working state ({@code LakeRangeRewriteSchemaChangeJob} uses {@code SCHEMA_CHANGE}; a range OPTIMIZE
+     * would use {@code OPTIMIZE}); it should agree with the {@code JobType} the subclass passes to the
+     * constructor. Must be a stable, non-{@code NORMAL} state: {@code NORMAL} is the idle terminus this job
+     * resets to at flip/cancel, so returning it would collapse the idle and in-progress states and defeat
+     * the entry/replay guards.
+     */
+    protected abstract OlapTable.OlapTableState jobTableState();
+
+    /**
+     * Validate the logical-to-physical partition shape before a partition's rewrite INSERT in
+     * {@link #runRunningJob}. The INSERT scans the whole logical parent but the read-version override pins
+     * only one physical partition, so the default requires a 1:1 logical:physical mapping — a &gt;1:1
+     * mapping would leave the other physical partitions reading their live (post-watershed) version and
+     * double-count. A sibling job whose rewrite does not rely on that invariant can relax this.
+     */
+    protected void validateRewritePartitionShape(Partition logicalParent) throws AlterCancelException {
+        if (logicalParent.getSubPartitions().size() != 1) {
+            throw new AlterCancelException("range-rewrite requires a 1:1 logical-to-physical partition "
+                    + "mapping, but logical partition " + logicalParent.getId() + " has "
+                    + logicalParent.getSubPartitions().size() + " physical partitions");
+        }
+    }
+
     // ---- PENDING ---------------------------------------------------------------------------------
 
     @Override
@@ -255,7 +284,7 @@ public abstract class LakeOnlineRewriteJobBase
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.NORMAL
-                            || table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE,
+                            || table.getState() == jobTableState(),
                     table.getState());
             cachedDbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
             String tableName = table.getName();
@@ -303,7 +332,7 @@ public abstract class LakeOnlineRewriteJobBase
             try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
                 OlapTable committedTable = getTableOrThrow();
                 Preconditions.checkState(committedTable.getState() == OlapTable.OlapTableState.NORMAL
-                                || committedTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE,
+                                || committedTable.getState() == jobTableState(),
                         committedTable.getState());
                 // The partition set must be unchanged between snapshot and commit; a partition that was
                 // dropped/added in the window means the sampled boundaries no longer describe the data, so
@@ -347,7 +376,7 @@ public abstract class LakeOnlineRewriteJobBase
                     this.jobState = JobState.WAITING_TXN;
                     registerShadowIndexMeta(committedTable);
                     addShadowTabletsToInvertedIndex(committedTable);
-                    committedTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+                    committedTable.setState(jobTableState());
                 });
             }
         } finally {
@@ -371,7 +400,7 @@ public abstract class LakeOnlineRewriteJobBase
         if (span != null) {
             span.addEvent("setWaitingTxn");
         }
-        LOG.info("transfer range-rewrite schema change job {} state to {}", jobId, this.jobState);
+        LOG.info("transfer online rewrite job {} state to {}", jobId, this.jobState);
     }
 
     /**
@@ -397,7 +426,7 @@ public abstract class LakeOnlineRewriteJobBase
         try {
             GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(orphanShardIds);
         } catch (Exception e) {
-            LOG.warn("range-rewrite schema change job {}: failed to drop {} orphaned shadow shards; "
+            LOG.warn("online rewrite job {}: failed to drop {} orphaned shadow shards; "
                     + "lake GC will reclaim them: {}", jobId, orphanShardIds.size(), e.getMessage());
         }
     }
@@ -487,7 +516,7 @@ public abstract class LakeOnlineRewriteJobBase
 
         try {
             if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
-                LOG.info("wait transactions before {} to be finished, range-rewrite schema change job: {}",
+                LOG.info("wait transactions before {} to be finished, online rewrite job: {}",
                         watershedTxnId, jobId);
                 return;
             }
@@ -499,7 +528,7 @@ public abstract class LakeOnlineRewriteJobBase
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+            Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             // Capture W = visible version only after the drain: anything visible at the watershed must
             // be re-sorted by the new key in RUNNING.
             for (long physicalPartitionId : partitionStates.keySet()) {
@@ -520,7 +549,7 @@ public abstract class LakeOnlineRewriteJobBase
         if (span != null) {
             span.addEvent("setRunning");
         }
-        LOG.info("transfer range-rewrite schema change job {} state to {}", jobId, this.jobState);
+        LOG.info("transfer online rewrite job {} state to {}", jobId, this.jobState);
     }
 
     /**
@@ -532,7 +561,7 @@ public abstract class LakeOnlineRewriteJobBase
     private void allocateWatershedAndExposeShadow() throws AlterCancelException {
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+            Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             watershedTxnId = getNextTransactionId();
             watershedGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
@@ -558,7 +587,7 @@ public abstract class LakeOnlineRewriteJobBase
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("exposeShadow");
         }
-        LOG.info("range-rewrite schema change job {} allocated watershed txn id {} and exposed shadow index",
+        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index",
                 jobId, watershedTxnId);
     }
 
@@ -626,7 +655,7 @@ public abstract class LakeOnlineRewriteJobBase
         List<RewritePlan> plans = new ArrayList<>();
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+            Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             if (cachedDbName == null) {
                 // Fallback for replayed jobs where runPendingJob was not re-run in this JVM lifetime.
                 cachedDbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
@@ -649,15 +678,9 @@ public abstract class LakeOnlineRewriteJobBase
                 // partition by name, exactly as the PENDING-phase sampler does. The read-version
                 // override (keyed by physical partition id) pins the SELECT to the watershed snapshot.
                 Partition logicalParent = table.getPartition(physicalPartition.getParentId());
-                // The INSERT scans the whole logical parent, but the read-version override pins only THIS
-                // physical partition. Range-distribution OLAP tables are 1:1 logical:physical, so the scan
-                // touches exactly the pinned physical partition. Guard that invariant: a >1:1 mapping would
-                // leave the other physicals reading their live (post-watershed) version and double-count.
-                if (logicalParent.getSubPartitions().size() != 1) {
-                    throw new AlterCancelException("range-rewrite requires a 1:1 logical-to-physical partition "
-                            + "mapping, but logical partition " + logicalParent.getId() + " has "
-                            + logicalParent.getSubPartitions().size() + " physical partitions");
-                }
+                // Guard the logical-to-physical partition shape the watershed-pinned rewrite relies on
+                // (default: a 1:1 mapping). Extracted to an overridable hook so a sibling job can relax it.
+                validateRewritePartitionShape(logicalParent);
                 String partitionName = logicalParent.getName();
                 plans.add(new RewritePlan(physicalPartitionId, partitionName, watershedVersion, selectColumnNames));
             }
@@ -669,7 +692,7 @@ public abstract class LakeOnlineRewriteJobBase
                     continue;
                 case IN_FLIGHT:
                     // Committed-not-yet-visible: stay in RUNNING; the scheduler re-invokes this method.
-                    LOG.info("range-rewrite schema change job {}: rewrite txn {} for partition {} in flight, waiting",
+                    LOG.info("online rewrite job {}: rewrite txn {} for partition {} in flight, waiting",
                             jobId, partitionStates.get(plan.physicalPartitionId).rewriteTxnId,
                             plan.physicalPartitionId);
                     return;
@@ -689,7 +712,7 @@ public abstract class LakeOnlineRewriteJobBase
         if (span != null) {
             span.addEvent("finishedRewriting");
         }
-        LOG.info("range-rewrite schema change job {} finished rewriting historical data, state to {}",
+        LOG.info("online rewrite job {} finished rewriting historical data, state to {}",
                 jobId, this.jobState);
     }
 
@@ -797,7 +820,7 @@ public abstract class LakeOnlineRewriteJobBase
             }
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                LOG.warn("range-rewrite schema change job {}: rewrite INSERT failed for partition {}: {}",
+                LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {}: {}",
                         jobId, plan.physicalPartitionId, context.getState().getErrorMessage());
                 throw new AlterCancelException(context.getState().getErrorMessage());
             }
@@ -917,7 +940,7 @@ public abstract class LakeOnlineRewriteJobBase
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTable();
             if (table == null) {
-                LOG.info("database or table dropped while flipping range-rewrite schema change job {}", jobId);
+                LOG.info("database or table dropped while flipping online rewrite job {}", jobId);
                 return;
             }
             // Collect the columns whose meaning changed (keyness flip / sort-key reorder) BEFORE the flip,
@@ -936,7 +959,7 @@ public abstract class LakeOnlineRewriteJobBase
         if (span != null) {
             span.end();
         }
-        LOG.info("range-rewrite schema change job finished: {}", jobId);
+        LOG.info("online rewrite job finished: {}", jobId);
     }
 
     /**
@@ -1033,7 +1056,7 @@ public abstract class LakeOnlineRewriteJobBase
                         commitVersion, rewriteTxnId, watershedVersion));
             }
         } catch (AlterCancelException e) {
-            LOG.warn("range-rewrite schema change job {}: table dropped before publish", jobId);
+            LOG.warn("online rewrite job {}: table dropped before publish", jobId);
             return false;
         }
 
@@ -1078,7 +1101,7 @@ public abstract class LakeOnlineRewriteJobBase
             }
             return true;
         } catch (Exception e) {
-            LOG.error("Fail to publish version for range-rewrite schema change job {}", jobId, e);
+            LOG.error("Fail to publish version for online rewrite job {}", jobId, e);
             return false;
         }
     }
@@ -1284,7 +1307,7 @@ public abstract class LakeOnlineRewriteJobBase
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .abortTransaction(dbId, txnId, errMsg);
             } catch (Exception e) {
-                LOG.warn("range-rewrite schema change job {}: failed to abort rewrite txn {}: {}",
+                LOG.warn("online rewrite job {}: failed to abort rewrite txn {}: {}",
                         jobId, txnId, e.getMessage());
             }
         }
@@ -1313,7 +1336,7 @@ public abstract class LakeOnlineRewriteJobBase
             span.end();
         }
 
-        LOG.info("range-rewrite schema change job cancelled, jobId: {}, error: {}", jobId, errMsg);
+        LOG.info("online rewrite job cancelled, jobId: {}, error: {}", jobId, errMsg);
         return true;
     }
 
@@ -1404,7 +1427,7 @@ public abstract class LakeOnlineRewriteJobBase
     public void replay(AlterJobV2 replayedJob) {
         LakeOnlineRewriteJobBase other = (LakeOnlineRewriteJobBase) replayedJob;
 
-        LOG.info("Replaying range-rewrite schema change job. state={} jobId={}",
+        LOG.info("Replaying online rewrite job. state={} jobId={}",
                 replayedJob.jobState, replayedJob.jobId);
 
         if (this != other) {
@@ -1444,12 +1467,13 @@ public abstract class LakeOnlineRewriteJobBase
                 // has no matching partition index -- loads to the table then fail until the job advances.
                 // So replay installs nothing for PENDING; the resuming leader's runPendingJob builds the
                 // shadow fresh.
-                LOG.info("Replaying PENDING range-rewrite job {}; no durable shadow state to reconstruct.", jobId);
+                LOG.info("Replaying PENDING online rewrite job {}; no durable shadow state to reconstruct.", jobId);
             } else if (jobState == JobState.WAITING_TXN || jobState == JobState.RUNNING) {
                 // WAITING_TXN and RUNNING share the same durable catalog state: the shadow index meta is
-                // registered, the shadow tablets are in the inverted index, the table is in SCHEMA_CHANGE,
-                // and (watershed allocated from WAITING_TXN onwards) the shadow index is exposed to the
-                // catalog with visibleTxnId = watershedTxnId so post-watershed loads double-write it.
+                // registered, the shadow tablets are in the inverted index, the table is in the job's
+                // working state (jobTableState()), and (watershed allocated from WAITING_TXN onwards) the
+                // shadow index is exposed to the catalog with visibleTxnId = watershedTxnId so
+                // post-watershed loads double-write it.
                 // RUNNING only adds in-flight rewrite txns on top of the WAITING_TXN catalog state; those
                 // are resumed by the live scheduler's three-state resume (rewriteTxnId is journaled) after
                 // the leader takes over, never by replay. So replay just reconstructs the shared shadow
@@ -1501,9 +1525,9 @@ public abstract class LakeOnlineRewriteJobBase
      * themselves serialized in {@link #partitionStates}, so GSON has already rebuilt them (with their
      * tablet ids and ranges) on deserialization; the StarOS shards they reference were created in the
      * live run and are not re-created here. We only re-attach the durable catalog state: the shadow
-     * index meta, the inverted-index entries, the table's SCHEMA_CHANGE state and, once the watershed
-     * has been allocated, the catalog exposure of the shadow index. Every step is guarded so a second
-     * replay is a no-op (no double-add of meta, tablets or the exposed index).
+     * index meta, the inverted-index entries, the table's working state ({@code jobTableState()}) and,
+     * once the watershed has been allocated, the catalog exposure of the shadow index. Every step is
+     * guarded so a second replay is a no-op (no double-add of meta, tablets or the exposed index).
      *
      * <p>The catalog state in RUNNING is identical to WAITING_TXN; the only RUNNING-specific state is
      * the in-flight rewrite txns, which are resumed by the live scheduler's three-state resume
@@ -1515,7 +1539,7 @@ public abstract class LakeOnlineRewriteJobBase
         // Make the shadow tablets discoverable to the tablet inverted index (skips tablets already
         // present, so a second replay does not double-add).
         addShadowTabletsToInvertedIndex(table);
-        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        table.setState(jobTableState());
         // Once the watershed has been allocated (WAITING_TXN onwards) the live path also exposed the
         // shadow index to the catalog so post-watershed loads double-write it. Re-apply that exposure
         // idempotently (a partition already carrying the shadow is skipped). When watershedTxnId is
