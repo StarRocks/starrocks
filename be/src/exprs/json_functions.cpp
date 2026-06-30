@@ -540,17 +540,19 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
-                if (p.key.find('.') != std::string::npos) {
-                    in_flat = false;
-                }
-                if (in_flat) {
-                    flat_path += "." + p.key;
+                // A key containing the '.' separator is still a valid flat level once wrapped in
+                // quotes (the inverse of JsonFlatPath::split_path, matching SubfieldAccessPathNormalizer
+                // on the FE); only a key whose name itself contains a '"' is unrepresentable and falls
+                // back to extraction from the reconstructed JSON via real_path.
+                if (in_flat && p.key.find('"') == std::string::npos) {
+                    flat_path += (p.key.find('.') == std::string::npos) ? "." + p.key : ".\"" + p.key + "\"";
                     if (p.array_selector->type != NONE) {
                         state->real_path.paths.emplace_back("", p.array_selector);
                         in_flat = false;
                     }
                     continue;
                 }
+                in_flat = false;
                 state->real_path.paths.emplace_back(p);
             }
 
