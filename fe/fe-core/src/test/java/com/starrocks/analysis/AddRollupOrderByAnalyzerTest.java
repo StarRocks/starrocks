@@ -15,10 +15,12 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
+import com.starrocks.type.JsonType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Test;
@@ -120,5 +122,44 @@ public class AddRollupOrderByAnalyzerTest {
         });
         assertTrue(ex.getMessage().contains("only supported for shared-data range-distribution"),
                 "expected range-distribution-only message, got: " + ex.getMessage());
+    }
+
+    /**
+     * A range rollup ORDER BY column of type JSON must be rejected because JSON is non-sortable
+     * (canDistributedBy() == false). This mirrors the check in #74758 for base-table rollup keys,
+     * applied here because createRangeRollupJob re-derives key flags from the ORDER BY columns.
+     */
+    @Test
+    public void testRollupOrderByJsonColumnRejected() {
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isRangeDistribution() {
+                return true;
+            }
+
+            @Mock
+            public boolean isCloudNativeTable() {
+                return true;
+            }
+
+            @Mock
+            public Column getColumn(String name) {
+                if ("jcol".equalsIgnoreCase(name)) {
+                    return new Column("jcol", JsonType.JSON);
+                }
+                return null;
+            }
+        };
+        OlapTable table = new OlapTable();
+
+        SemanticException ex = assertThrows(SemanticException.class, () -> {
+            // jcol is in the rollup column list; ORDER BY jcol should fail on non-sortable type
+            AddRollupClause clause = makeClause(
+                    Lists.newArrayList("jcol", "k1"),
+                    Lists.newArrayList("jcol"));
+            new AlterTableClauseAnalyzer(table).analyze(null, clause);
+        });
+        assertTrue(ex.getMessage().contains("non-sortable"),
+                "expected non-sortable message, got: " + ex.getMessage());
     }
 }
