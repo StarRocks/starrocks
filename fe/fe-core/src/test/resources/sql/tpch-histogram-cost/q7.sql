@@ -30,7 +30,7 @@ OutPut Exchange Id: 24
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 351.5625] ESTIMATE
 |
 22:AGGREGATE (merge finalize)
-|  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([57: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
 |  cardinality: 352
 |  column statistics:

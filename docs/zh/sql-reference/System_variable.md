@@ -470,6 +470,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v2.5
 
+### enable_agg_inline_accumulator
+
+* 描述：控制针对计算 `count`、`sum`、`min` 或 `max` 的 `GROUP BY` 聚合的执行优化。启用后，聚合值直接内联存储在 GROUP BY 哈希表中，无需为每个分组单独分配聚合状态。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v4.0
+
 ### enable_bucket_aware_execution_on_lake
 
 * 描述：是否针对数据湖（如 Iceberg 表）查询启用 Bucket-aware 执行。启用后，系统通过利用分桶信息来优化查询执行，减少数据 Shuffle 并提高性能。此优化对分桶表的 Join 和 Aggregation 特别有效。

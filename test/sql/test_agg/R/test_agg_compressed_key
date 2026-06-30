@@ -871,6 +871,9 @@ function: wait_min_max_stat_ready('c24','all_t1')
 -- result:
 
 -- !result
+set sql_mode = 'ONLY_FULL_GROUP_BY,PIPES_AS_CONCAT';
+-- result:
+-- !result
 set group_concat_max_len=65535;
 -- result:
 -- !result

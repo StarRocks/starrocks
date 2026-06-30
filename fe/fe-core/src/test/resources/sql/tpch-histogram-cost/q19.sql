@@ -5,7 +5,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 9:AGGREGATE (merge finalize)
-|  aggregate: sum[([29: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([29: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE

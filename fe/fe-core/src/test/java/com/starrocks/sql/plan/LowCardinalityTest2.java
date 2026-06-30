@@ -542,9 +542,10 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: false; result nullable: false]"), plan);
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         plan = getVerboseExplain(sql);
+        // merge-honest count: the child is the producer's non-nullable count slot
         Assertions.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: count[([9: count, BIGINT, false]); args: INT; result: BIGINT; " +
-                "args nullable: true; result nullable: false]"), plan);
+                "args nullable: false; result nullable: false]"), plan);
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
         sql = "select count(distinct S_ADDRESS, S_COMMENT) from supplier";
@@ -2371,12 +2372,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "args nullable: true; result nullable: false]\n" +
                 "  |  group by: [4: S_NATIONKEY, INT, false]\n" +
                 "  |  cardinality: 1");
+        // count is merge-honest: its child is the producer's non-nullable count slot;
+        // multi_distinct_count is not whitelisted and keeps the blanket nullable child
         assertContains(plan, "  6:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: multi_distinct_count[([9: multi_distinct_count, VARBINARY, false]); " +
                 "args: INT; result: BIGINT; " +
                 "args nullable: true; result nullable: false], count[([10: count, BIGINT, false]); " +
                 "args: INT; result: BIGINT; " +
-                "args nullable: true; result nullable: false]\n" +
+                "args nullable: false; result nullable: false]\n" +
                 "  |  cardinality: 1");
     }
 

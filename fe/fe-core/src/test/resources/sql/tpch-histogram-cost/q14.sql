@@ -13,7 +13,7 @@ RESULT SINK
 |  * expr-->[0.0, 12942.348008385745, 0.0, 8.0, 1.0] ESTIMATE
 |
 8:AGGREGATE (merge finalize)
-|  aggregate: sum[([30: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([31: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([30: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([31: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[0.0, 104949.5, 0.0, 8.0, 1.0] ESTIMATE

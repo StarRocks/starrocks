@@ -114,7 +114,7 @@ OutPut Exchange Id: 18
 |       cardinality: 1
 |
 5:AGGREGATE (merge finalize)
-|  aggregate: sum[([27: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([27: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [11: L_SUPPKEY, INT, false]
 |  having: [27: sum, DOUBLE, true] IS NOT NULL
 |  cardinality: 1000000
@@ -166,7 +166,7 @@ OutPut Exchange Id: 13
 |  * sum-->[810.9, 112561.22791531752, 0.0, 8.0, 932377.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
-|  aggregate: sum[([46: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([46: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [30: L_SUPPKEY, INT, false]
 |  cardinality: 1000000
 |  column statistics:

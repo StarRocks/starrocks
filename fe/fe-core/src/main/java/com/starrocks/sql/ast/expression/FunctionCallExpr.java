@@ -264,7 +264,13 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean hasNullableChild() {
-        if (this.isMergeAggFn) {
+        // A merge-stage aggregate call is synthesized at plan time, so historically it
+        // reported a nullable child unconditionally. For the functions below the child is
+        // the producer stage's output slot whose nullability the planner states honestly,
+        // so trust the children: a non-nullable answer lets the BE resolve the
+        // non-nullable variant (and keep e.g. inline aggregation) on the merge stage.
+        if (this.isMergeAggFn &&
+                !FunctionSet.MERGE_HONEST_NULLABLE_CHILD_FUNCTIONS.contains(fnRef.getFunctionName())) {
             return true;
         }
 

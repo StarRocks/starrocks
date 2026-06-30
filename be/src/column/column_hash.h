@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <type_traits>
 
 #include "base/types/int256.h"
@@ -48,6 +49,24 @@ typename std::enable_if<sizeof(T) == 1, bool>::type memequal_padded(const T* p1,
                                                                     size_t size2) {
     if (size1 != size2) {
         return false;
+    }
+    if (LIKELY(size1 <= 16)) {
+        // Short keys: compare the whole padded 16-byte window at once and accept the
+        // first size1 byte lanes via a validity mask -- no per-word loop, so there is no
+        // loop-continue branch left to predict. Inside a dense hash-probe loop the word
+        // loop's "window fully equal" exit fires data-dependently (it tracks whatever
+        // trailing bytes follow the keys) and mispredicts on nearly every taken
+        // occurrence; this form is branchless on that axis.
+        if (size1 == 0) {
+            // An empty slice may point at the very end of its buffer; the padding contract
+            // (15 bytes) does not cover a 16-byte read from there, so do not touch memory.
+            return true;
+        }
+        const __m128i va = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p1));
+        const __m128i vb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p2));
+        const auto eqm = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(va, vb)));
+        const uint32_t valid = (1u << size1) - 1; // size1 <= 16, the shift cannot overflow
+        return (eqm & valid) == valid;
     }
     for (size_t offset = 0; offset < size1; offset += 16) {
         uint16_t mask =

@@ -39,7 +39,7 @@ OutPut Exchange Id: 36
 |  * expr-->[0.0, 129.42348008385744, 0.0, 8.0, 2.0] ESTIMATE
 |
 33:AGGREGATE (merge finalize)
-|  aggregate: sum[([72: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([73: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  aggregate: sum[([72: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([73: sum, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [69: year, SMALLINT, false]
 |  cardinality: 2
 |  column statistics:

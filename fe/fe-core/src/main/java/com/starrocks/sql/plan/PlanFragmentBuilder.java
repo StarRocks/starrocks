@@ -2540,6 +2540,42 @@ public class PlanFragmentBuilder {
                     intermediateAggrExprs, removeDistinctFlags);
         }
 
+        // The catalog marks sum/min/max nullable, so buildAggregateTuple creates their output
+        // and intermediate slots nullable even when the argument can never be NULL. On a
+        // producer stage those slots only carry partial states to the merge stage, so narrow
+        // them to the exact nullability:
+        //     argument nullable || repeat/outer-join below the node
+        // This is the same disjunction the BE evaluates to pick the function variant
+        // (has_outer_join_child || has_nullable_child), so the producer's intermediate column
+        // representation and these slot descriptors agree by construction, and the merge-stage
+        // call (whose child is the SlotRef registered on the output slot) reports an honest
+        // hasNullableChild. count needs no narrowing: it is catalog-non-nullable already.
+        private void markHonestProducerAggSlotNullability(AggregationNode aggregationNode,
+                                                          List<FunctionCallExpr> aggregateExprList,
+                                                          List<Expr> intermediateAggrExprs) {
+            for (int i = 0; i < aggregateExprList.size(); i++) {
+                FunctionCallExpr aggExpr = aggregateExprList.get(i);
+                String fnName = aggExpr.getFunctionName();
+                if (!FunctionSet.SUM.equals(fnName) && !FunctionSet.MIN.equals(fnName) &&
+                        !FunctionSet.MAX.equals(fnName)) {
+                    continue;
+                }
+                if (aggExpr.isDistinct() || aggregationNode.isHasNullableGenerateChild() ||
+                        aggExpr.getChildren().stream().anyMatch(Expr::isNullable)) {
+                    continue;
+                }
+                SlotDescriptor intermediateSlot = ((SlotRef) intermediateAggrExprs.get(i)).getDesc();
+                intermediateSlot.setIsNullable(false);
+                // The output slot shares the intermediate slot's id and parent tuple; the merge
+                // stage reads the producer through the SlotRef registered on it.
+                for (SlotDescriptor slot : intermediateSlot.getParent().getSlots()) {
+                    if (slot.getId().equals(intermediateSlot.getId())) {
+                        slot.setIsNullable(false);
+                    }
+                }
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -2682,6 +2718,16 @@ public class PlanFragmentBuilder {
             aggregationNode.setLocalLimit(node.getLocalLimit());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
+            // Producer stages feed the later merge stage, not the user; state their aggregate
+            // slots' real nullability so the merge call sees an honest child (see
+            // FunctionSet.MERGE_HONEST_NULLABLE_CHILD_FUNCTIONS). Final stages keep the
+            // catalog-nullable slots: those are user-visible result metadata.
+            boolean producerStage = (node.getType().isLocal() && node.isSplit())
+                    || node.getType().isDistinctGlobal()
+                    || node.getType().isDistinctLocal();
+            if (producerStage) {
+                markHonestProducerAggSlotNullability(aggregationNode, aggregateExprList, intermediateAggrExprs);
+            }
             aggregationNode.computeStatistics(optExpr.getStatistics());
             aggregationNode.setGroupByMinMaxStats(node.getGroupByMinMaxStatistic());
 
