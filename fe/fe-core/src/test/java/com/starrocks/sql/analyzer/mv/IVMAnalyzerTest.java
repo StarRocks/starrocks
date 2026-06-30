@@ -96,6 +96,30 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * bitmap_union(to_bitmap(col)) is the exact-distinct-count pattern. The analyzer normalizes it to
+     * bitmap_agg(col) (raw INT arg, BITMAP intermediate state), which IVM must accept and maintain via
+     * the already-registered bitmap_agg combinators.
+     */
+    @Test
+    public void testBitmapUnionAggregateYieldsIvmRewrite() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_bitmap "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_union(to_bitmap(c1)) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), "bitmap_union aggregate MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy());
+    }
+
+    /**
      * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
      * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
      */
