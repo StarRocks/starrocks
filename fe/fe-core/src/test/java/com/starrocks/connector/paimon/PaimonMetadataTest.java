@@ -25,7 +25,6 @@ import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.proc.ExternalSchemaProcNode;
 import com.starrocks.common.proc.ProcResult;
@@ -1915,6 +1914,6 @@ public class PaimonMetadataTest {
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };
-        org.junit.jupiter.api.Assertions.assertThrows(DdlException.class, () -> metadata.dropTable(connectContext, dropStmt));
+        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class, () -> metadata.dropTable(connectContext, dropStmt));
     }
 }

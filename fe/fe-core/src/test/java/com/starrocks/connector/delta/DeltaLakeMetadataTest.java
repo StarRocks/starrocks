@@ -24,6 +24,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -239,7 +240,7 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_sem", "tbl_sem"));
-        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("semantic detail message"));
     }
 
     @Test
@@ -257,8 +258,8 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_io", "tbl_io"));
-        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        String expectedPrefix = "Failed to get Delta Lake table delta0.db_io.tbl_io";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 }
