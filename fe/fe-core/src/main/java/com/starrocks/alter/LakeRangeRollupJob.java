@@ -19,18 +19,34 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.reshard.TabletReshardUtils;
+import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
+import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
+import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
+import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
+import com.starrocks.alter.reshard.presplit.SampleRequest;
+import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
+import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Range;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -222,20 +238,112 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Plan one partition's K-tablet shadow layout for the rollup index. Implemented in Task 3.
+     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: choose {@code K}
+     * from the base data size and the active compute-node count, sample by the rollup sort key, plan
+     * the boundaries, and build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
+     * NO db lock is held here.
      */
     @Override
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
-        throw new UnsupportedOperationException("implemented in Task 3/4");
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
+        Estimates estimates = new Estimates(plan.partitionDataSize, 0L);
+        int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
+        List<Tuple> boundaries = planBoundaries(dbName, plan.tableName, plan.partitionName,
+                plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
+        // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
+        int shadowTabletCount = boundaries.size() + 1;
+        List<TabletRange> ranges = buildTabletRanges(boundaries);
+        MaterializedIndex shadowIndex;
+        try {
+            shadowIndex = LakeTableAlterJobV2Builder.buildRangeShadowIndex(
+                    dbId, table, plan.physicalPartition, shadowIndexMetaId, shadowTabletCount, ranges,
+                    plan.shardGroupId, computeResource);
+        } catch (DdlException e) {
+            throw new AlterCancelException("failed to build rollup shadow index for partition "
+                    + plan.physicalPartitionId + ": " + e.getMessage());
+        }
+        plan.boundaries = boundaries;
+        plan.shadowTabletCount = shadowTabletCount;
+        plan.shadowIndex = shadowIndex;
     }
 
     /**
-     * Register the rollup shadow index's MaterializedIndexMeta on the table. Implemented in Task 3.
+     * Sample the partition by the rollup sort key and plan {@code K-1} boundaries. A sampling failure
+     * or a no-distinction sample (empty sample / all-equal keys → planner NO_SPLIT) degrades to an
+     * empty boundary list = a single full-range tablet (K=1 fallback). All inputs are captured
+     * snapshots so this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
+     */
+    private List<Tuple> planBoundaries(String dbName, String tableName, String partitionName,
+                                       long physicalPartitionId, long partitionDataSize,
+                                       int requestedTabletCount) {
+        try {
+            SampleSet sampleSet = sampleByRollupSortKey(dbName, tableName, partitionName, partitionDataSize);
+            if (sampleSet.isEmpty()) {
+                return List.of();
+            }
+            BoundaryPlannerResult planResult =
+                    BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, rollupSortKeyColumns);
+            if (planResult.isNoSplit()) {
+                return List.of();
+            }
+            return planResult.getBoundaries();
+        } catch (StarRocksException | RuntimeException e) {
+            // Sampling / planning failure must not fail the alter: fall back to a single full-range
+            // shadow tablet (the rewrite still re-sorts by the rollup key; it just isn't split).
+            LOG.warn("range-rollup job {}: sampling/planning failed for partition {}, "
+                    + "falling back to a single full-range shadow tablet", jobId, physicalPartitionId, e);
+            return List.of();
+        }
+    }
+
+    private SampleSet sampleByRollupSortKey(String dbName, String tableName, String partitionName,
+                                             long partitionDataSize) throws StarRocksException {
+        List<String> sortKeySourceColumnNames =
+                rollupSortKeyColumns.stream().map(Column::getName).collect(Collectors.toList());
+        // The sample sub-query addresses the logical partition by name; physical partitions are not
+        // directly addressable in SQL. Boundaries only need to be representative, so sampling the
+        // parent partition is sufficient.
+        InternalPartitionScanContext scanContext = new InternalPartitionScanContext(
+                dbName,
+                tableName,
+                partitionName,
+                sortKeySourceColumnNames,
+                List.of(),
+                partitionDataSize,
+                computeResource);
+        SampleRequest request = new SampleRequest(
+                scanContext, rollupSortKeyColumns, Config.tablet_pre_split_sample_byte_limit, jobId);
+        return getSampler().sample(request);
+    }
+
+    /**
+     * Tile {@code (-inf, +inf)} with one {@link TabletRange} per tablet given the {@code K-1}
+     * sorted boundaries: {@code (-inf, c1), [c1, c2), ..., [c_{K-1}, +inf)}. An empty boundary list
+     * yields a single full-range tablet (K=1 case).
+     */
+    @VisibleForTesting
+    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
+        if (boundaries.isEmpty()) {
+            List<TabletRange> singleRange = new ArrayList<>(1);
+            singleRange.add(new TabletRange(Range.all()));
+            return singleRange;
+        }
+        return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
+    }
+
+    /**
+     * Register the rollup's own {@link com.starrocks.catalog.MaterializedIndexMeta} under its own
+     * (real) name. Unlike the replace-flavored schema-change job, we do NOT call
+     * {@code rebuildMaterializedIndexMeta}: that copies the origin index's view/define/colocate into
+     * the shadow, which is wrong for an additive rollup that has its own independent definition.
+     * The caller holds the database write lock.
      */
     @Override
     protected void registerShadowIndexMeta(@NotNull OlapTable table) {
-        throw new UnsupportedOperationException("implemented in Task 3/4");
+        table.setIndexMeta(shadowIndexMetaId, shadowIndexName, rollupSchema, 0, 0, shadowShortKeyColumnCount,
+                TStorageType.COLUMN, rollupKeysType, null, rollupSortKeyIdxes, rollupSortKeyUniqueIds);
+        Preconditions.checkNotNull(table.getIndexMetaByMetaId(shadowIndexMetaId));
     }
 
     /**

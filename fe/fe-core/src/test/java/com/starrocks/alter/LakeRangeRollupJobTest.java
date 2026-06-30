@@ -14,11 +14,19 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
+import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.SampleSet;
+import com.starrocks.alter.reshard.presplit.Sampler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -26,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -38,7 +47,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LakeRangeRollupJobTest {
@@ -216,5 +227,111 @@ public class LakeRangeRollupJobTest {
         LakeRangeRollupJob job = new LakeRangeRollupJob(1L, dbId, tableId, "t", 3600_000L);
         job.setShadowIndex(500L, baseIndexMetaId, "my_rollup", (short) 1);
         assertEquals("my_rollup", job.getRollupIndexName());
+    }
+
+    // ---- planPartitionShadow + registerShadowIndexMeta helpers ------------------
+
+    /**
+     * Build a job configured with the given rollup sort-key column list (a reordering of base columns).
+     * Uses schema columns k1(idx=0) and k2(idx=1) from the base index. The supplied rollupSortKeyColumns
+     * list determines which column is the primary sort key; rollupSortKeyIdxes are positional indexes into
+     * the rollup schema.
+     */
+    private LakeRangeRollupJob newConfiguredRollupJob(List<Column> rollupSortKeyColumns) {
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        LakeRangeRollupJob job = new LakeRangeRollupJob(jobId, dbId, tableId, table.getName(), 3600_000L);
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        // Rollup schema = k1, k2 (first two columns of base).
+        List<Column> rollupSchema = new ArrayList<>(baseSchema.subList(0, 2));
+        job.setRollupSchema(rollupSchema);
+        job.setRollupKeysType(KeysType.DUP_KEYS);
+        job.setRollupSortKeyColumns(rollupSortKeyColumns);
+        // Sort key idxes: position of each sort-key column in rollupSchema.
+        List<Integer> sortKeyIdxes = rollupSortKeyColumns.stream()
+                .map(c -> {
+                    for (int i = 0; i < rollupSchema.size(); i++) {
+                        if (rollupSchema.get(i).getName().equals(c.getName())) {
+                            return i;
+                        }
+                    }
+                    throw new IllegalArgumentException("sort-key column not in rollup schema: " + c.getName());
+                })
+                .collect(java.util.stream.Collectors.toList());
+        job.setRollupSortKeyIdxes(sortKeyIdxes);
+        job.setRollupSortKeyUniqueIds(sortKeyIdxes); // use same values as unique ids for tests
+        job.setShadowIndex(shadowIndexMetaId, baseIndexMetaId, "r_rollup", (short) 2);
+        return job;
+    }
+
+    /** A stub sampler returning a diverse sample over the given columns; drives boundary planning. */
+    private static Sampler stubSamplerReturning(List<Tuple> tuples) {
+        return request -> tuples.isEmpty()
+                ? SampleSet.EMPTY
+                : new SampleSet(tuples, new Estimates(1024L, tuples.size()));
+    }
+
+    /** Build a diverse sorted sample of (c0, c1) tuples over two integer columns. */
+    private static List<Tuple> sampleOver(Column c0, Column c1) {
+        List<Tuple> sample = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            sample.add(new Tuple(List.of(
+                    Variant.of(IntegerType.INT, Integer.toString(i)),
+                    Variant.of(IntegerType.INT, Integer.toString(i)))));
+        }
+        return sample;
+    }
+
+    /** Create a PendingPartitionPlan for the first physical partition of the test table. */
+    private PendingPartitionPlan newPendingPlan(PhysicalPartition physicalPartition) {
+        MaterializedIndex baseIndex = physicalPartition.getLatestIndex(baseIndexMetaId);
+        return new PendingPartitionPlan(
+                physicalPartition.getId(),
+                baseIndex,
+                baseIndex.getShardGroupId(),
+                table.getPartition(physicalPartition.getParentId()).getName(),
+                baseIndex.getDataSize(),
+                table.getName(),
+                physicalPartition);
+    }
+
+    // ---- planPartitionShadow test (Task 3 Step 1 / Step 2 / Step 4) -------------
+
+    @Test
+    public void testPlanPartitionShadowBuildsKTabletShadowByRollupSortKey() throws Exception {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        // Sort key for the rollup is (k2, k1) — reordered relative to the base.
+        Column colK1 = baseSchema.get(0);
+        Column colK2 = baseSchema.get(1);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK2, colK1));
+        job.setSampler(stubSamplerReturning(sampleOver(colK2, colK1)));
+        PhysicalPartition physicalPartition0 = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan plan = newPendingPlan(physicalPartition0);
+        job.planPartitionShadow(plan, table, DB_NAME);
+        assertNotNull(plan.shadowIndex);
+        assertEquals(plan.shadowTabletCount, plan.shadowIndex.getTablets().size());
+        assertTrue(plan.shadowTabletCount >= 1);
+        for (Tablet t : plan.shadowIndex.getTablets()) {
+            assertNotNull(t.getRange());
+        }
+    }
+
+    // ---- registerShadowIndexMeta test (Task 3 Step 5 / Step 6 / Step 7 / Step 8) ---
+
+    @Test
+    public void testRegisterShadowIndexMetaRegistersRollupMetaWithoutTouchingBase() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        Column colK1 = baseSchema.get(0);
+        Column colK2 = baseSchema.get(1);
+        LakeRangeRollupJob job = newConfiguredRollupJob(List.of(colK2, colK1));
+        MaterializedIndexMeta baseBefore = table.getIndexMetaByMetaId(baseIndexMetaId);
+        job.registerShadowIndexMeta(table);
+        MaterializedIndexMeta rollupMeta = table.getIndexMetaByMetaId(job.getShadowIndexMetaId());
+        assertNotNull(rollupMeta);
+        assertEquals(KeysType.DUP_KEYS, rollupMeta.getKeysType());
+        // Sort key idxes: colK2 is at position 1 in rollup schema (k1,k2), colK1 is at 0.
+        assertEquals(List.of(1, 0), rollupMeta.getSortKeyIdxes());
+        // base index meta must be untouched (identity check).
+        assertSame(baseBefore, table.getIndexMetaByMetaId(baseIndexMetaId));
     }
 }
