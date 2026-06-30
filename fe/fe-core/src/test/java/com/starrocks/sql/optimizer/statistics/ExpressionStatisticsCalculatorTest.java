@@ -355,8 +355,8 @@ public class ExpressionStatisticsCalculatorTest {
         // test time_to_sec function
         callOperator = new CallOperator(FunctionSet.TIME_TO_SEC, IntegerType.BIGINT, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), min, 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), distinctValue);
         // test abs function
         callOperator = new CallOperator(FunctionSet.ABS, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));

@@ -747,6 +747,8 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.TIMESTAMP:
                     break;
                 case FunctionSet.TIME_TO_SEC:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     break;
                 case FunctionSet.ABS:
                     double absMinValue;
