@@ -358,6 +358,7 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
     index/inverted/builtin/builtin_simple_analyzer.cpp
+    index/inverted/builtin/gin_pfor.cpp
     manual_compaction.cpp
     rowset/unique_rowset_id_generator.cpp
     rowset/rowset.cpp
