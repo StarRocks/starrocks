@@ -43,6 +43,7 @@ set(RUNTIME_SRCS
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
+    memory/memory_lock.cpp
     exception_stack.cpp
     prof/heap_prof.cpp
     serde/chunk_encode_context.cpp

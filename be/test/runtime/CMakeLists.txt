@@ -40,6 +40,7 @@ set(RUNTIME_TEST_FILES
     memory/memory_resource_test.cpp
     memory/counting_allocator_test.cpp
     memory/memory_allocator_test.cpp
+    memory/memory_lock_test.cpp
 )
 
 set(RUNTIME_TEST_LINK_LIBS

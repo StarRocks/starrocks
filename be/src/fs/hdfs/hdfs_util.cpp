@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/hdfs_util.h"
+#include "fs/hdfs/hdfs_util.h"
 
-#include <common/status.h>
 #include <hdfs/hdfs.h>
 
+#include <cerrno>
+#include <cstring>
+#include <sstream>
 #include <string>
 
 #include "fmt/format.h"

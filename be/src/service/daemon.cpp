@@ -74,6 +74,7 @@
 #include "jemalloc/jemalloc.h"
 #include "platform/platform_metrics.h"
 #include "platform/user_function_cache.h"
+#include "runtime/memory/memory_lock.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/failure_handler.h"
@@ -81,7 +82,6 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/memory_lock.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
