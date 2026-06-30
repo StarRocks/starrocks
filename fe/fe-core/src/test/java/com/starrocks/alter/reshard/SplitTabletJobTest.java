@@ -320,53 +320,18 @@ public class SplitTabletJobTest {
         }
     }
 
-    // The job's warehouse defaults to "unset" (background) and is settable by the pre-split caller
-    // (base-class TabletReshardJob#setWarehouseId, also used by the merge job).
+    // The job's warehouse defaults to "unset" (null -> background) and is settable by the pre-split
+    // caller (base-class TabletReshardJob#setWarehouseId, also used by the merge job). The
+    // empty-source -> spread / non-empty -> PACK behavior is covered by the end-to-end
+    // external-boundaries flow and StarOSAgentTest#testCreateShardsForSplitSpreadDropsWithShardPin.
     @Test
     public void testWarehouseIdDefaultsUnsetAndIsSettable() throws Exception {
         SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
-        Assertions.assertEquals(TabletReshardJob.INVALID_WAREHOUSE_ID, job.getWarehouseId(),
-                "warehouse defaults to unset (-> background warehouse)");
+        Assertions.assertNull(job.getWarehouseId(),
+                "warehouse defaults to unset (null -> background warehouse)");
         job.setWarehouseId(12345L);
-        Assertions.assertEquals(12345L, job.getWarehouseId(),
+        Assertions.assertEquals(Long.valueOf(12345L), job.getWarehouseId(),
                 "caller applies the load's warehouse id");
-    }
-
-    // Spread is derived from the source tablet being empty (the same signal the pre-split eligibility
-    // gate uses), not from a stored flag: an empty source spreads the new shards (drop WITH_SHARD),
-    // a non-empty source keeps the PACK pin for warm-cache reuse.
-    @Test
-    public void testSpreadIsDerivedFromEmptySource() throws Exception {
-        AtomicReference<Boolean> capturedSpread = new AtomicReference<>();
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
-                                             Map<Long, List<Long>> newShardIdToGroupIds,
-                                             FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo,
-                                             Map<String, String> properties,
-                                             ComputeResource computeResource,
-                                             boolean spreadNewShards) {
-                capturedSpread.set(spreadNewShards);
-            }
-        };
-
-        // Empty source (the UT table has no rows) -> spread.
-        SplitTabletJob emptySrc = (SplitTabletJob) createTabletReshardJob();
-        emptySrc.createShardsOnStarOS();
-        Assertions.assertEquals(Boolean.TRUE, capturedSpread.get(), "empty source must spread");
-
-        // Non-empty source -> PACK (no spread).
-        capturedSpread.set(null);
-        new MockUp<MaterializedIndex>() {
-            @Mock
-            public long getRowCount() {
-                return 100L;
-            }
-        };
-        SplitTabletJob nonEmptySrc = (SplitTabletJob) createTabletReshardJob();
-        nonEmptySrc.createShardsOnStarOS();
-        Assertions.assertEquals(Boolean.FALSE, capturedSpread.get(), "non-empty source must PACK");
     }
 
     // -------------------------------------------------------------------------

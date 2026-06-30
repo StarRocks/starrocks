@@ -69,15 +69,13 @@ public abstract class TabletReshardJob implements Writable {
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
 
-    // Sentinel: no explicit warehouse set; fall back to the background warehouse.
-    public static final long INVALID_WAREHOUSE_ID = -1L;
-
     // The warehouse this job should run its compute work (shard creation + publish) in. Set by the
-    // pre-split caller to the triggering load's warehouse; left unset (INVALID_WAREHOUSE_ID) for an
-    // online split / merge, which then use the background warehouse. Persisted so a leader-switch
-    // re-run targets the same warehouse.
+    // pre-split caller to the triggering load's warehouse; null for an online split / merge (and for a
+    // job journaled before this field existed), which then fall back to the background warehouse.
+    // Nullable so a missing field on replay deserializes to null (background), not 0 (a real warehouse).
+    // Persisted so a leader-switch re-run targets the same warehouse.
     @SerializedName(value = "warehouseId")
-    protected long warehouseId = INVALID_WAREHOUSE_ID;
+    protected Long warehouseId;
 
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
@@ -92,7 +90,7 @@ public abstract class TabletReshardJob implements Writable {
         return jobType;
     }
 
-    public long getWarehouseId() {
+    public Long getWarehouseId() {
         return warehouseId;
     }
 
@@ -108,11 +106,11 @@ public abstract class TabletReshardJob implements Writable {
     /**
      * Resolve the compute resource for this job's compute work: the explicitly-set warehouse when one
      * was provided (pre-split → the load's warehouse), otherwise the background warehouse (online
-     * split / merge).
+     * split / merge, or a job journaled before warehouseId existed).
      */
     protected ComputeResource resolveComputeResource(long tableId) {
         WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        return warehouseId == INVALID_WAREHOUSE_ID
+        return warehouseId == null
                 ? warehouseMgr.getBackgroundComputeResource(tableId)
                 : warehouseMgr.acquireComputeResource(warehouseId);
     }
