@@ -22,7 +22,6 @@ set(UTIL_FILES
 # perf-counters.cpp
   system_metrics.cpp
 # coding_util.cpp
-  hdfs_util.cpp
   jvm_metrics.cpp
 )
 

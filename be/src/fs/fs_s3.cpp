@@ -47,7 +47,6 @@
 #include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
-#include "util/hdfs_util.h"
 
 namespace starrocks {
 
