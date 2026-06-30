@@ -462,6 +462,19 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testGetPartitionKeysByFilter() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        List<String> partitionNames = cachingHiveMetastore.getPartitionKeysByFilter("db1", "tbl1",
+                "col1 >= '20260601' AND col1 <= '20260606'");
+        Assertions.assertEquals(Lists.newArrayList("col1=20260601"), partitionNames);
+        // second call should hit filter cache, not full partition list cache
+        Assertions.assertEquals(partitionNames, cachingHiveMetastore.getPartitionKeysByFilter("db1", "tbl1",
+                "col1 >= '20260601' AND col1 <= '20260606'"));
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, executor,
