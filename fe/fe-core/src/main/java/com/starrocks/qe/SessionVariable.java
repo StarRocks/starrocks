@@ -104,6 +104,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
+import static com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -405,6 +406,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
      */
     public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
+
+    // The default SQL SECURITY characteristic (NONE | INVOKER) applied when CREATE VIEW omits the SECURITY clause.
+    public static final String DEFAULT_VIEW_SQL_SECURITY = "default_view_sql_security";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -1292,6 +1296,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
     private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+
+    @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
+    private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -3806,6 +3813,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return Enums.getIfPresent(BlacklistBackupRoutingPolicy.class,
                         StringUtils.upperCase(blacklistBackupRouting))
                 .or(BlacklistBackupRoutingPolicy.getDefault());
+    }
+
+    public void setDefaultViewSqlSecurity(String defaultViewSqlSecurity) {
+        DefaultViewSqlSecurity result =
+                Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(DefaultViewSqlSecurity.values());
+            throw new IllegalArgumentException("Legal values of " + DEFAULT_VIEW_SQL_SECURITY + " are " + legalValues);
+        }
+        this.defaultViewSqlSecurity = StringUtils.upperCase(defaultViewSqlSecurity);
+    }
+
+    public DefaultViewSqlSecurity getDefaultViewSqlSecurity() {
+        return Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity))
+                .or(DefaultViewSqlSecurity.getDefault());
     }
 
     public int getStatisticCollectParallelism() {
