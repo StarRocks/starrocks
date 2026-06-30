@@ -101,11 +101,6 @@ import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.QueryRelation;
->>>>>>> 834eb8179f ([BugFix] Skip CTE references when collecting view tables (#74813))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -117,7 +112,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -725,7 +719,6 @@ public class AnalyzerUtils {
     private static class TableCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Table> tables;
         private final Deque<Set<String>> cteNameScopes = new ArrayDeque<>();
-        private final Deque<Boolean> recursiveCteScopes = new ArrayDeque<>();
 
         public TableCollector() {
             this.tables = Maps.newHashMap();
@@ -748,11 +741,9 @@ public class AnalyzerUtils {
                 return super.visitSelect(node, context);
             }
             cteNameScopes.push(new HashSet<>());
-            recursiveCteScopes.push(node.isHasRecursiveCTE());
             try {
                 return super.visitSelect(node, context);
             } finally {
-                recursiveCteScopes.pop();
                 cteNameScopes.pop();
             }
         }
@@ -763,11 +754,9 @@ public class AnalyzerUtils {
                 return super.visitSetOp(node, context);
             }
             cteNameScopes.push(new HashSet<>());
-            recursiveCteScopes.push(node.isHasRecursiveCTE());
             try {
                 return super.visitSetOp(node, context);
             } finally {
-                recursiveCteScopes.pop();
                 cteNameScopes.pop();
             }
         }
@@ -807,50 +796,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
-            if (node.isRecursive() && !node.isAnchor()) {
-                // An analyzed recursive member consumes the current CTE through a non-anchor CTERelation.
-                // Do not expand its definition again, or the collector will revisit the same recursive member.
-                return null;
-            }
             if (cteNameScopes.isEmpty()) {
                 return super.visitCTE(node, context);
             }
-            if (isInRecursiveCteScope() && node.getCteQueryStatement().getQueryRelation()
-                    instanceof UnionRelation unionRelation) {
-                visitRecursiveCteDefinition(node, unionRelation, context);
-            } else {
-                visit(node.getCteQueryStatement(), context);
-            }
+            visit(node.getCteQueryStatement(), context);
             addCteName(cteNameScopes.peek(), node);
             return null;
-        }
-
-        private void visitRecursiveCteDefinition(CTERelation cteRelation, SetOperationRelation setOperationRelation,
-                                                 Void context) {
-            List<QueryRelation> relations = setOperationRelation.getRelations();
-            if (relations.isEmpty()) {
-                return;
-            }
-            // Mirror QueryAnalyzer.tryProcessRecursiveCte: the first set-op child is the anchor.
-            // The current CTE name is not visible there, so a same-named table must still be collected.
-            visit(relations.get(0), context);
-
-            // Only recursive members can see the current CTE name. Keep that visibility in a temporary
-            // scope so unresolved self-references are skipped without hiding anchor base tables.
-            Set<String> recursiveNames = new HashSet<>();
-            addCteName(recursiveNames, cteRelation);
-            cteNameScopes.push(recursiveNames);
-            try {
-                for (int i = 1; i < relations.size(); i++) {
-                    visit(relations.get(i), context);
-                }
-            } finally {
-                cteNameScopes.pop();
-            }
-        }
-
-        private boolean isInRecursiveCteScope() {
-            return !recursiveCteScopes.isEmpty() && recursiveCteScopes.peek();
         }
 
         private void addCteName(Set<String> names, CTERelation cteRelation) {
