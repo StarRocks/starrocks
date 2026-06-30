@@ -58,12 +58,27 @@ struct TSetSessionParams {
     1: required string user
 }
 
+enum TPrivilegeRequirement {
+    // Identity-only authentication, no role/privilege check beyond AuthN.
+    NONE = 0,
+    // Caller must hold System-level OPERATE privilege.
+    // Maps to Authorizer.checkSystemAction(OPERATE) on the FE side.
+    OPERATE = 1,
+    // Caller must hold System-level NODE privilege.
+    // Maps to Authorizer.checkSystemAction(NODE) on the FE side.
+    NODE = 2,
+}
+
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
     3: optional string host
     4: optional string db_name
     5: optional list<string> table_names;
+    // Required role/privilege the caller must have, in addition to identity AuthN.
+    // Used by FE.checkAuth on the BE HTTP auth path so BE handlers can demand
+    // admin/operate-level checks without round-tripping the role check themselves.
+    6: optional TPrivilegeRequirement required_privilege;
 }
 
 struct TColumnDesc {
@@ -2362,6 +2377,16 @@ struct TBatchGetTabletMetadataResponse {
     2: optional list<TGetTabletMetadataResponse> responses;
 }
 
+// information_schema.fe_metrics: the BE scanner fetches each FE's metrics over the getFeMetrics
+// RPC (instead of scraping the HTTP /metrics endpoint), so fe_metrics works regardless of
+// `enable_http_auth` and no longer depends on HTTP Basic auth. The RPC takes no arguments —
+// FE process metrics are global with no per-object RBAC to authorize.
+struct TFeMetricsResult {
+    1: optional Status.TStatus status
+    // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
+    2: optional string json_metrics
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2462,6 +2487,9 @@ service FrontendService {
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
 
+    // information_schema.fe_metrics
+    TFeMetricsResult getFeMetrics()
+
     // information_schema.column_stats_uage
     TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
     // information_schema.analyze_status
@@ -2515,4 +2543,9 @@ service FrontendService {
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
 
     TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
+
+    // Verify Basic Auth credentials. Used by BE to authenticate external HTTP requests
+    // when `enable_http_auth` is on. Returns OK status when the user/password pair is
+    // valid for the given host, or an error status otherwise.
+    TFeResult checkAuth(1: optional TAuthenticateParams request)
 }
