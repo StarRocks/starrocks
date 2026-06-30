@@ -40,7 +40,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -722,7 +721,7 @@ public class MergeTabletJob extends TabletReshardJob {
                             table.getPartitionFilePathInfo(physicalPartitionId),
                             table.getPartitionFileCacheInfo(physicalPartitionId),
                             newIndex.getShardGroupId(),
-                            properties, WarehouseManager.DEFAULT_RESOURCE);
+                            properties, resolveComputeResource(tableId));
                 }
             }
         } catch (StarRocksException e) {
