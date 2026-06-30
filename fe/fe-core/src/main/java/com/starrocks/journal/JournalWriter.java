@@ -374,13 +374,21 @@ public class JournalWriter {
                     : new DrainResult(DrainResult.Status.BARRIER_REACHED, lastCommittedJournalId);
         }
 
+        // Capture the barrier task into a local: the journal-writer thread can complete and null
+        // out activeDrainBarrierTask very quickly (an empty/fast drain finishes in ~ms), so
+        // re-reading the field below would race to null -> NPE in waitForDrainResult -> the
+        // sealJournalWriter demotion stage fails and the node exits. Hold our own reference.
+        JournalTask barrierTask;
         if (activeDrainBarrierTask == null) {
             writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
-            activeDrainBarrierTask = JournalTask.createBarrierTask();
-            journalQueue.put(activeDrainBarrierTask);
+            barrierTask = JournalTask.createBarrierTask();
+            activeDrainBarrierTask = barrierTask;
+            journalQueue.put(barrierTask);
+        } else {
+            barrierTask = activeDrainBarrierTask;
         }
 
-        return waitForDrainResult(activeDrainBarrierTask, timeoutMs);
+        return waitForDrainResult(barrierTask, timeoutMs);
     }
 
     private boolean needForceRollJournal() {
