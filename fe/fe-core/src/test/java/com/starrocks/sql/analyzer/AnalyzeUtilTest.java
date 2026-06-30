@@ -37,6 +37,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -171,6 +172,45 @@ public class AnalyzeUtilTest {
                 "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
                         "tp2cte where tprimary.pk = tp2cte.pk"));
         Assertions.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
+    }
+
+    @Test
+    public void testCollectTableAndViewSkipsCteReferenceWithoutAnalyze() {
+        String sql = "with x as (select v1 from db2.t0) " +
+                "select db1.t0.v1 from db1.t0 join x on db1.t0.v1 = x.v1";
+        StatementBase statementBase = SqlParser.parse(sql, 0L).get(0);
+        Map<TableName, Table> m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        Set<String> tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        Set<String> expectedTables = new HashSet<>(Lists.newArrayList("db1.t0", "db2.t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+    }
+
+    @Test
+    public void testCollectTableAndViewKeepsBaseTableInsideCteDefinitionWithoutAnalyze() {
+        String sql = "with t0 as (select * from t0) select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, 0L).get(0);
+        Map<TableName, Table> m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        Set<String> tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        Set<String> expectedTables = new HashSet<>(Lists.newArrayList("t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with x as (select * from y), y as (select * from t0) select * from y";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("y", "t0"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
+
+        sql = "with X as (select * from t0) select * from x";
+        statementBase = SqlParser.parse(sql, 0L).get(0);
+        m = AnalyzerUtils.collectAllTableAndView(statementBase);
+        tableNames = m.keySet().stream().map(TableName::toString).collect(Collectors.toSet());
+        expectedTables = new HashSet<>(Lists.newArrayList("t0", "x"));
+
+        Assertions.assertEquals(expectedTables, tableNames);
     }
 
     @Test
