@@ -431,18 +431,15 @@ public class MaterializedViewHandler extends AlterHandler {
             sortKeyIdxes.add(i);
         }
         // sortKeyUniqueIds: the uniqueId of each sort-key column. The rollup reuses base column
-        // identities; if any sort-key column lacks a real uniqueId, drop the list entirely (the sink
-        // then falls back to positional sort-key handling). Mirrors processModifySortKeyColumn.
+        // identities. A routable range rollup is cloud-native only, where every column is assigned a
+        // real uniqueId at createTable, so the list is always fully populated; assert that invariant
+        // loudly rather than emit a sort key whose uniqueIds the sink cannot resolve.
         List<Integer> sortKeyUniqueIds = new ArrayList<>(sortKeyIdxes.size());
-        boolean useSortKeyUniqueId = true;
         for (int idx : sortKeyIdxes) {
             Column column = finalSchema.get(idx);
-            if (useSortKeyUniqueId && column.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
-                sortKeyUniqueIds.add(column.getUniqueId());
-            } else {
-                useSortKeyUniqueId = false;
-                sortKeyUniqueIds.clear();
-            }
+            Preconditions.checkState(column.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "range rollup sort-key column %s has no uniqueId", column.getName());
+            sortKeyUniqueIds.add(column.getUniqueId());
         }
 
         // Short key count must be computed with the sort-key-aware path (the sort key is the leading
