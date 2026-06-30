@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from 'Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## View FE configuration items
@@ -1464,3 +1466,4 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
 
+<EditonSpecificFEItemSharedLakeOther />
