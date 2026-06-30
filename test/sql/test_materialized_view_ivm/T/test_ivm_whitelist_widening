@@ -4,8 +4,8 @@
 --   * AVG(DECIMAL)     — enabled by #73012 (preserve AggStateDesc on state_union)
 --   * MIN/MAX(DECIMAL) — state is the value itself; no AVG-style (sum, count) plumbing
 --   * ARRAY_AGG(arg)   — single-arg accepted; ORDER BY variant rejected
--- HLL_UNION / BITMAP_UNION remain rejected (Column.type singleton mutation bug
--- in the underlying combinator path; deferred to a separate PR).
+--   * BITMAP_UNION(to_bitmap(...)) — now accepted: normalizes to bitmap_agg.
+-- HLL_UNION remains rejected (hll_union is not yet whitelisted; a separate change).
 
 create external catalog mv_iceberg_${uuid0}
 properties
@@ -107,8 +107,7 @@ AS SELECT k, dt, HLL_UNION(HLL_HASH(s_short)) AS h
    GROUP BY k, dt;
 
 -- ============================================================
--- NEGATIVE: BITMAP_UNION not in whitelist
--- expected: SemanticException "IVMAnalyzer does not support aggregate function: bitmap_union"
+-- POSITIVE: BITMAP_UNION(TO_BITMAP(...)) IVM MV — now accepted (normalizes to bitmap_agg)
 -- ============================================================
 CREATE MATERIALIZED VIEW mv_bmp PARTITION BY dt
 REFRESH DEFERRED MANUAL
@@ -116,6 +115,8 @@ PROPERTIES ("refresh_mode" = "incremental")
 AS SELECT k, dt, BITMAP_UNION(TO_BITMAP(k)) AS b
    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
    GROUP BY k, dt;
+[UC]REFRESH MATERIALIZED VIEW mv_bmp WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b) AS dc FROM mv_bmp ORDER BY k, dt;
 
 -- cleanup
 drop database db_${uuid0} force;
