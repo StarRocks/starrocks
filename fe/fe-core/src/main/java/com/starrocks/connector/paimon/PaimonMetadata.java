@@ -23,7 +23,6 @@ import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -171,7 +170,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void createView(ConnectContext context, CreateViewStmt stmt) throws DdlException {
+    public void createView(ConnectContext context, CreateViewStmt stmt) {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
         String viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt).getInlineViewDef();
@@ -183,12 +182,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
         } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
-            throw new DdlException("Paimon createView error: " + e.getMessage());
+            throw StarRocksConnectorException.fromExternalException(
+                    String.format("Paimon createView error for %s.%s", dbName, viewName), e);
         }
     }
 
     @Override
-    public void dropTable(ConnectContext context, DropTableStmt stmt) throws DdlException {
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
@@ -202,7 +202,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
         } catch (Exception e) {
-            throw new DdlException("Paimon error: " + e.getMessage(), e);
+            throw StarRocksConnectorException.fromExternalException(
+                    String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
         }
     }
 
