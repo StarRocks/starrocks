@@ -15,6 +15,7 @@
 #include "connector/lance/lance_connector.h"
 
 #include "connector/hive/scanner/jni_scanner.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
@@ -49,25 +50,31 @@ Status LanceDataSource::open(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor for Lance scan");
     }
 
-    // Build JNI scanner params from the scan range
+    // The dataset URI lives on TLanceTable in the table descriptor (the per-split
+    // payload only carries fragment metadata); read it from LanceTableDescriptor.
+    const auto* lance_table = dynamic_cast<const LanceTableDescriptor*>(_tuple_desc->table_desc());
+    if (lance_table == nullptr) {
+        return Status::InternalError("Failed to resolve LanceTableDescriptor for Lance scan");
+    }
+
     std::map<std::string, std::string> jni_scanner_params;
     jni_scanner_params["lance_split_info"] = _scan_range.lance_split_info;
-    jni_scanner_params["lance_dataset_uri"] = _scan_range.lance_dataset_uri;
+    jni_scanner_params["lance_dataset_uri"] = std::string(lance_table->lance_dataset_uri());
 
     std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
     _scanner = std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 
-    // Build HdfsScannerParams needed by JniScanner
-    HdfsScannerParams scanner_params;
-    scanner_params.tuple_desc = _tuple_desc;
+    _scanner_ctx.tuple_desc = _tuple_desc;
+    _scanner_ctx.runtime_filter_collector = _runtime_filters;
+    _scanner_ctx.format_scan_context.conjuncts.all_ctxs = _conjunct_ctxs;
     for (int i = 0; i < _tuple_desc->slots().size(); i++) {
         auto* slot = _tuple_desc->slots()[i];
-        scanner_params.materialize_slots.push_back(slot);
-        scanner_params.materialize_index_in_chunk.push_back(i);
+        _scanner_ctx.materialize_slots.push_back(slot);
+        _scanner_ctx.materialize_index_in_chunk.push_back(i);
     }
-    scanner_params.scanner_conjunct_ctxs = _conjunct_ctxs;
+    _scanner_ctx.scan_range = &_scan_range;
 
-    RETURN_IF_ERROR(_scanner->init(state, scanner_params));
+    RETURN_IF_ERROR(_scanner->init(state, &_scanner_ctx));
     RETURN_IF_ERROR(_scanner->open(state));
     return Status::OK();
 }
