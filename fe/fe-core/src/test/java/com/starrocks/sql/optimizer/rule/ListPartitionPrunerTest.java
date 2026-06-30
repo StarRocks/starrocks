@@ -961,7 +961,7 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testCastTypePredicate() throws AnalysisException {
-        // date_col = "2021-01-01"
+        // date_col = "2021-01-01" 11
         conjuncts.clear();
         conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ,
                 new CastOperator(DateType.DATETIME, dateColumn),
