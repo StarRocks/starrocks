@@ -34,8 +34,8 @@
 
 #include "runtime/exec_env.h"
 
+#include <algorithm>
 #include <memory>
-#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/time/time.h"
@@ -53,16 +53,12 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/connector_sink_executor.h"
-#include "exec/pipeline/driver_executor_factory.h"
-#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
-#include "platform/store_path.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
@@ -91,7 +87,7 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()), _compute_env(std::make_unique<ComputeEnv>()) {
+ExecEnv::ExecEnv() : _global_env(GlobalEnv::GetInstance()) {
     _refresh_service_contexts();
 }
 ExecEnv::~ExecEnv() = default;
@@ -173,14 +169,18 @@ void ExecEnv::set_agent_server(AgentServer* agent_server) {
     _refresh_service_contexts();
 }
 
+void ExecEnv::set_compute_env(ComputeEnv* compute_env) {
+    _compute_env = compute_env;
+    _refresh_service_contexts();
+}
+
 void ExecEnv::set_runtime_filter_services(RuntimeFilterSender* sender, RuntimeFilterQueryLifecycle* query_lifecycle) {
     _runtime_filter_sender = sender;
     _runtime_filter_query_lifecycle = query_lifecycle;
     _refresh_service_contexts();
 }
 
-Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRegistry* process_metrics_registry,
-                     GlobalEnv* global_env, bool as_cn) {
+Status ExecEnv::init(ProcessMetricsRegistry* process_metrics_registry, GlobalEnv* global_env) {
     DCHECK(process_metrics_registry != nullptr);
     DCHECK(global_env != nullptr);
     _global_env = global_env;
@@ -190,6 +190,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
         platform_env->brpc_stub_cache() == nullptr || platform_env->small_file_mgr() == nullptr) {
         return Status::InternalError("PlatformEnv is not initialized");
     }
+    if (_compute_env == nullptr) {
+        return Status::InternalError("ComputeEnv is not attached");
+    }
     RETURN_IF_ERROR(connector::install_builtin_connectors(connector::ConnectorRegistry::default_instance()));
     _process_metrics_registry = process_metrics_registry;
     auto* process_metrics = process_metrics_registry->root_registry();
@@ -198,29 +201,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init(process_metrics));
-    RETURN_IF_ERROR(global_env->init_execution_thread_pools(process_metrics));
-
-    // register the metrics to monitor the task queue len
-    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
-        auto pool = global_env->pipeline_prepare_pool();
-        return (pool == nullptr) ? 0U : pool->get_queue_size();
-    });
-
-    std::vector<std::string> compute_store_paths;
-    compute_store_paths.reserve(store_paths.size());
-    for (const auto& store_path : store_paths) {
-        compute_store_paths.emplace_back(store_path.path);
-    }
-
-    ComputeEnvOptions compute_env_options;
-    compute_env_options.global_env = global_env;
-    compute_env_options.metrics = process_metrics;
-    compute_env_options.store_paths = std::move(compute_store_paths);
-    compute_env_options.as_cn = as_cn;
-    compute_env_options.query_cache_capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
-    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
-    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-    RETURN_IF_ERROR(_compute_env->init(compute_env_options));
 
     _stream_load_executor = new StreamLoadExecutor(this);
     _transaction_mgr = new TransactionMgr(this);
@@ -242,8 +222,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, ProcessMetricsRe
 
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-
-    RETURN_IF_ERROR(global_env->init_lake_thread_pools(process_metrics));
 
 #ifdef STARROCKS_JIT_ENABLE
     auto jit_engine = JITEngine::get_instance();
@@ -296,112 +274,15 @@ void ExecEnv::stop() {
     int64_t total_start = MonotonicMillis();
     int64_t start;
     std::vector<std::pair<std::string, int64_t>> component_times;
-    auto* global_env = _global_env;
-    DCHECK(global_env != nullptr);
 
-    if (_compute_env != nullptr) {
-        start = MonotonicMillis();
-        _compute_env->stop();
-        component_times.emplace_back("compute_env", MonotonicMillis() - start);
-    }
     if (_lookup_dispatcher_mgr != nullptr) {
         _lookup_dispatcher_mgr->close();
-    }
-
-    if (global_env->pipeline_sink_io_pool()) {
-        start = MonotonicMillis();
-        global_env->pipeline_sink_io_pool()->shutdown();
-        component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->put_aggregate_metadata_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->put_aggregate_metadata_thread_pool()->shutdown();
-        component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->lake_metadata_fetch_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->lake_metadata_fetch_thread_pool()->shutdown();
-        component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->lake_vector_index_build_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->lake_vector_index_build_thread_pool()->shutdown();
-        component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->pk_index_execution_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->pk_index_execution_thread_pool()->shutdown();
-        component_times.emplace_back("pk_index_execution_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->pk_index_memtable_flush_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->pk_index_memtable_flush_thread_pool()->shutdown();
-        component_times.emplace_back("pk_index_memtable_flush_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->lake_partial_update_thread_pool()) {
-        start = MonotonicMillis();
-        global_env->lake_partial_update_thread_pool()->shutdown();
-        component_times.emplace_back("lake_partial_update_thread_pool", MonotonicMillis() - start);
-    }
-
-    if (profile_report_worker()) {
-        start = MonotonicMillis();
-        _compute_env->stop_profile_report_worker();
-        component_times.emplace_back("profile_report_worker", MonotonicMillis() - start);
-    }
-
-    if (global_env->automatic_partition_pool()) {
-        start = MonotonicMillis();
-        global_env->automatic_partition_pool()->shutdown();
-        component_times.emplace_back("automatic_partition_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->query_rpc_pool()) {
-        start = MonotonicMillis();
-        global_env->query_rpc_pool()->shutdown();
-        component_times.emplace_back("query_rpc_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->datacache_rpc_pool()) {
-        start = MonotonicMillis();
-        global_env->datacache_rpc_pool()->shutdown();
-        component_times.emplace_back("datacache_rpc_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->load_rpc_pool()) {
-        start = MonotonicMillis();
-        global_env->load_rpc_pool()->shutdown();
-        component_times.emplace_back("load_rpc_pool", MonotonicMillis() - start);
-    }
-
-    if (global_env->thread_pool()) {
-        start = MonotonicMillis();
-        global_env->thread_pool()->shutdown();
-        component_times.emplace_back("thread_pool", MonotonicMillis() - start);
-    }
-
-    if (_query_context_mgr) {
-        start = MonotonicMillis();
-        _query_context_mgr->clear();
-        component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
     if (_batch_write_mgr) {
         start = MonotonicMillis();
         _batch_write_mgr->stop();
         component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
-    }
-
-    if (global_env->dictionary_cache_pool()) {
-        start = MonotonicMillis();
-        global_env->dictionary_cache_pool()->shutdown();
-        component_times.emplace_back("dictionary_cache_pool", MonotonicMillis() - start);
     }
 
     start = MonotonicMillis();
@@ -424,30 +305,28 @@ void ExecEnv::stop() {
     LOG(INFO) << summary;
 }
 
-void ExecEnv::destroy() {
-    if (_compute_env != nullptr) {
-        _compute_env->destroy_profile_report_worker();
+void ExecEnv::clear_query_contexts() {
+    if (_query_context_mgr == nullptr) {
+        return;
     }
+    int64_t start = MonotonicMillis();
+    _query_context_mgr->clear();
+    LOG(INFO) << strings::Substitute("[ExecEnv::clear_query_contexts] Total: $0 ms", MonotonicMillis() - start);
+}
+
+void ExecEnv::destroy() {
     delete_and_null(_transaction_mgr);
     delete_and_null(_stream_load_executor);
     delete_and_null(_connector_sink_spill_executor);
     delete_and_null(_query_context_mgr);
-    // Query/workgroup teardown can release FragmentContext state that still uses
-    // ComputeEnv-owned timers, pass-through stream buffers, and workgroup resources.
-    if (_compute_env) {
-        _compute_env->destroy();
-    }
 
-    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
-    // _query_pool_mem_tracker.
     delete_and_null(_runtime_filter_cache);
     delete_and_null(_lookup_dispatcher_mgr);
     delete_and_null(_batch_write_mgr);
-    DCHECK(_global_env != nullptr);
-    _global_env->destroy_thread_pools();
-    _query_execution_services.process_metrics = nullptr;
     _table_metrics_mgr = nullptr;
     _process_metrics_registry = nullptr;
+    _compute_env = nullptr;
+    _refresh_service_contexts();
 }
 
 uint32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {

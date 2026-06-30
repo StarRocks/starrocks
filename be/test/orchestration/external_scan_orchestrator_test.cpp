@@ -91,7 +91,8 @@ protected:
         options.query_cache_capacity = 4 * 1024 * 1024;
         options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
         options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-        ASSERT_TRUE(_exec_env.compute_env()->init(options).ok());
+        ASSERT_TRUE(_compute_env.init(options).ok());
+        _exec_env.set_compute_env(&_compute_env);
         _fragment_mgr = std::make_unique<FragmentMgr>(&_exec_env, nullptr);
         _exec_env._query_context_mgr = new pipeline::QueryContextManager(5);
         _exec_env._refresh_service_contexts();
@@ -101,10 +102,12 @@ protected:
         _fragment_mgr.reset();
         delete _exec_env._query_context_mgr;
         _exec_env._query_context_mgr = nullptr;
-        _exec_env.compute_env()->destroy();
+        _exec_env.set_compute_env(nullptr);
+        _compute_env.destroy();
     }
 
     ExecEnv _exec_env;
+    ComputeEnv _compute_env;
     std::unique_ptr<FragmentMgr> _fragment_mgr;
     static std::shared_ptr<MemTracker> _previous_process_mem_tracker;
     static std::shared_ptr<MemTracker> _previous_query_pool_mem_tracker;

@@ -64,6 +64,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
+    EXPECT_EQ(env.compute_env(), nullptr);
 
     std::error_code ec;
     std::filesystem::create_directories(config::spill_local_storage_dir, ec);
@@ -76,7 +77,9 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     compute_env_options.query_cache_capacity = 4 * 1024 * 1024;
     compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
     compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
-    ASSERT_OK(env.compute_env()->init(compute_env_options));
+    ComputeEnv compute_env;
+    ASSERT_OK(compute_env.init(compute_env_options));
+    env.set_compute_env(&compute_env);
 
     ProfileReportWorkerOptions profile_report_worker_options;
     profile_report_worker_options.start_worker_thread = false;
@@ -141,7 +144,22 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.admin_services().runtime, &env.runtime_services());
     EXPECT_EQ(env.admin_services().agent, &env.agent_services());
 
-    env.compute_env()->destroy();
+    env.set_compute_env(nullptr);
+    EXPECT_EQ(env.compute_env(), nullptr);
+    EXPECT_EQ(env.execution_services().workgroup_manager, nullptr);
+    EXPECT_EQ(env.execution_services().driver_limiter, nullptr);
+    EXPECT_EQ(env.execution_services().pipeline_timer, nullptr);
+    EXPECT_EQ(env.runtime_services().stream_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().result_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().result_queue_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().load_path_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().load_stream_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().profile_report_worker, nullptr);
+    EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
+    EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+
+    env._query_context_mgr = nullptr;
+    compute_env.destroy();
 }
 
 } // namespace starrocks

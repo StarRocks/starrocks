@@ -18,6 +18,7 @@
 #include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/path/file_util.h"
@@ -26,6 +27,7 @@
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
@@ -36,7 +38,11 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/compute_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
@@ -812,7 +818,32 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    CHECK_OK(exec_env->init(paths, process_metrics_registry, global_env));
+    auto* process_metrics = process_metrics_registry->root_registry();
+    CHECK_OK(global_env->init_execution_thread_pools(process_metrics));
+    starrocks::pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
+        auto pool = global_env->pipeline_prepare_pool();
+        return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
+    });
+
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        compute_store_paths.emplace_back(path.path);
+    }
+    starrocks::ComputeEnvOptions compute_env_options;
+    compute_env_options.global_env = global_env;
+    compute_env_options.metrics = process_metrics;
+    compute_env_options.store_paths = std::move(compute_store_paths);
+    compute_env_options.query_cache_capacity =
+            std::max<size_t>(starrocks::config::query_cache_capacity, 4L * 1024 * 1024);
+    compute_env_options.driver_queue_factory = starrocks::pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = starrocks::pipeline::create_workgroup_driver_executor;
+    auto compute_env = std::make_unique<starrocks::ComputeEnv>();
+    CHECK_OK(compute_env->init(compute_env_options));
+
+    exec_env->set_compute_env(compute_env.get());
+    CHECK_OK(global_env->init_lake_thread_pools(process_metrics));
+    CHECK_OK(exec_env->init(process_metrics_registry, global_env));
     starrocks::StorageEnvOptions storage_env_options;
     storage_env_options.store_path_registry = platform_env->store_path_registry();
     storage_env_options.update_mem_tracker = global_env->update_mem_tracker();
@@ -825,9 +856,7 @@ int main(int argc, char** argv) {
     storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kFixed;
 #endif
     CHECK_OK(starrocks::StorageEnv::GetInstance()->init(storage_env_options));
-    if (exec_env->compute_env() != nullptr) {
-        starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
-    }
+    starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -842,12 +871,17 @@ int main(int argc, char** argv) {
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::StorageEnv::GetInstance()->stop();
     exec_env->stop();
+    compute_env->stop();
+    exec_env->clear_query_contexts();
+    global_env->shutdown_thread_pools();
 #ifdef USE_STAROS
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
     starrocks::StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
+    compute_env->destroy();
+    compute_env.reset();
     global_env->stop();
     platform_env->destroy();
 

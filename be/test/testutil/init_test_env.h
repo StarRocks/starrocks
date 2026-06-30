@@ -17,6 +17,7 @@
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "agent/agent_server.h"
@@ -24,6 +25,7 @@
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -32,9 +34,13 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/compute_env.h"
 #include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
@@ -149,7 +155,34 @@ int init_test_env(int argc, char** argv) {
     auto* exec_env = ExecEnv::GetInstance();
     st = connector::bootstrap_builtin_connectors();
     CHECK(st.ok()) << st;
-    st = exec_env->init(paths, process_metrics_registry, global_env);
+    auto* process_metrics = process_metrics_registry->root_registry();
+    st = global_env->init_execution_thread_pools(process_metrics);
+    CHECK(st.ok()) << st;
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([global_env] {
+        auto pool = global_env->pipeline_prepare_pool();
+        return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
+    });
+
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        compute_store_paths.emplace_back(path.path);
+    }
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.global_env = global_env;
+    compute_env_options.metrics = process_metrics;
+    compute_env_options.store_paths = std::move(compute_store_paths);
+    compute_env_options.query_cache_capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    auto compute_env = std::make_unique<ComputeEnv>();
+    st = compute_env->init(compute_env_options);
+    CHECK(st.ok()) << st;
+
+    exec_env->set_compute_env(compute_env.get());
+    st = global_env->init_lake_thread_pools(process_metrics);
+    CHECK(st.ok()) << st;
+    st = exec_env->init(process_metrics_registry, global_env);
     CHECK(st.ok()) << st;
 
     StorageEnvOptions storage_env_options;
@@ -165,9 +198,7 @@ int init_test_env(int argc, char** argv) {
 #endif
     st = StorageEnv::GetInstance()->init(storage_env_options);
     CHECK(st.ok()) << st;
-    if (exec_env->compute_env() != nullptr) {
-        StorageEnv::GetInstance()->set_spill_dir_mgr(exec_env->compute_env()->spill_dir_mgr());
-    }
+    StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
 
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
@@ -207,6 +238,9 @@ int init_test_env(int argc, char** argv) {
     data_workflows_env->stop();
     StorageEnv::GetInstance()->stop();
     exec_env->stop();
+    compute_env->stop();
+    exec_env->clear_query_contexts();
+    global_env->shutdown_thread_pools();
     engine->stop();
 #ifdef USE_STAROS
     StorageEnv::GetInstance()->stop_lake_tablet_manager();
@@ -219,6 +253,8 @@ int init_test_env(int argc, char** argv) {
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
     StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
+    compute_env->destroy();
+    compute_env.reset();
     agent_server.reset();
     cache_env->destroy();
     global_env->stop();
