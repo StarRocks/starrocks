@@ -111,6 +111,10 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+message CdcMetadataPB {
+    // no implementation, only used for placeholder in TabletMetadataPB
+}
+
 // An Index Delta Group (IDG) entry describes a standalone .idx file
 // produced by an ADD INDEX schema change. The file stores index blobs
 // for one or more (column, index_type) pairs for a single segment,
@@ -326,7 +330,15 @@ message TabletMetadataPB {
 
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
+<<<<<<< HEAD
     optional IndexDeltaGroupMetadataPB idg_meta = 25;
+=======
+    optional IndexDeltaGroupMetadataPB idg_meta = 24;
+
+    // These are just placeholders
+    repeated int64 metadata_ancestors = 50;
+    optional CdcMetadataPB cdc_metadata = 51;
+>>>>>>> 50ca61bbaae... [Enhancement] Reserve proto/thrift placeholders for CDC metadata and changes scan (#75537)
 }
 
 message MetadataUpdateInfoPB {
