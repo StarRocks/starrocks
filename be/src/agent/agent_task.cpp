@@ -34,11 +34,8 @@
 #include "data_workflows/migration/engine_storage_migration_task.h"
 #include "data_workflows/schema_change/engine_alter_tablet_task.h"
 #include "data_workflows/snapshot/snapshot_loader.h"
-<<<<<<< HEAD
-#include "fs/fs.h"
-=======
 #include "exec/exec_env.h"
->>>>>>> ba8f293f468... [Refactor] Move runtime compatibility sources into Exec (#75565)
+#include "fs/fs.h"
 #include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
