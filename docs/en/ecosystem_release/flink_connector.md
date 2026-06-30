@@ -28,12 +28,9 @@ displayed_sidebar: docs
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
-<<<<<<< HEAD
-=======
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
->>>>>>> a4be7d06e1 ([Doc] Flink Connector 1.2.15 (#75353))
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
@@ -44,9 +41,6 @@ displayed_sidebar: docs
 
 ### 1.2
 
-<<<<<<< HEAD
-## Release 1.2.11
-=======
 #### 1.2.15
 
 Release date: June 18, 2026
@@ -103,7 +97,6 @@ The following issues have been fixed:
 - False success caused by any exception in StreamLoadManagerV2.flush. [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
 
 #### 1.2.11
->>>>>>> a4be7d06e1 ([Doc] Flink Connector 1.2.15 (#75353))
 
 Release data: June 3, 2025
 
