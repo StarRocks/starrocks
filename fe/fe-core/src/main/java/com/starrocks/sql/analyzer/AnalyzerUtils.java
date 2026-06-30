@@ -132,9 +132,11 @@ import org.apache.logging.log4j.Logger;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -716,6 +718,7 @@ public class AnalyzerUtils {
 
     private static class TableCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Table> tables;
+        private final Deque<Set<String>> cteNameScopes = new ArrayDeque<>();
 
         public TableCollector() {
             this.tables = Maps.newHashMap();
@@ -730,6 +733,32 @@ public class AnalyzerUtils {
         @Override
         public Void visitQueryStatement(QueryStatement statement, Void context) {
             return visit(statement.getQueryRelation());
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSelect(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            try {
+                return super.visitSelect(node, context);
+            } finally {
+                cteNameScopes.pop();
+            }
+        }
+
+        @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            if (!node.hasWithClause()) {
+                return super.visitSetOp(node, context);
+            }
+            cteNameScopes.push(new HashSet<>());
+            try {
+                return super.visitSetOp(node, context);
+            } finally {
+                cteNameScopes.pop();
+            }
         }
 
         // ------------------------------------------- DML Statement -------------------------------------------------------
@@ -757,9 +786,46 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (isUnresolvedCteReference(node)) {
+                return null;
+            }
             Table table = node.getTable();
             tables.put(node.getName(), table);
             return null;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            if (cteNameScopes.isEmpty()) {
+                return super.visitCTE(node, context);
+            }
+            visit(node.getCteQueryStatement(), context);
+            addCteName(cteNameScopes.peek(), node);
+            return null;
+        }
+
+        private void addCteName(Set<String> names, CTERelation cteRelation) {
+            if (!Strings.isNullOrEmpty(cteRelation.getName())) {
+                names.add(cteRelation.getName());
+            }
+        }
+
+        private boolean isUnresolvedCteReference(TableRelation node) {
+            if (node.getTable() != null || cteNameScopes.isEmpty()) {
+                return false;
+            }
+            TableName tableName = node.getName();
+            if (tableName == null || !Strings.isNullOrEmpty(tableName.getCatalog()) ||
+                    !Strings.isNullOrEmpty(tableName.getDb()) || Strings.isNullOrEmpty(tableName.getTbl())) {
+                return false;
+            }
+            String tableNameWithoutDb = tableName.getTbl();
+            for (Set<String> cteNames : cteNameScopes) {
+                if (cteNames.contains(tableNameWithoutDb)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
