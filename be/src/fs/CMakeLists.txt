@@ -47,6 +47,7 @@ set(EXEC_FILES
     credential/cloud_configuration_factory.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+    hdfs/hdfs_util.cpp
     )
 
 ADD_BE_LIB(FileSystem

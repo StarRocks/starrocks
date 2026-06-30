@@ -21,6 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "fs/fs_util.h"
+#include "fs/hdfs/hdfs_util.h"
 
 namespace starrocks {
 
@@ -70,6 +71,28 @@ void HdfsFileSystemTest::create_file_and_destroy() {
 
     // done the file, check if there is any memory leak
     (*wfile).reset();
+}
+
+TEST_F(HdfsFileSystemTest, get_namenode_from_path) {
+    std::string namenode;
+
+    auto st = get_namenode_from_path("hdfs://namenode:8020/path/to/file", &namenode);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ("hdfs://namenode:8020/", namenode);
+
+    st = get_namenode_from_path("file:/tmp/data", &namenode);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ("file:///", namenode);
+
+    st = get_namenode_from_path("/tmp/data", &namenode);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ("default", namenode);
+
+    st = get_namenode_from_path("://missing-scheme/path", &namenode);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+
+    st = get_namenode_from_path("hdfs://namenode:8020", &namenode);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
 }
 
 TEST_F(HdfsFileSystemTest, create_file_and_destroy) {

@@ -51,6 +51,8 @@
 
 namespace starrocks {
 
+static_assert(sizeof(DateTimeValue) == 16, "DateTimeValue size mismatch");
+
 const uint64_t log_10_int[] = {1,         10,         100,         1000,         10000UL,       100000UL,
                                1000000UL, 10000000UL, 100000000UL, 1000000000UL, 10000000000UL, 100000000000UL};
 

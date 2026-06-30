@@ -30,10 +30,10 @@
 #include "fs/fs_scheme.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
+#include "fs/hdfs/hdfs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
 #include "udf/java/utils.h"
-#include "util/hdfs_util.h"
 
 using namespace fmt::literals;
 
