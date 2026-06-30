@@ -310,6 +310,20 @@ public class SplitTabletJobTest {
             }
         };
 
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+            }
+        };
+
         try {
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());

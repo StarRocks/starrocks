@@ -49,7 +49,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -903,10 +902,8 @@ public class SplitTabletJob extends TabletReshardJob {
         // eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
         boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
         // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
-        // otherwise DEFAULT_RESOURCE (the original online-split behavior).
-        ComputeResource computeResource = warehouseId == null
-                ? WarehouseManager.DEFAULT_RESOURCE
-                : GlobalStateMgr.getCurrentState().getWarehouseMgr().acquireComputeResource(warehouseId);
+        // otherwise the background warehouse (online split) — unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
