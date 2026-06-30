@@ -548,24 +548,6 @@ public class FunctionAnalyzer {
             }
         }
 
-<<<<<<< HEAD
-=======
-        if (fnName.equals(FunctionSet.MIN_N) || fnName.equals(FunctionSet.MAX_N)) {
-            if (functionCallExpr.hasChild(1)) {
-                Expr nExpr = functionCallExpr.getChild(1);
-                Optional<Long> n = extractIntegerValue(nExpr);
-                if (!n.isPresent() || n.get() <= 0) {
-                    throw new SemanticException(
-                            "The second parameter of " + fnName + " must be a constant positive integer: " +
-                                    ExprToSql.toSql(functionCallExpr), nExpr.getPos());
-                }
-                if (n.get() > Config.minmax_n_max_size) {
-                    throw new SemanticException("The second parameter of " + fnName +
-                            " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
-                }
-            }
-        }
-
         // histogram(expr, bucket_num, sample_ratio[, ...]): bucket_num is a constant INT used as a
         // divisor / bucket-size base in the BE finalize step. A non-positive value divided by zero
         // (SIGFPE crash) or mis-bucketed every row; reject it here at analysis instead.
@@ -579,7 +561,6 @@ public class FunctionAnalyzer {
             }
         }
 
->>>>>>> 9d033ecb24 ([BugFix] Reject non-positive bucket_num in histogram() instead of crashing (#75041))
         if (fnName.equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
