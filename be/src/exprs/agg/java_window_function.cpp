@@ -33,20 +33,20 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_window_shared_cont
     std::string state = symbol + "$State";
 
     auto shared = std::make_shared<JavaUDAFSharedContext>();
-    shared->udf_classloader = std::make_unique<ClassLoader>(libpath);
-    auto analyzer = std::make_unique<ClassAnalyzer>();
+    shared->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
+    auto analyzer = std::make_unique<JavaUdfClassAnalyzer>();
     RETURN_IF_ERROR(shared->udf_classloader->init());
 
     ASSIGN_OR_RETURN(shared->udaf_class, shared->udf_classloader->getClass(symbol));
     ASSIGN_OR_RETURN(shared->udaf_state_class, shared->udf_classloader->getClass(state));
 
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->name = std::move(method_name);
         (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);

@@ -47,20 +47,20 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     std::string state_cls_name = symbol + "$State";
 
     auto udaf_ctx = std::make_shared<JavaUDAFSharedContext>();
-    udaf_ctx->udf_classloader = std::make_unique<ClassLoader>(libpath);
-    auto analyzer = std::make_unique<ClassAnalyzer>();
+    udaf_ctx->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
+    auto analyzer = std::make_unique<JavaUdfClassAnalyzer>();
     RETURN_IF_ERROR(udaf_ctx->udf_classloader->init());
 
     ASSIGN_OR_RETURN(udaf_ctx->udaf_class, udaf_ctx->udf_classloader->getClass(symbol));
     ASSIGN_OR_RETURN(udaf_ctx->udaf_state_class, udaf_ctx->udf_classloader->getClass(state_cls_name));
 
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string sign;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &sign));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(sign, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->signature = std::move(sign);
         (*res)->name = std::move(method_name);
         (*res)->method_desc = std::move(mtdesc);
@@ -83,7 +83,7 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     jobject update_method_obj = udaf_ctx->update->method.handle();
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_clazz,
                      udaf_ctx->udf_classloader->genCallStub(stub_clazz_name, udaf_clazz, update_method_obj,
-                                                            ClassLoader::BATCH_SINGLE_UPDATE, num_args));
+                                                            JavaUdfClassLoader::BATCH_SINGLE_UPDATE, num_args));
     ASSIGN_OR_RETURN(udaf_ctx->update_stub_method,
                      analyzer->get_method_object(udaf_ctx->update_stub_clazz.clazz(), stub_method_name));
 

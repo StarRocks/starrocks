@@ -26,6 +26,7 @@
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
+#include "udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {
@@ -369,36 +370,36 @@ TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
 
 TEST(StripJniGenericTypesTest, NoGenerics) {
     std::string sign = "(Ljava/lang/String;I)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/lang/String;I)V");
 }
 
 TEST(StripJniGenericTypesTest, SimpleGeneric) {
     std::string sign = "(Ljava/util/List<Ljava/lang/String;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/util/List;)V");
 }
 
 TEST(StripJniGenericTypesTest, MultipleGenericParams) {
     std::string sign = "(Ljava/lang/String;Ljava/util/List<Ljava/lang/String;>;Ljava/util/List<Ljava/lang/Integer;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V");
 }
 
 TEST(StripJniGenericTypesTest, NestedGenerics) {
     std::string sign = "(Ljava/util/Map<Ljava/lang/String;Ljava/util/List<Ljava/lang/Integer;>;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/util/Map;)V");
 }
 
 TEST(StripJniGenericTypesTest, EmptyString) {
     std::string sign;
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "");
 }
 
 // ============================================================================
-// Tests for ClassAnalyzer::get_udaf_method_desc bug fixes:
+// Tests for JavaUdfClassAnalyzer::get_udaf_method_desc bug fixes:
 //   1. '[' branch missing continue — caused spurious method_desc entries
 //   2. List<> generic in signature — caused type matching failure
 //   3. Combined: UDTF with List params + String[] return — the crash scenario
@@ -408,8 +409,8 @@ TEST(StripJniGenericTypesTest, EmptyString) {
 // Before fix, processing "[Ljava/lang/String;" left i on ';', which fell through
 // to the else branch and added an extra {TYPE_UNKNOWN, false} entry.
 TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: process(String[] arr, int n) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("([Ljava/lang/String;I)V", &desc));
     // Must be exactly 3: [return=V, param1=[String, param2=I]
@@ -426,8 +427,8 @@ TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
 // Before fix, generic signature "Ljava/util/List<java/lang/String>;" caused
 // type == "java/util/List<java/lang/String>" which didn't match "java/util/List".
 TEST(GetUdafMethodDescTest, ListTypeMatchAfterGenericStrip) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Clean signature (generics already stripped by get_signature)
     ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V", &desc));
     ASSERT_EQ(desc.size(), 4);
@@ -441,8 +442,8 @@ TEST(GetUdafMethodDescTest, ListTypeMatchAfterGenericStrip) {
 // This is the exact signature pattern that caused the CN crash.
 // Verifies method_desc.size() == num_cols + 1 so process() won't OOB access.
 TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)[Ljava/lang/String;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     // 1 return + 3 params = 4
@@ -456,8 +457,8 @@ TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
 
 // Test: Primitive array parsing — [I, [J, etc. don't end with ';'.
 TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: process(int, int[]) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("(I[I)V", &desc));
     ASSERT_EQ(desc.size(), 3);
@@ -468,8 +469,8 @@ TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
 
 // Test: Multi-dimensional primitive array — [[J (long[][])
 TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([[J)V", &desc));
     ASSERT_EQ(desc.size(), 2);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
@@ -480,8 +481,8 @@ TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
 // Before the fix, the L-type parser silently skipped these classes, leaving
 // method_desc empty and producing a SIGSEGV at method_desc[0].is_box.
 TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: evaluate(LocalDate, LocalDateTime) -> LocalDateTime
     std::string sign = "(Ljava/time/LocalDate;Ljava/time/LocalDateTime;)Ljava/time/LocalDateTime;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
@@ -499,8 +500,8 @@ TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
 // that records only appear in STRUCT slots, so the BE signature parser may
 // safely surface them as TYPE_STRUCT and accept the method.
 TEST(GetUdafMethodDescTest, UnknownObjectClassTreatedAsStruct) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // process(String, com/example/Mystery) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc));
     ASSERT_EQ(desc.size(), 3);
@@ -523,8 +524,8 @@ TEST(GetUdafMethodDescTest, UnknownObjectClassTreatedAsStruct) {
 // left-to-right then moves the last (return) entry to desc[0], so the final
 // layout is [return, param1, param2, ...].
 TEST(GetUdafMethodDescTest, RecordParamAndReturn) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(LStructA;)LStructA;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 2);
@@ -542,8 +543,8 @@ TEST(GetUdafMethodDescTest, RecordParamAndReturn) {
 // the L-class branch (which now emits TYPE_STRUCT for unknown classes) and
 // the existing primitive / known-class branches in the same parser pass.
 TEST(GetUdafMethodDescTest, RecordWithPrimitiveAndStringMix) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(LStructA;ILjava/lang/String;)LStructB;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 4);
@@ -561,8 +562,8 @@ TEST(GetUdafMethodDescTest, RecordWithPrimitiveAndStringMix) {
 // the parser should treat the whole `L<binary-name>;` as a single record
 // reference and emit TYPE_STRUCT regardless of the surface form.
 TEST(GetUdafMethodDescTest, RecordWithPackageAndInnerClass) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(Lcom/example/Outer$Inner;)Lcom/example/pkg/Result;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 2);

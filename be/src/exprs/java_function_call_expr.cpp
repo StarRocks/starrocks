@@ -41,13 +41,14 @@
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/java_udf_reflection.h"
 #include "udf/java/utils.h"
 
 namespace starrocks {
 
 struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
-    JavaMethodDescriptor* call_desc;
+    JavaUdfMethodDescriptor* call_desc;
 
     StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
@@ -183,22 +184,22 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
         FunctionContext::FunctionStateScope scope, const std::string& libpath) {
     auto desc = std::make_shared<JavaUDFContext>();
     // init class loader and analyzer
-    desc->udf_classloader = std::make_unique<ClassLoader>(libpath);
+    desc->udf_classloader = std::make_unique<JavaUdfClassLoader>(libpath);
     RETURN_IF_ERROR(desc->udf_classloader->init());
-    desc->analyzer = std::make_unique<ClassAnalyzer>();
+    desc->analyzer = std::make_unique<JavaUdfClassAnalyzer>();
 
     ASSIGN_OR_RETURN(desc->udf_class, desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
 
-    auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         bool has_method = false;
         std::string method_name = name;
         std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(desc->analyzer->has_method(desc->udf_class.clazz(), method_name, &has_method));
         if (has_method) {
             RETURN_IF_ERROR(desc->analyzer->get_signature(desc->udf_class.clazz(), method_name, &signature));
             RETURN_IF_ERROR(desc->analyzer->get_method_desc(signature, &mtdesc));
-            *res = std::make_unique<JavaMethodDescriptor>();
+            *res = std::make_unique<JavaUdfMethodDescriptor>();
             (*res)->name = std::move(method_name);
             (*res)->signature = std::move(signature);
             (*res)->method_desc = std::move(mtdesc);
@@ -249,7 +250,7 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     int num_actual_var_args = _fn.has_var_args ? std::max(0, static_cast<int>(_children.size()) - num_fixed_params) : 0;
     ASSIGN_OR_RETURN(auto update_stub_clazz,
                      desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                        ClassLoader::BATCH_EVALUATE, num_actual_var_args));
+                                                        JavaUdfClassLoader::BATCH_EVALUATE, num_actual_var_args));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
                                                           JavaGlobalRef(method));

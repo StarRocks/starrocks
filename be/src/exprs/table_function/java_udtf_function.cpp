@@ -33,6 +33,7 @@
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/java_udf_reflection.h"
 #include "udf/java/utils.h"
 
 namespace starrocks {
@@ -55,7 +56,7 @@ public:
     void close();
 
     const TypeDescriptor& type_desc() { return _ret_type; }
-    JavaMethodDescriptor* method_process() { return _process.get(); }
+    JavaUdfMethodDescriptor* method_process() { return _process.get(); }
     const std::vector<TypeDescriptor>& arg_type_descs() const { return _arg_type_descs; }
     jclass get_udtf_clazz() { return _udtf_class.clazz(); }
     jobject handle() { return _udtf_handle.handle(); }
@@ -75,11 +76,11 @@ private:
     std::string _libpath;
     std::string _symbol;
 
-    std::unique_ptr<ClassLoader> _class_loader;
-    std::unique_ptr<ClassAnalyzer> _analyzer;
+    std::unique_ptr<JavaUdfClassLoader> _class_loader;
+    std::unique_ptr<JavaUdfClassAnalyzer> _analyzer;
     JVMClass _udtf_class = nullptr;
     JavaGlobalRef _udtf_handle = nullptr;
-    std::unique_ptr<JavaMethodDescriptor> _process;
+    std::unique_ptr<JavaUdfMethodDescriptor> _process;
     std::vector<TypeDescriptor> _arg_type_descs;
     TypeDescriptor _ret_type;
     JavaUdfMethodTypeDescs _process_type_descs;
@@ -87,21 +88,21 @@ private:
 
 Status JavaUDTFState::open() {
     RETURN_IF_ERROR(detect_java_runtime());
-    _class_loader = std::make_unique<ClassLoader>(std::move(_libpath));
+    _class_loader = std::make_unique<JavaUdfClassLoader>(std::move(_libpath));
     RETURN_IF_ERROR(_class_loader->init());
-    _analyzer = std::make_unique<ClassAnalyzer>();
+    _analyzer = std::make_unique<JavaUdfClassAnalyzer>();
 
     ASSIGN_OR_RETURN(_udtf_class, _class_loader->getClass(_symbol));
     ASSIGN_OR_RETURN(_udtf_handle, _udtf_class.newInstance());
 
     auto* analyzer = _analyzer.get();
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->name = std::move(method_name);
         (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
