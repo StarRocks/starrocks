@@ -26,10 +26,14 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "runtime/mem_tracker.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/peer_cache_engine.h"
+#endif
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
 #endif
 
 namespace starrocks {
@@ -43,6 +47,8 @@ Status DataCache::init(const DataCacheInitOptions& options) {
     _storage_root_paths = options.storage_root_paths;
     _process_mem_limit = options.process_mem_limit;
     _process_mem_tracker = options.process_mem_tracker;
+    _datacache_mem_tracker = options.datacache_mem_tracker;
+    _page_cache_mem_tracker = options.page_cache_mem_tracker;
     _block_cache = std::make_shared<BlockCache>();
     _page_cache = std::make_shared<StoragePageCache>();
 
@@ -112,6 +118,43 @@ void DataCache::destroy() {
     _local_disk_cache.reset();
     _remote_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
+
+    if (_datacache_mem_tracker != nullptr) {
+        _datacache_mem_tracker->set(0);
+        _datacache_mem_tracker = nullptr;
+    }
+    if (_page_cache_mem_tracker != nullptr) {
+        _page_cache_mem_tracker->set(0);
+        _page_cache_mem_tracker = nullptr;
+    }
+    _process_mem_tracker = nullptr;
+}
+
+void DataCache::refresh_memory_trackers(bool use_same_datacache_instance) {
+    (void)use_same_datacache_instance;
+
+    if (_datacache_mem_tracker != nullptr) {
+        int64_t datacache_mem_bytes = 0;
+        auto* local_cache = local_mem_cache();
+        if (local_cache != nullptr && local_cache->is_initialized()) {
+            datacache_mem_bytes = local_cache->cache_metrics().mem_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!use_same_datacache_instance) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        _datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+
+    if (_page_cache_mem_tracker != nullptr) {
+        int64_t page_cache_mem_bytes = 0;
+        auto* cache = page_cache();
+        if (cache != nullptr && cache->is_initialized()) {
+            page_cache_mem_bytes = static_cast<int64_t>(cache->memory_usage());
+        }
+        _page_cache_mem_tracker->set(page_cache_mem_bytes);
+    }
 }
 
 bool DataCache::adjust_mem_capacity(int64_t delta, size_t min_capacity) {

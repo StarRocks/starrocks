@@ -35,6 +35,7 @@ public:
     // Register the runtime update hook after startup determines whether StarOS
     // and DataCache share the same StarCache instance.
     void enable_update_hook(bool use_same_instance);
+    void update_memory_trackers();
     void update();
 
     METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);

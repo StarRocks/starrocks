@@ -16,13 +16,21 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 
-#include "common/metrics/process_metrics_registry.h"
-
-#ifdef WITH_STARCACHE
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
-#endif
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/metrics/process_metrics_registry.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -60,6 +68,44 @@ TEST_F(DataCacheMetricsTest, test_enable_update_hook_basic) {
     // This should not crash regardless of WITH_STARCACHE
     ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(false));
     ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(true));
+}
+
+TEST_F(DataCacheMetricsTest, test_memory_tracker_hook_updates_cache_trackers) {
+    const bool old_disable_storage_page_cache = config::disable_storage_page_cache;
+    const bool old_block_cache_enable = config::block_cache_enable;
+    SCOPED_UPDATE(bool, config::datacache_enable, false);
+    SCOPED_UPDATE(bool, config::disable_storage_page_cache, old_disable_storage_page_cache);
+    SCOPED_UPDATE(bool, config::block_cache_enable, old_block_cache_enable);
+    DataCacheMetrics::instance()->enable_update_hook(true);
+
+    auto* cache_env = DataCache::GetInstance();
+    cache_env->destroy();
+
+    MemTracker datacache_tracker(-1, "datacache");
+    MemTracker page_cache_tracker(-1, "page_cache");
+    DataCacheInitOptions options;
+    options.datacache_mem_tracker = &datacache_tracker;
+    options.page_cache_mem_tracker = &page_cache_tracker;
+    ASSERT_OK(cache_env->init(options));
+    DeferOp cleanup([cache_env] { cache_env->destroy(); });
+
+    MemCacheOptions mem_cache_options{.mem_space_size = 4 * 1024 * 1024};
+    auto lru_cache = std::make_shared<LRUCacheEngine>();
+    ASSERT_OK(lru_cache->init(mem_cache_options));
+    auto page_cache = std::make_shared<StoragePageCache>(lru_cache.get());
+    cache_env->set_page_cache(page_cache);
+
+    std::string key("cache_memory_tracker");
+    auto data = std::make_unique<std::vector<uint8_t>>(1024);
+    PageCacheHandle handle;
+    MemCacheWriteOptions write_options;
+    ASSERT_OK(page_cache->insert(key, data.get(), write_options, &handle));
+    data.release();
+
+    ASSERT_EQ(0, page_cache_tracker.consumption());
+    backend_metrics_registry_for_test()->trigger_hook();
+    ASSERT_EQ(0, datacache_tracker.consumption());
+    ASSERT_EQ(page_cache->memory_usage(), page_cache_tracker.consumption());
 }
 
 #ifdef WITH_STARCACHE

@@ -44,6 +44,8 @@ struct DataCacheInitOptions {
     MetricRegistry* metrics = nullptr;
     int64_t process_mem_limit = -1;
     MemTracker* process_mem_tracker = nullptr;
+    MemTracker* datacache_mem_tracker = nullptr;
+    MemTracker* page_cache_mem_tracker = nullptr;
 };
 
 class DataCache {
@@ -53,6 +55,8 @@ public:
     Status init(const DataCacheInitOptions& options);
     void attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache);
     void destroy();
+
+    void refresh_memory_trackers(bool use_same_datacache_instance);
 
     void release_memory_before_core_dump();
 
@@ -91,6 +95,8 @@ private:
     std::vector<std::string> _storage_root_paths;
     int64_t _process_mem_limit = -1;
     MemTracker* _process_mem_tracker = nullptr;
+    MemTracker* _datacache_mem_tracker = nullptr;
+    MemTracker* _page_cache_mem_tracker = nullptr;
 
     // cache engine
     std::shared_ptr<LocalMemCacheEngine> _local_mem_cache;

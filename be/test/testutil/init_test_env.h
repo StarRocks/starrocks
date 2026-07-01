@@ -149,6 +149,8 @@ int init_test_env(int argc, char** argv) {
     cache_init_options.metrics = process_metrics_registry->root_registry();
     cache_init_options.process_mem_limit = runtime_env->process_mem_limit();
     cache_init_options.process_mem_tracker = runtime_env->process_mem_tracker();
+    cache_init_options.datacache_mem_tracker = runtime_env->datacache_mem_tracker();
+    cache_init_options.page_cache_mem_tracker = runtime_env->page_cache_mem_tracker();
     st = cache_env->init(cache_init_options);
     CHECK(st.ok()) << st;
 

@@ -29,6 +29,8 @@ namespace starrocks {
 
 namespace {
 
+const char* const kRefreshCacheMemoryTrackersHookName = "cache_memory_tracker_metrics";
+
 #ifdef WITH_STARCACHE
 const char* const kUpdateDataCacheMetricsHookName = "update_datacache_metrics";
 #endif
@@ -56,6 +58,8 @@ void DataCacheMetrics::install(MetricRegistry* registry) {
     registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
     registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
     registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
+    registry->register_hook(kRefreshCacheMemoryTrackersHookName,
+                            [] { DataCacheMetrics::instance()->update_memory_trackers(); });
 }
 
 void DataCacheMetrics::enable_update_hook(bool use_same_instance) {
@@ -65,6 +69,10 @@ void DataCacheMetrics::enable_update_hook(bool use_same_instance) {
         _registry->register_hook(kUpdateDataCacheMetricsHookName, [] { DataCacheMetrics::instance()->update(); });
     }
 #endif
+}
+
+void DataCacheMetrics::update_memory_trackers() {
+    DataCache::GetInstance()->refresh_memory_trackers(_use_same_instance.load(std::memory_order_relaxed));
 }
 
 void DataCacheMetrics::update() {
