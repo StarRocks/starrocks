@@ -556,7 +556,6 @@ set(STARROCKS_LINK_LIBS
     Orchestration
     DataWorkflows
     Udf
-    Util
     ${WL_END_GROUP}
     Storage
     FormatAvro
@@ -993,7 +992,6 @@ add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
-add_subdirectory(${SRC_DIR}/util)
 add_subdirectory(${SRC_DIR}/script)
 
 if (BUILD_FORMAT_LIB)
