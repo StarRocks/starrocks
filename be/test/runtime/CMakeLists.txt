@@ -36,6 +36,7 @@ set(RUNTIME_TEST_FILES
     serde_core_test.cpp
     time_guard_test.cpp
     memory/mem_chunk_allocator_test.cpp
+    memory/process_memory_metrics_test.cpp
     memory/system_allocator_test.cpp
     memory/memory_resource_test.cpp
     memory/counting_allocator_test.cpp

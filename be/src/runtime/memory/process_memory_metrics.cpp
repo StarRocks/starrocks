@@ -11,36 +11,38 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/be/src/util/system_metrics.cpp
 
-#include "util/system_metrics.h"
-
-#include <runtime/mem_tracker.h>
+#include "runtime/memory/process_memory_metrics.h"
 
 #include "jemalloc/jemalloc.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks {
 
-const char* const SystemMetrics::_s_hook_name = "system_metrics";
+const char* const ProcessMemoryMetrics::_s_hook_name = "process_memory_metrics";
 
-SystemMetrics::SystemMetrics() = default;
+ProcessMemoryMetrics::ProcessMemoryMetrics() = default;
 
-SystemMetrics* SystemMetrics::instance() {
-    // Process-lifetime singleton: instrumentation may touch SystemMetrics before
-    // the process metrics registry is constructed, then install it into the
-    // registry later. Avoid exit-time destructor ordering against the registry.
-    static auto* instance = new SystemMetrics();
+ProcessMemoryMetrics* ProcessMemoryMetrics::instance() {
+    // Process-lifetime singleton: instrumentation may touch ProcessMemoryMetrics
+    // before the process metrics registry is constructed, then install it into
+    // the registry later. Avoid exit-time destructor ordering against the registry.
+    static auto* instance = new ProcessMemoryMetrics();
     return instance;
 }
 
-SystemMetrics::~SystemMetrics() {
+ProcessMemoryMetrics::~ProcessMemoryMetrics() {
     if (_registry != nullptr) {
         _registry->deregister_hook(_s_hook_name);
         _registry = nullptr;
     }
 }
 
-void SystemMetrics::install(MetricRegistry* registry) {
+void ProcessMemoryMetrics::install(MetricRegistry* registry) {
     if (_registry != nullptr) {
         DCHECK_EQ(_registry, registry);
         return;
@@ -52,7 +54,7 @@ void SystemMetrics::install(MetricRegistry* registry) {
     _registry = registry;
 }
 
-void SystemMetrics::update() {
+void ProcessMemoryMetrics::update() {
     // Use try_lock to avoid blocking concurrent callers since metrics collection
     // is best-effort and the data will be refreshed on the next collection cycle.
     std::unique_lock lock(_update_mutex, std::try_to_lock);
@@ -63,8 +65,8 @@ void SystemMetrics::update() {
     update_memory_metrics();
 }
 
-void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
-    _memory_metrics = std::make_unique<MemoryMetrics>();
+void ProcessMemoryMetrics::_install_memory_metrics(MetricRegistry* registry) {
+    _memory_metrics = std::make_unique<ProcessMemoryMetricValues>();
     registry->register_metric("jemalloc_allocated_bytes", &_memory_metrics->jemalloc_allocated_bytes);
     registry->register_metric("jemalloc_active_bytes", &_memory_metrics->jemalloc_active_bytes);
     registry->register_metric("jemalloc_metadata_bytes", &_memory_metrics->jemalloc_metadata_bytes);
@@ -101,7 +103,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("vector_index_mem_bytes", &_memory_metrics->vector_index_mem_bytes);
 }
 
-void SystemMetrics::update_memory_metrics() {
+void ProcessMemoryMetrics::update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else

@@ -39,6 +39,7 @@ set(RUNTIME_SRCS
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
+    memory/process_memory_metrics.cpp
     memory/system_allocator.cpp
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
