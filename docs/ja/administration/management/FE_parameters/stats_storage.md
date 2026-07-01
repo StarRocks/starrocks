@@ -554,6 +554,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：古いタブレットを分割できる新しいタブレットの最大数。
 - 導入時期：v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- デフォルト：2147483648 (2 GB)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：タブレットのプリスプリットで生成されるタブレットの最小サイズ。プリスプリット時のコンピュートノード数へのアライメントを制限し、ノード数の多いクラスターで小さなロードが多数の極小タブレットに分割されないようにします。`tablet_reshard_target_size` 以下にする必要があります。
+- 導入時期：v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - デフォルト：259200000 (72 hours)
