@@ -322,9 +322,16 @@ public class CompactionScheduler extends Daemon {
             table = (OlapTable) stateMgr.getLocalMetastore()
                         .getTable(db.getId(), tableId);
 
-            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
-            // will not be used after the schema change job finished.
-            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+            // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
+            //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
+            //   - ROLLUP on a range-distribution table: this is an online-rewrite rollup (LakeRangeRollupJob) whose
+            //     flip replays the shadow tablets' per-version txn vlogs over [alter_version + 1, new_version). A
+            //     compaction commits a partition version with no vlog, leaving a gap the flip cannot bridge, which
+            //     wedges the publish forever. Only range-distribution rollups take the online-rewrite path (there
+            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets); traditional
+            //     hash rollups build eagerly via BE alter tasks, hold no such dependency, and must keep compacting.
+            if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    || (table.getState() == OlapTable.OlapTableState.ROLLUP && table.isRangeDistribution()))) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
                 return null;
             }
