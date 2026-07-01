@@ -24,6 +24,11 @@ namespace starrocks::gin_pfor {
 
 namespace {
 
+// Maximum number of values a single encode()/decode() call may handle: the exception position and
+// the exception count are both u8 in the frozen format, so a stream cannot represent more than this
+// many values. The GIN block size (128) is well under this bound.
+constexpr size_t kMaxValues = 255;
+
 // Mask of the low `b` bits. b is always in [0, 32] here.
 inline uint32_t low_mask(int b) {
     return b >= 32 ? 0xFFFFFFFFu : ((1u << b) - 1u);
@@ -105,7 +110,7 @@ int choose_bit_width(const uint32_t* vals, size_t n) {
 } // namespace
 
 void encode(const uint32_t* vals, size_t n, faststring* out) {
-    DCHECK_LE(n, 255u); // pos and num_exceptions are u8; GIN block size is 128
+    CHECK_LE(n, kMaxValues); // enforce in all builds: pos/num_exceptions are u8 (GIN block size is 128)
 
     const int b = choose_bit_width(vals, n);
 
@@ -148,7 +153,8 @@ void encode(const uint32_t* vals, size_t n, faststring* out) {
 }
 
 size_t decode(const uint8_t* data, size_t len, size_t n, uint32_t* out) {
-    if (len < 2) return 0; // need at least the 2-byte header
+    if (len < 2) return 0;        // need at least the 2-byte header
+    if (n > kMaxValues) return 0; // more values than the u8 exception pos/count header can represent
     const uint8_t* p = data;
     const uint8_t* const limit = data + len;
 

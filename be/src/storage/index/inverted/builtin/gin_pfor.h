@@ -40,11 +40,12 @@ class faststring;
 // `n` must be <= 255 so that `pos` and `num_exceptions` fit in u8; the GIN block size is 128.
 namespace gin_pfor {
 
-// Append the PFOR encoding of vals[0..n) to *out. n may be 0 (emits a 2-byte empty header).
+// Append the PFOR encoding of vals[0..n) to *out. n may be 0 (emits a 2-byte empty header) and must
+// be <= 255 (checked): the frozen format stores exception positions and count as u8.
 void encode(const uint32_t* vals, size_t n, faststring* out);
 
 // Decode exactly `n` values from data[0..len) into out[0..n).
-// Returns the number of bytes consumed, or 0 on malformed / truncated input.
+// Returns the number of bytes consumed, or 0 on malformed / truncated input or unsupported n > 255.
 size_t decode(const uint8_t* data, size_t len, size_t n, uint32_t* out);
 
 } // namespace gin_pfor

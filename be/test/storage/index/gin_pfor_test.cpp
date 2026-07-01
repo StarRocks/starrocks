@@ -116,6 +116,17 @@ TEST_F(GinPforTest, roundtrip_outlier_at_last_position) {
     check_roundtrip({1, 2, 3, 1, 2, 3, 1, 999999});
 }
 
+// n == 255 is the largest value count the u8 exception-position/count header can represent; it must
+// round-trip (with exceptions). Guards the n > 255 rejection against an off-by-one and exercises
+// encode()'s size check at the boundary.
+TEST_F(GinPforTest, roundtrip_max_block_size) {
+    std::vector<uint32_t> in(255);
+    for (size_t i = 0; i < in.size(); ++i) {
+        in[i] = (i % 16 == 0) ? (100000u + static_cast<uint32_t>(i)) : (i % 7); // a few outliers
+    }
+    check_roundtrip(in);
+}
+
 // Two streams concatenated into one buffer (as a block stores gaps then tfs): decoding the first
 // must report the exact byte offset where the second begins.
 TEST_F(GinPforTest, decode_framing_two_streams) {
@@ -186,6 +197,16 @@ TEST_F(GinPforTest, decode_rejects_bit_width_32_with_exceptions) {
     const uint8_t corrupt[] = {0x20, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
     std::vector<uint32_t> out(1, 0);
     EXPECT_EQ(gin_pfor::decode(corrupt, sizeof(corrupt), 1, out.data()), 0u);
+}
+
+// The u8 exception-position/count header cannot represent more than 255 values, so decode() must
+// reject n > 255 (return 0) rather than silently produce meaningless output. {bit_width=0,
+// num_exceptions=0} is an otherwise-valid 2-byte stream that would "succeed" for any n without the
+// guard; out is oversized so the check is on the return value, not on a would-be overflow.
+TEST_F(GinPforTest, decode_rejects_n_over_255) {
+    const uint8_t buf[] = {0x00, 0x00};
+    std::vector<uint32_t> out(256, 0);
+    EXPECT_EQ(gin_pfor::decode(buf, sizeof(buf), 256, out.data()), 0u);
 }
 
 } // namespace starrocks
