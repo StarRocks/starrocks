@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.authorization.IdGenerator;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -195,6 +197,86 @@ public class TabletInvertedIndexTest {
         Assertions.assertEquals(
                 batchIndex.getTabletIdsByBackendId(2001L),
                 singleIndex.getTabletIdsByBackendId(2001L));
+    }
+
+    @Test
+    public void testMarkTabletsForceDeleteBatch() {
+        // Given: two tablets with replicas on distinct backends, plus a tablet with no replicas
+        long tabletId1 = 5001L;
+        long tabletId2 = 5002L;
+        long emptyTabletId = 5003L;
+
+        Replica r1 = new Replica(300L, 3000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2 = new Replica(301L, 3001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+
+        LocalTablet tablet1 = new LocalTablet(tabletId1, Arrays.asList(r1));
+        LocalTablet tablet2 = new LocalTablet(tabletId2, Arrays.asList(r2));
+        // Empty backend set -> should be skipped by the batch mark
+        LocalTablet emptyTablet = new LocalTablet(emptyTabletId);
+
+        // When: batch mark all of them for force delete
+        tabletInvertedIndex.markTabletsForceDelete(Arrays.asList(tablet1, tablet2, emptyTablet));
+
+        // Then: tablets with backends are marked, the empty one is skipped
+        Assertions.assertTrue(tabletInvertedIndex.tabletForceDelete(tabletId1, 3000L));
+        Assertions.assertTrue(tabletInvertedIndex.tabletForceDelete(tabletId2, 3001L));
+        Assertions.assertFalse(tabletInvertedIndex.tabletForceDelete(emptyTabletId, 0L));
+        Assertions.assertEquals(2, tabletInvertedIndex.getForceDeleteTablets().size());
+    }
+
+    @Test
+    public void testMarkTabletsForceDeleteConsistentWithSingleMark() {
+        // Verify batch mark produces the same result as marking each tablet individually
+        long tabletId1 = 6001L;
+        long tabletId2 = 6002L;
+
+        TabletInvertedIndex batchIndex = new TabletInvertedIndex();
+        TabletInvertedIndex singleIndex = new TabletInvertedIndex();
+
+        Replica r1 = new Replica(400L, 4000L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+        Replica r2 = new Replica(401L, 4001L, 1L, 123, 0L, 0L,
+                Replica.ReplicaState.NORMAL, -1L, 1L);
+
+        LocalTablet tablet1 = new LocalTablet(tabletId1, Arrays.asList(r1));
+        LocalTablet tablet2 = new LocalTablet(tabletId2, Arrays.asList(r2));
+
+        // Batch mark
+        batchIndex.markTabletsForceDelete(Arrays.asList(tablet1, tablet2));
+
+        // Sequential single mark
+        singleIndex.markTabletForceDelete(tablet1);
+        singleIndex.markTabletForceDelete(tablet2);
+
+        // Both should mark the same (tabletId, backendId) pairs
+        for (long tabletId : new long[] {tabletId1, tabletId2}) {
+            Set<Long> batchBackends = batchIndex.getForceDeleteTablets().get(tabletId);
+            Set<Long> singleBackends = singleIndex.getForceDeleteTablets().get(tabletId);
+            Assertions.assertEquals(singleBackends, batchBackends);
+        }
+        Assertions.assertEquals(
+                singleIndex.getForceDeleteTablets().size(),
+                batchIndex.getForceDeleteTablets().size());
+    }
+
+    @Test
+    public void testMarkTabletsForceDeleteSkipsLakeTablets() {
+        // LakeTablet is managed by StarOS; a lake-table batch must be a no-op (no marking, no lock work)
+        LakeTablet lakeTablet1 = new LakeTablet(7001L);
+        LakeTablet lakeTablet2 = new LakeTablet(7002L);
+
+        tabletInvertedIndex.markTabletsForceDelete(Arrays.asList(lakeTablet1, lakeTablet2));
+
+        Assertions.assertTrue(tabletInvertedIndex.getForceDeleteTablets().isEmpty());
+        Assertions.assertFalse(tabletInvertedIndex.tabletForceDelete(7001L, 0L));
+    }
+
+    @Test
+    public void testMarkTabletsForceDeleteEmptyCollection() {
+        tabletInvertedIndex.markTabletsForceDelete(Collections.emptyList());
+        Assertions.assertTrue(tabletInvertedIndex.getForceDeleteTablets().isEmpty());
     }
 
     @Test
