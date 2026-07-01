@@ -1152,6 +1152,58 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testExternalFullStatisticsCollectJobExtendedInfo() throws Exception {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("r_regionkey", "r_name", "r_comment"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) {
+                // Skip the actual query execution, only exercise collect()'s bookkeeping logic.
+            }
+        };
+
+        // Existing (user-supplied) properties must be preserved alongside the merged-in collection metadata.
+        Map<String, String> initialProperties = Maps.newHashMap();
+        initialProperties.put("custom_key", "custom_value");
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "hive0", "tpch", "region",
+                table.getUUID(), Lists.newArrayList("r_regionkey", "r_name", "r_comment"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, initialProperties, LocalDateTime.now());
+        collectJob.collect(connectContext, analyzeStatus);
+
+        Map<String, String> properties = analyzeStatus.getProperties();
+        Assertions.assertEquals("custom_value", properties.get("custom_key"));
+        Assertions.assertEquals("hive", properties.get("table_format"));
+        Assertions.assertEquals("1", properties.get("partition_count"));
+        Assertions.assertEquals("3", properties.get("column_count"));
+
+        // The merge happens before the collection try-block runs, so the properties must still be
+        // populated on the AnalyzeStatus even when the collection itself fails.
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                throw new DdlException("mock collect failure");
+            }
+        };
+        ExternalAnalyzeStatus failedStatus = new ExternalAnalyzeStatus(2, "hive0", "tpch", "region",
+                table.getUUID(), Lists.newArrayList("r_regionkey", "r_name", "r_comment"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        Assertions.assertThrows(Exception.class, () -> collectJob.collect(connectContext, failedStatus));
+        Assertions.assertEquals("hive", failedStatus.getProperties().get("table_format"));
+        Assertions.assertEquals("3", failedStatus.getProperties().get("column_count"));
+    }
+
+    @Test
     public void testIcebergPartitionTransformFullStatisticsBuildCollectSQLList() {
         // test partition column type is timestamp without time zone
         Database database =
