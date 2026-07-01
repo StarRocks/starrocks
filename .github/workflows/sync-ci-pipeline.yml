@@ -130,7 +130,7 @@ jobs:
           labels: thirdparty
 
   thirdparty-update:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [code-checker]
     name: Thirdparty Update
     continue-on-error: true
@@ -183,7 +183,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs:
       - thirdparty-update
     name: Thirdparty Info
@@ -219,7 +219,7 @@ jobs:
           echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
 
   build:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [thirdparty-info]
     name: BUILD
     env:
@@ -277,7 +277,7 @@ jobs:
   # For [Refactor] sync PRs that touch BE, compile all BE UT targets (dry-run,
   # no test execution) to catch the break before the sync merges to main.
   be-ut-refactor-compile:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [ code-checker, thirdparty-info ]
     name: BE UT (Refactor compile-check)
     timeout-minutes: 90
@@ -317,7 +317,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   result:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [ pr-label, code-checker, build, be-ut-refactor-compile ]
     name: RESULT
     if: >
