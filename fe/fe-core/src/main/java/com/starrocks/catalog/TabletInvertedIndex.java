@@ -211,11 +211,30 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     /**
-     * Batch mark tablets for force delete.
+     * Batch mark tablets for force delete with a single write lock acquisition,
+     * reducing lock contention compared to calling markTabletForceDelete() in a loop.
      */
     public void markTabletsForceDelete(Collection<Tablet> tablets) {
-        for (Tablet tablet : tablets) {
-            markTabletForceDelete(tablet);
+        if (tablets.isEmpty()) {
+            return;
+        }
+        // LakeTablet is managed by StarOS, no need to do this mark and clean up. A cluster does
+        // not mix LocalTablet and LakeTablet, so inspecting one tablet is enough to decide; bail
+        // out before taking the write lock when the batch belongs to a lake table.
+        if (tablets.iterator().next() instanceof LakeTablet) {
+            return;
+        }
+        writeLock();
+        try {
+            for (Tablet tablet : tablets) {
+                Set<Long> backendIds = tablet.getBackendIds();
+                if (backendIds.isEmpty()) {
+                    continue;
+                }
+                forceDeleteTablets.put(tablet.getId(), backendIds);
+            }
+        } finally {
+            writeUnlock();
         }
     }
 
