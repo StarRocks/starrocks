@@ -43,6 +43,7 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
@@ -500,23 +501,57 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     RETURN_IF_ERROR(col_iter->init(col_iter_opts));
     RETURN_IF_ERROR(col_iter->seek_to_first());
 
+    // The query read path (ColumnReader::bloom_filter) addresses bloom filters
+    // by DATA-PAGE index: it maps a row range to this column's covering data
+    // pages and calls read_bloom_filter(page_id), assuming bloom filter #p
+    // covers exactly the rows of data page #p. That is the contract the normal
+    // segment-write path honors (ScalarColumnWriter::finish_current_page()
+    // flushes exactly one bloom filter per data page). The IDG fast path must
+    // therefore emit one bloom filter per data page, aligned to the source
+    // column's persisted page boundaries.
+    //
+    // Flushing one bloom filter per fixed 4096-row batch instead leaves
+    // #bloom_filters = ceil(num_rows / 4096), which does NOT equal #data_pages
+    // for the default 64KB data_page_size (a page rarely holds exactly 4096
+    // rows). read_bloom_filter(page_id) then either indexes past the last
+    // bloom filter -> out-of-bounds read -> SIGSEGV, or returns a bloom filter
+    // built for a different row range -> false-negative pruning -> missing rows.
+    //
+    // col_iter->init() above already loaded this column's ordinal index, so the
+    // reader can report its data-page layout. column_with_uid() returns the very
+    // same ColumnReader the iterator reads through (both keyed by unique_id).
+    auto* col_reader = const_cast<ColumnReader*>(segment->column_with_uid(column.unique_id()));
+    if (col_reader == nullptr) {
+        return Status::InternalError(
+                strings::Substitute("build_bloom_for_column: no column reader for column $0", column.name()));
+    }
+    const int32_t num_pages = col_reader->num_data_pages();
+
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
-    constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
-    while (true) {
-        col->reset_column();
-        size_t n = kBatch;
-        Status st = col_iter->next_batch(&n, col.get());
-        if (st.is_end_of_file() || n == 0) {
-            break;
+    for (int32_t page = 0; page < num_pages; ++page) {
+        // [first_ordinal, last_ordinal] is the inclusive row range of data page
+        // `page` — exactly what the read path will resolve for read_bloom_filter(page).
+        auto [first_ordinal, last_ordinal] = col_reader->get_page_range(static_cast<size_t>(page));
+        RETURN_IF_ERROR(col_iter->seek_to_ordinal(first_ordinal));
+        size_t remaining = static_cast<size_t>(last_ordinal - first_ordinal + 1);
+        while (remaining > 0) {
+            col->reset_column();
+            size_t n = remaining;
+            Status st = col_iter->next_batch(&n, col.get());
+            if (st.is_end_of_file() || n == 0) {
+                break;
+            }
+            if (!st.ok()) return st;
+            // BloomFilterIndexWriter shares the add_values/add_nulls signature
+            // with BitmapIndexWriter; reuse the common feeder so Binary / string
+            // columns get the Slice-buffer treatment automatically. Multiple
+            // next_batch calls accumulate into the SAME pending bloom filter.
+            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
+            remaining -= n;
         }
-        if (!st.ok()) return st;
-        // BloomFilterIndexWriter shares the add_values/add_nulls signature
-        // with BitmapIndexWriter; reuse the common feeder so Binary / string
-        // columns get the Slice-buffer treatment automatically.
-        RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
-        // BloomFilterIndexWriter accumulates per-page filters; flush at
-        // chunk boundaries so memory stays bounded even for large columns.
+        // Emit exactly one bloom filter for this data page (mirrors
+        // finish_current_page()), so read_bloom_filter(page) lines up 1:1.
         RETURN_IF_ERROR(bf_writer->flush());
     }
 
