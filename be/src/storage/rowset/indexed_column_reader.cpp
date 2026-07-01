@@ -122,6 +122,17 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
 }
 
 Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
+    // Hard bounds check (not just a debug DCHECK): callers such as the bloom
+    // filter read path derive `idx` from a data-page index, and a layout
+    // mismatch (e.g. fewer stored bloom filters than data pages) would pass an
+    // ordinal past the end. Relying on the DCHECK alone means release builds
+    // skip it and run off the end of the page data -> out-of-bounds read /
+    // SIGSEGV. Return a recoverable error so the caller can degrade gracefully.
+    // Seeking to exactly num_values() stays allowed (a valid past-the-last seek).
+    if (idx > static_cast<ordinal_t>(_reader->num_values())) {
+        return Status::InvalidArgument(strings::Substitute(
+                "IndexedColumnIterator::seek_to_ordinal out of range: $0 > $1", idx, _reader->num_values()));
+    }
     DCHECK(idx >= 0 && idx <= _reader->num_values());
 
     if (!_reader->support_ordinal_seek()) {

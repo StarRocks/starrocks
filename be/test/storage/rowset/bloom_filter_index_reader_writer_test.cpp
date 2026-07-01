@@ -179,6 +179,44 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_int) {
     delete[] val;
 }
 
+// Reading a bloom filter at an ordinal that has no backing filter must return a
+// recoverable error instead of running off the end of the index (release builds
+// strip the DCHECK). This guards the lake IDG build-vs-read granularity path:
+// ColumnReader::bloom_filter relies on these errors to degrade to no-pruning
+// rather than reading out of bounds / crashing. Two cases:
+//   - ordinal == num_values: a legal past-the-last seek that yields no row ->
+//     read_bloom_filter reports Corruption.
+//   - ordinal  > num_values: seek_to_ordinal itself rejects with InvalidArgument.
+TEST_F(BloomFilterIndexReaderWriterTest, test_read_out_of_range_ordinal) {
+    size_t num = 1024 * 3 - 1;
+    int* val = new int[num];
+    for (int i = 0; i < num; ++i) {
+        // there will be 3 bloom filter pages (ordinals 0, 1, 2)
+        val[i] = 10000 + i + 1;
+    }
+
+    std::string file_name = "bloom_filter_oob";
+    ColumnIndexMetaPB meta;
+    write_bloom_filter_index_file<TYPE_INT>(file_name, val, num, 1, &meta);
+
+    std::unique_ptr<RandomAccessFile> rfile;
+    BloomFilterIndexReader* reader = nullptr;
+    std::unique_ptr<BloomFilterIndexIterator> iter;
+    get_bloom_filter_reader_iter(file_name, meta, &rfile, &reader, &iter);
+
+    // ordinal == num_values (3): valid past-the-last seek, no value to read.
+    std::unique_ptr<BloomFilter> bf;
+    auto st = iter->read_bloom_filter(3, &bf);
+    ASSERT_FALSE(st.ok());
+
+    // ordinal far past the end: rejected before any read.
+    st = iter->read_bloom_filter(1000000, &bf);
+    ASSERT_FALSE(st.ok());
+
+    delete reader;
+    delete[] val;
+}
+
 TEST_F(BloomFilterIndexReaderWriterTest, test_bigint) {
     size_t num = 1024 * 3 - 1;
     auto* val = new int64_t[num];

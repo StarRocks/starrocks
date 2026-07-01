@@ -21,12 +21,14 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -39,16 +41,22 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
+#include "storage/lake/index_file_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/primitive/column_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
+#include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
 
 namespace starrocks::lake {
 
@@ -661,6 +669,305 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
     SparseRange<> empty_ranges;
     auto* reader = const_cast<ColumnReader*>(reader_const);
     ASSERT_OK(reader->ngram_bloom_filter(empty_predicates, &empty_ranges, ix_opts));
+}
+
+// Regression for the IDG bloom-filter build-vs-read granularity mismatch.
+//
+// The query read path (ColumnReader::bloom_filter) addresses bloom filters by
+// DATA-PAGE index and assumes bloom filter #p covers exactly the rows of data
+// page #p. The IDG fast path used to flush one bloom filter per fixed 4096-row
+// batch instead, so for a column whose data spans many small pages
+// #bloom_filters (= ceil(num_rows/4096)) was far smaller than #data_pages. The
+// reader then indexed read_bloom_filter() past the last bloom filter
+// (out-of-bounds read -> CN SIGSEGV) or consulted a bloom filter built for the
+// wrong row range (false-negative pruning -> missing rows).
+//
+// Here we force many small data pages (tiny data_page_size) over an INT column,
+// build a plain BLOOM_FILTER via the fast path, then run an equality predicate
+// for a value that lives in a late page. We assert:
+//   (a) the read path does NOT crash / error (was an OOB SIGSEGV);
+//   (b) the page holding the matching value survives pruning (no false negative);
+//   (c) only a few pages survive — NOT the whole column. (c) distinguishes a
+//       correct per-data-page build from the defensive "skip pruning" fallback
+//       that would retain every page if the granularity were still wrong.
+TEST_F(AddIndexSchemaChangeTest, idg_bloom_multi_page_no_oob_and_correct_pruning) {
+    // Force many small data pages so each page holds far fewer than 4096 rows.
+    const int32_t saved_page_size = config::data_page_size;
+    config::data_page_size = 64;
+    DeferOp restore([&]() { config::data_page_size = saved_page_size; });
+
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    // c1 is a non-null INT (4 bytes); with data_page_size=64 a page holds only a
+    // handful of rows, so 2000 rows produce many data pages while the old
+    // per-batch build would have emitted just ceil(2000/4096) = 1 bloom filter.
+    const int kNumRows = 2000;
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, kNumRows);
+
+    // Build a plain BLOOM_FILTER IDG index on c1 (INT) via the fast path.
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& seg_entry = op.segment_entries(0);
+    ASSERT_GT(seg_entry.entry().file_size(), 0);
+
+    // Reload published metadata and open the segment we just indexed.
+    auto vt2 = versioned_at(base_tablet_id, version);
+    auto meta = vt2.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    const auto& rowset = meta->rowsets(0);
+    ASSERT_GT(rowset.segment_metas_size(), 0);
+    const auto& segment_meta = rowset.segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, base_schema));
+    auto* reader_const = segment->column_with_uid(_c1_uid);
+    ASSERT_TRUE(reader_const != nullptr);
+    auto* reader = const_cast<ColumnReader*>(reader_const);
+    // load_segment() only parses the footer; the ordinal index stays unloaded
+    // (num_data_pages() reports 0) until load_ordinal_index() runs. The bloom
+    // read path below reads the same ordinal index (page->row mapping), so load
+    // it now -- in production SegmentIterator::_init_internal() does this before
+    // pruning.
+    {
+        OlapReaderStatistics ord_stats;
+        ASSIGN_OR_ABORT(auto ord_fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+        ASSIGN_OR_ABORT(auto ord_rfile, ord_fs->new_random_access_file(seg_fi));
+        IndexReadOptions ord_opts;
+        ord_opts.read_file = ord_rfile->stream().get();
+        ord_opts.stats = &ord_stats;
+        ord_opts.use_page_cache = false;
+        ASSERT_OK(reader->load_ordinal_index(ord_opts));
+    }
+    // Premise: the column really spans multiple data pages, otherwise the test
+    // would not exercise the granularity mismatch at all.
+    ASSERT_GT(reader->num_data_pages(), 1);
+
+    // Wire the IDG loader to surface the .idx we just produced.
+    IndexDeltaGroupEntry entry;
+    entry.index_file = seg_entry.entry().index_file();
+    entry.version = seg_entry.entry().version();
+    entry.keys.push_back({_c1_uid, IndexType::BLOOM_FILTER});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    ix_opts.col_unique_id = _c1_uid;
+
+    // c1 values are i*7+3 for row i (see write_one_rowset). Probe a value that
+    // exists in a late page; under the old build the reader would index
+    // read_bloom_filter() far past the single emitted bloom filter.
+    const int matched_row = 1500;
+    const int matched_value = matched_row * 7 + 3;
+    auto type_info = get_type_info(LogicalType::TYPE_INT);
+    // Keep the operand string alive for the lifetime of the predicate: the Slice
+    // is a non-owning view over this buffer.
+    const std::string matched_value_str = std::to_string(matched_value);
+    auto* pred = new_column_eq_predicate(type_info, /*id=*/0, Slice(matched_value_str));
+    std::unique_ptr<ColumnPredicate> pred_guard(pred);
+    std::vector<const ColumnPredicate*> predicates{pred};
+
+    SparseRange<> ranges;
+    ranges.add(Range<>(0, kNumRows));
+    // (a) no crash / error.
+    ASSERT_OK(reader->original_bloom_filter(predicates, &ranges, ix_opts));
+
+    // (b) the matching row's page survives pruning (no false negative).
+    auto covered = [&](int64_t row) {
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            if (row >= static_cast<int64_t>(ranges[i].begin()) && row < static_cast<int64_t>(ranges[i].end())) {
+                return true;
+            }
+        }
+        return false;
+    };
+    EXPECT_GT(ranges.span_size(), 0);
+    EXPECT_TRUE(covered(matched_row));
+
+    // (c) only a small fraction of rows survive. A correct per-data-page build
+    // retains the matching page plus a few bloom false positives. A still-wrong
+    // granularity would force the defensive fallback to retain every page,
+    // leaving ~all kNumRows rows — caught here.
+    EXPECT_LT(ranges.span_size(), kNumRows / 2);
+}
+
+// Fault injection for the read-side defensive fallback in
+// ColumnReader::bloom_filter (column_reader.cpp): when an .idx carries FEWER
+// bloom filters than the column has data pages -- the exact on-disk shape the
+// pre-fix per-4096-row build produced, and what any legacy/corrupt .idx could
+// present -- the read path must NOT index past the bloom filter array (no
+// SIGSEGV) and must NOT drop matching rows. It degrades to "no pruning" for
+// every data page whose bloom filter is missing.
+//
+// The fixed build path now emits exactly one bloom filter per data page, so
+// this mismatch is no longer producible through AddIndexSchemaChange::run().
+// We therefore fabricate the bad on-disk state directly: build an .idx whose
+// bloom filter index holds a SINGLE filter (one flush over all rows) while the
+// data column spans many data pages.
+TEST_F(AddIndexSchemaChangeTest, idg_bloom_undersized_idx_degrades_to_no_pruning) {
+    const int32_t saved_page_size = config::data_page_size;
+    config::data_page_size = 64;
+    DeferOp restore([&]() { config::data_page_size = saved_page_size; });
+
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    const int kNumRows = 2000;
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, kNumRows);
+
+    // Open the segment we just wrote.
+    auto vt2 = versioned_at(base_tablet_id, version);
+    auto meta = vt2.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    const auto& rowset = meta->rowsets(0);
+    ASSERT_GT(rowset.segment_metas_size(), 0);
+    const auto& segment_meta = rowset.segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, base_schema));
+    auto* reader_const = segment->column_with_uid(_c1_uid);
+    ASSERT_TRUE(reader_const != nullptr);
+    auto* reader = const_cast<ColumnReader*>(reader_const);
+    // load_segment() leaves the ordinal index unloaded; load it so
+    // num_data_pages() is accurate and the bloom read path can map pages->rows
+    // (production does this in SegmentIterator::_init_internal()).
+    {
+        OlapReaderStatistics ord_stats;
+        ASSIGN_OR_ABORT(auto ord_fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+        ASSIGN_OR_ABORT(auto ord_rfile, ord_fs->new_random_access_file(seg_fi));
+        IndexReadOptions ord_opts;
+        ord_opts.read_file = ord_rfile->stream().get();
+        ord_opts.stats = &ord_stats;
+        ord_opts.use_page_cache = false;
+        ASSERT_OK(reader->load_ordinal_index(ord_opts));
+    }
+    const int32_t num_pages = reader->num_data_pages();
+    // Premise: many data pages, but we will write only a single bloom filter,
+    // so most page indices have no backing filter -> the degrade path fires.
+    ASSERT_GT(num_pages, 1);
+
+    // Fabricate an UNDERSIZED .idx beside the segment: one bloom filter (a
+    // single flush) over ALL rows, vs. num_pages > 1 data pages.
+    const auto slash = seg_fi.path.find_last_of('/');
+    ASSERT_NE(slash, std::string::npos);
+    const std::string idx_name = "undersized_bf.idx";
+    const std::string idx_path = seg_fi.path.substr(0, slash + 1) + idx_name;
+    {
+        ASSIGN_OR_ABORT(auto idx_fs, FileSystemFactory::CreateSharedFromString(idx_path));
+        ASSIGN_OR_ABORT(auto wfile, idx_fs->new_writable_file(idx_path));
+        IndexFileWriter idx_writer(std::move(wfile));
+
+        BloomFilterOptions bf_opts; // plain (non-ngram) bloom filter
+        auto bf_type_info = get_type_info(LogicalType::TYPE_INT);
+        std::unique_ptr<BloomFilterIndexWriter> bf_writer;
+        ASSERT_OK(BloomFilterIndexWriter::create(bf_opts, bf_type_info, &bf_writer));
+        // c1 value for row i is i*7+3 (see write_one_rowset). Feed every row
+        // then flush ONCE -> exactly one bloom filter covering all rows.
+        std::vector<int32_t> values(kNumRows);
+        for (int i = 0; i < kNumRows; ++i) {
+            values[i] = i * 7 + 3;
+        }
+        bf_writer->add_values(values.data(), values.size());
+        ASSERT_OK(bf_writer->flush());
+        ColumnIndexMetaPB bf_meta;
+        ASSERT_OK(bf_writer->finish(idx_writer.writable_file(), &bf_meta));
+        ASSERT_TRUE(bf_meta.has_bloom_filter_index());
+        idx_writer.append_column_index(_c1_uid, IndexType::BLOOM_FILTER, bf_meta);
+        ASSERT_OK(idx_writer.finalize());
+    }
+
+    // Wire the IDG loader to surface the undersized .idx.
+    IndexDeltaGroupEntry entry;
+    entry.index_file = idx_name;
+    entry.version = version;
+    entry.keys.push_back({_c1_uid, IndexType::BLOOM_FILTER});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    ix_opts.col_unique_id = _c1_uid;
+
+    // Probe a value that lives in a LATE data page (its bloom filter is one of
+    // the missing ones). Under the old DCHECK-only read path this indexed past
+    // the lone bloom filter -> out-of-bounds read -> SIGSEGV.
+    const int matched_row = 1500;
+    const int matched_value = matched_row * 7 + 3;
+    auto type_info = get_type_info(LogicalType::TYPE_INT);
+    const std::string matched_value_str = std::to_string(matched_value);
+    auto* pred = new_column_eq_predicate(type_info, /*id=*/0, Slice(matched_value_str));
+    std::unique_ptr<ColumnPredicate> pred_guard(pred);
+    std::vector<const ColumnPredicate*> predicates{pred};
+
+    SparseRange<> ranges;
+    ranges.add(Range<>(0, kNumRows));
+    // (a) graceful: no crash, no error returned.
+    ASSERT_OK(reader->original_bloom_filter(predicates, &ranges, ix_opts));
+
+    // (b) no false negative: the matching row's page survives. Its data page
+    // has no bloom filter, so the degrade fallback keeps the full page range.
+    auto covered = [&](int64_t row) {
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            if (row >= static_cast<int64_t>(ranges[i].begin()) && row < static_cast<int64_t>(ranges[i].end())) {
+                return true;
+            }
+        }
+        return false;
+    };
+    EXPECT_TRUE(covered(matched_row));
+
+    // (c) the no-pruning degrade fallback (not real per-page pruning) is what
+    // retained the rows: with a single bloom filter for many pages, nearly
+    // every page lacks a filter and is kept in full. A correct per-page index
+    // would prune to a small fraction (< kNumRows/2, asserted in the
+    // multi_page test); here the bulk of rows survive, proving the degrade
+    // path executed rather than crashing or over-pruning.
+    EXPECT_GT(ranges.span_size(), kNumRows / 2);
 }
 
 // Build BITMAP and NGRAMBF together on the same .idx. Both keys end up on
