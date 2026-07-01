@@ -242,7 +242,7 @@ TEST_F(DataCacheMetricsTest, test_update_mem_trackers_handles_null_trackers) {
     cache->update_mem_trackers();
 }
 
-TEST_F(DataCacheMetricsTest, test_datacache_hook_runs_before_system_metrics) {
+TEST_F(DataCacheMetricsTest, test_datacache_hook_runs_before_process_memory_metrics) {
     SCOPED_UPDATE(bool, config::datacache_unified_instance_enable, true);
     auto* cache = DataCache::GetInstance();
     auto mem_cache = std::make_shared<FakeMemCacheEngine>();
@@ -256,9 +256,9 @@ TEST_F(DataCacheMetricsTest, test_datacache_hook_runs_before_system_metrics) {
     ASSERT_TRUE(status.ok()) << status.to_string();
 
     int64_t observed_datacache_mem_bytes = 0;
-    ASSERT_TRUE(registry->register_hook("system_metrics",
+    ASSERT_TRUE(registry->register_hook("process_memory_metrics",
                                         [&] { observed_datacache_mem_bytes = datacache_mem_tracker.consumption(); }));
-    DeferOp deregister_system_metrics_hook([&] { registry->deregister_hook("system_metrics"); });
+    DeferOp deregister_process_memory_metrics_hook([&] { registry->deregister_hook("process_memory_metrics"); });
 
     mem_cache->metrics.mem_used_bytes = 55;
     registry->trigger_hook();

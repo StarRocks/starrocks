@@ -24,6 +24,7 @@ set(RUNTIME_TEST_FILES
     runtime_chunk_helper_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
+    process_memory_metrics_test.cpp
     load_fail_point_test.cpp
     mysql_table_descriptor_core_test.cpp
     query_statistics_test.cpp

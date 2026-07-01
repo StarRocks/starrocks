@@ -30,6 +30,7 @@
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "runtime/process_memory_metrics.h"
 #include "types/hll.h"
 
 namespace starrocks {
@@ -42,6 +43,10 @@ RuntimeEnv::~RuntimeEnv() {
 
 int64_t RuntimeEnv::process_mem_limit() const {
     return _process_mem_tracker->limit();
+}
+
+ProcessMemoryMetrics* RuntimeEnv::process_memory_metrics() const {
+    return ProcessMemoryMetrics::instance();
 }
 
 // Calculate the total memory limit of all load tasks on this BE

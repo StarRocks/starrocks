@@ -45,8 +45,8 @@ namespace starrocks {
 
 namespace {
 
-// MetricRegistry triggers hooks in name order. Keep this before "system_metrics"
-// because SystemMetrics reads the datacache/page-cache MemTracker values.
+// MetricRegistry triggers hooks in name order. Keep this before "process_memory_metrics"
+// because ProcessMemoryMetrics reads the datacache/page-cache MemTracker values.
 const char* const kUpdateDataCacheMetricsHookName = "datacache_metrics";
 
 } // namespace

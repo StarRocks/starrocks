@@ -12,35 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/system_metrics.h"
-
-#include <runtime/mem_tracker.h>
+#include "runtime/process_memory_metrics.h"
 
 #include "jemalloc/jemalloc.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks {
 
-const char* const SystemMetrics::_s_hook_name = "system_metrics";
+const char* const ProcessMemoryMetrics::_s_hook_name = "process_memory_metrics";
 
-SystemMetrics::SystemMetrics() = default;
+ProcessMemoryMetrics::ProcessMemoryMetrics() = default;
 
-SystemMetrics* SystemMetrics::instance() {
-    // Process-lifetime singleton: instrumentation may touch SystemMetrics before
+ProcessMemoryMetrics* ProcessMemoryMetrics::instance() {
+    // Process-lifetime singleton: instrumentation may touch ProcessMemoryMetrics before
     // the process metrics registry is constructed, then install it into the
     // registry later. Avoid exit-time destructor ordering against the registry.
-    static auto* instance = new SystemMetrics();
+    static auto* instance = new ProcessMemoryMetrics();
     return instance;
 }
 
-SystemMetrics::~SystemMetrics() {
+ProcessMemoryMetrics::~ProcessMemoryMetrics() {
     if (_registry != nullptr) {
         _registry->deregister_hook(_s_hook_name);
         _registry = nullptr;
     }
 }
 
-void SystemMetrics::install(MetricRegistry* registry) {
+void ProcessMemoryMetrics::install(MetricRegistry* registry) {
     if (_registry != nullptr) {
         DCHECK_EQ(_registry, registry);
         return;
@@ -52,7 +51,7 @@ void SystemMetrics::install(MetricRegistry* registry) {
     _registry = registry;
 }
 
-void SystemMetrics::update() {
+void ProcessMemoryMetrics::update() {
     // Use try_lock to avoid blocking concurrent callers since metrics collection
     // is best-effort and the data will be refreshed on the next collection cycle.
     std::unique_lock lock(_update_mutex, std::try_to_lock);
@@ -63,45 +62,44 @@ void SystemMetrics::update() {
     update_memory_metrics();
 }
 
-void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
-    _memory_metrics = std::make_unique<MemoryMetrics>();
-    registry->register_metric("jemalloc_allocated_bytes", &_memory_metrics->jemalloc_allocated_bytes);
-    registry->register_metric("jemalloc_active_bytes", &_memory_metrics->jemalloc_active_bytes);
-    registry->register_metric("jemalloc_metadata_bytes", &_memory_metrics->jemalloc_metadata_bytes);
-    registry->register_metric("jemalloc_metadata_thp", &_memory_metrics->jemalloc_metadata_thp);
-    registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
-    registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
-    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_retained_bytes);
+void ProcessMemoryMetrics::_install_memory_metrics(MetricRegistry* registry) {
+    registry->register_metric("jemalloc_allocated_bytes", &jemalloc_allocated_bytes);
+    registry->register_metric("jemalloc_active_bytes", &jemalloc_active_bytes);
+    registry->register_metric("jemalloc_metadata_bytes", &jemalloc_metadata_bytes);
+    registry->register_metric("jemalloc_metadata_thp", &jemalloc_metadata_thp);
+    registry->register_metric("jemalloc_resident_bytes", &jemalloc_resident_bytes);
+    registry->register_metric("jemalloc_mapped_bytes", &jemalloc_mapped_bytes);
+    registry->register_metric("jemalloc_retained_bytes", &jemalloc_retained_bytes);
 
-    registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
-    registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
-    registry->register_metric("connector_scan_pool_mem_bytes", &_memory_metrics->connector_scan_pool_mem_bytes);
-    registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
-    registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
-    registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
-    registry->register_metric("rowset_metadata_mem_bytes", &_memory_metrics->rowset_metadata_mem_bytes);
-    registry->register_metric("segment_metadata_mem_bytes", &_memory_metrics->segment_metadata_mem_bytes);
-    registry->register_metric("column_metadata_mem_bytes", &_memory_metrics->column_metadata_mem_bytes);
-    registry->register_metric("tablet_schema_mem_bytes", &_memory_metrics->tablet_schema_mem_bytes);
-    registry->register_metric("column_zonemap_index_mem_bytes", &_memory_metrics->column_zonemap_index_mem_bytes);
-    registry->register_metric("ordinal_index_mem_bytes", &_memory_metrics->ordinal_index_mem_bytes);
-    registry->register_metric("bitmap_index_mem_bytes", &_memory_metrics->bitmap_index_mem_bytes);
-    registry->register_metric("bloom_filter_index_mem_bytes", &_memory_metrics->bloom_filter_index_mem_bytes);
-    registry->register_metric("builtin_inverted_index_mem_bytes", &_memory_metrics->builtin_inverted_index_mem_bytes);
-    registry->register_metric("segment_zonemap_mem_bytes", &_memory_metrics->segment_zonemap_mem_bytes);
-    registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
-    registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
-    registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
-    registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
-    registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
-    registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
-    registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
-    registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
-    registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
-    registry->register_metric("vector_index_mem_bytes", &_memory_metrics->vector_index_mem_bytes);
+    registry->register_metric("process_mem_bytes", &process_mem_bytes);
+    registry->register_metric("query_mem_bytes", &query_mem_bytes);
+    registry->register_metric("connector_scan_pool_mem_bytes", &connector_scan_pool_mem_bytes);
+    registry->register_metric("load_mem_bytes", &load_mem_bytes);
+    registry->register_metric("metadata_mem_bytes", &metadata_mem_bytes);
+    registry->register_metric("tablet_metadata_mem_bytes", &tablet_metadata_mem_bytes);
+    registry->register_metric("rowset_metadata_mem_bytes", &rowset_metadata_mem_bytes);
+    registry->register_metric("segment_metadata_mem_bytes", &segment_metadata_mem_bytes);
+    registry->register_metric("column_metadata_mem_bytes", &column_metadata_mem_bytes);
+    registry->register_metric("tablet_schema_mem_bytes", &tablet_schema_mem_bytes);
+    registry->register_metric("column_zonemap_index_mem_bytes", &column_zonemap_index_mem_bytes);
+    registry->register_metric("ordinal_index_mem_bytes", &ordinal_index_mem_bytes);
+    registry->register_metric("bitmap_index_mem_bytes", &bitmap_index_mem_bytes);
+    registry->register_metric("bloom_filter_index_mem_bytes", &bloom_filter_index_mem_bytes);
+    registry->register_metric("builtin_inverted_index_mem_bytes", &builtin_inverted_index_mem_bytes);
+    registry->register_metric("segment_zonemap_mem_bytes", &segment_zonemap_mem_bytes);
+    registry->register_metric("short_key_index_mem_bytes", &short_key_index_mem_bytes);
+    registry->register_metric("compaction_mem_bytes", &compaction_mem_bytes);
+    registry->register_metric("schema_change_mem_bytes", &schema_change_mem_bytes);
+    registry->register_metric("storage_page_cache_mem_bytes", &storage_page_cache_mem_bytes);
+    registry->register_metric("jit_cache_mem_bytes", &jit_cache_mem_bytes);
+    registry->register_metric("update_mem_bytes", &update_mem_bytes);
+    registry->register_metric("clone_mem_bytes", &clone_mem_bytes);
+    registry->register_metric("consistency_mem_bytes", &consistency_mem_bytes);
+    registry->register_metric("datacache_mem_bytes", &datacache_mem_bytes);
+    registry->register_metric("vector_index_mem_bytes", &vector_index_mem_bytes);
 }
 
-void SystemMetrics::update_memory_metrics() {
+void ProcessMemoryMetrics::update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
@@ -112,31 +110,31 @@ void SystemMetrics::update_memory_metrics() {
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
     sz = sizeof(size_t);
     if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_allocated_bytes.set_value(value);
+        jemalloc_allocated_bytes.set_value(value);
     }
     if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_active_bytes.set_value(value);
+        jemalloc_active_bytes.set_value(value);
     }
     if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_metadata_bytes.set_value(value);
+        jemalloc_metadata_bytes.set_value(value);
     }
     if (je_mallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_metadata_thp.set_value(value);
+        jemalloc_metadata_thp.set_value(value);
     }
     if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_resident_bytes.set_value(value);
+        jemalloc_resident_bytes.set_value(value);
     }
     if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_mapped_bytes.set_value(value);
+        jemalloc_mapped_bytes.set_value(value);
     }
     if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
-        _memory_metrics->jemalloc_retained_bytes.set_value(value);
+        jemalloc_retained_bytes.set_value(value);
     }
 #endif
 
-#define SET_MEM_METRIC_VALUE(tracker, key)                                                   \
-    if (RuntimeEnv::GetInstance()->tracker() != nullptr) {                                   \
-        _memory_metrics->key.set_value(RuntimeEnv::GetInstance()->tracker()->consumption()); \
+#define SET_MEM_METRIC_VALUE(tracker, key)                                  \
+    if (RuntimeEnv::GetInstance()->tracker() != nullptr) {                  \
+        key.set_value(RuntimeEnv::GetInstance()->tracker()->consumption()); \
     }
 
     SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
