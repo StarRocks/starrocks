@@ -40,7 +40,6 @@ import com.starrocks.sql.MergeIntoPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -264,29 +263,6 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testMergeDoesNotDeriveTargetPredicateAcrossTypeMismatch() throws Exception {
-        // Source key 'id' is STRING (aliased from data); target id is INT. The ON equality needs an
-        // implicit, non-injective cast, so the source filter (data LIKE '01%') must NOT be propagated
-        // onto the INT target column — doing so would drop matching target rows (or be invalid). The
-        // derivation is type-gated, so no source predicate reaches the target scan here.
-        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
-                "USING (SELECT data AS id, data FROM iceberg0.unpartitioned_db.t0_v2 WHERE data LIKE '01%') AS s " +
-                "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET data = s.data";
-        ExecPlan execPlan = getMergeExecPlan(sql);
-        IcebergScanNode targetScan = findTargetIcebergScan(execPlan);
-        assertNotNull(targetScan, "MERGE plan should have a target IcebergScanNode");
-
-        String targetPredicates = targetScan.getConjuncts().stream()
-                .map(ExprToSql::toSql)
-                .map(String::toLowerCase)
-                .collect(Collectors.joining(", "));
-        assertFalse(targetPredicates.contains("like"),
-                "Source predicate must NOT be derived to the target across a type-mismatched ON key; got: "
-                        + targetPredicates);
-    }
-
-    @Test
     public void testMergePlanPartitionedTableHasShuffle() throws Exception {
         // t1_v2 is partitioned by 'date' — verify plan generates correctly for partitioned tables.
         // Note: with a trivial constant source, the optimizer may choose NESTLOOP JOIN with
@@ -392,25 +368,6 @@ public class MergeIntoPlanTest extends PlanTestBase {
         String explainString = getMergeExecPlanString(sql);
         assertTrue(explainString.contains("IcebergScanNode"),
                 "Explain plan should contain IcebergScanNode");
-    }
-
-    @Test
-    public void testMergeDerivedTargetPredicatePushedDownToTargetIcebergScan() throws Exception {
-        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
-                "USING (SELECT id, data, date FROM iceberg0.unpartitioned_db.t0_v2 WHERE id % 20 = 0) AS s " +
-                "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET data = s.data";
-        ExecPlan execPlan = getMergeExecPlan(sql);
-        IcebergScanNode targetScan = findTargetIcebergScan(execPlan);
-        assertNotNull(targetScan, "MERGE plan should have a target IcebergScanNode marked usedForDelete");
-
-        String targetPredicates = targetScan.getConjuncts().stream()
-                .map(ExprToSql::toSql)
-                .map(String::toLowerCase)
-                .collect(Collectors.joining(", "));
-        assertTrue(targetPredicates.contains("id % 20 = 0"),
-                "Derived source predicate should be pushed to target IcebergScanNode PREDICATES; got: "
-                        + targetPredicates);
     }
 
     @Test
@@ -927,16 +884,5 @@ public class MergeIntoPlanTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnablePipelineEngine(prev);
         }
-    }
-
-    private static IcebergScanNode findTargetIcebergScan(ExecPlan execPlan) {
-        for (PlanFragment fragment : execPlan.getFragments()) {
-            for (PlanNode node : fragment.collectScanNodes().values()) {
-                if (node instanceof IcebergScanNode icebergScanNode && icebergScanNode.isUsedForDelete()) {
-                    return icebergScanNode;
-                }
-            }
-        }
-        return null;
     }
 }

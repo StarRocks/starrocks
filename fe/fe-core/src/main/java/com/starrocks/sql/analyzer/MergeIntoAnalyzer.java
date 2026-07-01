@@ -284,22 +284,6 @@ public class MergeIntoAnalyzer {
         // Analyze the query statement
         new QueryAnalyzer(session).analyze(queryStatement);
 
-        // Propagate source-side predicates to the target through type-equivalent ON equalities, now
-        // that analysis has resolved slot types. This is done post-analysis on purpose: the analyzed
-        // AST equality keeps bare SlotRefs even across an implicit cast (e.g. VARCHAR = INT), so a
-        // pre-analysis, name-only rewrite could derive a wrong target predicate; deriveTargetPredicate
-        // only maps across equi-keys whose slot types match. Re-analyze the combined ON predicate so
-        // the new AND node and the derived conjunct get full type/legality state.
-        Expr derivedTargetPredicate = MergeIntoPredicateDeriver.deriveTargetPredicate(
-                sourceRelation, joinRelation.getOnPredicate(), targetSlotTableName);
-        if (derivedTargetPredicate != null) {
-            Expr combinedOnPredicate = new CompoundPredicate(CompoundPredicate.Operator.AND,
-                    joinRelation.getOnPredicate(), derivedTargetPredicate);
-            ExpressionAnalyzer.analyzeExpression(
-                    combinedOnPredicate, new AnalyzeState(), joinRelation.getScope(), session);
-            joinRelation.setOnPredicate(combinedOnPredicate);
-        }
-
         // Resolve the op_code routing expression against the join scope. It references
         // target._file plus per-WHEN-clause source predicates, none of which appear as
         // top-level SELECT items, so it has to be analyzed separately.
