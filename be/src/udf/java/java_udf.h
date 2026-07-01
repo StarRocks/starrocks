@@ -22,7 +22,8 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/java_global_ref.h"
+#include "runtime/java/jvm_class.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
 
@@ -688,8 +689,5 @@ JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
 void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
 void clear_java_udaf_states(FunctionContext* ctx);
 void destroy_java_udaf_context(FunctionContext* ctx);
-
-// Check whether java runtime can work
-Status detect_java_runtime();
 
 } // namespace starrocks

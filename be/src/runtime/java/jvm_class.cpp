@@ -12,21 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/jvm_class.h"
 
-#include <bthread/bthread.h>
-
-#include <algorithm>
-#include <cstdint>
-#include <functional>
-#include <future>
-#include <limits>
 #include <string>
+#include <utility>
 
-#include "base/logging.h"
 #include "base/status.h"
-#include "common/config_exec_env_fwd.h"
-#include "common/thread/priority_thread_pool.hpp"
+#include "runtime/java/java_env.h"
 
 namespace starrocks {
 namespace {
@@ -41,65 +33,6 @@ Status jni_exception_status(JNIEnv* env, const std::string& message) {
 }
 
 } // namespace
-
-JavaEnv::JavaEnv() = default;
-
-JavaEnv::~JavaEnv() = default;
-
-Status JavaEnv::init() {
-    if (_jvm_call_pool != nullptr) {
-        return Status::OK();
-    }
-    _jvm_call_pool = std::make_unique<PriorityThreadPool>(
-            "jvm", std::max<int32_t>(1, config::jvm_call_thread_pool_size), std::numeric_limits<uint32_t>::max());
-    return Status::OK();
-}
-
-void JavaEnv::shutdown() {
-    if (_jvm_call_pool) {
-        _jvm_call_pool->shutdown();
-    }
-}
-
-void JavaEnv::destroy() {
-    _jvm_call_pool.reset();
-}
-
-Status JavaEnv::call_function_in_pthread(const std::function<Status()>& func) {
-    if (!bthread_self()) {
-        return func();
-    }
-
-    if (_jvm_call_pool == nullptr) {
-        return Status::InternalError("jvm_call_pool is not initialized");
-    }
-
-    std::promise<Status> promise;
-    auto future = promise.get_future();
-    if (!_jvm_call_pool->offer([func, &promise]() { promise.set_value(func()); })) {
-        return Status::InternalError("failed to submit JVM call to jvm_call_pool");
-    }
-    return future.get();
-}
-
-JavaGlobalRef::~JavaGlobalRef() {
-    clear();
-}
-
-void JavaGlobalRef::clear() {
-    if (_handle) {
-        auto st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
-            JNIEnv* env = getJNIEnv();
-            if (env == nullptr) {
-                return Status::InternalError("couldn't get a JNIEnv");
-            }
-            env->DeleteGlobalRef(_handle);
-            _handle = nullptr;
-            return Status::OK();
-        });
-        LOG_IF(WARNING, !st.ok()) << "failed to clear Java global ref: " << st;
-    }
-}
 
 StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
     JNIEnv* env = getJNIEnv();

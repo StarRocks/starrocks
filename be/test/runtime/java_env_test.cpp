@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/java_env.h"
 
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
@@ -25,6 +25,8 @@
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/system/cpu_info.h"
+#include "runtime/java/java_global_ref.h"
+#include "runtime/java/jvm_class.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_env_test_util.h"
 
@@ -55,6 +57,10 @@ private:
 TEST_F(JavaEnvTest, GetJNIEnvReturnsStableEnvForCurrentThread) {
     ASSERT_NE(env(), nullptr);
     ASSERT_EQ(env(), getJNIEnv());
+}
+
+TEST_F(JavaEnvTest, DetectJavaRuntimeReturnsOk) {
+    ASSERT_OK(detect_java_runtime());
 }
 
 TEST_F(JavaEnvTest, JVMClassCreatesStringBuilderInstances) {
@@ -109,6 +115,24 @@ TEST_F(JavaEnvTest, JavaGlobalRefCanClearFromBthread) {
 
     ASSERT_TRUE(ran_on_bthread.load(std::memory_order_relaxed));
     ASSERT_EQ(ref.handle(), nullptr);
+}
+
+TEST_F(JavaEnvTest, DetectJavaRuntimeCanRunFromBthread) {
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    auto* java_env = RuntimeEnv::GetInstance()->java_env();
+    java_env->destroy();
+    DeferOp cleanup([java_env]() {
+        java_env->shutdown();
+        java_env->destroy();
+    });
+
+    ASSERT_OK(java_env->init());
+
+    Status st;
+    ASSERT_OK(bthreads::start_bthread_and_join([&]() { st = detect_java_runtime(); }));
+    ASSERT_OK(st);
 }
 
 TEST_F(JavaEnvTest, CallFunctionInPthreadUsesJvmPoolFromBthread) {

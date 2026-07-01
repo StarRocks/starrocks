@@ -22,6 +22,7 @@
 #include "column/nullable_column.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "runtime/java/java_env.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"

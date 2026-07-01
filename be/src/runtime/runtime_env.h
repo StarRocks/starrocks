@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "common/status.h"
-#include "runtime/env/global_thread_pools.h"
-#include "runtime/env/java/java_env.h"
+#include "runtime/global_thread_pools.h"
+#include "runtime/java/java_env.h"
 #include "runtime/mem_tracker_fwd.h"
 
 namespace starrocks {

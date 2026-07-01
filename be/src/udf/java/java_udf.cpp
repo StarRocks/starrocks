@@ -26,6 +26,7 @@
 #include "exprs/function_context.h"
 #include "fmt/core.h"
 #include "jni.h"
+#include "runtime/java/java_env.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
@@ -1367,19 +1368,6 @@ jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int p
     jobject res = env->CallObjectMethodA(_udaf_handle, window_update, jvalues);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
     return res;
-}
-
-Status detect_java_runtime() {
-    const char* p = std::getenv("JAVA_HOME");
-    if (p == nullptr) {
-        return Status::RuntimeError("env 'JAVA_HOME' is not set");
-    }
-    return JavaEnv::GetInstance()->call_function_in_pthread([]() {
-        if (getJNIEnv() == nullptr) {
-            return Status::RuntimeError("couldn't get JNIEnv, please check your java runtime");
-        }
-        return Status::OK();
-    });
 }
 
 } // namespace starrocks

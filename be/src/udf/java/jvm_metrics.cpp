@@ -20,6 +20,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
+#include "runtime/java/java_env.h"
 #include "udf/java/java_udf.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                          \
