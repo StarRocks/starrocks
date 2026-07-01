@@ -313,6 +313,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：高基数 string/varchar 列在回退到 plain（非字典）编码时，是否将页尾偏移数组以逐值增量（即字符串长度）方式存储，而非绝对偏移。绝对偏移单调递增，在 LZ4 下几乎压不动；增量长度对于长度接近固定的字符串近乎常数，压缩效果好得多，而未压缩的页尾大小保持不变。压缩后列大小的减少量约等于偏移页尾的大小（每行约 4 字节），对高基数字符串列更明显。开启后，此类列会以独立的列编码 `PLAIN_ENCODING_DELTA_OFFSET` 写入并记录在 segment 元数据中，因此格式按列自描述。该配置仅影响写入侧。不认识该编码的旧版本 BE 在打开 segment 时会直接报错（而不是误读），因此请在整个集群升级完成后再开启；并注意：用该编码写入的 segment 在降级到不支持的版本后将无法读取。
 - 引入版本：v4.2.0
 
+### enable_binary_column_serde_overflow_check
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 BE 是否拒绝 byte payload size 或 offset payload byte size 无法用历史 u32 BinaryColumn 布局表示的 BinaryColumn serde payload。该配置默认关闭，因此溢出的 BinaryColumn payload 会使用带版本号的 extended layout 序列化。如果滚动降级或混合版本交换期间可能由旧版本 BE 读取该 payload，并且不能接收 extended layout，则应开启该配置。
+- 引入版本：v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - 默认值：1024

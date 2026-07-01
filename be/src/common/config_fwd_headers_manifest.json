@@ -936,6 +936,12 @@
       ]
     },
     {
+      "path": "be/src/common/config_serde_fwd.h",
+      "configs": [
+        "enable_binary_column_serde_overflow_check"
+      ]
+    },
+    {
       "path": "be/src/common/config_diagnostic_fwd.h",
       "configs": [
         "be_exit_after_disk_write_hang_second",

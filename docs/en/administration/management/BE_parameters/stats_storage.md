@@ -316,6 +316,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether high-cardinality string/varchar columns that fall back to plain (non-dictionary) encoding store their page offset trailer as per-value deltas (string lengths) instead of absolute offsets. Absolute offsets increase monotonically and compress poorly under LZ4; deltas are near-constant for fixed-ish strings and compress much better, while the uncompressed trailer keeps the same size. The reduction in compressed column size is roughly the size of the offset trailer (about 4 bytes per row), which is more significant for high-cardinality string columns. When enabled, such columns are written with the distinct `PLAIN_ENCODING_DELTA_OFFSET` column encoding recorded in the segment metadata; the format is therefore self-describing per column. Only the write side is gated by this config. A BE version that does not understand the encoding fails to open the segment (a clear error) rather than misreading it, so do not enable this until the whole cluster is upgraded, and note that segments written with it are not readable after downgrading to a version without support.
 - Introduced in: v4.2.0
 
+### enable_binary_column_serde_overflow_check
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether BE rejects BinaryColumn serde payloads whose byte payload size or offset payload byte size cannot be represented by the historical u32 BinaryColumn layout. This is disabled by default, so overflow BinaryColumn payloads are serialized with the extended, versioned layout. Enable it during rolling downgrade or mixed-version exchange if older BE nodes may read the payload and must not receive the extended layout.
+- Introduced in: v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - Default: 1024

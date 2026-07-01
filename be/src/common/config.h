@@ -1204,6 +1204,11 @@ CONF_Int32(pipline_limit_max_delivery, "4096");
 // only used in DCHECK
 CONF_mBool(enable_dcheck_on_serde_failure, "false");
 
+// When enabled, BinaryColumn serde rejects payloads whose byte payload size or offset
+// payload byte size cannot be represented by the historical u32 BinaryColumn layout.
+// Enable during rolling downgrade or mixed-version exchange if older BEs may read the payload.
+CONF_mBool(enable_binary_column_serde_overflow_check, "false");
+
 CONF_mBool(use_default_dop_when_shared_scan, "true");
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.

@@ -262,6 +262,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 高カーディナリティの string/varchar 列が plain（非辞書）エンコーディングにフォールバックする際、ページ末尾のオフセット配列を絶対オフセットではなく値ごとの差分（文字列長）として格納するかどうか。絶対オフセットは単調増加するため LZ4 ではほとんど圧縮できませんが、差分は長さがほぼ一定の文字列に対してほぼ一定値となり、はるかによく圧縮されます（非圧縮時の末尾サイズは変わりません）。圧縮後の列サイズの削減量はオフセット末尾のサイズ（1 行あたり約 4 バイト）にほぼ等しく、高カーディナリティの文字列列ほど効果が大きくなります。有効化すると、そのような列は独立した列エンコーディング `PLAIN_ENCODING_DELTA_OFFSET` として segment メタデータに記録されるため、形式は列ごとに自己記述的です。本設定は書き込み側のみを制御します。このエンコーディングを認識しない BE バージョンは、segment を誤読するのではなく開く際にエラーになります。したがってクラスタ全体をアップグレードするまで有効化しないでください。また、このエンコーディングで書き込まれた segment は、サポートのないバージョンへダウングレードすると読み取れなくなる点に注意してください。
 - 導入バージョン: v4.2.0
 
+### enable_binary_column_serde_overflow_check
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: byte payload size または offset payload byte size が historical u32 BinaryColumn layout で表現できない BinaryColumn serde payload を BE が拒否するかどうかを制御します。この設定はデフォルトで無効であり、オーバーフローした BinaryColumn payload はバージョン付きの extended layout でシリアライズされます。ローリングダウングレードまたは混在バージョンでの交換中に、古い BE ノードが payload を読み取る可能性があり extended layout を受け取ってはいけない場合は、この設定を有効にしてください。
+- 導入バージョン: v4.2.0
+
 ### default_num_rows_per_column_file_block
 
 - デフォルト: 1024
