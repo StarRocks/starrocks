@@ -761,9 +761,9 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
         }
 
         VLOG(2) << "incremental vacuum propose tablet=" << tablet_id << " resume_from=" << resume_from_version
-                << " min_retain=" << min_retain_version << " type=" << (resumed ? "resume" : "fresh")
-                << " proposed=[" << (version + 1) << "," << max_version << ") walked=" << versions_walked
-                << " stop=" << (!skip_check_timestamp ? "grace_blocked" : (stopped_by_limit ? "budget" : "chain_bottom"));
+                << " min_retain=" << min_retain_version << " type=" << (resumed ? "resume" : "fresh") << " proposed=["
+                << (version + 1) << "," << max_version << ") walked=" << versions_walked << " stop="
+                << (!skip_check_timestamp ? "grace_blocked" : (stopped_by_limit ? "budget" : "chain_bottom"));
 
         if (!skip_check_timestamp) {
             // Every version this tablet examined is still within the grace window (or none existed): it
@@ -827,9 +827,9 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
     // is strictly above on a resume range). A floor at/below the range means the FE forgot to replay it;
     // proceeding would misderive the chain entry and could delete still-referenced metadata. Fail loud.
     if (alive_boundary_version < to_delete_high) {
-        return Status::InternalError(fmt::format(
-                "vacuum commit: alive_boundary_version {} must be >= delete-range high {} (range [{}, {}))",
-                alive_boundary_version, to_delete_high, to_delete_low, to_delete_high));
+        return Status::InternalError(
+                fmt::format("vacuum commit: alive_boundary_version {} must be >= delete-range high {} (range [{}, {}))",
+                            alive_boundary_version, to_delete_high, to_delete_low, to_delete_high));
     }
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
@@ -856,9 +856,9 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
             if (res.status().is_not_found()) {
                 // to_delete_high is the pass retain floor and is retained for the whole pass, so it must
                 // exist. If it is gone, the partition state is corrupt.
-                return Status::InternalError(fmt::format(
-                        "vacuum commit: retain floor metadata (version {}) missing for tablet {}", to_delete_high,
-                        tablet_id));
+                return Status::InternalError(
+                        fmt::format("vacuum commit: retain floor metadata (version {}) missing for tablet {}",
+                                    to_delete_high, tablet_id));
             } else if (!res.ok()) {
                 return res.status();
             }
@@ -1195,10 +1195,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         // Phase 1 (commit): physically delete the inclusive range the previous round proposed and the FE
         // has persisted. Absent/empty on the very first incremental round for a partition.
         if (req_to_delete_low < req_to_delete_high) {
-            if (auto st = commit_metadata_range(tablet_mgr, root_loc, tablet_infos, req_to_delete_low,
-                                                req_to_delete_high, alive_boundary_version, enable_file_bundling,
-                                                enable_shared_file_cleanup, retain_versions, &vacuumed_files,
-                                                &vacuumed_file_size, deadline_ms);
+            if (auto st =
+                        commit_metadata_range(tablet_mgr, root_loc, tablet_infos, req_to_delete_low, req_to_delete_high,
+                                              alive_boundary_version, enable_file_bundling, enable_shared_file_cleanup,
+                                              retain_versions, &vacuumed_files, &vacuumed_file_size, deadline_ms);
                 !st.ok()) {
                 LOG(WARNING) << "incremental vacuum commit failed: partition=" << request.partition_id()
                              << " resume_from=" << resume_from << " alive_boundary_version=" << alive_boundary_version
@@ -1214,10 +1214,9 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         int64_t next_to_delete_high = 0;
         int64_t next_cursor = 0;
         int64_t next_alive_boundary = 0;
-        if (auto st = propose_metadata_range(tablet_mgr, tablet_infos, min_retain_version, grace_timestamp,
-                                             resume_from, request.max_versions_per_round(), deadline_ms,
-                                             &next_to_delete_low, &next_to_delete_high, &next_cursor,
-                                             &next_alive_boundary);
+        if (auto st = propose_metadata_range(tablet_mgr, tablet_infos, min_retain_version, grace_timestamp, resume_from,
+                                             request.max_versions_per_round(), deadline_ms, &next_to_delete_low,
+                                             &next_to_delete_high, &next_cursor, &next_alive_boundary);
             !st.ok()) {
             LOG(WARNING) << "incremental vacuum propose failed: partition=" << request.partition_id()
                          << " resume_from=" << resume_from << " min_retain=" << min_retain_version
@@ -1233,15 +1232,14 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         if (resume_from == 0) {
             resp_state->set_alive_boundary_version(next_alive_boundary);
         }
-        LOG(INFO) << "incremental vacuum: partition=" << request.partition_id()
-                  << " bundling=" << enable_file_bundling << " min_retain=" << min_retain_version
-                  << " grace_ts=" << grace_timestamp << " resume_from=" << resume_from
-                  << " alive_boundary_version=" << alive_boundary_version << " committed=[" << req_to_delete_low << ","
-                  << req_to_delete_high << ") proposed=[" << next_to_delete_low << "," << next_to_delete_high
-                  << ") next_propose_start=" << next_cursor << " vacuumed_files=" << vacuumed_files
-                  << " vacuumed_bytes=" << vacuumed_file_size << " tablets=" << tablet_infos.size()
-                  << " type=" << (resume_from == 0 ? "fresh" : "resume") << " done=" << (next_cursor == 0)
-                  << " cost_ms=" << (butil::gettimeofday_ms() - round_start_ms);
+        LOG(INFO) << "incremental vacuum: partition=" << request.partition_id() << " bundling=" << enable_file_bundling
+                  << " min_retain=" << min_retain_version << " grace_ts=" << grace_timestamp
+                  << " resume_from=" << resume_from << " alive_boundary_version=" << alive_boundary_version
+                  << " committed=[" << req_to_delete_low << "," << req_to_delete_high << ") proposed=["
+                  << next_to_delete_low << "," << next_to_delete_high << ") next_propose_start=" << next_cursor
+                  << " vacuumed_files=" << vacuumed_files << " vacuumed_bytes=" << vacuumed_file_size
+                  << " tablets=" << tablet_infos.size() << " type=" << (resume_from == 0 ? "fresh" : "resume")
+                  << " done=" << (next_cursor == 0) << " cost_ms=" << (butil::gettimeofday_ms() - round_start_ms);
         // NOTE: in incremental mode the response's vacuumed_version is NOT a committed per-pass
         // watermark (propose deletes nothing and never advances it). The FE advances its persisted
         // watermark from the cursor + proposed range -- the cursor resets to 0 only when a full pass
@@ -1251,8 +1249,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     } else {
         RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
                                                enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                               &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions,
-                                               deadline_ms));
+                                               &vacuumed_file_size, &vacuumed_version, &extra_file_size,
+                                               retain_versions, deadline_ms));
         extra_file_size -= vacuumed_file_size;
     }
     if (request.delete_txn_log()) {
