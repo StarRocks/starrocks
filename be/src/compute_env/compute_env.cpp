@@ -102,7 +102,7 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     const size_t query_cache_capacity = options.query_cache_capacity == 0
                                                 ? std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024)
                                                 : options.query_cache_capacity;
-    status = _init_query_cache(query_cache_capacity);
+    status = _init_query_cache(query_cache_capacity, options.metrics);
     if (!status.ok()) {
         destroy();
         return status;
@@ -194,8 +194,9 @@ Status ComputeEnv::_init_spill(const std::vector<std::string>& store_paths, Metr
     return Status::OK();
 }
 
-Status ComputeEnv::_init_query_cache(size_t capacity) {
+Status ComputeEnv::_init_query_cache(size_t capacity, MetricRegistry* metrics) {
     _cache_mgr = std::make_unique<query_cache::CacheManager>(capacity);
+    RETURN_IF_ERROR(_cache_mgr->install_metrics(metrics));
     return Status::OK();
 }
 

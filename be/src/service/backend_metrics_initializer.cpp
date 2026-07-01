@@ -46,6 +46,7 @@
 #include "platform/platform_metrics.h"
 #include "runtime/runtime_metrics.h"
 #include "service/service_metrics.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
 #include "util/jvm_metrics.h"
@@ -276,6 +277,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     CatalogScanMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);
+    VectorIndexCacheMetrics::instance()->install(registry);
     StorageMetrics::instance()->install(registry);
     KeyCache::instance().install_metrics(registry);
 

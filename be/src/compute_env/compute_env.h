@@ -96,7 +96,7 @@ private:
     Status _init_workgroup(const ComputeEnvOptions& options, int64_t max_executor_threads);
     Status _init_load_path(std::vector<std::string> store_paths, bool use_dummy_load_path_mgr);
     Status _init_spill(const std::vector<std::string>& store_paths, MetricRegistry* metrics);
-    Status _init_query_cache(size_t capacity);
+    Status _init_query_cache(size_t capacity, MetricRegistry* metrics);
     Status _start_result_mgr();
     void _stop_stream_load_pipes();
     void _stop_workgroup();
