@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   basic-checker:
-    runs-on: [self-hosted, quick]
+    runs-on: [self-hosted, normal]
     name: RUN CHECKER
     env:
       PR_NUMBER: ${{ github.event.number }}
