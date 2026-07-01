@@ -187,7 +187,7 @@ public class IvmRewriter {
 
         ColumnRefOperator loadOpColumn = rootTaskContext.getOptimizerContext().getColumnRefFactory()
                 .create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false);
-        // __op shares __ACTION__'s domain (0 = UPSERT, 1 = DELETE) — direct alias.
+        // __op shares __ACTION__'s domain (INSERT_ACTION = UPSERT, DELETE_ACTION = DELETE) — direct alias.
         ScalarOperator loadOpExpr = actionColumn;
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();

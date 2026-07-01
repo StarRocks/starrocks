@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
 
@@ -178,10 +179,10 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(origRef, stateUnion);
         }
 
-        // Aggregate MV outputs are all UPSERTs. __ACTION__ = 0 (= __op UPSERT).
+        // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
         ColumnRefOperator actionColumn = delta.getActionColumn();
         if (actionColumn != null) {
-            projMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 0));
+            projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
         }
 
         OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
