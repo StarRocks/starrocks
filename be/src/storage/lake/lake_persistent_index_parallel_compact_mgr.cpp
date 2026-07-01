@@ -395,6 +395,20 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         return;
     }
 
+    // A base-level merge must coalesce the whole index into a single range-less
+    // output. Splitting it into parallel ranged segments leaves every output SST
+    // carrying a key range, so the next round never hits the range-less single-task
+    // path below and the index stays fragmented (bistable non-convergence, observed
+    // on the low-key (-inf, first) range tablet: publish stalls at ~29s while the
+    // index sits at ~78 SSTs). Running the base merge as one coalescing task mirrors
+    // the infinite-boundary path and reseeds a range-less base SST, restoring
+    // convergence for subsequent incremental rounds.
+    if (merge_base_level) {
+        tasks->push_back(std::make_shared<LakePersistentIndexParallelCompactTask>(
+                candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SstSeekRange()));
+        return;
+    }
+
     // Check if any sstable has no key range (infinite boundary)
     // If found, create a single task without parallel splitting
     for (const auto& fileset : candidates) {
