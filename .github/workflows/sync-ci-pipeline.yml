@@ -283,6 +283,7 @@ jobs:
     timeout-minutes: 90
     if: >
       !cancelled() &&
+      contains(github.event.pull_request.title, '(sync #') &&
       startsWith(github.event.pull_request.title, '[Refactor]') &&
       needs.code-checker.outputs.output1 == 'true' &&
       needs.thirdparty-info.result != 'failure' &&
