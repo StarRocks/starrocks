@@ -220,6 +220,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
 ${BUILD_SYSTEM} -j${PARALLEL}
 
 cd ${STARROCKS_HOME}
+<<<<<<< HEAD
 export STARROCKS_TEST_BINARY_DIR=${CMAKE_BUILD_DIR}/test
 TEST_BIN=starrocks_test
 if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
@@ -232,6 +233,32 @@ if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DI
     # continue the echo output from the previous `echo -n`
     echo " split done."
     popd >/dev/null 2>&1
+=======
+export STARROCKS_TEST_BINARY_BASE_DIR=${CMAKE_BUILD_DIR}
+export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
+
+split_debug_symbol() {
+    local bin="$1"
+    local symbol="${bin}.debuginfo"
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    objcopy --only-keep-debug "$bin" "$symbol"
+    strip --strip-debug "$bin"
+    objcopy --add-gnu-debuglink="$symbol" "$bin"
+}
+
+if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && ! starrocks_is_darwin ; then
+    if [ "x$WITH_DEBUG_SO_SYMBOL_SPLIT" = "xON" ] ; then
+        find "${STARROCKS_TEST_BINARY_BASE_DIR}" -type f -name "*.so*" ! -name "*.debuginfo" | while read -r so; do
+            split_debug_symbol "$so"
+        done
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
+    fi
+>>>>>>> 881b7b1e27 ([BugFix] Initialize StringSearch::_pattern and fix split_debug_symbol log (#75614))
 fi
 
 echo "*********************************"
