@@ -33,6 +33,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/index_file_writer.h"
@@ -159,6 +160,19 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         return Status::InternalError("AddIndexSchemaChange: base tablet metadata is null");
     }
 
+    // run() executes on the alter-worker thread, which has the per-alter
+    // SCHEMA_CHANGE_TASK mem tracker installed on TLS (see
+    // EngineAlterTabletTask::execute). The per-segment index build below,
+    // however, runs on lake_schema_change pool worker threads that do NOT
+    // inherit that TLS tracker — so without re-installing it, the build's
+    // allocations (esp. the whole-segment BITMAP index accumulated until
+    // finish()) would be charged to the process-root tracker and, with no
+    // check_mem_limit, could drive the process toward OOM instead of failing
+    // cleanly. Capture the tracker here and re-install it inside each pool
+    // task, mirroring the legacy inline DirectSchemaChange path. May be the
+    // process-root tracker (or null in bare unit tests); both are safe.
+    MemTracker* mem_tracker = CurrentThread::mem_tracker();
+
     for (const auto& rowset : base_metadata->rowsets()) {
         for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
             uint32_t rssid = get_rssid(rowset, seg_idx);
@@ -166,16 +180,21 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
             // reference would dangle if we captured by reference and the
             // metadata got mutated during the run (e.g. defensive).
             RowsetMetadataPB rowset_copy = rowset;
-            Status submit_st = runner.submit(
-                    [this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index]() -> Status {
-                        IndexDeltaGroupEntryPB entry;
-                        RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
-                        std::lock_guard<std::mutex> lg(_op_mtx);
-                        auto* se = op_add_index->add_segment_entries();
-                        se->set_segment_id(rssid);
-                        se->mutable_entry()->Swap(&entry);
-                        return Status::OK();
-                    });
+            Status submit_st = runner.submit([this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index,
+                                              mem_tracker]() -> Status {
+                // Re-install the alter's schema-change mem tracker on this
+                // pool worker thread so the index build is accounted for and
+                // subject to the same limit as the legacy path. RAII-restored
+                // on task exit, leaving the pool thread's TLS clean.
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                IndexDeltaGroupEntryPB entry;
+                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                std::lock_guard<std::mutex> lg(_op_mtx);
+                auto* se = op_add_index->add_segment_entries();
+                se->set_segment_id(rssid);
+                se->mutable_entry()->Swap(&entry);
+                return Status::OK();
+            });
             if (!submit_st.ok()) {
                 // Submission failure short-circuits: wait for pending tasks
                 // to drain, then report the submit error (which takes
@@ -396,6 +415,16 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
     while (true) {
+        // Back-pressure: the bitmap writer accumulates the entire per-segment
+        // index (distinct-value dict + a roaring posting list per value) in
+        // memory until finish(), so check the schema-change mem limit each
+        // batch and abort cleanly rather than risk an OOM. The tracker was
+        // installed on this thread's TLS by run()'s task wrapper. Mirrors
+        // legacy DirectSchemaChange (schema_change.cpp). Null-guarded so bare
+        // unit tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         col->reset_column();
         size_t n = kBatch;
         Status st = col_iter->next_batch(&n, col.get());
@@ -530,6 +559,16 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     const size_t type_size = type_info->size();
     for (int32_t page = 0; page < num_pages; ++page) {
+        // Back-pressure: the bloom writer keeps one finished filter per data
+        // page (plus the current page's distinct-value working set) in memory
+        // until finish(), so check the schema-change mem limit each page and
+        // abort cleanly rather than risk an OOM. The tracker was installed on
+        // this thread's TLS by run()'s task wrapper. Mirrors legacy
+        // DirectSchemaChange (schema_change.cpp). Null-guarded so bare unit
+        // tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         // [first_ordinal, last_ordinal] is the inclusive row range of data page
         // `page` — exactly what the read path will resolve for read_bloom_filter(page).
         auto [first_ordinal, last_ordinal] = col_reader->get_page_range(static_cast<size_t>(page));

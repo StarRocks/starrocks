@@ -29,6 +29,7 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "common/config_rowset_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -36,6 +37,8 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gen_cpp/types.pb.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -991,6 +994,114 @@ TEST_F(AddIndexSchemaChangeTest, run_two_indexes_share_idx_file) {
     ASSERT_OK(sc.run(&op));
     ASSERT_EQ(1, op.segment_entries_size());
     EXPECT_EQ(2, op.segment_entries(0).entry().keys_size());
+}
+
+// The IDG fast path builds the whole per-segment index in memory (BITMAP
+// accumulates its dictionary + posting lists until finish()). It runs on
+// lake_schema_change pool workers that do NOT inherit the alter's schema-change
+// mem tracker, and historically had no check_mem_limit at all — so a large or
+// wide build could drive the CN past its mem limit toward OOM instead of
+// failing cleanly, unlike the legacy DirectSchemaChange path. These tests pin
+// the back-pressure: with the schema-change tracker already over its limit, the
+// build must abort with a clean MemoryLimitExceeded, not crash/OOM.
+//
+// Notes on the test harness:
+//  - The first two tests drive run() with the default (null) lake_schema_change
+//    pool, so the per-segment task executes INLINE on this thread; the tracker
+//    installed via SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER is the one run()
+//    captures and the build loop consults. The third test uses a REAL pool to
+//    cover the cross-thread re-install that is the actual cause of the OOM.
+//  - In BE_TEST builds the malloc hook does not charge MemTrackers, so we
+//    pre-consume the tracker past its limit to trigger the per-batch check
+//    deterministically rather than relying on the build's own allocations.
+TEST_F(AddIndexSchemaChangeTest, run_bitmap_trips_clean_mem_limit_exceeded) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/100);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
+    sc_tracker.consume(sc_tracker.limit() + 1); // push consumption past the limit
+
+    TxnLogPB_OpAddIndex op;
+    Status st;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+        st = sc.run(&op);
+    }
+    sc_tracker.release(sc_tracker.consumption()); // reset before dtor
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
+}
+
+// Same as above but exercises the check in build_bloom_for_column's batch loop.
+TEST_F(AddIndexSchemaChangeTest, run_bloom_trips_clean_mem_limit_exceeded) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/100);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
+    sc_tracker.consume(sc_tracker.limit() + 1);
+
+    TxnLogPB_OpAddIndex op;
+    Status st;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+        st = sc.run(&op);
+    }
+    sc_tracker.release(sc_tracker.consumption());
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
+}
+
+// Regression guard for the tracker capture + re-install across the
+// lake_schema_change POOL-THREAD hop — the actual cause of the OOM (per-segment
+// builds run on pool workers that don't inherit the alter thread's tracker).
+// Here we drive run() with a REAL single-thread pool and install the over-limit
+// tracker ONLY on the parent thread. The build then runs on a pool worker whose
+// TLS tracker is NOT the over-limit one, so it can observe the limit ONLY if
+// run() captured the parent's tracker and the task wrapper re-installed it on
+// the worker. If that capture/re-install regressed, the check would consult the
+// (unlimited) process-root tracker and the build would wrongly succeed.
+TEST_F(AddIndexSchemaChangeTest, run_bitmap_pool_thread_inherits_mem_limit) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/100);
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("idg_sc_test").set_min_threads(0).set_max_threads(1).build(&pool));
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version, pool.get());
+
+    MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
+    sc_tracker.consume(sc_tracker.limit() + 1);
+
+    TxnLogPB_OpAddIndex op;
+    Status st;
+    {
+        // Installed on the PARENT thread only; the pool worker does not inherit
+        // it via TLS — the fix must carry it across the hop.
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+        st = sc.run(&op);
+    }
+    sc_tracker.release(sc_tracker.consumption());
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
 }
 
 } // namespace starrocks::lake
