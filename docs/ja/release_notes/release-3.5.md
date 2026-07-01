@@ -27,6 +27,77 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 
 :::
 
+## 3.5.19
+
+リリース日: 2026年6月26日
+
+### 動作の変更
+
+- `parse_json` は `ALLOW_THROW_EXCEPTION` を尊重するようになりました: 不正な形式の JSON はクエリを失敗させ、`NULL` を暗黙的に生成する代わりに、以前の `get_json_string` の変更を踏襲します。[#74976](https://github.com/StarRocks/starrocks/pull/74976)
+- `FILES()` およびブローカーロードは、`INT64` タイムスタンプに対して Parquet の `isAdjustedToUTC=false` フラグを尊重するようになり、そのようなタイムスタンプはセッションタイムゾーンによってシフトされなくなりました。[#73674](https://github.com/StarRocks/starrocks/pull/73674)
+- `SHOW FUNCTIONS` は Java UDF および UDAF に対して `isolation` プロパティ（`shared` または `isolated`）を表示するようになりました。[#75255](https://github.com/StarRocks/starrocks/pull/75255)
+- 非予約キーワード `FLOOR` および `CEIL` がカラム名として使用できるようになりました。[#75241](https://github.com/StarRocks/starrocks/pull/75241)
+
+### 改善
+
+- `FILES()` およびブローカーロードを通じて、Arrow の `LARGE_LIST` および `FIXED_SIZE_LIST` カラムを `JSON` カラムへのロードをサポートします。[#73714](https://github.com/StarRocks/starrocks/pull/73714) [#73718](https://github.com/StarRocks/starrocks/pull/73718)
+- 幅広い `CHAR`/`VARCHAR` カラムを専用の統計収集に分離するオプトインの `statistics_large_string_column_merge_threshold` を追加しました。[#73258](https://github.com/StarRocks/starrocks/pull/73258)
+- 定数入力に対して `base64_to_bitmap` を最適化し、無効な base64 エンコードされたビットマップに対して堅牢化しました。[#74684](https://github.com/StarRocks/starrocks/pull/74684)
+- レイクバキュームのバッチサイズおよびリトライ回数の新しいメトリクスと、`CatalogRecycleBin` サイズのゲージを追加しました。[#74112](https://github.com/StarRocks/starrocks/pull/74112) [#74440](https://github.com/StarRocks/starrocks/pull/74440)
+- ステートメントの二重監査をサポートします。[#73896](https://github.com/StarRocks/starrocks/pull/73896)
+
+### バグ修正
+
+以下の問題が修正されました:
+
+- いくつかの誤った結果および計画の問題: `f(NULL)` が `NULL` でない式に対する低カーディナリティ辞書変換; 可換な `AND`/`OR` の共通部分式除去による `Multiple entries with same key` エラー; `AGGREGATE has mismatch types` エラー; `UNION` の下で常に偽のネストされた分岐を持つ複合述語が行を返さない問題; および `RANK` TopN のチャンク境界で行を削除するオフバイワン。[#69376](https://github.com/StarRocks/starrocks/pull/69376) [#72823](https://github.com/StarRocks/starrocks/pull/72823) [#74159](https://github.com/StarRocks/starrocks/pull/74159) [#74218](https://github.com/StarRocks/starrocks/pull/74218) [#75045](https://github.com/StarRocks/starrocks/pull/75045)
+- 誤った結果を返す可能性のあるマテリアライズドビューの書き換え問題: `HAVING` 句を持つ集計 MV が（より弱い）`HAVING` なしのクエリを書き換える問題、および `avg(DISTINCT x)` が `sum`/`count` MV を通じて書き換えられる問題。[#73610](https://github.com/StarRocks/starrocks/pull/73610) [#75071](https://github.com/StarRocks/starrocks/pull/75071)
+- `enable_push_down_pre_agg_with_rank` がウィンドウカウントをローカルの事前集計とグローバルな分析マージに分割した場合の誤ったウィンドウ関数の結果、および個別集計のプッシュダウン後に空のウィンドウ演算子が生成される問題。[#74453](https://github.com/StarRocks/starrocks/pull/74453) [#74810](https://github.com/StarRocks/starrocks/pull/74810)
+- パーティション TopN が子演算子の出力カラムを失う問題、およびソートや事前集計のエラーを暗黙的に飲み込んで誤った結果または部分的な結果を返す問題。[#72848](https://github.com/StarRocks/starrocks/pull/72848) [#74693](https://github.com/StarRocks/starrocks/pull/74693)
+- NULL の identity カラム値を持つ Iceberg equality-delete 行が適用されませんでした。[#67321](https://github.com/StarRocks/starrocks/pull/67321)
+- NULL 行の未定義データから誤った strict モードのキャストオーバーフローエラーが発生しました。[#74903](https://github.com/StarRocks/starrocks/pull/74903)
+- カラム全体が NULL の場合、Decimal のスケールが失われる可能性がありました。[#73789](https://github.com/StarRocks/starrocks/pull/73789)
+- to_base64 での BE クラッシュ（スタックオーバーフロー）、ネスト型の JSON ロードにおける部分追記、非 nullable な集計結果を持つローカルパーティション TopN、パーティション結合（不正確なメモリ計算による範囲外アクセス）、ランタイムプロファイルのシリアライズ（カウンターの min/max 競合）、JIT コンパイル失敗（LLVMContext の use-after-free）、float/integer 混在型での CASE WHEN に対する無効な JIT IR、およびスキーマドリフト下での部分カラム更新。[#70623](https://github.com/StarRocks/starrocks/pull/70623) [#73715](https://github.com/StarRocks/starrocks/pull/73715) [#69752](https://github.com/StarRocks/starrocks/pull/69752) [#74315](https://github.com/StarRocks/starrocks/pull/74315) [#72904](https://github.com/StarRocks/starrocks/pull/72904) [#74396](https://github.com/StarRocks/starrocks/pull/74396) [#74382](https://github.com/StarRocks/starrocks/pull/74382) [#74005](https://github.com/StarRocks/starrocks/pull/74005)
+- 入力が切り捨てられた UTF-8 バイトで終わる場合に、split、split_part、および str_to_map で発生する範囲外読み取りおよび過大なアロケーションの可能性。[#75068](https://github.com/StarRocks/starrocks/pull/75068)
+- UDAF コンテキストキャッシュからのメモリリークと、OlapTableSink におけるクエリプールのメモリ計算の過大評価。[#74025](https://github.com/StarRocks/starrocks/pull/74025) [#73807](https://github.com/StarRocks/starrocks/pull/73807)
+- 予期しないバックエンドプロセスの再起動。[#74424](https://github.com/StarRocks/starrocks/pull/74424)
+- マテリアライズドビューの問題: 遅延マテリアライゼーション下で FULL OUTER JOIN を使用して定義された MV のスロット nullable クラッシュ、ネスト MV のリフレッシュ時の NPE、SHOW CREATE MATERIALIZED VIEW でのウェアハウスプロパティの重複、およびベクター ANN クエリが共有テーブルスキーマを汚染し無関係なステートメントを破壊する問題。[#72621](https://github.com/StarRocks/starrocks/pull/72621) [#73644](https://github.com/StarRocks/starrocks/pull/73644) [#69418](https://github.com/StarRocks/starrocks/pull/69418) [#74785](https://github.com/StarRocks/starrocks/pull/74785)
+- DATE パーティションカラムに NULL 値を含む Paimon テーブルへのクエリ。[#73950](https://github.com/StarRocks/starrocks/pull/73950)
+- hudi_mor_force_jni_reader が有効な場合に char/varchar カラムを持つ Hudi MOR テーブルの読み取り。[#58521](https://github.com/StarRocks/starrocks/pull/58521)
+- ネストされた INT96 タイムスタンプ（ARRAY、MAP、または STRUCT の内部）が、FILES()/Broker Load 中にセッションタイムゾーンによってシフトされていました。[#74868](https://github.com/StarRocks/starrocks/pull/74868)
+- コネクタスキャンの監査ログにおける不正確なバイト読み取り統計、およびデプロイ済みフラグメントに存在しないドライバーシーケンスにインクリメンタルコネクタスキャン範囲が割り当てられ、スキャンの一部が欠落する可能性がありました。[#73799](https://github.com/StarRocks/starrocks/pull/73799) [#74674](https://github.com/StarRocks/starrocks/pull/74674)
+- ADD COLUMN などのスキーマ変更後にメタスキャンが失敗し、バックグラウンドの統計収集が失敗する可能性がありました。[#72901](https://github.com/StarRocks/starrocks/pull/72901)
+- ブローカー RPC の遅延がジョブごとの Routine Load 書き込みロックを保持し、管理 RPC および SHOW ROUTINE LOAD をブロックしていました。[#73591](https://github.com/StarRocks/starrocks/pull/73591)
+- `ALTER ROUTINE LOAD` は予約済みキーワードのテーブル名に対して無効なステートメントを永続化しており、FE 再起動時にロード句が削除される可能性がありました。[#74188](https://github.com/StarRocks/starrocks/pull/74188)
+- `GRANT`/`REVOKE` を `public` ロールに対して実行しても、キャッシュされたマージ済み権限が無効化されず、古い認可情報が残留していました。[#73717](https://github.com/StarRocks/starrocks/pull/73717)
+- テーブルおよびマテリアライズドビューの `RENAME` および `SWAP` 中に並行操作が破損した状態を観測できるレースコンディション、および `MaterializedIndexMeta` スキーマ更新追跡におけるデータレース。[#74100](https://github.com/StarRocks/starrocks/pull/74100) [#74412](https://github.com/StarRocks/starrocks/pull/74412)
+- `RESTORE ... AS <new_db>` 後、FE フォロワーでデータベースレベルの UDF が欠落していました。[#74313](https://github.com/StarRocks/starrocks/pull/74313)
+- コーディネーターが外部リソースのクリーンアップ中にロックを保持していると、クエリが強制終了できない状態になる場合がありました。[#72830](https://github.com/StarRocks/starrocks/pull/72830)
+- 非プライマリキーレプリカにおける永続的なバージョンホールにより、クエリが `version not found` で失敗する可能性がありました。[#74408](https://github.com/StarRocks/starrocks/pull/74408)
+- 強制終了された `SUBMIT TASK` の実行がタスク実行履歴から消失する問題（セッションプレフィックス付きタスク実行タイムアウトも適切に適用されるようになりました）、および不正な実行中から実行中への編集ログが後続のタスク実行をブロックする可能性がありました。[#74146](https://github.com/StarRocks/starrocks/pull/74146) [#73882](https://github.com/StarRocks/starrocks/pull/73882)
+- `ADMIN SHOW REPLICA STATUS` が欠落したレプリカに対してずれた行を出力し、クライアントがハングまたは切断される可能性がありました。[#74393](https://github.com/StarRocks/starrocks/pull/74393)
+- `CatalogRecycleBin` は、クラスタースナップショットが繰り返し失敗した際に共有データモードでのすべての削除を停止し、FE メモリが無制限に増大する原因となっていました。[#74379](https://github.com/StarRocks/starrocks/pull/74379)
+- パーティションが同時に削除された場合の統計計算における NPE、および `INSERT OVERWRITE` 後にパーティション統計にゼロ行数が書き込まれてカーディナリティ推定が破損する問題。[#73711](https://github.com/StarRocks/starrocks/pull/73711) [#74801](https://github.com/StarRocks/starrocks/pull/74801)
+- `tablet_sched_disable_colocate_balance` が有効な場合、すべてのレプリカが停止した BE 上にあるコロケートタブレットが正常として報告されていました。[#73550](https://github.com/StarRocks/starrocks/pull/73550)
+- タブレットチェッカーにおけるロックの不一致による `IllegalMonitorStateException` がチェッカーラウンドを中断させる可能性がありました。[#74596](https://github.com/StarRocks/starrocks/pull/74596)
+- 共有なしモードにおいて複数のデータベース全体の `WRITE` ロックをテーブルスコープのロックに絞り込むことでロック競合を軽減し、空の入力に対する `TabletInvertedIndex.deleteTablets` での不要なロックをスキップするようにしました。[#74523](https://github.com/StarRocks/starrocks/pull/74523) [#73955](https://github.com/StarRocks/starrocks/pull/73955)
+- トランザクション開始とオートバキュームの間のレースにより、まだ必要なトランザクションログが削除され、共有データモードでのパブリッシングが永続的にブロックされる可能性がありました。また、レイクバキュームのリトライバックオフに非相関ジッターが追加されました。[#74906](https://github.com/StarRocks/starrocks/pull/74906) [#74108](https://github.com/StarRocks/starrocks/pull/74108)
+- FE 呼び出し元のタイムアウトが経過した際に BE バキュームタスクを中断するための `lake_vacuum_enable_task_timeout` を追加しました。[#74694](https://github.com/StarRocks/starrocks/pull/74694)
+- データ書き換えスキーマ変更中に `gtid` を読み取る際の null チェック欠落によるクラッシュ。[#74855](https://github.com/StarRocks/starrocks/pull/74855)
+- スレッド名のレースにより、BE データディレクトリのロード中に大量の警告が出力されていました。[#73862](https://github.com/StarRocks/starrocks/pull/73862)
+- 外部テーブルクエリの並列プロファイル収集中に `IllegalStateException` が発生する問題（`enable_profile` がオンの場合）。[#74746](https://github.com/StarRocks/starrocks/pull/74746)
+- 存在しない列に対して `ALTER TABLE ... MODIFY COLUMN ... AFTER` を実行すると、適切なエラーではなく内部 NPE が発生していた。[#75073](https://github.com/StarRocks/starrocks/pull/75073)
+- distinct 集計ソースが終了した際の通知欠落およびオペレータ状態遷移の見逃しによるクエリのハングとオペレータのストール、およびソートマージプロバイダのエラーがフラグメントコンテキストに伝播されるようになった。[#74055](https://github.com/StarRocks/starrocks/pull/74055) [#74557](https://github.com/StarRocks/starrocks/pull/74557) [#73337](https://github.com/StarRocks/starrocks/pull/73337)
+- ユーザーが権限を持たないデータベースに接続する際、適切なエラーを返す代わりに FE が接続を切断（クライアント `ERROR 2013`）していた。[#70072](https://github.com/StarRocks/starrocks/pull/70072)
+- マイクロ秒の `DATETIME` パラメータを持つプリペアドステートメントが `Invalid date type: DECIMAL(6,0)` で失敗していた。[#74141](https://github.com/StarRocks/starrocks/pull/74141)
+- 監査ログが `SELECT ... INTO OUTFILE` に対して `ReturnRows=0` を記録していた。[#74467](https://github.com/StarRocks/starrocks/pull/74467)
+- `information_schema.COLUMNS` において `DATETIME_PRECISION` が常に `NULL` であり、一部の MySQL プロトコルクライアントの型マッピングが壊れていた。[#74623](https://github.com/StarRocks/starrocks/pull/74623)
+- CTAS が新しいテーブルのスキーマで明示的に宣言された `VARCHAR(N)` の長さを保持していなかった。[#73498](https://github.com/StarRocks/starrocks/pull/73498)
+- `enable_statistic_collect_on_first_load` でテーブルレベルの設定がグローバル設定を上書きできるようになった。[#74794](https://github.com/StarRocks/starrocks/pull/74794)
+- `azure_adls2_oauth2_client_endpoint` 設定フィールド名のタイポ。[#74581](https://github.com/StarRocks/starrocks/pull/74581)
+- assert-num-rows におけるアサーション名のルックアップ。[#74178](https://github.com/StarRocks/starrocks/pull/74178)
+- libthrift、Tomcat、Netty のアップグレード、および脆弱な jline 推移的依存関係の除外による複数の依存関係 CVE の修正。[#73243](https://github.com/StarRocks/starrocks/pull/73243) [#73797](https://github.com/StarRocks/starrocks/pull/73797) [#74668](https://github.com/StarRocks/starrocks/pull/74668) [#75066](https://github.com/StarRocks/starrocks/pull/75066)
+
 ## 3.5.18
 
 リリース日：2026 年 6 月 5 日
