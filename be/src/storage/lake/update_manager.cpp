@@ -44,7 +44,6 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
 #include "storage/lake/update_compaction_state.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primitive/primary_key_encoder.h"
@@ -309,17 +308,17 @@ static DelInterleavePlan build_del_interleave_plan(const TxnLogPB_OpWrite& op_wr
                                                    uint32_t assigned_global_segments, uint32_t max_segment_id,
                                                    uint32_t del_rebuild_rssid) {
     const uint32_t num_del_files = op_write.dels_meta_size();
-    // op_offset is carried parallel to dels_meta in op_write.del_op_offsets (index by del_id). An
-    // absent array, or a kUnknownDelOpOffset entry, means "not recorded" -> fall back to max segment.
-    const bool has_del_op_offsets = op_write.del_op_offsets_size() == static_cast<int>(num_del_files);
     DelInterleavePlan plan;
     plan.del_rssids.assign(num_del_files, del_rebuild_rssid);
     plan.del_applied.assign(num_del_files, false);
     for (uint32_t del_id = 0; del_id < num_del_files; ++del_id) {
+        // A del's op_offset (parallel to dels_meta) maps it to the segment it follows; when not
+        // recorded it stays at max_segment_id, i.e. applied after all segments.
         uint32_t target_segment = max_segment_id;
-        if (has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset) {
-            target_segment = assigned_global_segments +
-                             get_segment_idx(op_write.rowset(), static_cast<int32_t>(op_write.del_op_offsets(del_id)));
+        const int64_t op_offset = del_op_offset_or_unset(op_write, del_id);
+        if (op_offset >= 0) {
+            target_segment =
+                    assigned_global_segments + get_segment_idx(op_write.rowset(), static_cast<int32_t>(op_offset));
         }
         plan.del_rssids[del_id] = rowset_id + target_segment;
         plan.dels_after_segment[target_segment].push_back(del_id);

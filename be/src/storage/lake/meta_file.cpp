@@ -74,6 +74,20 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
 }
 
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id) {
+    // op_write.del_op_offsets is parallel to dels_meta (index by del_id). It is absent (size not
+    // aligned with dels_meta) when no del carries an offset -- the downgrade-safe default -- and an
+    // individual entry may be kUnknownDelOpOffset (spill / concurrent flush). Both cases mean "not
+    // recorded" and map to -1, for which resolve_del_op_offset() falls back to the max segment id.
+    // This is the single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel) representation
+    // to the signed value the rest of the apply/persist path uses.
+    if (op_write.del_op_offsets_size() != op_write.dels_meta_size()) {
+        return -1;
+    }
+    const uint32_t v = op_write.del_op_offsets(del_id);
+    return v == kUnknownDelOpOffset ? -1 : static_cast<int64_t>(v);
+}
+
 uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta) {
     if (!column_mode && op_offset >= 0) {
         // op_offset is a local segment position; map it to the segment index used for rssid so it is
@@ -235,9 +249,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     const bool column_mode = op_write.has_txn_meta() &&
                              (op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE ||
                               op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE);
-    // collect del files. op_offset is carried parallel to dels_meta in op_write.del_op_offsets
-    // (index by del_id); an absent array or a kUnknownDelOpOffset entry means "not recorded".
-    const bool has_del_op_offsets = op_write.del_op_offsets_size() == op_write.dels_meta_size();
+    // collect del files
     for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
         const auto& del_meta = op_write.dels_meta(del_id);
         DelfileWithRowsetId del_file_with_rid;
@@ -245,10 +257,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
         // fall back to the max segment id (delete after all upserts).
-        const int64_t op_offset = (has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset)
-                                          ? static_cast<int64_t>(op_write.del_op_offsets(del_id))
-                                          : -1;
-        del_file_with_rid.set_op_offset(resolve_del_op_offset(op_offset, column_mode, *rowset));
+        del_file_with_rid.set_op_offset(
+                resolve_del_op_offset(del_op_offset_or_unset(op_write, del_id), column_mode, *rowset));
         if (del_meta.has_encryption_meta()) {
             del_file_with_rid.set_encryption_meta(del_meta.encryption_meta());
         }
@@ -1383,12 +1393,9 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
     std::vector<int64_t> del_op_offsets;
     dels.reserve(op_write.dels_meta_size());
     del_op_offsets.reserve(op_write.dels_meta_size());
-    const bool has_del_op_offsets = op_write.del_op_offsets_size() == op_write.dels_meta_size();
     for (int del_id = 0; del_id < op_write.dels_meta_size(); ++del_id) {
         dels.emplace_back(op_write.dels_meta(del_id));
-        del_op_offsets.push_back((has_del_op_offsets && op_write.del_op_offsets(del_id) != kUnknownDelOpOffset)
-                                         ? static_cast<int64_t>(op_write.del_op_offsets(del_id))
-                                         : -1);
+        del_op_offsets.push_back(del_op_offset_or_unset(op_write, del_id));
     }
 
     // Accumulate into pending rowset

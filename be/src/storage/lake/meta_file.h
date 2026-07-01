@@ -53,6 +53,12 @@ uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 // Falls back to the max segment index -- the legacy "apply all deletes after all upserts" behavior --
 // when `column_mode` is true (column-mode partial update applies deletes after all column upserts,
 // never interleaved) or when `op_offset` < 0 ("not recorded": absent array or kUnknownDelOpOffset).
+// The recorded op_offset for del file `del_id` in `op_write`, or -1 when not recorded: the
+// del_op_offsets array is absent/misaligned with dels_meta, or the entry is kUnknownDelOpOffset
+// (spill / concurrent flush). Single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel)
+// representation to the signed value resolve_del_op_offset() expects.
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id);
+
 uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta);
 
 class MetaFileBuilder {
