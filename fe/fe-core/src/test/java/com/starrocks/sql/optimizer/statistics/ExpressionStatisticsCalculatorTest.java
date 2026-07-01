@@ -227,8 +227,8 @@ public class ExpressionStatisticsCalculatorTest {
         callOperator = new CallOperator(FunctionSet.MONTHNAME, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 12);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), min, 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Double.POSITIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Double.NEGATIVE_INFINITY, 0.001);
         // test weekofyear function
         callOperator = new CallOperator(FunctionSet.WEEKOFYEAR, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -279,6 +279,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 59, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        // test from_unix function
+        callOperator = new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), columnStatistic.getDistinctValuesCount(), 0.001);
         // test to_date function - columnStatistics for a date column are calculated.
         // Input provided as date+time. Function strips the time part.
         List<LocalDateTime> toDateValues = Lists.newArrayList(
@@ -326,8 +332,8 @@ public class ExpressionStatisticsCalculatorTest {
         // test DAYNAME function
         callOperator = new CallOperator(FunctionSet.DAYNAME, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        Assertions.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
-        Assertions.assertEquals(columnStatistic.getMinValue(), min, 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Double.POSITIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Double.NEGATIVE_INFINITY, 0.001);
         Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 7);
         // test to_days function
         callOperator = new CallOperator(FunctionSet.TO_DAYS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));

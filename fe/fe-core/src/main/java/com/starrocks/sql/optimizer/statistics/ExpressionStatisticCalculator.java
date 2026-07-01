@@ -658,6 +658,8 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 12;
                     break;
                 case FunctionSet.MONTHNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     distinctValue = 12;
                     break;
                 case FunctionSet.WEEKOFYEAR:
@@ -693,6 +695,10 @@ public class ExpressionStatisticCalculator {
                     minValue = 0;
                     maxValue = 59;
                     distinctValue = 60;
+                    break;
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     break;
                 case FunctionSet.TO_DATE, FunctionSet.DATE:
                     if (minMaxValueInfinite) {
@@ -738,6 +744,8 @@ public class ExpressionStatisticCalculator {
                     }
                     break;
                 case FunctionSet.DAYNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     distinctValue = 7;
                     break;
                 case FunctionSet.TIMESTAMP:
