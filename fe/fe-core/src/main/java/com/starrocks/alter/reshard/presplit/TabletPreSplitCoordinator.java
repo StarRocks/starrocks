@@ -483,6 +483,13 @@ public final class TabletPreSplitCoordinator {
      * The {@code max_split_count} cap takes precedence, so a clamped result is not
      * necessarily a multiple of the node count.
      *
+     * <p>The compute-node count used for the rounding/floor is itself bounded by how
+     * many {@code tablet_reshard_min_split_size} tablets the input can fill
+     * ({@code estimatedTotalBytes / tablet_reshard_min_split_size}). This stops a small
+     * load on a large cluster from being split into one tiny tablet per node — without
+     * it, the node-count floor alone would force {@code activeComputeNodeCount} tablets
+     * regardless of how little data there is.
+     *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
@@ -495,10 +502,13 @@ public final class TabletPreSplitCoordinator {
 
         long targetSize = Config.tablet_reshard_target_size;
         int maxSplitCount = Config.tablet_reshard_max_split_count;
+        long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
                 "tablet_reshard_target_size must be > 0, was %s", targetSize);
         Preconditions.checkState(maxSplitCount >= 2,
                 "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+        Preconditions.checkState(minSplitSize > 0,
+                "tablet_reshard_min_split_size must be > 0, was %s", minSplitSize);
 
         // Integer ceil-divide written as (n - 1) / d + 1 with a zero-case guard so it
         // does not overflow when totalBytes is near Long.MAX_VALUE.
@@ -509,15 +519,23 @@ public final class TabletPreSplitCoordinator {
         // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
         // Long.MAX_VALUE estimate (tiny target_size + huge input).
         long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
-        // Round the byte-volume estimate up to a whole multiple of the compute-node
-        // count so the tablets distribute evenly. A count that is not a multiple of
-        // the node count leaves some nodes owning one more tablet than the rest (e.g.
-        // 4 tablets on 3 nodes -> 2/1/1), skewing load-write and scan parallelism
-        // toward the heavier nodes.
+        // Bound the node count we align to by how many min-split-size tablets the input can
+        // fill (totalBytes / tablet_reshard_min_split_size). Without this, the rounding and
+        // node-count floor below would split a small load into one tiny tablet per node on a
+        // large cluster. effectiveMinSize is clamped to targetSize so the bound never forces
+        // tablets larger than the byte-volume target already implies; max(1, ...) keeps the
+        // divisor positive (and yields the minimum 2 after clamping for an empty input).
+        long effectiveMinSize = Math.min(minSplitSize, targetSize);
+        long maxTabletsByMinSize = totalBytes / effectiveMinSize;
+        long alignmentNodeCount = Math.min(activeComputeNodeCount, Math.max(1L, maxTabletsByMinSize));
+        // Round the byte-volume estimate up to a whole multiple of the (size-bounded) node
+        // count so the tablets distribute evenly. A count that is not a multiple of that node
+        // count leaves some nodes owning one more tablet than the rest (e.g. 4 tablets on 3
+        // nodes -> 2/1/1), skewing load-write and scan parallelism toward the heavier nodes.
         long nodeAlignedCount =
-                ((boundedByteTarget + activeComputeNodeCount - 1) / activeComputeNodeCount)
-                        * activeComputeNodeCount;
-        long proposed = Math.max(activeComputeNodeCount, nodeAlignedCount);
+                ((boundedByteTarget + alignmentNodeCount - 1) / alignmentNodeCount)
+                        * alignmentNodeCount;
+        long proposed = Math.max(alignmentNodeCount, nodeAlignedCount);
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }
