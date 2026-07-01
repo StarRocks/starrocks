@@ -253,6 +253,7 @@ public interface IcebergCatalog extends MemoryTrackable {
                 srScanContext);
     }
 
+<<<<<<< HEAD
     /**
      * Check if this catalog uses vended credentials for table access.
      * When vended credentials are used, caching tables may cause issues
@@ -266,6 +267,14 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     default String defaultTableLocation(Namespace ns, String tableName) {
         Map<String, String> properties = loadNamespaceMetadata(ns);
+=======
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
+    }
+
+    default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
+        Map<String, String> properties = loadNamespaceMetadata(context, ns);
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
         String databaseLocation = properties.get(LOCATION_PROPERTY);
         checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
 

@@ -78,6 +78,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
     // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
     private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
+<<<<<<< HEAD
+=======
+    // REST tables embed short-lived vended credentials (~1h) in their FileIO; cap the table-cache TTL so an
+    // idle entry can't outlive its token. Provider-agnostic: bounds cache lifetime, no per-cloud expiry parse.
+    private static final long REST_TABLE_CACHE_MAX_TTL_SEC = 3000;
+    private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
@@ -103,10 +110,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergTableCacheMemoryUsageRatio());
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
+<<<<<<< HEAD
                 NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+=======
+                NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+        long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
+        if (delegate instanceof IcebergRESTCatalog) {
+            tableCacheTtlSec = Math.min(tableCacheTtlSec, REST_TABLE_CACHE_MAX_TTL_SEC);
+        }
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
         this.tables = newCacheBuilder(
-                icebergProperties.getIcebergMetaCacheTtlSec(),
+                tableCacheTtlSec,
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
                 .maximumWeight(tableCacheSize)
@@ -139,6 +154,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
+<<<<<<< HEAD
                             BaseTable updateTable = 
                                     (BaseTable) delegate.getTable(key.dbName, key.tableName);
                             TableOperations newOps = updateTable.operations();
@@ -147,6 +163,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                 return oldValue;
                             }
                             return updateTable;
+=======
+                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -273,8 +292,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
+<<<<<<< HEAD
         if (!icebergProperties.isEnableIcebergMetadataCache() || delegate.isVendedCredentialsEnabled()) {
             return delegate.getTable(dbName, tableName);
+=======
+        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+        if (!cacheAllowed) {
+            return delegate.getTable(connectContext, dbName, tableName);
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
         }
 
         if (ConnectContext.get() == null || ConnectContext.get().getCommand() == MysqlCommand.COM_QUERY) {
@@ -407,6 +434,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         dbName, tableName, currentLocation, updateLocation);
                 refreshTable(currentTable, updateTable, dbName, tableName, executorService);
                 LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+            } else {
+                // Metadata unchanged keeps the partition/file caches valid; still swap in the reloaded
+                // table so the cache stops serving the old (expiring) vended FileIO token.
+                tables.put(icebergTableName, updateTable);
             }
         }
     }

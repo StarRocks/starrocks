@@ -69,7 +69,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private final Configuration conf;
     private final RESTCatalog delegate;
     private final boolean nestedNamespaceEnabled;
+<<<<<<< HEAD
     private final boolean enableVendedCredentials;
+=======
+    private final boolean viewEndpointsEnabled;
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -87,8 +91,13 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
+<<<<<<< HEAD
         this.enableVendedCredentials =
                 Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
+=======
+        boolean enableVendedCredentials =
+                Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
         if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
         }
@@ -115,7 +124,12 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.delegate = restCatalog;
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
+<<<<<<< HEAD
         this.enableVendedCredentials = false;
+=======
+        this.viewEndpointsEnabled = true;
+        this.restCatalogProperties = Maps.newHashMap();
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
     }
 
     @Override
@@ -387,8 +401,28 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         return null;
     }
 
+<<<<<<< HEAD
     @Override
     public boolean isVendedCredentialsEnabled() {
         return enableVendedCredentials;
+=======
+    private SessionCatalog.SessionContext buildContext(ConnectContext context) {
+        String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
+
+        // only pass user's auth token to REST Catalog when security mode is JWT
+        boolean isJwtSecurity = Security.JWT.name().equalsIgnoreCase(
+                restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"));
+        if (!isJwtSecurity || Strings.isNullOrEmpty(context.getAuthToken())) {
+            return SessionCatalog.SessionContext.createEmpty();
+        }
+
+        Map<String, String> credentials = ImmutableMap.<String, String>builder()
+                .put(OAuth2Properties.ACCESS_TOKEN_TYPE, context.getAuthToken())
+                .put(OAuth2Properties.TOKEN, context.getAuthToken())
+                .buildOrThrow();
+
+        return new SessionCatalog.SessionContext(sessionId, context.getQualifiedUser(), credentials, ImmutableMap.of(),
+                context.getCurrentUserIdentity());
+>>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
     }
 }
