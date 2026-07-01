@@ -117,6 +117,10 @@ public abstract class TabletReshardJob implements Writable {
         return jobState.isFinalState();
     }
 
+    public boolean isAborted() {
+        return jobState == JobState.ABORTED;
+    }
+
     protected boolean abort(String reason) {
         if (!canAbort()) {
             LOG.warn("Tablet reshard job cannot abort. {}", this);
@@ -206,6 +210,8 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     public abstract long getParallelTablets();
+
+    public abstract long getTableId();
 
     /*
      * Admission-time reservation. Reserve the table for this job before it is queued in
