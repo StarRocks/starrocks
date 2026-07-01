@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -132,6 +133,15 @@ public class PredicateColumnsMgr {
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
         // only support OLAP table right now
         if (!table.isNativeTableOrMaterializedView()) {
+            // For connector tables, record predicate/join/group-by columns in the trigger manager
+            // so that query-triggered ANALYZE is scoped to relevant columns.
+            if (ColumnUsage.UseCase.getPredicateColumnUseCase().contains(useCase)) {
+                String uuid = table.getUUID();
+                if (uuid != null && !uuid.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr()
+                            .recordPredicateColumn(uuid, column.getName());
+                }
+            }
             return;
         }
         Optional<ColumnUsage> mayUsage = ColumnUsage.build(column, table, useCase);

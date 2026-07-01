@@ -69,6 +69,7 @@ import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.share.iceberg.SerializableTable;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.metric.ConnectorMetricsMgr;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
@@ -1689,18 +1691,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    Must scan files for per-column bounds and Puffin NDV. buildFileScanTaskIterator
         //    handles both full-table and delta internally.  Cost: O(files) planFiles + per-column
         //    metadata collection.  Accuracy: best (NDV + min/max).
+        Statistics fgStats;
         if (enableColumnStats) {
-            return getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
-        }
+            fgStats = getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
         //
         // B. Incremental delta (append-only, column-stats off):
         //    Requires datafile-level precision (added_snapshot_id) because MergeAppend/compaction
         //    rewrites manifests and merges old + new records, making manifest-level addedRows
         //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
         //    so O(files) plan cost is acceptable; accuracy is required.
-        if (isIncrementalDelta) {
-            return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
-        }
+        } else if (isIncrementalDelta) {
+            fgStats = getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
         //
         // C. Whole-table snapshot (default, column-stats off, non-delta):
         //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
@@ -1711,7 +1712,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    never populated, incremental scan range delivery stays unlocked.
         //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
         //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
-        return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
+        } else {
+            fgStats = getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
+        }
+        return mergeWithBackgroundStats(icebergTable, columns, fgStats);
     }
 
     // -------------------------------------------------------------------------
@@ -1868,6 +1872,48 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Both row counts are null. If the manifest has any live files, the count would be
         // a severe under-estimate → caller must fall back to planFiles for exact cardinality.
         return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
+    }
+
+    // Merge foreground statistics with background ANALYZE results on a per-column basis.
+    // Background stats (NDV + min/max from ANALYZE) win over foreground estimates for any column
+    // that has been analyzed. Background row count is used when available.
+    // On the first query the async cache is cold: returns fgStats unchanged and triggers
+    // background loading. Subsequent queries see the merged result.
+    private Statistics mergeWithBackgroundStats(IcebergTable icebergTable,
+                                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                Statistics fgStats) {
+        List<Map.Entry<ColumnRefOperator, Column>> entries = new ArrayList<>(colRefToColumnMetaMap.entrySet());
+        List<String> columnNames = entries.stream()
+                .map(e -> e.getValue().getName())
+                .collect(Collectors.toList());
+
+        List<ConnectorTableColumnStats> bgStatsList =
+                GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getConnectorTableStatistics(icebergTable, columnNames);
+
+        Map<ColumnRefOperator, ColumnStatistic> bgOverrides = new HashMap<>();
+        long bgRowCount = -1;
+        for (int i = 0; i < entries.size(); i++) {
+            ConnectorTableColumnStats bg = bgStatsList.get(i);
+            if (!bg.isUnknown()) {
+                bgOverrides.put(entries.get(i).getKey(), bg.getColumnStatistic());
+                if (bgRowCount < 0) {
+                    bgRowCount = bg.getRowCount();
+                }
+            }
+        }
+
+        if (bgOverrides.isEmpty()) {
+            return fgStats;
+        }
+
+        Statistics.Builder builder = Statistics.buildFrom(fgStats);
+        builder.addColumnStatistics(bgOverrides);
+        builder.setStatsSource(Statistics.StatsSource.ANALYZE);
+        if (bgRowCount > 0) {
+            builder.setOutputRowCount(bgRowCount);
+        }
+        return builder.build();
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(

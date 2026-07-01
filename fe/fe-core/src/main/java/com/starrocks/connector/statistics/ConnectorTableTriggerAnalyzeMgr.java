@@ -45,6 +45,9 @@ public class ConnectorTableTriggerAnalyzeMgr {
     private final Map<ConnectorTableColumnKey, Optional<String>> keyToFileForGlobalDict = new ConcurrentHashMap<>();
     private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     private final AtomicBoolean isStart = new AtomicBoolean(false);
+    // Predicate/join/group-by column names per table UUID, populated by PredicateColumnsMgr
+    // during query planning for connector tables. Used to scope ANALYZE to relevant columns.
+    private final ConcurrentHashMap<String, Set<String>> tableUuidToPredicateCols = new ConcurrentHashMap<>();
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
@@ -125,10 +128,22 @@ public class ConnectorTableTriggerAnalyzeMgr {
             }
         }
 
+        // Scope ANALYZE to predicate/join/group-by columns when available.
+        // Falls back to all query-requested columns when no predicate data exists yet.
+        Set<String> knownPredicateCols = tableUuidToPredicateCols.get(tableUUID);
+        if (knownPredicateCols != null && !knownPredicateCols.isEmpty()) {
+            analyzeColumns.retainAll(knownPredicateCols);
+        }
+
         if (!analyzeColumns.isEmpty()) {
             // need to execute analyze
             this.connectorAnalyzeTaskQueue.addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, analyzeColumns));
         }
+    }
+
+    public void recordPredicateColumn(String tableUUID, String columnName) {
+        tableUuidToPredicateCols.computeIfAbsent(tableUUID, k -> ConcurrentHashMap.newKeySet())
+                .add(columnName);
     }
 
     public void addDictUpdateTask(ConnectorTableColumnKey key, Optional<String> fileName) {
