@@ -107,16 +107,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergTableCacheMemoryUsageRatio());
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
-<<<<<<< HEAD
                 NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
-=======
-                NEVER_CACHE, DEFAULT_CACHE_NUM).build();
         long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
         if (delegate instanceof IcebergRESTCatalog) {
             tableCacheTtlSec = Math.min(tableCacheTtlSec, REST_TABLE_CACHE_MAX_TTL_SEC);
         }
->>>>>>> dd16ab8a2a ([BugFix] Cache Iceberg REST vended-credential tables and keep their credentials fresh (#75431))
         this.tables = newCacheBuilder(
                 tableCacheTtlSec,
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
