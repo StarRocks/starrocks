@@ -675,6 +675,8 @@ partition_name:
   - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
   - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
 
+  - Iceberg 表 Partition Evolution 统计信息的收集功能在 4.0 及更高版本中已启用。
+
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 
 ### 查询触发采集
