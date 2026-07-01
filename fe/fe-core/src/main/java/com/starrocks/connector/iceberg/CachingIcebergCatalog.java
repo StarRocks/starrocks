@@ -76,6 +76,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
     // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
     private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
+    // REST tables embed short-lived vended credentials (~1h) in their FileIO; cap the table-cache TTL so an
+    // idle entry can't outlive its token. Provider-agnostic: bounds cache lifetime, no per-cloud expiry parse.
+    private static final long REST_TABLE_CACHE_MAX_TTL_SEC = 3000;
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -104,8 +107,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+        long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
+        if (delegate instanceof IcebergRESTCatalog) {
+            tableCacheTtlSec = Math.min(tableCacheTtlSec, REST_TABLE_CACHE_MAX_TTL_SEC);
+        }
         this.tables = newCacheBuilder(
-                icebergProperties.getIcebergMetaCacheTtlSec(),
+                tableCacheTtlSec,
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
                 .maximumWeight(tableCacheSize)
@@ -130,14 +137,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            BaseTable updateTable = 
-                                    (BaseTable) delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
-                            TableOperations newOps = updateTable.operations();
-                            TableOperations oldOps = ((BaseTable) oldValue).operations();
-                            if (oldOps.current().metadataFileLocation().equals(newOps.current().metadataFileLocation())) {
-                                return oldValue;
-                            }
-                            return updateTable;
+                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -253,10 +253,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
         // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
         boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
-                !delegate.isVendedCredentialsEnabled();
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
@@ -405,6 +403,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         dbName, tableName, currentLocation, updateLocation);
                 refreshTable(currentTable, updateTable, dbName, tableName, ctx, executorService);
                 LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+            } else {
+                // Metadata unchanged keeps the partition/file caches valid; still swap in the reloaded
+                // table so the cache stops serving the old (expiring) vended FileIO token.
+                tables.put(icebergTableName, updateTable);
             }
         }
     }
