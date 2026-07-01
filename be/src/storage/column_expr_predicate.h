@@ -1,8 +1,11 @@
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "storage/column_predicate.h"
+#include "storage/index/inverted/inverted_index_common.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 
@@ -85,6 +88,8 @@ private:
     bool _monotonic;
     mutable std::vector<uint8_t> _tmp_select;
 };
+
+std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, std::string_view pattern);
 
 class ColumnTruePredicate final : public ColumnPredicate {
 public:
