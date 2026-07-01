@@ -160,7 +160,7 @@ private:
 
     bool bloom_query(char c) const { return _mask & (1UL << (c & (BLOOM_WIDTH - 1))); }
 
-    const Slice* _pattern;
+    const Slice* _pattern = nullptr;
     int64_t _mask{0};
     int64_t _skip = 0;
 };
