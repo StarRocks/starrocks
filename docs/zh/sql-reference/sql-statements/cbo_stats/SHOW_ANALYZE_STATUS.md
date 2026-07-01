@@ -30,7 +30,7 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate]
 | Status     | 任务状态，包括 RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
 | StartTime  | 任务开始执行的时间。                                         |
 | EndTime    | 任务结束执行的时间。                                         |
-| Properties | 自定义参数信息。                                             |
+| Properties | 自定义参数信息。对于外部表（如 Iceberg、Hive、Paimon）的采集任务，还会包含本次采集的元信息，例如 `table_format`、`partition_count`、`column_count`，以及 Iceberg 表特有的 `snapshot_id`、`total_files`、`total_rows`。 |
 | Reason     | 任务失败的原因。如果执行成功则为 NULL。                      |
 
 ## 相关文档

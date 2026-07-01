@@ -423,4 +423,35 @@ public class IcebergTableTest extends TableTestBase {
         LightWeightIcebergTable light = new LightWeightIcebergTable(base);
         Assertions.assertThrows(UnsupportedOperationException.class, light::getNativeTable);
     }
+
+    @Test
+    public void testGetStatsCollectMetadata() {
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.Snapshot snapshot = Mockito.mock(org.apache.iceberg.Snapshot.class);
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.snapshotId()).thenReturn(123456789L);
+        Mockito.when(snapshot.summary()).thenReturn(ImmutableMap.of(
+                "total-data-files", "5",
+                "total-records", "1000"));
+
+        IcebergTable table = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(nativeTable)
+                .setIcebergProperties(new HashMap<>())
+                .build();
+
+        Map<String, String> metadata = table.getStatsCollectMetadata();
+        Assertions.assertEquals("123456789", metadata.get("snapshot_id"));
+        Assertions.assertEquals("5", metadata.get("total_files"));
+        Assertions.assertEquals("1000", metadata.get("total_rows"));
+
+        // No current snapshot (e.g. empty table) -> empty metadata, not an error.
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(null);
+        Assertions.assertTrue(table.getStatsCollectMetadata().isEmpty());
+    }
 }
