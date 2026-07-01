@@ -89,7 +89,7 @@ public:
                                                                  GlobalEnv::GetInstance()->diagnose_daemon(),
                                                                  PlatformEnv::GetInstance()->brpc_stub_cache())),
               _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager(),
-                            _load_channel_mgr.get()) {
+                            _load_channel_mgr.get(), nullptr) {
         CHECK_OK(_load_channel_mgr->init(GlobalEnv::GetInstance()->load_mem_tracker()));
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
@@ -6227,7 +6227,7 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_full_path) {
     ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
-    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr);
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr, nullptr);
 
     BuildVectorIndexRequest request;
     request.set_tablet_id(kTabletId);
@@ -6258,7 +6258,7 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_partial_failure)
 
     create_metadata(schema_pb, 3, {{2, seg_ok}, {3, seg_bad}});
 
-    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr);
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr, nullptr);
     BuildVectorIndexRequest request;
     request.set_tablet_id(kTabletId);
     request.set_version(3);
