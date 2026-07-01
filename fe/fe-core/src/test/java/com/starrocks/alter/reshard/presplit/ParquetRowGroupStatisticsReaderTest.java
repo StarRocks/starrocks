@@ -37,6 +37,8 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 class ParquetRowGroupStatisticsReaderTest {
@@ -287,7 +289,7 @@ class ParquetRowGroupStatisticsReaderTest {
     void pre1970DateIsAccepted() throws Exception {
         // epochDay -1 = 1969-12-31. A DATE has no sub-second part and BE's day-of-epoch load is
         // proleptic-Gregorian end to end, so a pre-1970 DATE boundary is FE/BE-identical and stays
-        // on the meta tier (only DATETIME keeps the 1970 lower bound).
+        // on the meta tier. DATE and DATETIME share the [0001-01-01, 9999-12-31] window.
         Path parquetPath = writeParquet(
                 "message schema { required int32 event_day (DATE); }",
                 /*rowCount=*/ 2,
@@ -446,13 +448,67 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void pre1970TimestampFallsBackToDataTier() throws Exception {
-        // -1000 ms = 1969-12-31 23:59:59 < 1970-01-01: outside the safe window, where the FE
-        // floorDiv/floorMod split is not proven equal to BE's signed C++ division. Defer to data tier.
+    void pre1970TimestampIsAccepted() throws Exception {
+        // -2000 ms = 1969-12-31 23:59:58, -1000 ms = 1969-12-31 23:59:59: both before the epoch but
+        // inside [0001-01-01, 9999-12-31]. The FE floorDiv/floorMod split equals the BE timestamp
+        // load (which borrows a whole second for a negative sub-second remainder), so a pre-1970
+        // DATETIME boundary is FE/BE-identical and stays on the meta tier.
         Path parquetPath = writeParquet(
                 timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
                 /*rowCount=*/ 2,
-                (group, rowIndex) -> group.append("event_ts", -1000L - rowIndex));
+                (group, rowIndex) -> group.append("event_ts", -2000L + rowIndex * 1000L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("1969-12-31 23:59:58",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("1969-12-31 23:59:59",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1970TimestampWithSubSecondIsAccepted() throws Exception {
+        // -500 ms = 1969-12-31 23:59:59.500000: the negative sub-second case the BE floor-borrow fix
+        // makes load-correct. floorDiv(-500, 1000) = -1 s, floorMod(-500, 1000) = 500 ms → .500000.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", -500L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals("1969-12-31 23:59:59.500000",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void pre1582TimestampIsAccepted() throws Exception {
+        // 1500-06-15 12:00:00 UTC, before the 1582 Gregorian cutover. BE's calendar is proleptic
+        // Gregorian end to end (load and boundary parse both pack through the same from_date), so a
+        // pre-1582 DATETIME boundary stays on the meta tier.
+        long millis = LocalDateTime.of(1500, 6, 15, 12, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000L;
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", millis));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+
+        Assertions.assertEquals("1500-06-15 12:00:00",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void postYear9999TimestampFallsBackToDataTier() throws Exception {
+        // 253402300800000 ms = 10000-01-01 00:00:00 UTC, year > 9999: above the window → data tier.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ false),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 253402300800000L));
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(

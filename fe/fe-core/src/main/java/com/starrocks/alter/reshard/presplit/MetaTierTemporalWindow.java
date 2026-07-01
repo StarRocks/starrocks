@@ -20,24 +20,21 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * The value windows the meta tier accepts for temporal sort-key boundaries. DATE accepts
- * {@code [0001-01-01, 9999-12-31]}; DATETIME accepts the narrower {@code [1970-01-01, 9999-12-31]}.
- * A value outside its window falls back to data tier (it is not a load failure). The upper bound
- * is the StarRocks DATE/DATETIME domain ceiling for both.
+ * The value window the meta tier accepts for DATE and DATETIME sort-key boundaries:
+ * {@code [0001-01-01, 9999-12-31]}. A value outside it falls back to data tier (it is not a load
+ * failure). The upper bound is the StarRocks DATE/DATETIME domain ceiling.
  *
- * <p>Why DATE reaches year 1 but DATETIME stops at the epoch — the FE-computed boundary must equal
- * the value the BE load stores:
+ * <p>Why the window reaches year 1 — the FE-computed boundary must equal the value the BE load
+ * stores, and that holds for every representable value down to the start of the unambiguous AD range:
  * <ul>
  *   <li>DATE carries no sub-second part, and BE decodes a day-of-epoch by adding a fixed Julian
  *       offset and converting with the same proleptic-Gregorian algorithm {@link LocalDate} uses
- *       (no 1582 cutover), so a DATE boundary is FE/BE-identical for every representable value down
- *       to the start of the unambiguous AD range.</li>
- *   <li>DATETIME below 1970-01-01 is not yet safe: the BE Parquet INT64-timestamp load splits the
- *       signed tick with truncating division and does not borrow a whole second for a negative
- *       sub-second remainder, so a pre-1970 fractional-second value decodes to a value that does not
- *       match the FE {@code Math.floorDiv}/{@code floorMod} boundary (and the BE ORC pre-epoch path
- *       drops the sub-second). Until the BE load handles a negative sub-second, a sub-1970 DATETIME
- *       stays on the data tier.</li>
+ *       (no 1582 cutover), so a DATE boundary is FE/BE-identical.</li>
+ *   <li>DATETIME below 1970-01-01 is safe too: the BE timestamp load reconstructs the same wall
+ *       clock the FE computes with {@code Math.floorDiv}/{@code floorMod} — keeping the sub-second of
+ *       a pre-1970 value rather than dropping or corrupting it — and both the load and the
+ *       boundary-string parse pack the calendar date through the same proleptic conversion, so a
+ *       pre-1970 (and pre-1582) DATETIME boundary matches the loaded value down to year 1.</li>
  * </ul>
  *
  * <p>This lives in one place — rather than being duplicated per reader like the integer-stat
@@ -49,34 +46,19 @@ import java.time.LocalDateTime;
 final class MetaTierTemporalWindow {
 
     private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1, 1, 1);
-    private static final LocalDate MIN_SUPPORTED_DATETIME_DATE = LocalDate.of(1970, 1, 1);
     private static final LocalDate MAX_SUPPORTED_DATE = LocalDate.of(9999, 12, 31);
 
     private MetaTierTemporalWindow() {
     }
 
     /**
-     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal)
-     * if a DATE sort-key boundary is outside {@code [0001-01-01, 9999-12-31]}.
+     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal) if the
+     * calendar date of a DATE or DATETIME sort-key boundary is outside {@code [0001-01-01, 9999-12-31]}.
      */
-    static void rejectDateOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
+    static void rejectOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
         if (date.isBefore(MIN_SUPPORTED_DATE) || date.isAfter(MAX_SUPPORTED_DATE)) {
             throw new MetaTierUnavailableException(
-                    "DATE meta tier supports [0001-01-01, 9999-12-31] only; value "
-                            + date + " is outside that window");
-        }
-    }
-
-    /**
-     * Throw {@link MetaTierUnavailableException} if the calendar date of a DATETIME sort-key boundary
-     * is outside {@code [1970-01-01, 9999-12-31]}. The lower bound is the epoch (not year 1 as for
-     * DATE) because the BE timestamp load does not yet decode a pre-1970 sub-second value to a
-     * boundary-matching wall clock — see the class comment.
-     */
-    static void rejectDateTimeOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
-        if (date.isBefore(MIN_SUPPORTED_DATETIME_DATE) || date.isAfter(MAX_SUPPORTED_DATE)) {
-            throw new MetaTierUnavailableException(
-                    "DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
+                    "DATE/DATETIME meta tier supports [0001-01-01, 9999-12-31] only; value "
                             + date + " is outside that window");
         }
     }
