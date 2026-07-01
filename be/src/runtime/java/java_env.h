@@ -18,10 +18,8 @@
 
 #include <functional>
 #include <memory>
-#include <utility>
 
 #include "base/status.h"
-#include "base/statusor.h"
 
 // implemented by libhdfs
 // hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
@@ -35,6 +33,8 @@ extern "C" JNIEnv* getJNIEnv(void);
 namespace starrocks {
 
 class PriorityThreadPool;
+
+Status detect_java_runtime();
 
 class JavaEnv {
 public:
@@ -55,61 +55,6 @@ public:
 
 private:
     std::unique_ptr<PriorityThreadPool> _jvm_call_pool;
-};
-
-// A global ref of the guard, handle can be shared across threads.
-class JavaGlobalRef {
-public:
-    JavaGlobalRef(jobject handle) : _handle(handle) {}
-    ~JavaGlobalRef();
-    JavaGlobalRef(const JavaGlobalRef&) = delete;
-
-    JavaGlobalRef(JavaGlobalRef&& other) noexcept {
-        _handle = other._handle;
-        other._handle = nullptr;
-    }
-
-    JavaGlobalRef& operator=(JavaGlobalRef&& other) noexcept {
-        JavaGlobalRef tmp(std::move(other));
-        std::swap(this->_handle, tmp._handle);
-        return *this;
-    }
-
-    jobject handle() const { return _handle; }
-
-    jobject& handle() { return _handle; }
-
-    void clear();
-
-private:
-    jobject _handle;
-};
-
-// A Class object created from the ClassLoader that can be accessed by multiple threads.
-class JVMClass {
-public:
-    JVMClass(jobject clazz) : _clazz(clazz) {}
-    JVMClass(const JVMClass&) = delete;
-
-    JVMClass& operator=(const JVMClass&&) = delete;
-    JVMClass& operator=(const JVMClass& other) = delete;
-
-    JVMClass(JVMClass&& other) noexcept : _clazz(nullptr) { _clazz = std::move(other._clazz); }
-
-    JVMClass& operator=(JVMClass&& other) noexcept {
-        JVMClass tmp(std::move(other));
-        std::swap(this->_clazz, tmp._clazz);
-        return *this;
-    }
-
-    jclass clazz() const { return (jclass)_clazz.handle(); }
-
-    // Create a new instance using the default constructor.
-    StatusOr<JavaGlobalRef> newInstance() const;
-    StatusOr<jobject> newLocalInstance() const;
-
-private:
-    JavaGlobalRef _clazz;
 };
 
 } // namespace starrocks

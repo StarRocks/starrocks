@@ -48,11 +48,13 @@ set(RUNTIME_SRCS
     prof/heap_prof.cpp
     serde/chunk_encode_context.cpp
     serde/protobuf_chunk_serde.cpp
-    env/diagnose_daemon.cpp
+    diagnose_daemon.cpp
     process_memory_metrics.cpp
     runtime_env.cpp
-    env/global_thread_pools.cpp
-    env/java/java_env.cpp
+    global_thread_pools.cpp
+    java/java_env.cpp
+    java/java_global_ref.cpp
+    java/jvm_class.cpp
 )
 
 ADD_BE_LIB(Runtime

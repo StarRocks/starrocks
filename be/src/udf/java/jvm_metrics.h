@@ -14,10 +14,15 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "base/metrics.h"
 #include "common/status.h"
 #include "jni.h"
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/java_global_ref.h"
+#include "runtime/java/jvm_class.h"
 
 namespace starrocks {
 
