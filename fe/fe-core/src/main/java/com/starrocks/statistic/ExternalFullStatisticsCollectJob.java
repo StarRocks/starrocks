@@ -65,6 +65,7 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,11 +127,23 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 jobId, catalogName, db.getOriginName(), table.getName(),
                 partitionNames.size(), columnNames.size());
 
-        String tableSummary = table.getStatsCollectSummary();
-        if (!tableSummary.isEmpty()) {
-            LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
-                    jobId, catalogName, db.getOriginName(), table.getName(), tableSummary);
+        Map<String, String> extendedInfo = new LinkedHashMap<>();
+        extendedInfo.put("table_format", table.getType().name());
+        extendedInfo.put("partition_count", String.valueOf(partitionNames.size()));
+        extendedInfo.put("column_count", String.valueOf(columnNames.size()));
+        extendedInfo.putAll(table.getStatsCollectMetadata());
+        if (analyzeStatus instanceof ExternalAnalyzeStatus) {
+            // Merge into the existing properties map so it surfaces via the Properties column of
+            // SHOW ANALYZE STATUS without introducing new columns.
+            Map<String, String> mergedProperties = new LinkedHashMap<>();
+            if (analyzeStatus.getProperties() != null) {
+                mergedProperties.putAll(analyzeStatus.getProperties());
+            }
+            mergedProperties.putAll(extendedInfo);
+            ((ExternalAnalyzeStatus) analyzeStatus).setProperties(mergedProperties);
         }
+        LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
+                jobId, catalogName, db.getOriginName(), table.getName(), extendedInfo);
 
         String status = "SUCCESS";
         String failureReason = "";
