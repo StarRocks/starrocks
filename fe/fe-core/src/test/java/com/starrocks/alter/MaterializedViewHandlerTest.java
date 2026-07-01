@@ -356,7 +356,7 @@ public class MaterializedViewHandlerTest {
     }
 
     @Test
-    public void checkInvalidPartitionKeyMV(@Injectable CreateSyncMVStmt createMaterializedViewStmt,
+    public void checkInvalidPartitionKeyMV(@Injectable CreateMaterializedViewStmt createMaterializedViewStmt,
                                            @Injectable OlapTable olapTable, @Injectable Database db) {
         final String mvName = "mv1";
         final String columnName1 = "k1";
