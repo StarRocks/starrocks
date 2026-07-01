@@ -271,9 +271,53 @@ jobs:
           rm -f ${{ steps.run_build.outputs.RES_FILE }}
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
 
+  # Refactor sync PRs often break enterprise-only BE UT compilation: OSS CI
+  # never compiles enterprise-only files (e.g. external_cluster_snapshot), so a
+  # symbol renamed/moved upstream by a refactor only surfaces once synced here.
+  # For [Refactor] sync PRs that touch BE, compile all BE UT targets (dry-run,
+  # no test execution) to catch the break before the sync merges to main.
+  be-ut-refactor-compile:
+    runs-on: [self-hosted, normal]
+    needs: [ code-checker, thirdparty-info ]
+    name: BE UT (Refactor compile-check)
+    timeout-minutes: 90
+    if: >
+      !cancelled() &&
+      startsWith(github.event.pull_request.title, '[Refactor]') &&
+      needs.code-checker.outputs.output1 == 'true' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      IMAGE_CACHE_ID: ${{ needs.thirdparty-info.outputs.ubuntu_image_cache_id }}
+      LINUX_DISTRO: ubuntu
+    steps:
+      - name: INIT ECI & RUN UT (compile-only)
+        id: run_ut
+        shell: bash
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          if [[ "${IMAGE_CACHE_ID}" != '' ]]; then
+              export image_cache_id=${IMAGE_CACHE_ID}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --compile-only
+
+      - name: clean ECI
+        if: always() && steps.run_ut.outputs.ECI_ID != ''
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
   result:
     runs-on: [self-hosted, normal]
-    needs: [ pr-label, code-checker, build ]
+    needs: [ pr-label, code-checker, build, be-ut-refactor-compile ]
     name: RESULT
     if: >
       always() && (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened')
@@ -286,14 +330,14 @@ jobs:
     steps:
       - name: add label
         uses: actions-ecosystem/action-add-labels@v1
-        if: needs.build.result == 'failure'
+        if: needs.build.result == 'failure' || needs.be-ut-refactor-compile.result == 'failure'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
 
       - name: remove label
         uses: actions-ecosystem/action-remove-labels@v1
-        if: needs.build.result != 'failure'
+        if: needs.build.result != 'failure' && needs.be-ut-refactor-compile.result != 'failure'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
