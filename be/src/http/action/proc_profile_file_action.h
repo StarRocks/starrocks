@@ -32,6 +32,8 @@ public:
 
     void handle(HttpRequest* req) override;
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     bool is_valid_filename(const std::string& filename);
     void serve_gzipped_html(HttpRequest* req, const std::string& file_path);

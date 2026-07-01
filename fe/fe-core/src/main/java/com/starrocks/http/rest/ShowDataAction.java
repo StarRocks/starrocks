@@ -34,9 +34,11 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
@@ -62,6 +64,12 @@ public class ShowDataAction extends RestBaseAction {
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         controller.registerHandler(HttpMethod.GET, "/api/show_data", new ShowDataAction(controller));
+    }
+
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
+    @Override
+    public boolean needAuth() {
+        return Config.enable_http_auth;
     }
 
     public long getDataSizeOfDatabase(Database db) {
@@ -100,7 +108,9 @@ public class ShowDataAction extends RestBaseAction {
     }
 
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String dbName = request.getSingleParameter("db");
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
         long totalSize = 0;
