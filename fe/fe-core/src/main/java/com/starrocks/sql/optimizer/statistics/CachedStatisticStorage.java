@@ -544,6 +544,19 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
 
+        // Skip loading histogram statistics when we are inside a statistics-collect connection
+        // (recursion guard) or when the target is a statistics-internal table, or when the
+        // statistics tables are not in a healthy state. Without this guard a histogram-collect
+        // INSERT that holds the histogram_statistics READ lock would synchronously load the
+        // histogram of its own source table, and that loader re-acquires the histogram_statistics
+        // READ lock -> self-deadlock. This mirrors the guard already present in getColumnStatistics.
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return Maps.newHashMap();
+        }
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return Maps.newHashMap();
+        }
+
         List<String> columnHasHistogram = new ArrayList<>();
         for (String columnName : columns) {
             if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().getHistogramStatsMetaMap()
