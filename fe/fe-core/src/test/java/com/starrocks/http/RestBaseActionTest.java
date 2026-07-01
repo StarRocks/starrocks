@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -121,6 +122,10 @@ public class RestBaseActionTest {
 
         public void callRequireDbInsert(String db) throws AccessDeniedException {
             requireDbInsertIfHttpAuthEnabled(db);
+        }
+
+        public void callRequireClusterAdmin() throws AccessDeniedException {
+            requireClusterAdminIfHttpAuthEnabled();
         }
     }
 
@@ -520,6 +525,60 @@ public class RestBaseActionTest {
                     org.mockito.ArgumentMatchers.eq("test_db"),
                     org.mockito.ArgumentMatchers.eq(PrivilegeType.INSERT)));
         }
+    }
+
+    @Test
+    public void testRequireClusterAdminDisabledIsNoop() throws Exception {
+        Config.enable_http_auth = false;
+        ConnectContext.remove();
+        // Must short-circuit before touching ConnectContext when the flag is off.
+        newTestableAction().callRequireClusterAdmin();
+    }
+
+    @Test
+    public void testRequireClusterAdminEnabledRootUserAllowed() throws Exception {
+        Config.enable_http_auth = true;
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Set.of()); // root user is allowed regardless of activated roles
+        ctx.setThreadLocalInfo();
+        newTestableAction().callRequireClusterAdmin();
+    }
+
+    @Test
+    public void testRequireClusterAdminEnabledClusterAdminRoleAllowed() throws Exception {
+        Config.enable_http_auth = true;
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("user1", "%"));
+        ctx.setCurrentRoleIds(Set.of(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID));
+        ctx.setThreadLocalInfo();
+        newTestableAction().callRequireClusterAdmin();
+    }
+
+    @Test
+    public void testRequireClusterAdminEnabledGroupDerivedRoleAllowed() throws Exception {
+        // Regression: a user who receives cluster_admin via a group mapping has the role in the
+        // context's currentRoleIds (merged by AuthenticationHandler.setCurrentRoleIds(user, groups))
+        // even though it is NOT directly owned by the user. The helper must honor the context roles,
+        // not only AuthorizationMgr.getOwnedRolesByUser.
+        Config.enable_http_auth = true;
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("ldap_user", "%"));
+        ctx.setGroups(Set.of("ldap_admins"));
+        ctx.setCurrentRoleIds(Set.of(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID));
+        ctx.setThreadLocalInfo();
+        newTestableAction().callRequireClusterAdmin();
+    }
+
+    @Test
+    public void testRequireClusterAdminEnabledNonAdminDenied() throws Exception {
+        Config.enable_http_auth = true;
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("user1", "%"));
+        ctx.setCurrentRoleIds(Set.of());
+        ctx.setThreadLocalInfo();
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> newTestableAction().callRequireClusterAdmin());
     }
 
 }

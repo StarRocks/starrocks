@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -39,7 +40,9 @@ public class WarehouseAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         WarehouseInfosBuilder warehouseInfoBuilder = WarehouseInfosBuilder.makeBuilderFromMetricAndMgrs();
 
         List<WarehouseInfo> infosFromOtherFEs = GlobalStateMgr.getCurrentState().getWarehouseInfosFromOtherFEs();
