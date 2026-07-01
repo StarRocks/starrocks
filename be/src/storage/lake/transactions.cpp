@@ -614,6 +614,19 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     merged->MergeFrom(*txn_logs[k]);
                 }
                 merged->clear_load_id();
+                // MergeFrom concatenated each source log's del_op_offsets, but those offsets are in
+                // per-statement-local segment space and this path (unlike batch_apply_opwrite) does not
+                // re-index the merged segment_metas into a global order -- so a later statement's delete
+                // would map onto an earlier statement's segment. Drop them so the merged log uniformly
+                // falls back to the legacy "delete after all segments" ordering (safe; the read path
+                // treats an absent array as "not recorded", see del_op_offset_or_unset()).
+                // TODO: to also preserve intra-transaction upsert/delete order for multi-statement /
+                // merge-commit txns snapshotted through publish_log_version, re-index the merged
+                // segment_metas to a global order here and rebase del_op_offsets to match (as
+                // MetaFileBuilder::add_rowset does via assigned_segment_idx) instead of dropping them.
+                if (merged->has_op_write()) {
+                    merged->mutable_op_write()->clear_del_op_offsets();
+                }
                 if (merged->has_op_write() && merged->op_write().has_rowset()) {
                     auto* rowset = merged->mutable_op_write()->mutable_rowset();
                     int64_t num_rows = 0;
