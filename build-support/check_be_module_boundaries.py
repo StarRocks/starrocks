@@ -44,6 +44,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "gutil",
     "http",
     "io",
+    "module",
     "platform",
     "orchestration",
     "runtime",

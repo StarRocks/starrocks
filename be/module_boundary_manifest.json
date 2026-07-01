@@ -969,6 +969,25 @@
       "remediation": "Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target."
     },
     {
+      "id": "modulebootstrap",
+      "doc_label": "ModuleBootstrap",
+      "summary": "Default BE module bootstrap composition for built-in module registration, currently filesystem provider registry installation.",
+      "owned_targets": ["ModuleBootstrap"],
+      "owned_roots": ["be/src/module"],
+      "allowed_include_prefixes": [
+        "module/",
+        "fs/",
+        "compute_env/staros/starlet_filesystem.h",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
+      "allowed_target_deps": ["FileSystem", "FSCore", "ComputeEnv", "Common"],
+      "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."
+    },
+    {
       "id": "execschemascannercore",
       "doc_label": "ExecSchemaScannerCore",
       "summary": "Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.",

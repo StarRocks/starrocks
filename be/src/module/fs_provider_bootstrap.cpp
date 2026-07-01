@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/fs_provider_bootstrap.h"
+#include "module/fs_provider_bootstrap.h"
 
 #ifndef __APPLE__
 #include "fs/azure/fs_azblob.h"
