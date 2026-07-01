@@ -38,14 +38,14 @@ public:
     using StringColumnType = RunTimeColumnType<TYPE_VARCHAR>;
     using StringCppType = RunTimeCppType<TYPE_VARCHAR>;
 
-    GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
+    GlobalDictDecoderBase(const Dict& dict) : _dict(&dict) {}
 
     Status decode_string(const Column* in, Column* out) override;
 
     Status decode_array(const Column* in, Column* out) override;
 
 private:
-    Dict _dict;
+    const Dict* _dict;
 };
 
 template <typename Dict>
@@ -109,8 +109,8 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     // handle const columns
     if (in->is_constant()) {
         auto id = in->get(0).get<DictCppType>();
-        auto iter = _dict.find(id);
-        if (iter == _dict.end()) {
+        auto iter = _dict->find(id);
+        if (iter == _dict->end()) {
             return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", id));
         }
         out->append_datum(Datum(iter->second));
@@ -127,8 +127,8 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
         std::vector<StringCppType> res_slices(num_rows);
         for (size_t i = 0; i < num_rows; i++) {
             DictCppType key = dict_data[i];
-            auto iter = _dict.find(key);
-            if (iter == _dict.end()) {
+            auto iter = _dict->find(key);
+            if (iter == _dict->end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
             }
             res_slices[i] = iter->second;
@@ -151,8 +151,8 @@ Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out)
     for (size_t i = 0; i < num_rows; i++) {
         if (column->null_column_data()[i] == 0) {
             DictCppType key = dict_data[i];
-            auto iter = _dict.find(key);
-            if (iter == _dict.end()) {
+            auto iter = _dict->find(key);
+            if (iter == _dict->end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
             }
             res_slices[i] = iter->second;

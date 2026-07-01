@@ -65,6 +65,12 @@ public:
 
     Status eval_dict_expr(RuntimeState* runtime_state, SlotId id);
 
+    // Forward dict for `slot_id`, or nullptr if not present.
+    const GlobalDictMap* get_dict_map(SlotId slot_id) const;
+
+    // Reverse dict for `slot_id`, built lazily if needed.
+    StatusOr<const RGlobalDictMap*> get_or_build_rdict(RuntimeState* runtime_state, SlotId slot_id);
+
     void close(RuntimeState* runtime_state) noexcept;
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
@@ -98,7 +104,7 @@ private:
     ObjectPool _free_pool;
     std::unordered_map<SlotId, ExprContext*> _dict_exprs;
     // Mutex to protect concurrent access to _mutable_dict_maps in parallel prepare
-    std::recursive_mutex _dict_maps_mutex;
+    mutable std::recursive_mutex _dict_maps_mutex;
 };
 
 } // namespace starrocks

@@ -29,8 +29,9 @@ using GlobalDictMap = phmap::flat_hash_map<Slice, DictId, SliceHashWithSeed<Phma
 using RGlobalDictMap = phmap::flat_hash_map<DictId, Slice>;
 
 using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
-// column-id -> GlobalDictMap
-using GlobalDictMaps = phmap::flat_hash_map<uint32_t, GlobalDictMapEntity>;
+// column-id -> GlobalDictMap. node_hash_map, not flat: callers hold pointers to entries across lazy
+// inserts, so entries must stay put on rehash.
+using GlobalDictMaps = phmap::node_hash_map<uint32_t, GlobalDictMapEntity>;
 
 // column-name -> GlobalDictMap
 // template to avoid incomplete type problems
@@ -44,6 +45,6 @@ using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictsWithVe
 
 using DictColumnsValidMap = phmap::flat_hash_map<std::string, bool, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 
-using ColumnIdToGlobalDictMap = phmap::flat_hash_map<uint32_t, GlobalDictMap*>;
+using ColumnIdToGlobalDictMap = phmap::flat_hash_map<uint32_t, const GlobalDictMap*>;
 
 } // namespace starrocks

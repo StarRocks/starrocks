@@ -100,7 +100,7 @@ public:
         return Status::NotSupported("unsupport decode_dict_codes in GlobalDictCodeColumnIterator");
     }
 
-    static Status build_code_convert_map(ColumnIterator* file_column_iter, GlobalDictMap* global_dict,
+    static Status build_code_convert_map(ColumnIterator* file_column_iter, const GlobalDictMap* global_dict,
                                          std::vector<int16_t>* code_convert_map);
 
     std::string name() const override { return "GlobalDictCodeColumnIterator"; }

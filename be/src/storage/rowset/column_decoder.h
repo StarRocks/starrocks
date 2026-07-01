@@ -42,7 +42,7 @@ public:
     }
 
     void set_all_page_dict_encoded(bool all_page_dict_encoded) { _all_page_dict_encoded = all_page_dict_encoded; }
-    void set_global_dict(GlobalDictMap* global_dict) { _global_dict = global_dict; }
+    void set_global_dict(const GlobalDictMap* global_dict) { _global_dict = global_dict; }
     // check global dict is superset of local dict
     void check_global_dict();
 
@@ -67,7 +67,7 @@ private:
 private:
     std::optional<std::vector<int16_t>> _code_convert_map;
     ColumnIterator* _iter = nullptr;
-    GlobalDictMap* _global_dict = nullptr;
+    const GlobalDictMap* _global_dict = nullptr;
     bool _all_page_dict_encoded = false;
 };
 

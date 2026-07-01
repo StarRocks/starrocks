@@ -23,7 +23,9 @@
 
 namespace starrocks {
 
-FragmentDictState::FragmentDictState() : _dict_optimize_parser(std::make_unique<DictOptimizeParser>()) {}
+FragmentDictState::FragmentDictState() : _dict_optimize_parser(std::make_unique<DictOptimizeParser>()) {
+    _dict_optimize_parser->set_mutable_dict_maps(&_query_global_dicts);
+}
 
 FragmentDictState::~FragmentDictState() = default;
 

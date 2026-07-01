@@ -259,7 +259,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
+    const auto* dict_optimize_parser = fragment_dict_state->dict_optimize_parser();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -267,12 +267,11 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
+        const GlobalDictMap* dict_map = dict_optimize_parser->get_dict_map(slot->id());
+        if (dict_map != nullptr) {
             int32_t index = _tablet_schema->field_index(slot->col_name());
             DCHECK(index >= 0);
-            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+            global_dict->emplace(index, dict_map);
         }
     }
     params->global_dictmaps = global_dict;

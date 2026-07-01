@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -261,19 +262,18 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 Status TabletScanner::_init_global_dicts() {
     const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
+    const auto* dict_optimize_parser = fragment_dict_state->dict_optimize_parser();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
+        const GlobalDictMap* dict_map = dict_optimize_parser->get_dict_map(slot->id());
+        if (dict_map != nullptr) {
             int32_t index = _tablet_schema->field_index(slot->col_name());
             DCHECK(index >= 0);
-            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+            global_dict->emplace(index, dict_map);
         }
     }
     _params.global_dictmaps = global_dict;

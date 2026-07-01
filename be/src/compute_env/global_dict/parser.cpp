@@ -441,6 +441,25 @@ Status DictOptimizeParser::eval_dict_expr(RuntimeState* runtime_state, SlotId id
     return eval_expression(runtime_state, _dict_exprs[id], &doc, id);
 }
 
+const GlobalDictMap* DictOptimizeParser::get_dict_map(SlotId slot_id) const {
+    std::lock_guard<std::recursive_mutex> guard(_dict_maps_mutex);
+    auto it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    return it == _mutable_dict_maps->end() ? nullptr : &it->second.first;
+}
+
+StatusOr<const RGlobalDictMap*> DictOptimizeParser::get_or_build_rdict(RuntimeState* runtime_state, SlotId slot_id) {
+    std::lock_guard<std::recursive_mutex> guard(_dict_maps_mutex);
+    auto it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    if (it == _mutable_dict_maps->end()) {
+        RETURN_IF_ERROR(eval_dict_expr(runtime_state, slot_id));
+        it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    }
+    if (it == _mutable_dict_maps->end()) {
+        return Status::InternalError(fmt::format("global dictionary not found for slot {}", slot_id));
+    }
+    return &it->second.second;
+}
+
 void DictOptimizeParser::set_output_slot_id(std::vector<ExprContext*>* pexpr_ctxs,
                                             const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
@@ -522,11 +541,10 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
     if (fragment_dict_state == nullptr) {
         return;
     }
-    const auto& global_dict = fragment_dict_state->query_global_dicts();
-    if (global_dict.empty()) return;
+    const auto* parser = fragment_dict_state->dict_optimize_parser();
 
     for (auto& slot_desc : *slot_descs) {
-        if (global_dict.count(slot_desc->id()) && slot_desc->type().type == LowCardDictType) {
+        if (slot_desc->type().type == LowCardDictType && parser->get_dict_map(slot_desc->id()) != nullptr) {
             SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*slot_desc));
             newSlot->type().type = TYPE_VARCHAR;
             slot_desc = newSlot;

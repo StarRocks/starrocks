@@ -51,10 +51,10 @@ TEST(FragmentDictStateTest, InitQueryAndLoadGlobalDicts) {
             fragment_dict_state.init_query_global_dict(&state, {make_global_dict(3, 11, {0, 1}, {"", "query-value"})}));
     ASSERT_OK(fragment_dict_state.init_load_global_dict(&state, {make_global_dict(5, 17, {0, 2}, {"", "load-value"})}));
 
-    const auto& query_dicts = fragment_dict_state.query_global_dicts();
-    ASSERT_EQ(1, query_dicts.size());
-    ASSERT_NE(query_dicts.find(3), query_dicts.end());
-    EXPECT_EQ("query-value", query_dicts.find(3)->second.second.find(1)->second.to_string());
+    const auto* query_dicts = fragment_dict_state.mutable_query_global_dicts();
+    ASSERT_EQ(1, query_dicts->size());
+    ASSERT_NE(query_dicts->find(3), query_dicts->end());
+    EXPECT_EQ("query-value", query_dicts->find(3)->second.second.find(1)->second.to_string());
 
     const auto& load_dicts = fragment_dict_state.load_global_dicts();
     ASSERT_EQ(1, load_dicts.size());

@@ -26,6 +26,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "compute_env/runtime_range_pruner.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/binary_predicate.h"
@@ -79,10 +80,10 @@ static Expr* get_root_expr(ExprContext* ctx) {
     return get_root_expr(ctx->root());
 }
 
-static const GlobalDictMaps& get_query_global_dicts(const RuntimeState* runtime_state) {
+static const GlobalDictMap* get_global_dict(const RuntimeState* runtime_state, SlotId slot_id) {
     const auto* fragment_dict_state = runtime_state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    return fragment_dict_state->query_global_dicts();
+    return fragment_dict_state->dict_optimize_parser()->get_dict_map(slot_id);
 }
 
 template <typename ValueType>
@@ -446,7 +447,7 @@ Status ChunkPredicateBuilder<E, Type>::_build_bitset_in_predicates(PredicateComp
         // Low-cardinality dictionary columns can only use VARCHAR-type predicates during the index application phase.
         // Therefore, if the runtime bitset filter corresponds to a global low-cardinality dictionary column,
         // it cannot be pushed down to the storage layer for index application.
-        if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
+        if (get_global_dict(_opts.runtime_state, slot_id) != nullptr) {
             continue;
         }
 
@@ -508,14 +509,14 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
         const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range) {
     // clang-format on
 
-    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
-    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
+    const GlobalDictMap* global_dict =
+            SlotType == TYPE_VARCHAR ? get_global_dict(_opts.runtime_state, slot.id()) : nullptr;
 
     auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
         if constexpr (SlotType != TYPE_VARCHAR) {
             return false;
         }
-        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() > 0 &&
+        return global_dict != nullptr && root_expr->get_num_children() > 0 &&
                root_expr->get_child(0)->type().type == LowCardDictType;
     };
 
@@ -588,7 +589,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             if constexpr (SlotType == TYPE_VARCHAR) {
                 if (is_in_values_dict_encoded(root_expr)) {
                     RETURN_IF_ERROR((normalize_in_pred.template operator()<LowCardDictType, GlobalDictCodeDecoder>(
-                            i, root_expr, &global_dict_iter->second.first)));
+                            i, root_expr, global_dict)));
                     continue;
                 }
             }
@@ -808,8 +809,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
     }
     DCHECK(!Negative);
 
-    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
-    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
+    const GlobalDictMap* global_dict =
+            SlotType == TYPE_VARCHAR ? get_global_dict(_opts.runtime_state, slot.id()) : nullptr;
 
     auto process = [&]<LogicalType MappingType, template <typename> typename Decoder, typename... Args>(Args &&
                                                                                                         ... args)
@@ -924,8 +925,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
     };
 
     if constexpr (SlotType == TYPE_VARCHAR) {
-        if (global_dict_iter != global_dicts.end()) {
-            return process.template operator()<LowCardDictType, GlobalDictCodeDecoder>(&global_dict_iter->second.first);
+        if (global_dict != nullptr) {
+            return process.template operator()<LowCardDictType, GlobalDictCodeDecoder>(global_dict);
         }
     }
     return process.template operator()<SlotType, DummyDecoder>(nullptr);
@@ -940,14 +941,14 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
 
     using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
-    const auto& global_dicts = get_query_global_dicts(_opts.runtime_state);
-    const auto global_dict_iter = SlotType == TYPE_VARCHAR ? global_dicts.find(slot.id()) : global_dicts.end();
+    const GlobalDictMap* global_dict =
+            SlotType == TYPE_VARCHAR ? get_global_dict(_opts.runtime_state, slot.id()) : nullptr;
 
     auto is_in_values_dict_encoded = [&](const Expr* root_expr) -> bool {
         if constexpr (SlotType != TYPE_VARCHAR) {
             return false;
         }
-        return global_dict_iter != global_dicts.end() && root_expr->get_num_children() > 0 &&
+        return global_dict != nullptr && root_expr->get_num_children() > 0 &&
                root_expr->get_child(0)->type().type == LowCardDictType;
     };
 
@@ -1028,7 +1029,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
             if constexpr (SlotType == TYPE_VARCHAR) {
                 if (is_in_values_dict_encoded(root_expr)) {
                     RETURN_IF_ERROR((normalize_in_pred.template operator()<LowCardDictType, GlobalDictCodeDecoder>(
-                            i, root_expr, &global_dict_iter->second.first)));
+                            i, root_expr, global_dict)));
                     continue;
                 }
             }
@@ -1311,7 +1312,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
 
             // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
             // Therefore, global low-cardinality dict columns cannot be pushed down.
-            if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
+            if (get_global_dict(_opts.runtime_state, slot_id) != nullptr) {
                 continue;
             }
 
@@ -1529,7 +1530,7 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         }
         // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
         // Therefore, global low-cardinality dict columns cannot be pushed down.
-        if (const auto& dict_map = get_query_global_dicts(_opts.runtime_state); dict_map.contains(slot_id)) {
+        if (get_global_dict(_opts.runtime_state, slot_id) != nullptr) {
             continue;
         }
         auto column_id = parser->column_id(*slot_desc);

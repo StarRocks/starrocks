@@ -748,7 +748,7 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerContext* ctx) {
     const THdfsScanNode& hdfs_scan_node = _provider->_hdfs_scan_node;
     const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
+    const auto* dict_optimize_parser = fragment_dict_state->dict_optimize_parser();
     auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
@@ -757,14 +757,13 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerContext* ctx) {
         if (!slot->is_materialized()) {
             continue;
         }
-        auto iter = global_dict_map.find(slot->id());
-        if (iter != global_dict_map.end()) {
-            auto& dict_map = iter->second.first;
-            global_dict->emplace(slot->id(), const_cast<GlobalDictMap*>(&dict_map));
+        const GlobalDictMap* dict_map = dict_optimize_parser->get_dict_map(slot->id());
+        if (dict_map != nullptr) {
+            global_dict->emplace(slot->id(), dict_map);
 #ifdef DEBUG
             std::stringstream ss;
             ss << "slot_id: " << slot->id() << " global dict: ";
-            for (const auto& kv : dict_map) {
+            for (const auto& kv : *dict_map) {
                 ss << "<" << kv.first << " " << kv.second << ">"
                    << ", ";
             }

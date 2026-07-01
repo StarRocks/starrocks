@@ -16,8 +16,11 @@
 
 #include "column/column_helper.h"
 #include "column/global_dict/decoder.h"
+#include "column/global_dict/types.h"
 #include "common/logging.h"
+#include "common/statusor.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
 
@@ -98,13 +101,10 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 
     auto* fragment_dict_state = state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
-    const auto& global_dict = fragment_dict_state->query_global_dicts();
     auto* dict_optimize_parser = fragment_dict_state->mutable_dict_optimize_parser();
 
     for (auto& [slot_id, v] : _string_functions) {
-        auto dict_iter = global_dict.find(slot_id);
-        auto dict_not_contains_cid = dict_iter == global_dict.end();
-        if (dict_not_contains_cid) {
+        if (dict_optimize_parser->get_dict_map(slot_id) == nullptr) {
             auto& [expr_ctx, dict_ctx] = v;
             dict_optimize_parser->check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             if (!dict_ctx.could_apply_dict_optimize) {
@@ -113,9 +113,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
             }
 
             RETURN_IF_ERROR(dict_optimize_parser->eval_expression(state, expr_ctx, &dict_ctx, slot_id));
-            auto dict_iter = global_dict.find(slot_id);
-            DCHECK(dict_iter != global_dict.end());
-            if (dict_iter == global_dict.end()) {
+            if (dict_optimize_parser->get_dict_map(slot_id) == nullptr) {
                 return Status::InternalError(fmt::format("Eval Expr Error for cid:{}", slot_id));
             }
         }
@@ -125,23 +123,8 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     int need_decode_size = _decode_column_cids.size();
     for (int i = 0; i < need_decode_size; ++i) {
         int need_encode_cid = _encode_column_cids[i];
-        auto dict_iter = global_dict.find(need_encode_cid);
-        auto dict_not_contains_cid = dict_iter == global_dict.end();
-
-        if (dict_not_contains_cid) {
-            if (dict_optimize_parser->eval_dict_expr(state, need_encode_cid).ok()) {
-                dict_iter = global_dict.find(need_encode_cid);
-                dict_not_contains_cid = dict_iter == global_dict.end();
-            }
-        }
-
-        if (dict_not_contains_cid) {
-            return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
-        }
-        // TODO : avoid copy dict
-        GlobalDictDecoderPtr decoder = create_global_dict_decoder(dict_iter->second.second);
-
-        _decoders.emplace_back(std::move(decoder));
+        ASSIGN_OR_RETURN(const RGlobalDictMap* rdict, dict_optimize_parser->get_or_build_rdict(state, need_encode_cid));
+        _decoders.emplace_back(create_global_dict_decoder(*rdict));
     }
 
     return Status::OK();

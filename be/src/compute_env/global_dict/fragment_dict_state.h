@@ -36,13 +36,13 @@ public:
     FragmentDictState();
     ~FragmentDictState();
 
-    const GlobalDictMaps& query_global_dicts() const { return _query_global_dicts; }
     GlobalDictMaps* mutable_query_global_dicts() { return &_query_global_dicts; }
 
     const GlobalDictMaps& load_global_dicts() const { return _load_global_dicts; }
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() const { return _load_dict_versions; }
 
     DictOptimizeParser* mutable_dict_optimize_parser();
+    const DictOptimizeParser* dict_optimize_parser() const { return _dict_optimize_parser.get(); }
 
     Status init_query_global_dict(RuntimeState* runtime_state, const GlobalDictLists& global_dict_list);
     Status init_query_global_dict_exprs(RuntimeState* runtime_state, const std::map<int, TExpr>& exprs);

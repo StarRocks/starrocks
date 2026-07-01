@@ -95,7 +95,7 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
 }
 
 Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file_column_iter,
-                                                            GlobalDictMap* global_dict,
+                                                            const GlobalDictMap* global_dict,
                                                             std::vector<int16_t>* code_convert_map) {
     DCHECK(file_column_iter->all_page_dict_encoded());
 
