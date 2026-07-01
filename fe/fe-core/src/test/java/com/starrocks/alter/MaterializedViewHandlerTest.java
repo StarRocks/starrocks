@@ -42,11 +42,13 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -282,6 +284,72 @@ public class MaterializedViewHandlerTest {
             Assertions.assertEquals(null, newMVColumn.getAggregationType());
             Assertions.assertEquals(false, newMVColumn.isAggregationTypeImplicit());
             Assertions.assertTrue(newMVColumn.getType().isVarchar());
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testRollupRejectsJsonKeyColumn(@Injectable OlapTable olapTable, @Injectable Database db) {
+        // Explicit DUPLICATE KEY listing a JSON column must be rejected, mirroring
+        // base-table key validation. Otherwise the JSON column becomes a rollup sort
+        // key and the BE crashes while building the sort-key tuple.
+        final long baseIndexMetaId = 1L;
+        final String rollupName = "r_json_key";
+        Column idColumn = new Column("id", IntegerType.BIGINT, true, AggregateType.NONE, "", "");
+        Column jsonColumn = new Column("j", JsonType.JSON, false, AggregateType.NONE, "", "");
+        AddRollupClause addRollupClause = new AddRollupClause(rollupName,
+                Lists.newArrayList("id", "j"), Lists.newArrayList("id", "j"), null, null);
+        new Expectations() {
+            {
+                olapTable.hasMaterializedIndex(rollupName);
+                result = false;
+                olapTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                olapTable.getSchemaByIndexMetaId(baseIndexMetaId);
+                result = Lists.newArrayList(idColumn, jsonColumn);
+            }
+        };
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        try {
+            Deencapsulation.invoke(materializedViewHandler, "checkAndPrepareMaterializedView",
+                    addRollupClause, olapTable, baseIndexMetaId);
+            Assertions.fail("expected DdlException for JSON key column");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("Invalid data type of key column 'j'"),
+                    e.getMessage());
+        }
+    }
+
+    @Test
+    public void testRollupDemotesJsonToValueColumn(@Injectable OlapTable olapTable, @Injectable Database db) {
+        // Auto key derivation (no explicit DUPLICATE KEY) must stop promoting keys at a
+        // non-sortable type, so the JSON column is added as a value column rather than a key.
+        final long baseIndexMetaId = 1L;
+        final String rollupName = "r_json_value";
+        Column idColumn = new Column("id", IntegerType.BIGINT, true, AggregateType.NONE, "", "");
+        Column jsonColumn = new Column("j", JsonType.JSON, false, AggregateType.NONE, "", "");
+        AddRollupClause addRollupClause = new AddRollupClause(rollupName,
+                Lists.newArrayList("id", "j"), null, null, null);
+        new Expectations() {
+            {
+                olapTable.hasMaterializedIndex(rollupName);
+                result = false;
+                olapTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                olapTable.getSchemaByIndexMetaId(baseIndexMetaId);
+                result = Lists.newArrayList(idColumn, jsonColumn);
+            }
+        };
+        MaterializedViewHandler materializedViewHandler = new MaterializedViewHandler();
+        try {
+            List<Column> rollupSchema = Deencapsulation.invoke(materializedViewHandler,
+                    "checkAndPrepareMaterializedView", addRollupClause, olapTable, baseIndexMetaId);
+            Assertions.assertEquals(2, rollupSchema.size());
+            Column idResult = rollupSchema.stream().filter(c -> c.getName().equals("id")).findFirst().orElseThrow();
+            Column jsonResult = rollupSchema.stream().filter(c -> c.getName().equals("j")).findFirst().orElseThrow();
+            Assertions.assertTrue(idResult.isKey());
+            Assertions.assertFalse(jsonResult.isKey(), "JSON column must not be a rollup key");
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
