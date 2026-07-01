@@ -62,6 +62,7 @@ public class TabletPreSplitCoordinatorTest {
     private boolean savedConfigBrokerLoad;
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigReshardMinSplitSize;
     private long savedConfigSampleByteLimit;
 
     @BeforeEach
@@ -70,12 +71,14 @@ public class TabletPreSplitCoordinatorTest {
         savedConfigBrokerLoad = Config.enable_tablet_pre_split_for_broker_load;
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         savedConfigSampleByteLimit = Config.tablet_pre_split_sample_byte_limit;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        Config.tablet_reshard_min_split_size = 2L * DebugUtil.GIGABYTE;
         Config.tablet_pre_split_sample_byte_limit = 16L * DebugUtil.MEGABYTE;
 
         // Bind a fresh ConnectContext so the coordinator's session-var check finds one.
@@ -133,6 +136,7 @@ public class TabletPreSplitCoordinatorTest {
         Config.enable_tablet_pre_split_for_broker_load = savedConfigBrokerLoad;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
         Config.tablet_pre_split_sample_byte_limit = savedConfigSampleByteLimit;
     }
 
@@ -291,8 +295,10 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testTabletCountSmallLoadOnThreeComputeNodes() {
-        // 1 GB / 10 GB target rounds up to 1 tablet by bytes; compute-node floor of 3 wins.
-        Assertions.assertEquals(3, selectTabletCount(DebugUtil.GIGABYTE, 3));
+        // 1 GB load fills zero whole 2 GB min-split-size tablets, so the node count used for
+        // alignment collapses to 1 instead of 3. Clamp lifts the result to the minimum 2 —
+        // far better than 3 tablets of ~340 MB each.
+        Assertions.assertEquals(2, selectTabletCount(DebugUtil.GIGABYTE, 3));
     }
 
     @Test
@@ -317,7 +323,33 @@ public class TabletPreSplitCoordinatorTest {
 
     @Test
     public void testTabletCountSmallLoadOnTwelveComputeNodes() {
-        Assertions.assertEquals(12, selectTabletCount(DebugUtil.GIGABYTE, 12));
+        // A small load on a large cluster must NOT become one tiny tablet per node: 1 GB fills
+        // zero whole 2 GB tablets, so alignment collapses to 1 and the result clamps to 2
+        // (was 12 tablets of ~85 MB each before the min-split-size bound).
+        Assertions.assertEquals(2, selectTabletCount(DebugUtil.GIGABYTE, 12));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeBoundsComputeNodeAlignment() {
+        // 30 GB on 100 nodes: the byte target is 3 tablets and node alignment would otherwise
+        // round/floor up to 100. The 2 GB min-split-size lets the input fill only 30 GB / 2 GB
+        // = 15 tablets, so alignment is bounded to 15 nodes -> 15 tablets of 2 GB each.
+        Assertions.assertEquals(15, selectTabletCount(30L * DebugUtil.GIGABYTE, 100));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeCapKeepsNodeMultiple() {
+        // 5 GB on 10 nodes: fills only 5 GB / 2 GB = 2 whole min-split-size tablets, so
+        // alignment collapses from 10 to 2 nodes -> 2 tablets of 2.5 GB rather than 10 of 512 MB.
+        Assertions.assertEquals(2, selectTabletCount(5L * DebugUtil.GIGABYTE, 10));
+    }
+
+    @Test
+    public void testTabletCountMinSplitSizeIsTunable() {
+        // Raising the min-split-size to 5 GB tightens the bound: 30 GB / 5 GB = 6 whole tablets,
+        // so alignment is bounded to 6 nodes -> 6 tablets even though 100 nodes are available.
+        Config.tablet_reshard_min_split_size = 5L * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(6, selectTabletCount(30L * DebugUtil.GIGABYTE, 100));
     }
 
     @Test
