@@ -4025,11 +4025,14 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(traits.get(0).isAppendOnly());
         Assertions.assertTrue(traits.get(1).isAppendOnly());
 
-        // Verify contiguous delta boundaries: snap2→snap3, snap4→snap4
-        // (snap3 is the REPLACE snapshot ID — used as boundary but not emitted as a trait)
+        // Verify contiguous delta boundaries after skipping REPLACE:
+        //   traits[0] = (snap2, snap4]   ← spans over snap3 (REPLACE, no logical change)
+        //   traits[1] = (snap4, snap4]   ← degenerate self-delta of the newest APPEND
+        // Skipping REPLACE does NOT advance the running `lastSnapshotId`, so the previous
+        // APPEND's `to` is anchored to the next real (non-REPLACE) snapshot below it.
         TvrTableDelta delta0 = traits.get(0).getTvrDelta();
         Assertions.assertEquals(snap2.snapshotId(), delta0.start().get());
-        Assertions.assertEquals(snap3.snapshotId(), delta0.end().get());
+        Assertions.assertEquals(snap4.snapshotId(), delta0.end().get());
 
         TvrTableDelta delta1 = traits.get(1).getTvrDelta();
         Assertions.assertEquals(snap4.snapshotId(), delta1.start().get());
@@ -4118,5 +4121,64 @@ public class IcebergMetadataTest extends TableTestBase {
         assertTrue(exception.getMessage().contains("Starting snapshot (exclusive)"));
         assertTrue(exception.getMessage().contains(String.valueOf(snap1.snapshotId())));
         assertTrue(exception.getMessage().contains(String.valueOf(snap3.snapshotId())));
+    }
+
+    @Test
+    public void testListTableDeltaTraitsConsecutiveReplacesOnTailReturnsEmpty() {
+        // snap1: APPEND (mv's last-refreshed base version — used as exclusive start)
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("append", snap1.operation());
+
+        // snap2: REPLACE (first compaction after the last mv refresh)
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap2.operation());
+
+        // snap3: REPLACE (second compaction — currentSnapshot, becomes toSnapshotInclusive)
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A_1).addFile(FILE_A_2).commit();
+        Snapshot snap3 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap3.operation());
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap3.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+        // Range spans only REPLACE snapshots — no logical data change → empty trait list.
+        // Prior to the fix this returned a non-empty list whose newest trait ended at snap2
+        // (the intermediate REPLACE id), triggering the "tvr delta lineage inconsistent" error.
+        Assertions.assertTrue(traits.isEmpty(),
+                "consecutive REPLACE-only tail must not emit a trait pointing at an intermediate REPLACE id");
+    }
+
+    @Test
+    public void testListTableDeltaTraitsSingleReplaceAsToSnapshotReturnsEmpty() {
+        // snap1: APPEND (mv's last-refreshed base version)
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+
+        // snap2: REPLACE (only new commit since last refresh — a bare compaction)
+        mockedNativeTableA.newRewrite().deleteFile(FILE_A).addFile(FILE_A_1).commit();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+        Assertions.assertEquals("replace", snap2.operation());
+
+        IcebergTable icebergTable = new IcebergTable(1, "testTbl", CATALOG_NAME, CATALOG_NAME,
+                "db", "testTbl", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT,
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG),
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+
+        TvrTableSnapshot from = TvrTableSnapshot.of(Optional.of(snap1.snapshotId()));
+        TvrTableSnapshot to = TvrTableSnapshot.of(Optional.of(snap2.snapshotId()));
+
+        List<TvrTableDeltaTrait> traits = metadata.listTableDeltaTraits("db", icebergTable, from, to);
+        Assertions.assertTrue(traits.isEmpty(),
+                "REPLACE-only tail must return empty traits (no logical data change)");
     }
 }

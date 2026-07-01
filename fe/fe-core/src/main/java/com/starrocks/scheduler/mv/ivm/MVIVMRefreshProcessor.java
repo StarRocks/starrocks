@@ -292,11 +292,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             throw e;
         }
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
-            logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
-                    baseTableInfo.getDbName());
-            throw new SemanticException(formatPartitionShapeChangeError(
-                    String.format("no tvr delta traits found for base table %s.%s",
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName())));
+            logger.info("No logical-change snapshot in ({}, {}] for base table {}.{} "
+                            + "(range spans only compaction/REPLACE); treating as a no-op refresh",
+                    maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot(),
+                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            return TvrTableDelta.of(maxTvrDelta.to, maxTvrDelta.to);
         }
         // check whether the last delta trait is equal to the max delta
         TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);

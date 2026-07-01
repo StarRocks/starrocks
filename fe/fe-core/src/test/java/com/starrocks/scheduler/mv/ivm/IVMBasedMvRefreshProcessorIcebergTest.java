@@ -1627,12 +1627,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         advanceTableVersionTo(1);
         mockListTableDeltaTraits(ImmutableList.of());
 
-        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
-        String chain = collectMessages(thrown);
-        Assertions.assertTrue(chain.contains("no tvr delta traits"),
-                "expected 'no tvr delta traits' in chain, got: " + chain);
-        Assertions.assertTrue(chain.contains("Drop and recreate"),
-                "expected drop-and-recreate guidance in chain, got: " + chain);
+        ExecPlan execPlan = getIVMRefreshedExecPlan(mv);
+        Assertions.assertNull(execPlan,
+                "empty trait list with a non-empty maxTvrDelta must be treated as a no-op refresh");
     }
 
     @Test
