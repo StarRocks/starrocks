@@ -86,6 +86,8 @@ import org.apache.thrift.TSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -408,19 +410,20 @@ public class IcebergTable extends Table {
     }
 
     @Override
-    public String getStatsCollectSummary() {
+    public Map<String, String> getStatsCollectMetadata() {
         org.apache.iceberg.Snapshot snapshot = getNativeTable().currentSnapshot();
         if (snapshot == null) {
-            return "";
+            return Collections.emptyMap();
         }
-        java.util.Map<String, String> summary = snapshot.summary();
+        Map<String, String> summary = snapshot.summary();
         if (summary == null) {
-            summary = java.util.Collections.emptyMap();
+            summary = Collections.emptyMap();
         }
-        return String.format("snapshotId=%d totalFiles=%s totalRows=%s",
-                snapshot.snapshotId(),
-                summary.getOrDefault("total-data-files", "0"),
-                summary.getOrDefault("total-records", "0"));
+        Map<String, String> result = new LinkedHashMap<>();
+        result.put("snapshot_id", String.valueOf(snapshot.snapshotId()));
+        result.put("total_files", summary.getOrDefault("total-data-files", "0"));
+        result.put("total_rows", summary.getOrDefault("total-records", "0"));
+        return result;
     }
 
     public org.apache.iceberg.Table getNativeTable() {
