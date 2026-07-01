@@ -31,7 +31,6 @@
 #include "types/timestamp_value.h"
 #include "udf/java/java_native_method.h"
 #include "udf/java/type_traits.h"
-#include "udf/java/utils.h"
 
 // find a jclass and return a global jclass ref
 #define JNI_FIND_CLASS(clazz_name)                                                                 \
@@ -765,14 +764,14 @@ DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
 
 DirectByteBuffer::~DirectByteBuffer() {
     if (_handle != nullptr) {
-        auto ret = call_hdfs_scan_function_in_pthread([this]() {
+        auto st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
             auto& helper = JVMFunctionHelper::getInstance();
             JNIEnv* env = helper.getEnv();
             env->DeleteGlobalRef(_handle);
             _handle = nullptr;
             return Status::OK();
         });
-        (void)ret->get_future().get();
+        LOG_IF(WARNING, !st.ok()) << "failed to delete direct byte buffer global ref: " << st;
     }
 }
 
@@ -1375,13 +1374,12 @@ Status detect_java_runtime() {
     if (p == nullptr) {
         return Status::RuntimeError("env 'JAVA_HOME' is not set");
     }
-    auto st = call_hdfs_scan_function_in_pthread([]() {
+    return JavaEnv::GetInstance()->call_function_in_pthread([]() {
         if (getJNIEnv() == nullptr) {
             return Status::RuntimeError("couldn't get JNIEnv, please check your java runtime");
         }
         return Status::OK();
     });
-    return st->get_future().get();
 }
 
 } // namespace starrocks

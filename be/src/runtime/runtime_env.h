@@ -21,6 +21,7 @@
 
 #include "common/status.h"
 #include "runtime/env/global_thread_pools.h"
+#include "runtime/env/java/java_env.h"
 #include "runtime/mem_tracker_fwd.h"
 
 namespace starrocks {
@@ -94,16 +95,23 @@ public:
 
     Status init_execution_thread_pools(MetricRegistry* metrics);
     Status init_lake_thread_pools(MetricRegistry* metrics);
-    void shutdown_thread_pools() { _thread_pools.shutdown(); }
-    void destroy_thread_pools() { _thread_pools.destroy(); }
+    void shutdown_thread_pools() {
+        _java_env.shutdown();
+        _thread_pools.shutdown();
+    }
+    void destroy_thread_pools() {
+        _java_env.destroy();
+        _thread_pools.destroy();
+    }
 
+    JavaEnv* java_env() { return &_java_env; }
+    const JavaEnv* java_env() const { return &_java_env; }
     PriorityThreadPool* thread_pool() const { return _thread_pools.thread_pool(); }
     ThreadPool* streaming_load_thread_pool() const { return _thread_pools.streaming_load_thread_pool(); }
     ThreadPool* load_rowset_thread_pool() const { return _thread_pools.load_rowset_thread_pool(); }
     ThreadPool* load_segment_thread_pool() const { return _thread_pools.load_segment_thread_pool(); }
     ThreadPool* put_combined_txn_log_thread_pool() const { return _thread_pools.put_combined_txn_log_thread_pool(); }
     PriorityThreadPool* udf_call_pool() const { return _thread_pools.udf_call_pool(); }
-    PriorityThreadPool* jvm_call_pool() const { return _thread_pools.jvm_call_pool(); }
     PriorityThreadPool* pipeline_prepare_pool() const { return _thread_pools.pipeline_prepare_pool(); }
     PriorityThreadPool* pipeline_sink_io_pool() const { return _thread_pools.pipeline_sink_io_pool(); }
     PriorityThreadPool* query_rpc_pool() const { return _thread_pools.query_rpc_pool(); }
@@ -130,6 +138,8 @@ private:
 
     Status _init_mem_tracker(MetricRegistry* metrics);
     void _reset_tracker();
+
+    JavaEnv _java_env;
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 

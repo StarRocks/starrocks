@@ -122,6 +122,10 @@ MemTracker* process_mem_tracker_provider() {
 
 bool RuntimeEnv::_is_init = false;
 
+JavaEnv* JavaEnv::GetInstance() {
+    return RuntimeEnv::GetInstance()->java_env();
+}
+
 bool RuntimeEnv::is_init() {
     return _is_init;
 }
@@ -147,14 +151,17 @@ void RuntimeEnv::stop() {
         _diagnose_daemon->stop();
         _diagnose_daemon.reset();
     }
+    _java_env.shutdown();
     _thread_pools.shutdown();
+    _java_env.destroy();
     _thread_pools.destroy();
     _is_init = false;
     _reset_tracker();
 }
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
-    return _thread_pools.init_execution_thread_pools(metrics);
+    RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
+    return _java_env.init();
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {

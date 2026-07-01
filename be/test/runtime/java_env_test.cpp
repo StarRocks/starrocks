@@ -19,9 +19,9 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <string>
 
 #include "base/bthreads/util.h"
-#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "common/system/cpu_info.h"
@@ -83,16 +83,15 @@ TEST_F(JavaEnvTest, JavaGlobalRefCanClearFromBthread) {
     CpuInfo::init();
     runtime_env_test::set_small_thread_pool_configs();
 
-    auto* runtime_env = RuntimeEnv::GetInstance();
-    runtime_env->destroy_thread_pools();
-    DeferOp cleanup([runtime_env]() {
-        runtime_env->shutdown_thread_pools();
-        runtime_env->destroy_thread_pools();
+    auto* java_env = RuntimeEnv::GetInstance()->java_env();
+    java_env->destroy();
+    DeferOp cleanup([java_env]() {
+        java_env->shutdown();
+        java_env->destroy();
     });
 
-    MetricRegistry metrics("java_env_test");
-    ASSERT_OK(runtime_env->init_execution_thread_pools(&metrics));
-    ASSERT_NE(runtime_env->jvm_call_pool(), nullptr);
+    ASSERT_OK(java_env->init());
+    ASSERT_NE(java_env->jvm_call_pool(), nullptr);
 
     jclass local_clazz = env()->FindClass("java/lang/StringBuilder");
     ASSERT_NE(local_clazz, nullptr);
@@ -110,6 +109,58 @@ TEST_F(JavaEnvTest, JavaGlobalRefCanClearFromBthread) {
 
     ASSERT_TRUE(ran_on_bthread.load(std::memory_order_relaxed));
     ASSERT_EQ(ref.handle(), nullptr);
+}
+
+TEST_F(JavaEnvTest, CallFunctionInPthreadUsesJvmPoolFromBthread) {
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    auto* java_env = RuntimeEnv::GetInstance()->java_env();
+    java_env->destroy();
+    DeferOp cleanup([java_env]() {
+        java_env->shutdown();
+        java_env->destroy();
+    });
+
+    ASSERT_OK(java_env->init());
+
+    Status st;
+    std::atomic<bool> caller_was_bthread = false;
+    std::atomic<bool> func_ran_on_pthread = false;
+    ASSERT_OK(bthreads::start_bthread_and_join([&]() {
+        caller_was_bthread.store(bthread_self() != 0, std::memory_order_relaxed);
+        st = java_env->call_function_in_pthread([&]() {
+            func_ran_on_pthread.store(bthread_self() == 0, std::memory_order_relaxed);
+            return Status::OK();
+        });
+    }));
+
+    ASSERT_TRUE(caller_was_bthread.load(std::memory_order_relaxed));
+    ASSERT_TRUE(func_ran_on_pthread.load(std::memory_order_relaxed));
+    ASSERT_OK(st);
+}
+
+TEST_F(JavaEnvTest, CallFunctionInPthreadPropagatesStatusFromBthread) {
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    auto* java_env = RuntimeEnv::GetInstance()->java_env();
+    java_env->destroy();
+    DeferOp cleanup([java_env]() {
+        java_env->shutdown();
+        java_env->destroy();
+    });
+
+    ASSERT_OK(java_env->init());
+
+    Status st;
+    ASSERT_OK(bthreads::start_bthread_and_join([&]() {
+        st = java_env->call_function_in_pthread(
+                []() { return Status::InternalError("expected java env dispatch failure"); });
+    }));
+
+    ASSERT_ERROR(st);
+    ASSERT_EQ("expected java env dispatch failure", std::string(st.message()));
 }
 
 } // namespace starrocks
