@@ -83,6 +83,42 @@ For more information on how to build a monitoring service for your StarRocks clu
   - `delete_type` (`position` or `metadata`)
 - Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
 
+## `iceberg_merge_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `file_type` (`data` or `position_delete`)
+- Description: Total bytes written by Iceberg `MERGE INTO` tasks, split by file type. `data` is the size of new data files (updated rows and inserts); `position_delete` is the size of position-delete files marking the matched old rows.
+
+## `iceberg_merge_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Description: Total execution time of Iceberg `MERGE INTO` tasks in milliseconds. The duration of each task is added after it ends.
+
+## `iceberg_merge_files`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `file_type` (`data` or `position_delete`)
+- Description: Total number of files written by Iceberg `MERGE INTO` tasks, split by file type. `data` counts new data files; `position_delete` counts position-delete files.
+
+## `iceberg_merge_rows`
+
+- Unit: Rows
+- Type: Cumulative
+- Labels: `file_type` (`data` or `position_delete`)
+- Description: Total number of rows processed by Iceberg `MERGE INTO` tasks, split by file type. `position_delete` counts target rows hit by UPDATE or DELETE (added as position deletes); `data` counts data rows written (updated rows plus inserts).
+
+## `iceberg_merge_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels:
+  - `status` (`success` or `failed`)
+  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
+- Description: Total number of `MERGE INTO` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. Iceberg MERGE INTO uses the V2 Merge-On-Read model and atomically writes both data files and position-delete files in a single snapshot.
+
 ## `iceberg_metadata_table_query_total`
 
 - Unit: Count
