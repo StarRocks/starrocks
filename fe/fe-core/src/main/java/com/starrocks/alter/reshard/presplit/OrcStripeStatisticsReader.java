@@ -61,8 +61,10 @@ import java.util.Objects;
  *   <li>ORC DECIMAL → StarRocks DECIMAL of the SAME precision and scale (ORC orders decimal
  *       stats correctly, so footer min/max are usable). Non-matching precision/scale → data tier</li>
  *   <li>ORC TIMESTAMP (local, no timezone) → StarRocks DATETIME, using the tz-independent UTC stat,
- *       gated to {@code [1970-01-01, 9999-12-31]}. TIMESTAMP_INSTANT is deferred (the load applies a
- *       session-tz offset this reader cannot reproduce).</li>
+ *       gated to {@code [0001-01-01, 9999-12-31]} (the load reconstructs the same wall clock — incl.
+ *       a pre-1970 sub-second — and packs the calendar date through the same proleptic conversion as
+ *       the boundary parse). TIMESTAMP_INSTANT is deferred (the load applies a session-tz offset this
+ *       reader cannot reproduce).</li>
  * </ul>
  * Everything else — STRING/CHAR/VARCHAR (data-tier fallback anyway), BOOLEAN,
  * FLOAT/DOUBLE, TIMESTAMP_INSTANT (load applies a session-tz offset this reader cannot reproduce),
@@ -253,14 +255,14 @@ public final class OrcStripeStatisticsReader {
             // getMinimumDayOfEpoch() is day-of-epoch (timezone-free).
             LocalDate minDate = LocalDate.ofEpochDay(dateStatistics.getMinimumDayOfEpoch());
             LocalDate maxDate = LocalDate.ofEpochDay(dateStatistics.getMaximumDayOfEpoch());
-            // rejectDateOutsideWindow throws a checked MetaTierUnavailableException (not a
+            // rejectOutsideWindow throws a checked MetaTierUnavailableException (not a
             // RuntimeException), so a window rejection propagates past the catch below keeping its
             // own message. ofEpochDay and Variant.of RuntimeExceptions are wrapped as a meta-tier
             // fallback signal — mirroring convertIntegerStripe — so any unrepresentable value falls
             // back to data tier instead of escaping read() (which only catches IOException) as an
             // uncaught exception that would skip pre-split entirely.
-            MetaTierTemporalWindow.rejectDateOutsideWindow(minDate);
-            MetaTierTemporalWindow.rejectDateOutsideWindow(maxDate);
+            MetaTierTemporalWindow.rejectOutsideWindow(minDate);
+            MetaTierTemporalWindow.rejectOutsideWindow(maxDate);
             minVariant = Variant.of(location.starRocksColumn.getType(), minDate.format(DateUtils.DATE_FORMATTER_UNIX));
             maxVariant = Variant.of(location.starRocksColumn.getType(), maxDate.format(DateUtils.DATE_FORMATTER_UNIX));
         } catch (RuntimeException conversionFailure) {
@@ -319,13 +321,13 @@ public final class OrcStripeStatisticsReader {
             // wrong data or wrong results (and if a conversion ever yields min > max, the downstream
             // ParquetMetadataSampler treats the row group as fallback rather than emitting a boundary).
             // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
-            // rejectDateTimeOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
+            // rejectOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
             // catch(RuntimeException) below (keeping its own message); getMinimumUTC/Variant.of
             // RuntimeExceptions are wrapped as the data-tier fallback signal — mirroring convertDateStripe.
             LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
             LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
-            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(minDateTime.toLocalDate());
-            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(maxDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectOutsideWindow(minDateTime.toLocalDate());
+            MetaTierTemporalWindow.rejectOutsideWindow(maxDateTime.toLocalDate());
             minVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(minDateTime));
             maxVariant = Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(maxDateTime));
         } catch (RuntimeException conversionFailure) {
@@ -340,7 +342,8 @@ public final class OrcStripeStatisticsReader {
     private static LocalDateTime utcTimestampToDateTime(Timestamp utcTimestamp) {
         // getTime() is UTC epoch millis (no TimeZone.getDefault() shift, unlike getMinimum());
         // getNanos() is the full sub-second nanos (0..999_999_999). floorDiv keeps the whole-second
-        // part correct; ofEpochSecond combines them. The window gate rejects pre-1970 / post-9999.
+        // part correct (incl. pre-1970); ofEpochSecond combines them. The window gate rejects only
+        // values outside [0001-01-01, 9999-12-31].
         long epochSecond = Math.floorDiv(utcTimestamp.getTime(), 1000L);
         return LocalDateTime.ofEpochSecond(epochSecond, utcTimestamp.getNanos(), ZoneOffset.UTC);
     }
