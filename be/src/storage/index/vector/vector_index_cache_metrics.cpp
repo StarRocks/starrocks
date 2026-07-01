@@ -29,6 +29,10 @@ VectorIndexCacheMetrics* VectorIndexCacheMetrics::instance() {
     return instance;
 }
 
+VectorIndexCacheMetrics::~VectorIndexCacheMetrics() {
+    hide();
+}
+
 bool VectorIndexCacheMetrics::install(MetricRegistry* registry) {
     DCHECK(registry != nullptr);
     if (_registry != nullptr) {

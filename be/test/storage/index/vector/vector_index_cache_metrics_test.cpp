@@ -43,6 +43,25 @@ TEST(VectorIndexCacheMetricsTest, InstallRegistersMetrics) {
     assert_metric_registered(&registry, "vector_index_cache_dynamic_hit_ratio");
 }
 
+TEST(VectorIndexCacheMetricsTest, DestructorDeregistersHook) {
+    MetricRegistry registry("test_registry");
+    {
+        VectorIndexCacheMetrics metrics(&registry);
+        metrics.update(/*capacity=*/100, /*usage=*/25, /*lookup_count=*/4, /*hit_count=*/3);
+        registry.trigger_hook();
+    }
+
+    VectorIndexCacheMetrics metrics;
+    ASSERT_TRUE(metrics.install(&registry));
+    metrics.update(/*capacity=*/200, /*usage=*/50, /*lookup_count=*/8, /*hit_count=*/4);
+    registry.trigger_hook();
+
+    EXPECT_EQ(200, metrics.vector_index_cache_capacity.value());
+    EXPECT_EQ(50, metrics.vector_index_cache_usage.value());
+    EXPECT_EQ(8, metrics.vector_index_cache_lookup_count.value());
+    EXPECT_EQ(4, metrics.vector_index_cache_hit_count.value());
+}
+
 TEST(VectorIndexCacheMetricsTest, RefreshPublishesSnapshotAndDynamicDeltas) {
     MetricRegistry registry("test_registry");
     VectorIndexCacheMetrics metrics(&registry);

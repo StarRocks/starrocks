@@ -27,7 +27,7 @@ class VectorIndexCacheMetrics {
 public:
     VectorIndexCacheMetrics() = default;
     explicit VectorIndexCacheMetrics(MetricRegistry* registry) { install(registry); }
-    ~VectorIndexCacheMetrics() = default;
+    ~VectorIndexCacheMetrics();
 
     static VectorIndexCacheMetrics* instance();
 
