@@ -305,6 +305,134 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
                 "replay must not null out defaultDistributionInfo when persisted job has null distributionInfo");
     }
 
+    @Test
+    public void testDoubleWriteEnableAssignsWatershedAndDisableClears() throws Exception {
+        // Window-A regression: enabling the double-write mapping and assigning the watershed txn id must
+        // happen together (atomically, under the table write lock). Otherwise a load can obtain a txn id
+        // >= watershed yet still observe an empty double-write mapping, write only the source partition,
+        // and then be dropped by the partition replacement (silent data loss) or fail at publish against a
+        // force-deleted source tablet. This asserts the enable+watershed timing rather than relying on the
+        // always-finished isPreviousLoadFinished() mock.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+
+        optimizeJob.runPendingJob();
+        optimizeJob.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        OptimizeTask task = optimizeJob.getOptimizeTasks().get(0);
+
+        // Before any task is activated, the double-write mapping is empty.
+        Assertions.assertTrue(olapTable.getDoubleWritePartitions().isEmpty());
+
+        // Activate double-write for the task's source/temp partition pair (the path runRunningJob takes
+        // when a task transitions PENDING -> RUNNING).
+        java.lang.reflect.Method enable = OnlineOptimizeJobV2.class.getDeclaredMethod(
+                "enableDoubleWritePartition", Database.class, OlapTable.class, String.class, String.class);
+        enable.setAccessible(true);
+        enable.invoke(optimizeJob, db, olapTable, task.getPartitionName(), task.getTempPartitionName());
+
+        // The mapping is now visible AND the watershed has been assigned in the same critical section.
+        Assertions.assertFalse(olapTable.getDoubleWritePartitions().isEmpty(),
+                "double-write mapping must be enabled");
+        Assertions.assertTrue(optimizeJob.getTransactionId().isPresent(),
+                "watershed txn id must be assigned atomically when double-write is enabled");
+        Assertions.assertTrue(optimizeJob.getTransactionId().get() > 0);
+
+        // Disabling double-write clears the mapping (the replacement / cancel cleanup path).
+        java.lang.reflect.Method disable = OnlineOptimizeJobV2.class.getDeclaredMethod(
+                "disableDoubleWritePartition", Database.class, OlapTable.class);
+        disable.setAccessible(true);
+        disable.invoke(optimizeJob, db, olapTable);
+        Assertions.assertTrue(olapTable.getDoubleWritePartitions().isEmpty(),
+                "double-write mapping must be cleared after disable");
+    }
+
+    @Test
+    public void testHasCommittedNotVisibleFalseWhenNoCommittedTxns() throws Exception {
+        // The visibility gate must report "safe to replace" when there are no committed-but-unpublished
+        // loads on the source partition, so the optimization converges in the common case (we delay the
+        // replacement only while a committed load is still unpublished, we never abandon it).
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+        optimizeJob.runPendingJob();
+        optimizeJob.runWaitingTxnJob();
+
+        OptimizeTask task = optimizeJob.getOptimizeTasks().get(0);
+        java.lang.reflect.Method m = OnlineOptimizeJobV2.class.getDeclaredMethod(
+                "hasCommittedNotVisible", Database.class, OlapTable.class, String.class);
+        m.setAccessible(true);
+        boolean committedNotVisible = (boolean) m.invoke(optimizeJob, db, olapTable, task.getPartitionName());
+        Assertions.assertFalse(committedNotVisible);
+    }
+
+    @Test
+    public void testCommittedNotVisibleDefersReplacementWithoutRerunningRewrite() throws Exception {
+        // When the rewrite SQL has finished (future done = SUCCESS) but a load is committed-but-not-visible
+        // on the source partition, runRunningJob must DEFER the partition replacement: stay in RUNNING and
+        // leave the (completed) future in place so the rewrite INSERT is NOT resubmitted on the next round.
+        // This preserves the online contract (no abandon) while never replacing under an unpublished load.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
+        optimizeJob.runPendingJob();
+        optimizeJob.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // Drive the first task straight into the "future done = SUCCESS" branch without running the real
+        // INSERT: mark it RUNNING and inject an already-completed future.
+        OptimizeTask task = optimizeJob.getOptimizeTasks().get(0);
+        task.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+        java.lang.reflect.Field futureField = OnlineOptimizeJobV2.class.getDeclaredField("future");
+        futureField.setAccessible(true);
+        futureField.set(optimizeJob,
+                java.util.concurrent.CompletableFuture.completedFuture(Constants.TaskRunState.SUCCESS));
+
+        // A committed-but-not-visible load exists on the source partition -> must defer.
+        Mockito.doReturn(true).when(optimizeJob)
+                .hasCommittedNotVisible(Mockito.any(), Mockito.any(), Mockito.anyString());
+
+        optimizeJob.runRunningJob();
+
+        // Deferred: still RUNNING, task still RUNNING, and the completed future is retained so the rewrite
+        // SQL is not resubmitted next round.
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, task.getOptimizeTaskState());
+        Assertions.assertNotNull(futureField.get(optimizeJob),
+                "completed future must be retained while deferring, so the rewrite INSERT is not re-run");
+
+        // Run a second scheduler round while still committed-not-visible: it must defer again and, crucially,
+        // must NOT resubmit the rewrite INSERT (the retained completed future short-circuits re-execution).
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+        Assertions.assertEquals(Constants.TaskRunState.RUNNING, task.getOptimizeTaskState());
+        Assertions.assertNotNull(futureField.get(optimizeJob));
+
+        // The rewrite SQL is never (re-)executed across the deferred rounds: the injected future stands in for
+        // the completed INSERT, and the defer branch returns before any resubmission path.
+        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
+    }
+
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
         // Detach the job from schema change handler to prevent background scheduler from changing state
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();

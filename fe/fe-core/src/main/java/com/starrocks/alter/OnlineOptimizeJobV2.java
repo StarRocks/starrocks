@@ -30,6 +30,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -314,8 +315,24 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     Preconditions.checkState(p.getSubPartitions().size() == 1);
                     tbl.addDoubleWritePartition(p.getId(), temp.getId());
 
-                    LOG.info("job {} add double write partition: {}:{} -> {}:{}", jobId, sourcePartitionName,
-                                p.getId(), tempPartitionName, temp.getId());
+                    // Assign the watershed transaction id atomically with enabling the double-write mapping,
+                    // while still holding this database WRITE lock. This closes a race window: a load reads the
+                    // double-write mapping (OlapTableSink) after allocating its txn id at beginTransaction, and
+                    // reads it under a database INTENTION_SHARED + table READ lock that conflicts with this
+                    // database WRITE lock. So any load that observed an *empty* mapping (and therefore only
+                    // writes the source partition) must have read it before this critical section ran, hence
+                    // allocated its txn id before watershedTxnId (a single monotonic generator) -> txn id
+                    // < watershedTxnId; isPreviousLoadFinished() below drains exactly those. Every load with a
+                    // txn id >= watershedTxnId necessarily begins after the mapping is visible and will
+                    // double-write into the temp partition. Previously the watershed was assigned after this
+                    // lock was released, leaving a gap where a source-only load could obtain a txn id
+                    // >= watershed, escape double-write, and then be dropped by the partition replacement
+                    // (silent data loss) or fail at publish against a force-deleted source tablet.
+                    this.watershedTxnId = GlobalStateMgr.getCurrentState()
+                                .getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+
+                    LOG.info("job {} add double write partition: {}:{} -> {}:{}, watershedTxnId {}", jobId,
+                                sourcePartitionName, p.getId(), tempPartitionName, temp.getId(), watershedTxnId);
                 } else {
                     LOG.warn("job {} add double partition {} does not exist", jobId, sourcePartitionName);
                 }
@@ -368,9 +385,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             }
 
             if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.PENDING) {
+                // enableDoubleWritePartition assigns watershedTxnId atomically under the database WRITE lock
+                // (the lock that conflicts with the load's mapping read in OlapTableSink.complete()).
                 enableDoubleWritePartition(db, tbl, rewriteTask.getPartitionName(), rewriteTask.getTempPartitionName());
-                this.watershedTxnId = GlobalStateMgr.getCurrentState()
-                            .getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
             }
 
@@ -386,13 +403,32 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
                 if (this.future != null) {
                     if (this.future.isDone()) {
+                        Constants.TaskRunState taskState;
                         try {
-                            rewriteTask.setOptimizeTaskState(future.get());
+                            taskState = future.get();
                         } catch (InterruptedException | ExecutionException e) {
                             LOG.warn("get rewrite task result failed", e);
-                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+                            taskState = Constants.TaskRunState.FAILED;
                         }
 
+                        // Before allowing the partition replacement, make sure no load transaction has
+                        // committed to the source partition but is not yet visible (published). Such a load
+                        // has already been double-written into the temp partition (it begins after the
+                        // watershed and therefore observes the double-write mapping), but replacing the source
+                        // partition before it is published would drop the source partition out from under an
+                        // unpublished transaction that still references it -> publish failure. We do NOT abandon
+                        // the optimization here; we simply wait one scheduler round for the load to become
+                        // visible, preserving the "online" contract (loads neither fail nor lose data).
+                        // future stays set and done, so the rewrite SQL is not re-run on retry.
+                        if (taskState == Constants.TaskRunState.SUCCESS
+                                && hasCommittedNotVisible(db, tbl, rewriteTask.getPartitionName())) {
+                            LOG.info("optimize job {} task {} waiting for committed-not-visible loads on "
+                                    + "partition {} before replacing", jobId, rewriteTask.getName(),
+                                    rewriteTask.getPartitionName());
+                            return;
+                        }
+
+                        rewriteTask.setOptimizeTaskState(taskState);
                         if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
                             this.allPartitionOptimized = false;
                         }
@@ -613,6 +649,40 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     protected boolean isPreviousLoadFinished() throws AnalysisException {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
+    }
+
+    // Returns true if there exists a committed-but-not-visible (not yet published) load transaction on the
+    // source partition identified by sourcePartitionName. Mirrors the visibility gate used by the offline
+    // OptimizeJobV2, so the online job never replaces a partition that an unpublished load still references.
+    protected boolean hasCommittedNotVisible(Database db, OlapTable tbl, String sourcePartitionName) {
+        // Committed load metadata (TableCommitInfo's PartitionCommitInfo map) is keyed by PHYSICAL partition
+        // id, not the logical partition id (see TableCommitInfo.addPartitionCommitInfo). For normal partitions
+        // the logical Partition.getId() differs from the physical partition id, so resolve the source
+        // partition's physical partition(s) here: passing the logical id would make existCommittedTxns miss a
+        // committed-but-not-visible load and let the replacement proceed under an unpublished transaction,
+        // reopening the publish-failure window this gate is meant to close. The source partition has a single
+        // sub-partition (see enableDoubleWritePartition), but iterate defensively in case that changes.
+        List<Long> sourcePhysicalPartitionIds = Lists.newArrayList();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
+        try {
+            Partition partition = tbl.getPartition(sourcePartitionName);
+            if (partition == null) {
+                return false;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                sourcePhysicalPartitionIds.add(physicalPartition.getId());
+            }
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
+        }
+        for (long physicalPartitionId : sourcePhysicalPartitionIds) {
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .existCommittedTxns(db.getId(), tbl.getId(), physicalPartitionId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
