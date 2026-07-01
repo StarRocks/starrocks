@@ -96,6 +96,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -274,6 +275,22 @@ public class SchemaChangeHandler extends AlterHandler {
             return ColumnBuilder.buildGeneratedColumn(table, columnDef);
         }
         return ColumnBuilder.buildColumn(columnDef);
+    }
+
+    private void inheritDefaultValueForModify(Column modColumn, Column oriColumn, OlapTable olapTable)
+            throws DdlException {
+        ColumnDef.DefaultValueDef inheritedDefaultValue = oriColumn.toColumnDef(olapTable).getDefaultValueDef();
+        inheritedDefaultValue.expr = inheritedDefaultValue.expr.clone();
+        if (inheritedDefaultValue.isSet) {
+            try {
+                inheritedDefaultValue.expr =
+                        ColumnDefAnalyzer.validateDefaultValue(modColumn.getType(), inheritedDefaultValue.expr);
+            } catch (AnalysisException e) {
+                throw new DdlException(
+                        String.format("Invalid default value for '%s': %s", modColumn.getName(), e.getMessage()));
+            }
+        }
+        modColumn.setDefaultValueDef(inheritedDefaultValue);
     }
 
     /**
@@ -870,6 +887,9 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         Column oriColumn = schemaForFinding.get(modColIndex);
+        if (!alterClause.getColumnDef().getDefaultValueDef().isSet) {
+            inheritDefaultValueForModify(modColumn, oriColumn, olapTable);
+        }
 
         for (Index index : olapTable.getIndexes()) {
             if (index.getIndexType() == IndexDef.IndexType.GIN) {
