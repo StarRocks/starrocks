@@ -260,8 +260,10 @@ public class PredicateColumnsMgr {
                 extStorage.restore();
                 extStorage.finishRestore();
             } else {
-                extStorage.vacuum(
-                        TimeUtils.getSystemNow().minusHours(Config.statistic_predicate_columns_ttl_hours));
+                long ttlHour = Config.statistic_predicate_columns_ttl_hours;
+                if (ttlHour >= 0) {
+                    extStorage.vacuum(TimeUtils.getSystemNow().minusHours(ttlHour));
+                }
                 extStorage.persist();
             }
         }

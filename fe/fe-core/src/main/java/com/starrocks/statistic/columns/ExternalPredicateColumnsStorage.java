@@ -259,11 +259,7 @@ public class ExternalPredicateColumnsStorage {
             sql.append(sw);
             first = false;
         }
-        try {
-            executor.executeDML(sql.toString());
-        } catch (Exception e) {
-            LOG.warn("[ExternalPredicateCols] persist batch failed table_uuid={}", tableUUID, e);
-        }
+        executor.executeDML(sql.toString());
     }
 
     /**
