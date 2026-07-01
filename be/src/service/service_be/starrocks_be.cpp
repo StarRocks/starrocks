@@ -14,14 +14,12 @@
 
 #include <unistd.h>
 
-#include <algorithm>
-#include <limits>
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 #include "agent/agent_server.h"
@@ -64,11 +62,7 @@
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
 #endif
-<<<<<<< HEAD
-#include "cache/datacache_metrics.h"
 #include "common/system/cpu_info.h"
-=======
->>>>>>> 9ee25ef340a... [Refactor] Move process memory metrics into RuntimeEnv (#75671)
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/thrift_server.h"
