@@ -501,6 +501,35 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testQueryShardGroupStable() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L, 20L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = Lists.newArrayList(true, false);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        List<Boolean> stable =
+                starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(Lists.newArrayList(true, false), stable);
+    }
+
+    @Test
+    public void testQueryShardGroupStableThrows() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "non-PACK group");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(StarClientException.class,
+                () -> starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+    }
+
+    @Test
     public void testGetBackendByShard() throws StarClientException {
         ReplicaInfo replica1 = ReplicaInfo.newBuilder()
                 .setReplicaRole(ReplicaRole.PRIMARY)

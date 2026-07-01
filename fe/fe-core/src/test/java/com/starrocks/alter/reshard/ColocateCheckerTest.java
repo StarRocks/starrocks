@@ -34,17 +34,21 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -55,6 +59,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -118,8 +123,15 @@ public class ColocateCheckerTest {
     public void testAlignedUnstableGroupBecomesStable() throws Exception {
         // The freshly-created table has one tablet covering the single default ColocateRange
         // [MIN, MAX) -> already aligned. Marking the group unstable then running the checker
-        // must find every partition aligned and mark every peer GroupId stable.
+        // must find every partition aligned and mark every peer GroupId stable. F7 also gates the
+        // flip on StarOS placement convergence, so stub it converged.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
+        };
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
         Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId));
 
@@ -127,7 +139,7 @@ public class ColocateCheckerTest {
         checker.runOneCycle();
 
         Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId),
-                "aligned + unstable group must be marked stable after one cycle");
+                "aligned + membership-settled + placement-converged unstable group must be marked stable after one cycle");
     }
 
     private long firstVisibleTabletId() {
@@ -163,6 +175,7 @@ public class ColocateCheckerTest {
 
         Map<Long, List<Long>> reassignedAdd = new HashMap<>();
         Map<Long, List<Long>> reassignedRemove = new HashMap<>();
+        boolean[] convergenceQueried = {false};
         new MockUp<StarOSAgent>() {
             @Mock
             public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId) {
@@ -179,6 +192,12 @@ public class ColocateCheckerTest {
                 reassignedAdd.put(shardId, new ArrayList<>(addGroupIds));
                 reassignedRemove.put(shardId, new ArrayList<>(removeGroupIds));
             }
+
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                convergenceQueried[0] = true;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
         };
 
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
@@ -190,6 +209,8 @@ public class ColocateCheckerTest {
                 "no stale PACK group to remove in the add-only case");
         Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
                 "group must stay unstable until a re-read confirms the repaired placement");
+        Assertions.assertFalse(convergenceQueried[0],
+                "convergence must not be queried while PACK membership is still being repaired");
     }
 
     @Test
@@ -221,6 +242,11 @@ public class ColocateCheckerTest {
                 reassignCount[0]++;
                 repaired[0] = true;
             }
+
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
         };
 
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
@@ -233,7 +259,7 @@ public class ColocateCheckerTest {
         new ColocateChecker().runOneCycle();
         new ColocateChecker().runOneCycle();
         Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId),
-                "group must become stable once the re-read shows the repaired placement");
+                "group must become stable once the re-read shows the repaired placement and placement converged");
         Assertions.assertTrue(reassignCount[0] >= 1, "a reassign must have been issued to repair placement");
     }
 
@@ -403,6 +429,114 @@ public class ColocateCheckerTest {
                 "must not re-add the already-present expected PACK group");
         Assertions.assertEquals(List.of(packForHigh), reassignedRemove.get(lowTabletId),
                 "must remove the stale sibling PACK group");
+    }
+
+    @Test
+    public void testStaysUnstableWhenPlacementNotConverged() throws Exception {
+        // Fresh single-range group is range-aligned and membership-settled (embedded StarMgr), but
+        // StarOS reports the PACK group has NOT converged onto co-resident workers -> stay unstable.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "group must stay unstable until StarOS reports placement converged");
+    }
+
+    @Test
+    public void testBecomesStableWhenPlacementConverged() throws Exception {
+        // Fresh single-range group is range-aligned + membership-settled, and StarOS now reports the
+        // PACK group converged -> the group flips stable. Also assert the OSS worker group (0L) is the
+        // one queried (Option B resolves to the default warehouse worker group).
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long[] capturedWorkerGroupId = {-1L};
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                capturedWorkerGroupId[0] = workerGroupId;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId),
+                "aligned + membership-settled + placement-converged group must be marked stable");
+        Assertions.assertEquals(StarOSAgent.DEFAULT_WORKER_GROUP_ID, capturedWorkerGroupId[0],
+                "F7 must query the default warehouse worker group in OSS");
+    }
+
+    @Test
+    public void testStaysUnstableOnConvergenceQueryFailure() throws Exception {
+        // A queryShardGroupStable RPC failure must NOT flip the group stable (fail-closed).
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId)
+                    throws StarClientException {
+                throw new StarClientException(com.staros.proto.StatusCode.INTERNAL, "mocked query failure");
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a placement-convergence query failure must leave the group unstable for retry");
+    }
+
+    @Test
+    public void testStaysUnstableOnShortConvergenceResponse() throws Exception {
+        // A short/empty response (size != requested) must fail closed so a subset can never flip the
+        // group stable while a group is still migrating.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return new ArrayList<>(); // empty response for a non-empty request
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a short convergence response must leave the group unstable");
+    }
+
+    @Test
+    public void testStaysUnstableWhenWorkerGroupResolutionFails() throws Exception {
+        // Resolving the worker group calls WarehouseManager.getBackgroundComputeResource, which throws
+        // ErrorReportException when the warehouse has no available compute nodes. The gate must fail
+        // closed locally (group stays unstable) rather than letting the exception escape. Convergence
+        // is stubbed converged so the worker-group throw is the only thing keeping the group unstable.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource getBackgroundComputeResource(long tableId) {
+                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, "mocked: warehouse unavailable");
+            }
+        };
+
+        colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
+        new ColocateChecker().runOneCycle();
+
+        Assertions.assertTrue(colocateTableIndex.isGroupUnstable(groupId),
+                "a worker-group resolution failure must leave the group unstable for retry");
     }
 
     @Test

@@ -4585,6 +4585,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
     public static int tablet_reshard_max_split_count = 1024;
 
+    @ConfField(mutable = true, comment = "Max number of tablets the range-colocate checker sends to StarOS in a "
+            + "single getShardInfo membership-read batch RPC on shared-data clusters; values < 1 are treated as 1.")
+    public static int tablet_reshard_colocate_checker_membership_batch_size = 1000;
+
+    @ConfField(mutable = true, comment = "Max number of PACK shard groups the range-colocate checker sends to StarOS "
+            + "in a single queryShardGroupStable placement-convergence batch RPC. Each group's stability check is "
+            + "computed server-side, so a smaller batch bounds per-RPC latency (the full result is assembled across "
+            + "repeated calls); values < 1 are treated as 1.")
+    public static int tablet_reshard_colocate_checker_convergence_batch_size = 64;
+
     @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
