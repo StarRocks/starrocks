@@ -658,6 +658,21 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         }
     }
 
+    // Collect UUIDs from idg (.idx) files so a repeated full-snapshot replication reuses the
+    // already-replicated .idx (and its encryption meta) instead of re-copying it.
+    if (target_data_version_tablet_meta->has_idg_meta()) {
+        const auto& idg_meta = target_data_version_tablet_meta->idg_meta();
+        for (const auto& [_, idg_ver_pb] : idg_meta.idgs()) {
+            for (const auto& entry : idg_ver_pb.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                existed_filename_uuids.emplace(extract_uuid_from(entry.index_file()),
+                                               std::make_pair(entry.index_file(), entry.encryption_meta()));
+            }
+        }
+    }
+
     return Status::OK();
 }
 
@@ -685,6 +700,13 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     new_metadata->mutable_dcg_meta()->mutable_dcgs()->clear();
     new_metadata->mutable_sstable_meta()->Clear();
     new_metadata->mutable_delvec_meta()->Clear();
+    // Drop the target's pre-replication idg_meta. Without this the target's stale
+    // per-segment IDG (.idx) entries would be carried into the replicated metadata:
+    // their rssids no longer match the freshly replicated rowsets (dangling entries),
+    // their .idx files leak (never orphaned/vacuumed since a retained entry still
+    // "references" them), and the source's own indexes would be missing. The source's
+    // idg_meta is rebuilt below, mirroring rowsets/dcg/sstable/delvec.
+    new_metadata->mutable_idg_meta()->Clear();
 
     // deal with segments and dels
     for (const auto& src_rowset_meta : src_tablet_meta->rowsets()) {
@@ -864,6 +886,53 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                             } else {
                                 dcg_ver_pb.add_encryption_metas(existing_encryption_meta);
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // deal with idg_meta (per-segment Index Delta Group / .idx sidecar index files,
+    // produced by the lake ADD INDEX fast path: BITMAP / NGRAMBF / bloom_filter_columns).
+    // Mirror the sstable/dcg handling: copy the source IDG metadata, then rewrite each
+    // .idx filename (and encryption meta) and register the file for copy via
+    // determine_final_filename, so the source's fast-path indexes are actually replicated
+    // to the target. The IDG map is keyed by rssid; rowset ids and next_rowset_id are
+    // adopted verbatim from the source above (set_rowset_uid only mints a fresh 128-bit
+    // uid, not the numeric rowset id), so the source's rssid keys stay valid against the
+    // copied rowsets and need no remap. The target's own stale idg_meta was cleared above;
+    // the publish-time applier orphans its now-unreferenced .idx via collect_idg_orphan_files.
+    if (src_tablet_meta->has_idg_meta()) {
+        IndexDeltaGroupMetadataPB* dest_meta = new_metadata->mutable_idg_meta();
+        dest_meta->CopyFrom(src_tablet_meta->idg_meta());
+        for (auto& [rssid, idg_ver] : *dest_meta->mutable_idgs()) {
+            for (auto& entry : *idg_ver.mutable_entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                const auto src_idx_filename = entry.index_file();
+                std::string final_idx_filename;
+                ASSIGN_OR_RETURN(
+                        auto is_existed,
+                        determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
+                                                 target_tablet_id, src_data_dir, file_locations, filename_map));
+                entry.set_index_file(final_idx_filename);
+                // The source's encryption meta belongs to the source cluster; drop it and
+                // re-derive against the target (matching the segment handling above).
+                entry.clear_encryption_meta();
+
+                if (config::enable_transparent_data_encryption) {
+                    if (!is_existed) {
+                        // .idx file doesn't exist on target, use the newly generated encryption metadata
+                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_idx_filename];
+                        entry.set_encryption_meta(pair.second.encryption_meta);
+                    } else {
+                        // .idx file already replicated in a previous txn, reuse its existing encryption metadata
+                        auto uuid = extract_uuid_from(src_idx_filename);
+                        auto it = existed_filename_uuids.find(uuid);
+                        if (it != existed_filename_uuids.end()) {
+                            entry.set_encryption_meta(it->second.second);
                         }
                     }
                 }
