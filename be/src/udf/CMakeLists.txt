@@ -21,7 +21,12 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 
 set(UDF_FILES
   java/utils.cpp
-  java/java_udf.cpp
+  java/jvm_function_helper.cpp
+  java/java_call_stub.cpp
+  java/java_function_loader.cpp
+  java/java_udf_context.cpp
+  java/java_udaf_context.cpp
+  java/java_runtime.cpp
   java/java_data_converter.cpp
   java/java_native_method.cpp
   python/env.cpp

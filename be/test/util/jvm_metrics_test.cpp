@@ -18,7 +18,6 @@
 
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 

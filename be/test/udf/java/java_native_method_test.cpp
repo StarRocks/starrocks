@@ -31,11 +31,11 @@
 #include "column/raw_data_visitor.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "runtime/env/java/java_env.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 

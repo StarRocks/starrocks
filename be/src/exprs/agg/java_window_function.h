@@ -25,7 +25,7 @@
 #include "jni.h"
 #include "types/logical_type.h"
 #include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/java_udaf_context.h"
 
 namespace starrocks {
 Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,

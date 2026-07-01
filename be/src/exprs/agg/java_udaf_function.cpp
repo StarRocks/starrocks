@@ -23,6 +23,7 @@
 #include "fmt/core.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
+#include "udf/java/java_runtime.h"
 
 namespace starrocks {
 

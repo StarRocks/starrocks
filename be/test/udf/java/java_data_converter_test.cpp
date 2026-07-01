@@ -35,7 +35,7 @@
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/jvm_function_helper.h"
 
 namespace starrocks {
 // `assign_jvalue` is a free function defined in java_data_converter.cpp and only

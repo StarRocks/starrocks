@@ -26,7 +26,8 @@
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/java_runtime.h"
+#include "udf/java/jvm_function_helper.h"
 
 namespace starrocks {
 

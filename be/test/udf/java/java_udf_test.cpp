@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_udf.h"
-
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
@@ -25,6 +23,8 @@
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
+#include "udf/java/java_function_loader.h"
+#include "udf/java/jvm_function_helper.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {

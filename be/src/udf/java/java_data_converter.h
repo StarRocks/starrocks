@@ -20,9 +20,11 @@
 #include "column/fixed_length_column.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/function_context.h"
+#include "runtime/env/java/java_env.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/jni_util.h"
 
 namespace starrocks {
 struct JavaUDAFState {

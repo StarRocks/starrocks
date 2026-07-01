@@ -32,7 +32,8 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/java_runtime.h"
+#include "udf/java/jvm_function_helper.h"
 
 namespace starrocks {
 

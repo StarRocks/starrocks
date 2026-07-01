@@ -20,7 +20,8 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
-#include "udf/java/java_udf.h"
+#include "udf/java/java_runtime.h"
+#include "udf/java/jvm_function_helper.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                          \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                          \
