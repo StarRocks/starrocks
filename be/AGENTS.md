@@ -281,6 +281,13 @@ Top-level built-in connector registration composition above connector contracts 
 - Allowed target deps: `Connector`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target.
 
+### ModuleBootstrap (`modulebootstrap`)
+Default BE module bootstrap composition for built-in module registration, currently filesystem provider registry installation.
+- Targets: `ModuleBootstrap`
+- Allowed internal include prefixes: `module/`, `fs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `FSCore`, `ComputeEnv`, `Common`
+- Remediation: Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly.
+
 ### ExecSchemaScannerCore (`execschemascannercore`)
 Schema scanner base contract and shared mechanics without concrete scanner, pipeline, storage, service, or ExecEnv coupling.
 - Targets: `ExecSchemaScannerCore`
