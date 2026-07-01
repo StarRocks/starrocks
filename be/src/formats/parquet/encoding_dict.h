@@ -529,7 +529,11 @@ private:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         // resize data
-        auto* binary_column = ColumnHelper::get_binary_column(dst);
+        auto* data_column = ColumnHelper::get_data_column(dst);
+        if (UNLIKELY(!data_column->is_binary())) {
+            return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+        }
+        auto* binary_column = down_cast<BinaryColumn*>(data_column);
         size_t read_count = count - null_cnt;
 
         if (read_count == 0) {
@@ -551,7 +555,6 @@ private:
             if (UNLIKELY(flag)) {
                 return Status::InternalError("Index not in dictionary bounds");
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
             size_t cnt = 0;
             for (int i = 0; i < count; ++i) {
                 if (filter[i] && !is_nulls[i]) {
@@ -618,7 +621,11 @@ private:
             if (dst->is_nullable()) {
                 down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
             }
-            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            auto* data_column = ColumnHelper::get_data_column(dst);
+            if (UNLIKELY(!data_column->is_binary())) {
+                return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
+            }
+            auto* binary_column = down_cast<BinaryColumn*>(data_column);
             for (int i = 0; i < count; ++i) {
                 if (filter[i]) {
                     binary_column->append(_dict[_indexes[i]]);
