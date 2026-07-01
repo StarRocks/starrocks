@@ -64,6 +64,7 @@ set(COMPUTE_ENV_SPILL_FILES
 set(COMPUTE_ENV_QUERY_CACHE_FILES
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
+    query_cache/query_cache_metrics.cpp
 )
 
 set(COMPUTE_ENV_QUERY_FILES

@@ -14,33 +14,22 @@
 
 #include "util/system_metrics.h"
 
-#include <exec/exec_env.h>
 #include <runtime/mem_tracker.h>
 
 #include "cache/datacache.h"
-#include "storage/index/vector/vector_index_cache.h"
-#include "storage/storage_env.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_cache_fwd.h"
-#include "compute_env/query_cache/cache_manager.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/runtime_env.h"
+#include "storage/index/vector/vector_index_cache.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
 const char* const SystemMetrics::_s_hook_name = "system_metrics";
-
-class QueryCacheMetrics {
-public:
-    METRIC_DEFINE_INT_GAUGE(query_cache_capacity, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(query_cache_usage, MetricUnit::BYTES);
-    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_usage_ratio, MetricUnit::PERCENT);
-    METRIC_DEFINE_INT_GAUGE(query_cache_lookup_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(query_cache_hit_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_hit_ratio, MetricUnit::PERCENT);
-};
 
 class VectorIndexCacheMetrics {
     friend class SystemMetrics;
@@ -87,7 +76,6 @@ void SystemMetrics::install(MetricRegistry* registry) {
         return;
     }
     _install_memory_metrics(registry);
-    _install_query_cache_metrics(registry);
     _install_vector_index_cache_metrics(registry);
     _registry = registry;
 }
@@ -101,7 +89,6 @@ void SystemMetrics::update() {
     }
 
     update_memory_metrics();
-    _update_query_cache_metrics();
     _update_vector_index_cache_metrics();
 }
 
@@ -240,35 +227,6 @@ void SystemMetrics::update_memory_metrics() {
     SET_MEM_METRIC_VALUE(replication_mem_tracker, replication_mem_bytes)
     SET_MEM_METRIC_VALUE(vector_index_mem_tracker, vector_index_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
-}
-
-void SystemMetrics::_update_query_cache_metrics() {
-    auto* cache_mgr = ExecEnv::GetInstance()->cache_mgr();
-    if (UNLIKELY(cache_mgr == nullptr)) {
-        return;
-    }
-    auto capacity = cache_mgr->capacity();
-    auto usage = cache_mgr->memory_usage();
-    auto lookup_count = cache_mgr->lookup_count();
-    auto hit_count = cache_mgr->hit_count();
-    auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
-    auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
-    _query_cache_metrics->query_cache_capacity.set_value(capacity);
-    _query_cache_metrics->query_cache_usage.set_value(usage);
-    _query_cache_metrics->query_cache_usage_ratio.set_value(usage_ratio);
-    _query_cache_metrics->query_cache_lookup_count.set_value(lookup_count);
-    _query_cache_metrics->query_cache_hit_count.set_value(hit_count);
-    _query_cache_metrics->query_cache_hit_ratio.set_value(hit_ratio);
-}
-
-void SystemMetrics::_install_query_cache_metrics(MetricRegistry* registry) {
-    _query_cache_metrics = std::make_unique<QueryCacheMetrics>();
-    registry->register_metric("query_cache_capacity", &_query_cache_metrics->query_cache_capacity);
-    registry->register_metric("query_cache_usage", &_query_cache_metrics->query_cache_usage);
-    registry->register_metric("query_cache_usage_ratio", &_query_cache_metrics->query_cache_usage_ratio);
-    registry->register_metric("query_cache_lookup_count", &_query_cache_metrics->query_cache_lookup_count);
-    registry->register_metric("query_cache_hit_count", &_query_cache_metrics->query_cache_hit_count);
-    registry->register_metric("query_cache_hit_ratio", &_query_cache_metrics->query_cache_hit_ratio);
 }
 
 void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry) {

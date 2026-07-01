@@ -24,7 +24,6 @@
 
 namespace starrocks {
 
-class QueryCacheMetrics;
 class VectorIndexCacheMetrics;
 
 class MemoryMetrics {
@@ -89,10 +88,6 @@ public:
 private:
     void _install_memory_metrics(MetricRegistry* registry);
 
-    void _install_query_cache_metrics(MetricRegistry* registry);
-
-    void _update_query_cache_metrics();
-
     void _install_vector_index_cache_metrics(MetricRegistry* registry);
 
     void _update_vector_index_cache_metrics();
@@ -104,7 +99,6 @@ private:
     static const char* const _s_hook_name;
 
     std::unique_ptr<MemoryMetrics> _memory_metrics;
-    std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
     std::unique_ptr<VectorIndexCacheMetrics> _vector_index_cache_metrics;
 
     std::mutex _update_mutex;

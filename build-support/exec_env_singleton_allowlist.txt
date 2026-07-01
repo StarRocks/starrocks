@@ -12,4 +12,3 @@ src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
 src/data_workflows/load/push_broker_reader.cpp
 src/udf/java/utils.cpp
-src/util/system_metrics.cpp
