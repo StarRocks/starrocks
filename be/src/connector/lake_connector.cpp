@@ -1739,12 +1739,20 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         max_tablet_rows = std::max(max_tablet_rows, static_cast<int64_t>(tablet_num_rows));
     }
 
-    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, effective max]. Under the
+    // prepared physical split scan a child morsel reuses the seed's prepared range (cheap), so cap the
+    // upper bound lower to cut big tablets into finer morsels that fill more otherwise-idle drivers.
+    // std::min keeps it never coarser than the shared default (an over-large config just degrades to the
+    // default); the min_splitted_scan_rows clamp below still guarantees >= one pipeline chunk per morsel.
+    int64_t max_splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_rows;
+    if (_enable_lake_prepared_physical_split_scan) {
+        max_splitted_scan_rows =
+                std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
+    }
     *splitted_scan_rows =
             config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
-    *splitted_scan_rows =
-            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
-                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+    *splitted_scan_rows = std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                                   std::min(*splitted_scan_rows, max_splitted_scan_rows));
 
     // Skew detection (only meaningful under prepared-physical-split, see the gate above). A tablet is a
     // straggler worth splitting when it is BOTH (a) big enough that TabletReader::open will actually split

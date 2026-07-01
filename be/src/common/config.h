@@ -1198,7 +1198,7 @@ CONF_mBool(use_default_dop_when_shared_scan, "true");
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
 CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
-// Default is 16384*64, where 16384 is the chunk size in pipeline.
+// Default is 16384*64. (Note: 16384 == 4 * vector_chunk_size(4096), i.e. 4 pipeline chunks, not one.)
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
@@ -1209,6 +1209,14 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on.
+// A prepared-split child morsel reuses the seed's prepared range (cheap), so a smaller cap cuts big
+// tablets into finer morsels that fill more otherwise-idle drivers. Combined as
+// min(tablet_internal_parallel_max_splitted_scan_rows, this): can only make splits finer, never coarser
+// (an over-large value degrades to the shared default); the [min_splitted_scan_rows, ...] clamp still
+// guarantees >= one pipeline chunk per morsel. Does not affect shared-nothing or the flag-off path.
+// Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
 
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
