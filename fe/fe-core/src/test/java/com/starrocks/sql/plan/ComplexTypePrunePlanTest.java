@@ -335,7 +335,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
 
         // Nested case: unnest over an array nested inside a struct.
         sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
         assertVerbosePlanContains(sql, "returnTypes: [struct<c3_sub1_sub1 int(11)>]");
 
         // All subfields used: nothing to prune, output keeps full width (still consistent).
