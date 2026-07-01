@@ -991,11 +991,12 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         out->filter.assign(out->keys.size(), false);
         const auto& del = rowset->metadata().del_files(del_idx);
         const bool is_origin = (rowset->id() == del.origin_rowset_id());
-        // Fall back to the max segment id when an origin delete has no recorded op_offset (older
-        // metadata): it then follows the last segment, the filter becomes a no-op (erase everything),
-        // i.e. the legacy behavior. Matches resolve_del_op_offset() and erase_one().
-        const uint32_t op_offset =
-                (is_origin && !del.has_op_offset()) ? get_max_segment_idx(rowset->metadata()) : del.op_offset();
+        // Fall back to the max segment id when a delete has no recorded op_offset (older metadata):
+        // it then follows the last segment, so the filter erases everything (the legacy behavior).
+        // This must cover non-origin (compaction-inherited) dels too: otherwise del.op_offset() reads a
+        // defaulted 0, under-setting too_old below and wrongly skipping -- resurrecting -- rows on
+        // rebuild. Matches resolve_del_op_offset() and erase_one().
+        const uint32_t op_offset = !del.has_op_offset() ? get_max_segment_idx(rowset->metadata()) : del.op_offset();
         // Skip the get()-based filter only when the delete follows the last segment of its own rowset,
         // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
         const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
