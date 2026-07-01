@@ -657,6 +657,11 @@ public class ExpressionStatisticCalculator {
                     maxValue = 12;
                     distinctValue = 12;
                     break;
+                case FunctionSet.MONTHNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValue = 12;
+                    break;
                 case FunctionSet.WEEKOFYEAR:
                 case FunctionSet.WEEK_ISO:
                     minValue = 1;
@@ -691,7 +696,11 @@ public class ExpressionStatisticCalculator {
                     maxValue = 59;
                     distinctValue = 60;
                     break;
-                case FunctionSet.TO_DATE:
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    break;
+                case FunctionSet.TO_DATE, FunctionSet.DATE:
                     if (minMaxValueInfinite) {
                         break;
                     }
@@ -734,7 +743,16 @@ public class ExpressionStatisticCalculator {
                         }
                     }
                     break;
+                case FunctionSet.DAYNAME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValue = 7;
+                    break;
                 case FunctionSet.TIMESTAMP:
+                    break;
+                case FunctionSet.TIME_TO_SEC:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
                     break;
                 case FunctionSet.ABS:
                     double absMinValue;
@@ -881,6 +899,11 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.SECONDS_DIFF:
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
+                    break;
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    distinctValues = left.getDistinctValuesCount();
                     break;
                 case FunctionSet.YEARS_DIFF:
                     interval = 3600L * 24L * 365L;
