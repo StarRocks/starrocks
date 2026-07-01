@@ -39,7 +39,6 @@ set(STARROCKS_LIBS
     Storage
     Runtime
     Types
-    Util
     Script
     StarRocksGen
     HttpService
