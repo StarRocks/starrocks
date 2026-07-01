@@ -1023,8 +1023,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_before_cop
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Create source tablet metadata at version 2 with a rowset containing segment files.
@@ -1069,8 +1069,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_fast_cancel_txn_aborted_during_cop
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Create source tablet metadata at version 2 with a rowset containing segment files
@@ -1132,8 +1132,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
 
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Create source tablet metadata at version 2 with a rowset containing a segment file
@@ -1182,8 +1182,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_no_fast_cancel_when_txn_active) {
 TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_operations) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     // Create source metadata with segments (with segment_size) and delvec
@@ -1256,8 +1256,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_sequential_copy_with_mocked_file_o
 TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_operations) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
@@ -1330,8 +1330,8 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_with_mocked_file_ope
 TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
     SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
-        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
-        *fs_st = mock_fs;
+        auto* fs_st = static_cast<absl::StatusOr<starrocks::FileSystemHandle>*>(arg);
+        *fs_st = starrocks::FileSystemHandle{mock_fs, {}};
     });
 
     auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
