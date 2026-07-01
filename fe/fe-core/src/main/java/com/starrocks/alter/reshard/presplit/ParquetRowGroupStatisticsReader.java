@@ -84,11 +84,11 @@ import java.util.Objects;
  *       integer sort key (decoded as the true unsigned magnitude and range-checked), but ONLY when
  *       the file's raw footer declares a TypeDefinedOrder column order for that leaf.</li>
  * </ul>
- * <p>A DATE boundary is gated to {@code [0001-01-01, 9999-12-31]} and a DATETIME boundary to the
- * narrower {@code [1970-01-01, 9999-12-31]}; a value outside its window falls back to data tier.
- * DATE reaches year 1 because the BE day-of-epoch load is proleptic-Gregorian with no sub-second
- * part, so the boundary is FE/BE-identical; DATETIME keeps the epoch lower bound because the BE
- * timestamp load does not yet decode a pre-1970 sub-second tick to a boundary-matching wall clock
+ * <p>DATE and DATETIME boundaries are gated to {@code [0001-01-01, 9999-12-31]}; a value outside
+ * that window falls back to data tier. The window reaches year 1 because the BE day-of-epoch DATE
+ * load is proleptic-Gregorian and the BE timestamp load reconstructs the same wall clock the FE
+ * {@code floorDiv}/{@code floorMod} split computes (it borrows a whole second for a negative
+ * sub-second remainder), so the boundary is FE/BE-identical down to year 1
  * (see {@link MetaTierTemporalWindow}).
  * Anything else (UINT_64, signed INT_8/16/32 annotations, UTC-adjusted/INT96 timestamps, JSON,
  * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
@@ -308,16 +308,16 @@ public final class ParquetRowGroupStatisticsReader {
         if (location.logicalAnnotation instanceof DateLogicalTypeAnnotation) {
             // INT32 days since 1970-01-01 → canonical "yyyy-MM-dd".
             LocalDate date = LocalDate.ofEpochDay(((Number) parquetValue).longValue());
-            MetaTierTemporalWindow.rejectDateOutsideWindow(date);
+            MetaTierTemporalWindow.rejectOutsideWindow(date);
             return Variant.of(location.starRocksColumn.getType(), date.format(DateUtils.DATE_FORMATTER_UNIX));
         }
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // A negative (pre-1970) tick lands before the DATETIME window's lower bound and is
-            // rejected here: the BE timestamp load does not yet decode a pre-1970 sub-second tick to
-            // the wall clock this floorDiv/floorMod boundary expects (see MetaTierTemporalWindow).
-            MetaTierTemporalWindow.rejectDateTimeOutsideWindow(dateTime.toLocalDate());
+            // A pre-1970 (negative) tick is now in window: epochTicksToUtcDateTime's floorDiv/floorMod
+            // split matches the BE timestamp load, so the boundary equals the loaded value
+            // (see MetaTierTemporalWindow).
+            MetaTierTemporalWindow.rejectOutsideWindow(dateTime.toLocalDate());
             return Variant.of(location.starRocksColumn.getType(), MetaTierTemporalWindow.renderDateTime(dateTime));
         }
         if (location.logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation) {
