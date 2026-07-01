@@ -1158,6 +1158,22 @@ public class StarOSAgent {
         return shardInfos;
     }
 
+    /**
+     * Best-effort placement-convergence query for PACK shard groups. Returns, positionally aligned
+     * with {@code shardGroupIds}, whether each PACK shard group has converged onto co-resident workers
+     * in {@code workerGroupId} — every member shard has >=1 replica there and all member shards share
+     * the same replica worker set; an empty PACK group is vacuously stable. Eventually-consistent:
+     * callers must poll rather than treat a single {@code true} as durable. A non-PACK or non-existent
+     * id, or an empty {@code shardGroupIds}, fails the whole RPC with {@link StarClientException}, so
+     * callers must pass only existing PACK shard-group ids and never an empty list.
+     */
+    @NotNull
+    public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId)
+            throws StarClientException {
+        prepare();
+        return client.queryShardGroupStable(serviceId, shardGroupIds, workerGroupId);
+    }
+
     public static FilePathInfo allocatePartitionFilePathInfo(FilePathInfo tableFilePathInfo, long physicalPartitionId) {
         String allocPath = StarClient.allocateFilePath(tableFilePathInfo, Long.hashCode(physicalPartitionId));
         return tableFilePathInfo.toBuilder().setFullPath(String.format("%s/%d", allocPath, physicalPartitionId)).build();
