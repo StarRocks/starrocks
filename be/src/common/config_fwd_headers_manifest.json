@@ -850,6 +850,7 @@
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
         "lake_prepared_split_max_splitted_scan_rows",
+        "enable_lake_prepared_split_pre_refinement",
         "lake_tablet_ignore_invalid_delete_predicate",
         "lake_print_delete_log",
         "experimental_lake_ignore_lost_segment",

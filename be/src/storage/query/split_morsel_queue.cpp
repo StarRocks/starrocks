@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 
+#include "common/config_lake_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
@@ -874,6 +875,12 @@ bool LakePreparedPhysicalSplitMorselQueue::has_pre_refinement_candidate_locked()
 
 void LakePreparedPhysicalSplitMorselQueue::enqueue_pre_refinement_candidate_from_initial_coarse_locked(
         ScanMorsel* morsel) {
+    // Sole functional switch for the pre-refinement path: when disabled, never register a candidate.
+    // With the candidate queue kept empty, has_pre_refinement_candidate_locked() / allocate / try_get /
+    // empty / ready_for_next all short-circuit naturally, so no other interface needs a guard.
+    if (!config::enable_lake_prepared_split_pre_refinement) {
+        return;
+    }
     if (morsel == nullptr) {
         return;
     }

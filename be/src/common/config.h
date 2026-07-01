@@ -1217,6 +1217,13 @@ CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 // guarantees >= one pipeline chunk per morsel. Does not affect shared-nothing or the flag-off path.
 // Default 262144 (1/4 of the shared 1048576 default).
 CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) — it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
 
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
