@@ -1605,6 +1605,18 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
     if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
+        // Validate that every struct field name is a parseable JSON path before constructing
+        // CastJsonToStruct, whose ctor would otherwise throw an uncaught std::runtime_error.
+        // The throw propagates out of create_expr_tree (no try/catch on that path) and aborts
+        // the BE at fragment prepare. Returning nullptr surfaces a clean Status::NotSupported.
+        for (const auto& field_name : cast_to.field_names) {
+            std::string path_string = "$." + field_name;
+            if (!JsonPath::parse(Slice(path_string)).ok()) {
+                LOG(WARNING) << "Cannot cast json to struct: field name is not a valid JSON path: " << field_name;
+                return nullptr;
+            }
+        }
+
         std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
