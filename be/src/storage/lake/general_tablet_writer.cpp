@@ -31,6 +31,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
+#include "storage/index/vector/vector_index_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -80,23 +81,9 @@ uint32_t get_vector_index_build_threshold(const TabletSchemaCSPtr& schema) {
         if (it == tablet_index.end()) {
             continue;
         }
-        const auto& props = it->second.common_properties();
-        auto threshold_it = props.find("index_build_threshold");
-        if (threshold_it != props.end()) {
-            // Use a checked parse: atoi() silently treats malformed strings as 0 and would
-            // wrap a negative int into a huge uint32_t after the cast, neither of which is
-            // a sensible build threshold. Fall back to the config default on parse failure
-            // or out-of-range values.
-            char* end = nullptr;
-            errno = 0;
-            unsigned long parsed = std::strtoul(threshold_it->second.c_str(), &end, 10);
-            if (errno == 0 && end != threshold_it->second.c_str() && *end == '\0' &&
-                parsed <= std::numeric_limits<uint32_t>::max()) {
-                return static_cast<uint32_t>(parsed);
-            }
-            LOG(WARNING) << "ignoring invalid index_build_threshold='" << threshold_it->second
-                         << "', falling back to config_vector_index_default_build_threshold";
-        }
+        // Single source of truth shared with the inline build path so async and sync resolve
+        // the same threshold, including the IVFPQ nlist floor.
+        return resolve_vector_index_build_threshold(it->second);
     }
     return config::config_vector_index_default_build_threshold;
 }
@@ -125,7 +112,7 @@ Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tab
                                 column.unique_id()));
         }
         int64_t index_id = it->second.index_id();
-        std::string vi_name = gen_vector_index_filename(segment_name, index_id);
+        std::string vi_name = gen_vector_index_filename(segment_name, tablet_id, index_id);
         std::string full_path;
         if (location_provider && fs) {
             full_path = location_provider->segment_location(tablet_id, vi_name);
@@ -291,10 +278,17 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
         of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
-        // Bundle segments skip vector index: the segment filename in metadata is the
-        // shared bundle filename, which differs from the independent segment name used
-        // to generate .vi file paths. Vector indexes will be built after compaction.
-        opts.skip_vector_index = true;
+        // Bundle segments share one physical file across the partition's tablets, so the .vi
+        // path must derive from the shared bundle filename (what metadata records) -- not the
+        // independent `name`. gen_vector_index_filename adds this tablet's id so tablets sharing
+        // the bundle get distinct .vi files instead of overwriting each other.
+        RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, basename(_bundle_file_context->filename()),
+                                                     _tablet_mgr, _location_provider.get(), _fs.get(), opts));
+        // Async mode defers the build to the lake build task (no inline write into the bundle
+        // path); sync mode builds the .vi inline now, which the unambiguous naming makes safe.
+        if (opts.defer_vector_index_build) {
+            opts.skip_vector_index = true;
+        }
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
         RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
@@ -314,10 +308,10 @@ void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileI
     // silently diverge: the PK override previously omitted this, dropping vector index builds
     // for shared-data primary-key tables.
     if (seg_writer->defer_vector_index_build()) {
-        // Async: skip bundle-file segments (.vi doesn't support the bundle format yet, so the
-        // index is rebuilt after compaction) and segments below the deferred-build threshold.
-        bool is_bundled = segment_file_info.bundle_file_offset.has_value();
-        if (is_bundled || segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
+        // Async: only skip segments below the deferred-build threshold. Bundle-file segments are
+        // supported now -- their .vi is named per-tablet (gen_vector_index_filename includes the
+        // tablet id) and built by the deferred task from this tablet's bundle slice.
+        if (segment_file_info.num_rows < seg_writer->vector_index_build_threshold()) {
             return;
         }
     } else if (!seg_writer->has_vector_index_written()) {

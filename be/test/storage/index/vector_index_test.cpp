@@ -343,6 +343,72 @@ TEST_F(VectorIndexWriterTest, get_vector_meta_unknown_quantizer_returns_error) {
 
 #endif // WITH_TENANN
 
+// ---- resolve_vector_index_build_threshold: single source of truth, B semantics ----
+// Pure logic; no tenann needed, so these run regardless of WITH_TENANN.
+TEST(VectorIndexBuildThresholdTest, default_when_no_properties) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    EXPECT_EQ(10000u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, user_override_for_non_ivfpq) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_build_threshold", "500");
+    EXPECT_EQ(500u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, ivfpq_nlist_floors_default_when_larger) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_type", "ivfpq");
+    idx.add_index_properties("nlist", "20000");
+    EXPECT_EQ(20000u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, ivfpq_default_wins_when_nlist_smaller) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_type", "ivfpq");
+    idx.add_index_properties("nlist", "100");
+    EXPECT_EQ(10000u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, ivfpq_user_override_above_nlist) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_type", "ivfpq");
+    idx.add_common_properties("index_build_threshold", "2000");
+    idx.add_index_properties("nlist", "1024");
+    EXPECT_EQ(2000u, resolve_vector_index_build_threshold(idx));
+}
+
+// Core B semantics: a user override BELOW nlist is floored back up to nlist,
+// because faiss IVFPQ training needs at least nlist points or it throws.
+TEST(VectorIndexBuildThresholdTest, ivfpq_user_override_below_nlist_is_floored) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_type", "ivfpq");
+    idx.add_common_properties("index_build_threshold", "500");
+    idx.add_index_properties("nlist", "1024");
+    EXPECT_EQ(1024u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, invalid_user_override_falls_back_to_default) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_build_threshold", "not_a_number");
+    EXPECT_EQ(10000u, resolve_vector_index_build_threshold(idx));
+}
+
+TEST(VectorIndexBuildThresholdTest, ivfpq_index_type_is_case_insensitive) {
+    config::config_vector_index_default_build_threshold = 10000;
+    TabletIndex idx;
+    idx.add_common_properties("index_type", "IVFPQ");
+    idx.add_index_properties("nlist", "20000");
+    EXPECT_EQ(20000u, resolve_vector_index_build_threshold(idx));
+}
+
 TEST_F(VectorIndexWriterTest, testwrite_with_empty_mark) {
     config::config_vector_index_default_build_threshold = 100;
     auto tablet_index = prepare_tablet_index();
