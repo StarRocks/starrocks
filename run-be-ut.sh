@@ -225,12 +225,10 @@ TEST_BIN=starrocks_test
 if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] && test -f ${STARROCKS_TEST_BINARY_DIR}/$TEST_BIN ; then
     pushd ${STARROCKS_TEST_BINARY_DIR} >/dev/null 2>&1
     TEST_BIN_SYMBOL=starrocks_test.debuginfo
-    echo -n "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
+    echo "[INFO] Split $TEST_BIN debug symbol to $TEST_BIN_SYMBOL ..."
     objcopy --only-keep-debug $TEST_BIN $TEST_BIN_SYMBOL
     strip --strip-debug $TEST_BIN
     objcopy --add-gnu-debuglink=$TEST_BIN_SYMBOL $TEST_BIN
-    # continue the echo output from the previous `echo -n`
-    echo " split done."
     popd >/dev/null 2>&1
 fi
 
