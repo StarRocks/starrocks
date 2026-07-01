@@ -1182,7 +1182,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         Map<String, String> properties = analyzeStatus.getProperties();
         Assertions.assertEquals("custom_value", properties.get("custom_key"));
-        Assertions.assertEquals("HIVE", properties.get("table_format"));
+        Assertions.assertEquals("hive", properties.get("table_format"));
         Assertions.assertEquals("1", properties.get("partition_count"));
         Assertions.assertEquals("3", properties.get("column_count"));
 
@@ -1199,7 +1199,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 table.getUUID(), Lists.newArrayList("r_regionkey", "r_name", "r_comment"), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
         Assertions.assertThrows(Exception.class, () -> collectJob.collect(connectContext, failedStatus));
-        Assertions.assertEquals("HIVE", failedStatus.getProperties().get("table_format"));
+        Assertions.assertEquals("hive", failedStatus.getProperties().get("table_format"));
         Assertions.assertEquals("3", failedStatus.getProperties().get("column_count"));
     }
 

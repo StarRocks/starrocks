@@ -136,6 +136,7 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
         return properties;
     }
 
+    @Override
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
     }
