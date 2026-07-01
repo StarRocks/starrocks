@@ -131,15 +131,12 @@ public class PredicateColumnsMgr {
     }
 
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
-        // only support OLAP table right now
         if (!table.isNativeTableOrMaterializedView()) {
-            // For connector tables, record predicate/join/group-by columns in the trigger manager
-            // so that query-triggered ANALYZE is scoped to relevant columns.
             if (ColumnUsage.UseCase.getPredicateColumnUseCase().contains(useCase)) {
                 String uuid = table.getUUID();
                 if (uuid != null && !uuid.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr()
-                            .recordPredicateColumn(uuid, column.getName());
+                    ExternalPredicateColumnsStorage.getInstance()
+                            .record(uuid, column.getName(), useCase.toString());
                 }
             }
             return;
@@ -240,6 +237,7 @@ public class PredicateColumnsMgr {
 
             PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
             PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
+            ExternalPredicateColumnsStorage extStorage = ExternalPredicateColumnsStorage.getInstance();
 
             if (!storage.isSystemTableReady()) {
                 LOG.warn("system table of predicate_columns is still not ready");
@@ -252,6 +250,20 @@ public class PredicateColumnsMgr {
             } else {
                 mgr.vacuum();
                 mgr.persist();
+            }
+
+            if (!extStorage.isSystemTableReady()) {
+                LOG.warn("system table of external_predicate_columns is still not ready");
+                return;
+            }
+
+            if (!extStorage.isRestored()) {
+                extStorage.restore();
+                extStorage.finishRestore();
+            } else {
+                extStorage.vacuum(
+                        TimeUtils.getSystemNow().minusHours(Config.statistic_predicate_columns_ttl_hours));
+                extStorage.persist();
             }
         }
     }

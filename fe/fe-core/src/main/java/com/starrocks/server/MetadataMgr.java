@@ -90,6 +90,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.DeleteFile;
@@ -766,6 +767,7 @@ public class MetadataMgr {
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
                 getTableStatisticsFromInternalStatistics(table, columns);
+        Statistics result;
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
@@ -775,7 +777,7 @@ public class MetadataMgr {
                 return internalStatistics;
             } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
                     session.getSourceTablesCount() == 1) {
-                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+                result = StatisticsUtils.buildDefaultStatistics(columns.keySet());
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
@@ -794,18 +796,25 @@ public class MetadataMgr {
                             combinedColumnStatsMap.put(key, value);
                         }
                     });
-
-                    return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
+                    result = Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
-                    return connectorBasicStats;
+                    result = connectorBasicStats;
                 }
             }
         } else {
             session.setObtainedFromInternalStatistics(true);
-            return internalStatistics;
+            result = internalStatistics;
         }
+        if (result != null && !table.isNativeTableOrMaterializedView()) {
+            if (result.getStatsSource() == Statistics.StatsSource.ANALYZE) {
+                MetricRepo.COUNTER_EXTERNAL_STATS_ANALYZE.increase(1L);
+            } else {
+                MetricRepo.COUNTER_EXTERNAL_STATS_TABLE_METADATA.increase(1L);
+            }
+        }
+        return result;
     }
 
     public Statistics getTableStatistics(OptimizerContext session,

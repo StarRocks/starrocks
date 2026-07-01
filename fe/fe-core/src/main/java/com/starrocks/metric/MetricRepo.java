@@ -123,6 +123,8 @@ public final class MetricRepo {
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
+    private static final String EXTERNAL_STATS_TABLE_METADATA_METRIC_NAME = "external_stats_table_metadata_total";
+    private static final String EXTERNAL_STATS_ANALYZE_METRIC_NAME = "external_stats_analyze_total";
     private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME = "plan_advisor_guide_generated_total";
     private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC =
             "total generated plan advisor guides";
@@ -145,6 +147,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
+    public static LongCounterMetric COUNTER_EXTERNAL_STATS_TABLE_METADATA;
+    public static LongCounterMetric COUNTER_EXTERNAL_STATS_ANALYZE;
     public static LongCounterMetric COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
@@ -848,6 +852,12 @@ public final class MetricRepo {
         COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
                 MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
+        COUNTER_EXTERNAL_STATS_TABLE_METADATA = new LongCounterMetric(EXTERNAL_STATS_TABLE_METADATA_METRIC_NAME,
+                MetricUnit.REQUESTS, "total external table stats served from table metadata estimation");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_STATS_TABLE_METADATA);
+        COUNTER_EXTERNAL_STATS_ANALYZE = new LongCounterMetric(EXTERNAL_STATS_ANALYZE_METRIC_NAME,
+                MetricUnit.REQUESTS, "total external table stats served from background ANALYZE");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_STATS_ANALYZE);
         COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL = new LongCounterMetric(
                 PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME,
                 MetricUnit.MILLISECONDS,

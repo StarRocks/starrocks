@@ -1715,7 +1715,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             fgStats = getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
         }
-        return mergeWithBackgroundStats(icebergTable, columns, fgStats);
+        return fgStats;
     }
 
     // -------------------------------------------------------------------------
@@ -1872,48 +1872,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Both row counts are null. If the manifest has any live files, the count would be
         // a severe under-estimate → caller must fall back to planFiles for exact cardinality.
         return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
-    }
-
-    // Merge foreground statistics with background ANALYZE results on a per-column basis.
-    // Background stats (NDV + min/max from ANALYZE) win over foreground estimates for any column
-    // that has been analyzed. Background row count is used when available.
-    // On the first query the async cache is cold: returns fgStats unchanged and triggers
-    // background loading. Subsequent queries see the merged result.
-    private Statistics mergeWithBackgroundStats(IcebergTable icebergTable,
-                                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                Statistics fgStats) {
-        List<Map.Entry<ColumnRefOperator, Column>> entries = new ArrayList<>(colRefToColumnMetaMap.entrySet());
-        List<String> columnNames = entries.stream()
-                .map(e -> e.getValue().getName())
-                .collect(Collectors.toList());
-
-        List<ConnectorTableColumnStats> bgStatsList =
-                GlobalStateMgr.getCurrentState().getStatisticStorage()
-                        .getConnectorTableStatistics(icebergTable, columnNames);
-
-        Map<ColumnRefOperator, ColumnStatistic> bgOverrides = new HashMap<>();
-        long bgRowCount = -1;
-        for (int i = 0; i < entries.size(); i++) {
-            ConnectorTableColumnStats bg = bgStatsList.get(i);
-            if (!bg.isUnknown()) {
-                bgOverrides.put(entries.get(i).getKey(), bg.getColumnStatistic());
-                if (bgRowCount < 0) {
-                    bgRowCount = bg.getRowCount();
-                }
-            }
-        }
-
-        if (bgOverrides.isEmpty()) {
-            return fgStats;
-        }
-
-        Statistics.Builder builder = Statistics.buildFrom(fgStats);
-        builder.addColumnStatistics(bgOverrides);
-        builder.setStatsSource(Statistics.StatsSource.ANALYZE);
-        if (bgRowCount > 0) {
-            builder.setOutputRowCount(bgRowCount);
-        }
-        return builder.build();
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
