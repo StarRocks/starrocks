@@ -1,11 +1,13 @@
 #pragma once
 
+#include <optional>
 #include <utility>
 
 #include "common/column_id.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/inverted_index_common.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -91,6 +93,9 @@ private:
     bool _monotonic{true};
     mutable std::vector<uint8_t> _tmp_select;
 };
+
+std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, bool valid_match,
+                                                                       TExprOpcode::type op, std::string_view pattern);
 
 class ColumnTruePredicate final : public ColumnPredicate {
 public:
