@@ -188,11 +188,33 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             for (int i = 0; i < operator.getFnResultColRefs().size(); i++) {
                 ColumnRefOperator output = operator.getFnResultColRefs().get(i);
                 if (output.getType().isComplexType() && context.hasUnnestColRefMapKey(output)) {
-                    pruneForComplexType(output, context);
+                    // The unnest input array element type is narrowed via the access group that
+                    // setUnnest() propagated from this output to the input array. The output element
+                    // type must be narrowed by that SAME access group, otherwise the unnest emits rows
+                    // whose struct width differs from its (narrowed) input element -> StructColumn::append
+                    // field-count mismatch (BE abort under DCHECK, silent under-read in release). The
+                    // unnest output is not a scan ref, so the scanRefs-gated pruneForComplexType() skips
+                    // it; narrow it directly by its access group instead.
+                    pruneUnnestResultType(output, context);
                     operator.getFn().getTableFnReturnTypes().set(i, output.getType());
                 }
             }
             return visit(optExpression, context);
+        }
+
+        // Narrow an unnest result column by its visited access group, ignoring the scanRefs gate that
+        // pruneForComplexType() applies (the unnest output is never a scan ref). The access group is the
+        // same one setUnnest() copied to the input array, so input and output element types stay in sync.
+        private static void pruneUnnestResultType(ColumnRefOperator columnRefOperator,
+                                                  PruneComplexTypeUtil.Context context) {
+            ComplexTypeAccessGroup accessGroup = context.getVisitedAccessGroup(columnRefOperator);
+            if (accessGroup == null) {
+                return;
+            }
+            Type cloneType = columnRefOperator.getType().clone();
+            PruneComplexTypeUtil.setAccessGroup(cloneType, accessGroup);
+            cloneType.pruneUnusedSubfields();
+            columnRefOperator.setType(cloneType);
         }
 
         private static void pruneForColumnRefMap(Map<ColumnRefOperator, ScalarOperator> map,
