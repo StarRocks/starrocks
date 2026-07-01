@@ -15,6 +15,7 @@ package com.starrocks.epack.http.rest;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -39,7 +40,9 @@ public class LicenseSystemInfoAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireClusterAdminIfHttpAuthEnabled();
+
         try {
             GlobalStateMgr stateMgr = GlobalStateMgr.getCurrentState();
             // note: do not use Gson.toJson() here, as it will encode the base64 string

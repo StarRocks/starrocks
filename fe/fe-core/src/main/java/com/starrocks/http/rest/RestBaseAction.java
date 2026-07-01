@@ -43,6 +43,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -268,6 +269,34 @@ public class RestBaseAction extends BaseAction {
             return;
         }
         Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
+    }
+
+    /**
+     * Require the cluster_admin (or root) role — for cluster-level administration.
+     * <p>
+     * Uses the role ids already resolved onto the authenticated {@link ConnectContext} by the auth
+     * pipeline ({@code RestBaseAction.execute} -> {@code AuthenticationHandler.authenticate} ->
+     * {@code ConnectContext.setCurrentRoleIds(user, groups)}), which merges the user's default roles
+     * AND its group-mapped roles. This intentionally does NOT use
+     * {@code AuthorizationMgr.getOwnedRolesByUser}, which returns only roles granted directly to the
+     * user and would wrongly deny a cluster admin who holds the role via a group (e.g. LDAP).
+     */
+    protected void requireClusterAdminIfHttpAuthEnabled() throws AccessDeniedException {
+        if (!Config.enable_http_auth) {
+            return;
+        }
+        ConnectContext context = ConnectContext.get();
+        UserIdentity currentUser = context.getCurrentUserIdentity();
+        if (currentUser != null && currentUser.equals(UserIdentity.ROOT)) {
+            return;
+        }
+        Set<Long> currentRoleIds = context.getCurrentRoleIds();
+        if (currentRoleIds != null &&
+                (currentRoleIds.contains(PrivilegeBuiltinConstants.ROOT_ROLE_ID) ||
+                        currentRoleIds.contains(PrivilegeBuiltinConstants.CLUSTER_ADMIN_ROLE_ID))) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied; the cluster_admin or root role is required.");
     }
 
     public void sendResult(BaseRequest request, BaseResponse response, RestBaseResult result) {

@@ -14,6 +14,7 @@
 package com.starrocks.epack.http.rest;
 
 import com.google.gson.Gson;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.epack.system.LicenseInfo;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -37,7 +38,9 @@ public class LicenseListAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireClusterAdminIfHttpAuthEnabled();
+
         List<LicenseInfo> licenseInfos = GlobalStateMgr.getCurrentState().getLicenseMgr().getAllLicenseInfo();
         response.setContentType("application/json");
         response.getContent().append(new Gson().toJson(licenseInfos));

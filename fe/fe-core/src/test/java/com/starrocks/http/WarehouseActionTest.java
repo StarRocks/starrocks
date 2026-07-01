@@ -141,6 +141,34 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void testGetWarehousesDeniedWhenHttpAuthEnabledAndNotOperate() throws IOException {
+        boolean savedEnableHttpAuth = Config.enable_http_auth;
+        try {
+            Config.enable_http_auth = true;
+            new MockUp<com.starrocks.sql.analyzer.Authorizer>() {
+                @Mock
+                public static void checkSystemAction(ConnectContext context,
+                                                     com.starrocks.authorization.PrivilegeType privilegeType)
+                        throws com.starrocks.authorization.AccessDeniedException {
+                    throw new com.starrocks.authorization.AccessDeniedException("operate denied");
+                }
+            };
+
+            Request request = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + WarehouseAction.URI)
+                    .build();
+
+            try (Response response = networkClient.newCall(request).execute()) {
+                Assertions.assertEquals(HttpResponseStatus.UNAUTHORIZED.code(), response.code());
+            }
+        } finally {
+            Config.enable_http_auth = savedEnableHttpAuth;
+        }
+    }
+
+    @Test
     public void testGetWarehousesWithException() throws IOException {
         new MockUp<WarehouseInfosBuilder>() {
             @Mock
