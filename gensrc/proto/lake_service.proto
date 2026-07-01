@@ -374,6 +374,54 @@ message TabletInfoPB {
     optional int64 min_version = 2;
 }
 
+// The resumable, per-pass state of the incremental (range-based) vacuum protocol; see
+// VacuumRequest.max_versions_per_round. It round-trips between FE and BE as ONE unit: in a VacuumRequest
+// it is the range the previous round proposed (for this round to commit) plus the resume cursor and the
+// pass retain floor; in a VacuumResponse it is the range this round newly proposed. The FE persists it
+// per partition (one edit log per round), which is why it is grouped into a single message and tracked
+// per partition -- not per tablet: lake metadata versions are partition-wide (every tablet has a
+// metadata at every version, whether stored as one bundled file (0, v) or per-tablet files (tablet_id,
+// v), because a publish copies each tablet's previous metadata forward), so one range and one cursor
+// describe the whole partition and the persisted state stays O(1) per partition.
+message IncrementalVacuumStatePB {
+    // The partition-version range [to_delete_low, to_delete_high) -- low inclusive, high EXCLUSIVE.
+    // to_delete_high is the intersection retained floor (the MIN over the partition's tablets of their
+    // grace/min_retain boundary), so every version strictly below it is deletable by every tablet. A
+    // commit does not delete to_delete_high itself; it derives the band's top real chain node from it
+    // (the node just below the floor for a fresh band, or to_delete_high - 1 for a resume band), walks
+    // each tablet's prev_garbage_version chain down to to_delete_low collecting the garbage data files,
+    // then deletes the bundled (or per-tablet) metadata in the range. Deletion is ascending and
+    // idempotent: a version with no file is treated as already deleted. Both 0/unset means "no range" (a
+    // fresh round, nothing proposed, or just reset).
+    optional int64 to_delete_low = 1;
+    optional int64 to_delete_high = 2;
+    // The partition version the chain walk resumes from. Unset/0 means "start a fresh pass from
+    // min_retain_version" (the first round of a pass, or right after the old chain was fully cleaned). In
+    // a VacuumResponse, 0 is also the sentinel for "the chain bottom was reached -- the pass has drained".
+    optional int64 next_propose_start_version = 3;
+    // The pass retain floor: the LOWEST partition version this whole pass keeps (everything below it is
+    // deleted band by band; it and above are retained for the pass). It is fixed for the entire pass --
+    // the fresh round computes it as the lowest surviving version (the MIN over tablets of their
+    // grace/min_retain boundary) and returns it here; the FE persists it as a pass constant and replays
+    // it on every commit round, resetting only when the next fresh round starts a new pass. The commit
+    // reads this version's metadata to spare the shared data files still referenced by surviving tablets.
+    //
+    // CONTRACT (the FE MUST honor this): on every round of a pass -- the fresh round AND every resume
+    // round -- this field carries the value the BE returned for THAT pass's fresh round (the round whose
+    // next_propose_start_version was 0/unset). It is a per-pass constant. The FE must NOT set it to the
+    // current round's to_delete_high, nor recompute it per round. The BE distinguishes a fresh-band
+    // commit from a resume-band commit by whether to_delete_high equals this field, and reads exactly
+    // this version for shared-file liveness; replaying to_delete_high instead would misdrive both.
+    //
+    // Why the MIN (unlike legacy one-shot vacuum which reads the MAX retain boundary): a shared file can
+    // be garbage for one tablet yet still referenced by another at this floor, so reading any version
+    // higher than the floor could dangle that reference. Reading the floor is safe because lake versions
+    // are partition-wide and incremental vacuum only deletes strictly below the floor, so the floor's
+    // metadata survives for every tablet throughout the pass. The two coincide when tablets are
+    // version-synchronized (the normal case). In a VacuumResponse, set only on a fresh round.
+    optional int64 alive_boundary_version = 4;
+}
+
 message VacuumRequest {
     // This field is deprecated, use |tablet_infos| instead.
     repeated int64 tablet_ids = 1; // deprecated
@@ -410,6 +458,19 @@ message VacuumRequest {
     // the request is received. After it elapses the FE has given up, so the BE task
     // should abort itself proactively instead of keeping a vacuum worker occupied.
     optional int64 timeout_ms = 11;
+
+    // ---- Incremental (range-based, resumable) vacuum protocol. ----
+    // Upper bound on how many partition versions a single round may advance the chain walk, so one round
+    // cannot run long enough to hit the RPC timeout wall. Its PRESENCE (set, > 0) is also what selects
+    // the incremental protocol: when set, the BE commits the previously proposed range carried in
+    // incremental_vacuum_state, walks at most this many versions further down from its
+    // next_propose_start_version, and returns the newly proposed range in VacuumResponse. When unset the
+    // BE keeps the legacy behavior of walking the whole chain in one round -- an old FE never sets it, so
+    // an upgraded BE transparently falls back and no FE/BE pair can disagree about the protocol in effect.
+    optional int64 max_versions_per_round = 12;
+    // The state the previous round proposed and the FE persisted: the range this round should commit, the
+    // cursor to resume the walk from, and the pass retain floor. See IncrementalVacuumStatePB.
+    optional IncrementalVacuumStatePB incremental_vacuum_state = 13;
 }
 
 message VacuumResponse {
@@ -424,6 +485,13 @@ message VacuumResponse {
     repeated TabletInfoPB tablet_infos = 5;
     // The total file size need to be vacuumed
     optional int64 extra_file_size = 6;
+
+    // ---- Incremental vacuum protocol result (see VacuumRequest.max_versions_per_round). ----
+    // The next-round state the FE must persist atomically in a single edit log: persisting it both
+    // acknowledges that the range the FE sent in this request has been committed and records the newly
+    // proposed range to commit next round (plus the resume cursor and, on a fresh round, the pass retain
+    // floor). Empty / unset means nothing new was proposed. See IncrementalVacuumStatePB.
+    optional IncrementalVacuumStatePB incremental_vacuum_state = 7;
 }
 
 // 1. Before the orphaned data file cleanup starts, VacuumFull will delete metadata files which satisfy the following:
