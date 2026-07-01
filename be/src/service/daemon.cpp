@@ -36,6 +36,7 @@
 
 #include <gflags/gflags.h>
 
+#include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_memory_allocator_fwd.h"
@@ -295,6 +296,7 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
                    << ", is going to exit";
 
+        DataCache::GetInstance()->update_mem_trackers();
         SystemMetrics::instance()->update_memory_metrics();
         LOG(ERROR) << dump_memory_tracker();
     }

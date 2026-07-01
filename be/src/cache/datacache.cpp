@@ -30,6 +30,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "runtime/mem_tracker.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -44,7 +45,9 @@ namespace starrocks {
 
 namespace {
 
-const char* const kUpdateDataCacheMetricsHookName = "update_datacache_metrics";
+// MetricRegistry triggers hooks in name order. Keep this before "system_metrics"
+// because SystemMetrics reads the datacache/page-cache MemTracker values.
+const char* const kUpdateDataCacheMetricsHookName = "datacache_metrics";
 
 } // namespace
 
@@ -132,6 +135,31 @@ void DataCache::disable_metrics_update_hook() {
     _use_same_starcache_instance = false;
 }
 
+void DataCache::set_mem_trackers(MemTracker* datacache_mem_tracker, MemTracker* pagecache_mem_tracker) {
+    _datacache_mem_tracker = datacache_mem_tracker;
+    _pagecache_mem_tracker = pagecache_mem_tracker;
+}
+
+void DataCache::update_mem_trackers() {
+    if (_datacache_mem_tracker != nullptr) {
+        int64_t datacache_mem_bytes = 0;
+        if (_local_mem_cache != nullptr && _local_mem_cache->is_initialized()) {
+            auto datacache_metrics = _local_mem_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!config::datacache_unified_instance_enable) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        _datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+
+    if (_pagecache_mem_tracker != nullptr && _page_cache != nullptr && _page_cache->is_initialized()) {
+        _pagecache_mem_tracker->set(_page_cache->memory_usage());
+    }
+}
+
 void DataCache::update_metrics() {
     DataCacheMetricsSnapshot snapshot{};
     if (_local_mem_cache != nullptr && _local_mem_cache->is_initialized()) {
@@ -159,10 +187,12 @@ void DataCache::update_metrics() {
     snapshot.block_cache_hit_bytes = hit_rate_counter->block_cache_hit_bytes();
     snapshot.block_cache_miss_bytes = hit_rate_counter->block_cache_miss_bytes();
     DataCacheMetrics::instance()->update(snapshot);
+    update_mem_trackers();
 }
 
 void DataCache::destroy() {
     disable_metrics_update_hook();
+    set_mem_trackers(nullptr, nullptr);
 
     if (_disk_space_monitor != nullptr) {
         _disk_space_monitor->stop();

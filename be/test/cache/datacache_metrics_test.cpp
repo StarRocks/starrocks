@@ -18,9 +18,14 @@
 
 #include <mutex>
 
+#include "base/testutil/scoped_updater.h"
+#include "base/utility/defer_op.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/datacache.h"
+#include "cache/mem_cache/page_cache.h"
+#include "common/config_cache_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -119,8 +124,10 @@ protected:
     void TearDown() override {
         auto* cache = DataCache::GetInstance();
         cache->disable_metrics_update_hook();
+        cache->set_mem_trackers(nullptr, nullptr);
         cache->_local_mem_cache.reset();
         cache->set_local_disk_cache(nullptr);
+        cache->set_page_cache(nullptr);
         DataCacheHitRateCounter::instance()->reset();
     }
 };
@@ -173,14 +180,22 @@ TEST_F(DataCacheMetricsTest, test_update_snapshot_sets_values) {
 }
 
 TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
+    SCOPED_UPDATE(bool, config::datacache_unified_instance_enable, true);
     auto* cache = DataCache::GetInstance();
     auto mem_cache = std::make_shared<FakeMemCacheEngine>();
     mem_cache->metrics = {.mem_quota_bytes = 100, .mem_used_bytes = 20};
+    auto page_cache_engine = std::make_shared<FakeMemCacheEngine>();
+    page_cache_engine->metrics = {.mem_quota_bytes = 300, .mem_used_bytes = 40};
+    auto page_cache = std::make_shared<StoragePageCache>(page_cache_engine.get());
     auto disk_cache = std::make_shared<FakeDiskCacheEngine>();
     disk_cache->metrics = {
             .status = DataCacheStatus::NORMAL, .disk_quota_bytes = 1000, .disk_used_bytes = 200, .meta_used_bytes = 30};
+    MemTracker datacache_mem_tracker(MemTrackerType::DATACACHE, -1, "datacache");
+    MemTracker pagecache_mem_tracker(MemTrackerType::PAGE_CACHE, -1, "page_cache");
     cache->_local_mem_cache = mem_cache;
     cache->set_local_disk_cache(disk_cache);
+    cache->set_page_cache(page_cache);
+    cache->set_mem_trackers(&datacache_mem_tracker, &pagecache_mem_tracker);
     DataCacheHitRateCounter::instance()->update_block_cache_stat(7, 9);
 
     auto status = cache->enable_metrics_update_hook(backend_metrics_registry_for_test(), true);
@@ -196,6 +211,59 @@ TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
     ASSERT_EQ(30, instance->datacache_meta_used_bytes.value());
     ASSERT_EQ(7, instance->block_cache_hit_bytes.value());
     ASSERT_EQ(9, instance->block_cache_miss_bytes.value());
+    ASSERT_EQ(20, datacache_mem_tracker.consumption());
+    ASSERT_EQ(40, pagecache_mem_tracker.consumption());
+}
+
+TEST_F(DataCacheMetricsTest, test_update_mem_trackers_sets_cache_trackers) {
+    SCOPED_UPDATE(bool, config::datacache_unified_instance_enable, true);
+    auto* cache = DataCache::GetInstance();
+    auto mem_cache = std::make_shared<FakeMemCacheEngine>();
+    mem_cache->metrics = {.mem_quota_bytes = 100, .mem_used_bytes = 20};
+    auto page_cache_engine = std::make_shared<FakeMemCacheEngine>();
+    page_cache_engine->metrics = {.mem_quota_bytes = 300, .mem_used_bytes = 40};
+    auto page_cache = std::make_shared<StoragePageCache>(page_cache_engine.get());
+    MemTracker datacache_mem_tracker(MemTrackerType::DATACACHE, -1, "datacache");
+    MemTracker pagecache_mem_tracker(MemTrackerType::PAGE_CACHE, -1, "page_cache");
+    cache->_local_mem_cache = mem_cache;
+    cache->set_page_cache(page_cache);
+    cache->set_mem_trackers(&datacache_mem_tracker, &pagecache_mem_tracker);
+
+    cache->update_mem_trackers();
+
+    ASSERT_EQ(20, datacache_mem_tracker.consumption());
+    ASSERT_EQ(40, pagecache_mem_tracker.consumption());
+}
+
+TEST_F(DataCacheMetricsTest, test_update_mem_trackers_handles_null_trackers) {
+    auto* cache = DataCache::GetInstance();
+    cache->set_mem_trackers(nullptr, nullptr);
+
+    cache->update_mem_trackers();
+}
+
+TEST_F(DataCacheMetricsTest, test_datacache_hook_runs_before_system_metrics) {
+    SCOPED_UPDATE(bool, config::datacache_unified_instance_enable, true);
+    auto* cache = DataCache::GetInstance();
+    auto mem_cache = std::make_shared<FakeMemCacheEngine>();
+    mem_cache->metrics = {.mem_quota_bytes = 100, .mem_used_bytes = 20};
+    MemTracker datacache_mem_tracker(MemTrackerType::DATACACHE, -1, "datacache");
+    cache->_local_mem_cache = mem_cache;
+    cache->set_mem_trackers(&datacache_mem_tracker, nullptr);
+
+    auto* registry = backend_metrics_registry_for_test();
+    auto status = cache->enable_metrics_update_hook(registry, true);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    int64_t observed_datacache_mem_bytes = 0;
+    ASSERT_TRUE(registry->register_hook("system_metrics",
+                                        [&] { observed_datacache_mem_bytes = datacache_mem_tracker.consumption(); }));
+    DeferOp deregister_system_metrics_hook([&] { registry->deregister_hook("system_metrics"); });
+
+    mem_cache->metrics.mem_used_bytes = 55;
+    registry->trigger_hook();
+
+    ASSERT_EQ(55, observed_datacache_mem_bytes);
 }
 
 TEST_F(DataCacheMetricsTest, test_metrics_types) {

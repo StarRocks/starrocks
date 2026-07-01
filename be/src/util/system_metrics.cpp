@@ -16,12 +16,6 @@
 
 #include <runtime/mem_tracker.h>
 
-#include "cache/datacache.h"
-#ifdef USE_STAROS
-#include "fslib/star_cache_handler.h"
-#endif
-#include "cache/mem_cache/page_cache.h"
-#include "common/config_cache_fwd.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/runtime_env.h"
 
@@ -107,32 +101,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("vector_index_mem_bytes", &_memory_metrics->vector_index_mem_bytes);
 }
 
-void SystemMetrics::_update_datacache_mem_tracker() {
-    int64_t datacache_mem_bytes = 0;
-    auto* datacache_mem_tracker = RuntimeEnv::GetInstance()->datacache_mem_tracker();
-    if (datacache_mem_tracker) {
-        LocalMemCacheEngine* local_cache = DataCache::GetInstance()->local_mem_cache();
-        if (local_cache != nullptr && local_cache->is_initialized()) {
-            auto datacache_metrics = local_cache->cache_metrics();
-            datacache_mem_bytes = datacache_metrics.mem_used_bytes;
-        }
-#ifdef USE_STAROS
-        if (!config::datacache_unified_instance_enable) {
-            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
-        }
-#endif
-        datacache_mem_tracker->set(datacache_mem_bytes);
-    }
-}
-
-void SystemMetrics::_update_pagecache_mem_tracker() {
-    auto* pagecache_mem_tracker = RuntimeEnv::GetInstance()->page_cache_mem_tracker();
-    auto* page_cache = StoragePageCache::instance();
-    if (pagecache_mem_tracker && page_cache != nullptr && page_cache->is_initialized()) {
-        pagecache_mem_tracker->set(page_cache->memory_usage());
-    }
-}
-
 void SystemMetrics::update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
@@ -165,9 +133,6 @@ void SystemMetrics::update_memory_metrics() {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
     }
 #endif
-
-    _update_datacache_mem_tracker();
-    _update_pagecache_mem_tracker();
 
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                   \
     if (RuntimeEnv::GetInstance()->tracker() != nullptr) {                                   \

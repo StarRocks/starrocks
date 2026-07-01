@@ -191,8 +191,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
-#ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
+    cache_env->set_mem_trackers(runtime_env->datacache_mem_tracker(), runtime_env->page_cache_mem_tracker());
+#ifndef __APPLE__
     std::vector<std::string> cache_storage_root_paths;
     cache_storage_root_paths.reserve(paths.size());
     for (const auto& path : paths) {

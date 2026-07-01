@@ -86,9 +86,6 @@ public:
 private:
     void _install_memory_metrics(MetricRegistry* registry);
 
-    void _update_datacache_mem_tracker();
-    void _update_pagecache_mem_tracker();
-
 private:
     static const char* const _s_hook_name;
 
