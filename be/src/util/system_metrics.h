@@ -24,8 +24,6 @@
 
 namespace starrocks {
 
-class VectorIndexCacheMetrics;
-
 class MemoryMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
@@ -88,10 +86,6 @@ public:
 private:
     void _install_memory_metrics(MetricRegistry* registry);
 
-    void _install_vector_index_cache_metrics(MetricRegistry* registry);
-
-    void _update_vector_index_cache_metrics();
-
     void _update_datacache_mem_tracker();
     void _update_pagecache_mem_tracker();
 
@@ -99,7 +93,6 @@ private:
     static const char* const _s_hook_name;
 
     std::unique_ptr<MemoryMetrics> _memory_metrics;
-    std::unique_ptr<VectorIndexCacheMetrics> _vector_index_cache_metrics;
 
     std::mutex _update_mutex;
     MetricRegistry* _registry = nullptr;
