@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -25,7 +29,8 @@
 #include "exprs/expr_context.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/java_global_ref.h"
+#include "runtime/java/jvm_class.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
 #include "types/logical_type.h"

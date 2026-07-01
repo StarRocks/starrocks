@@ -22,7 +22,8 @@
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "jni.h"
-#include "runtime/env/java/java_env.h"
+#include "runtime/java/java_global_ref.h"
+#include "runtime/java/jvm_class.h"
 #include "types/logical_type.h"
 #include "udf/java/type_traits.h"
 
@@ -40,6 +41,9 @@ namespace starrocks {
 class DirectByteBuffer;
 class AggBatchCallStub;
 class BatchEvaluateStub;
+class JavaUdfClassLoader;
+class JavaUdfClassAnalyzer;
+struct JavaUdfMethodDescriptor;
 
 struct ListMeta {
     // List class
@@ -498,82 +502,21 @@ private:
     jmethodID _clear_method_id;
 };
 
-// For loading UDF Class
-// Not thread safe
-class ClassLoader {
-public:
-    static const inline int BATCH_SINGLE_UPDATE = 1;
-    static const inline int BATCH_EVALUATE = 2;
-    // Handle
-    ClassLoader(std::string path) : _path(std::move(path)) {}
-    ~ClassLoader();
-
-    ClassLoader& operator=(const ClassLoader& other) = delete;
-    ClassLoader(const ClassLoader&) = delete;
-    // get class
-    StatusOr<JVMClass> getClass(const std::string& className);
-    // get batch call stub
-    // numActualVarArgs: actual number of varargs input columns; only meaningful when the method uses varargs
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
-                                   int numActualVarArgs = 0);
-
-    Status init();
-
-private:
-    std::string _path;
-    jmethodID _get_class = nullptr;
-    jmethodID _get_call_stub = nullptr;
-    JavaGlobalRef _handle = nullptr;
-    JavaGlobalRef _clazz = nullptr;
-};
-
-struct MethodTypeDescriptor {
-    LogicalType type;
-    bool is_box;
-    bool is_array = false;
-};
-
-struct JavaMethodDescriptor {
-    std::string signature; // function signature
-    std::string name;      // function name
-    std::vector<MethodTypeDescriptor> method_desc;
-    JavaGlobalRef method = nullptr;
-    // thread safe
-    jmethodID get_method_id() const;
-};
-
-// Used to get function signatures
-class ClassAnalyzer {
-public:
-    ClassAnalyzer() = default;
-    ~ClassAnalyzer() = default;
-
-    // Strip generic type parameters from a JNI method signature.
-    // e.g. "(Ljava/util/List<java/lang/String>;)V" -> "(Ljava/util/List;)V"
-    static void strip_jni_generic_types(std::string* sign);
-
-    Status has_method(jclass clazz, const std::string& method, bool* has);
-    Status get_signature(jclass clazz, const std::string& method, std::string* sign);
-    Status get_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
-    StatusOr<jobject> get_method_object(jclass clazz, const std::string& method_name);
-    Status get_udaf_method_desc(const std::string& sign, std::vector<MethodTypeDescriptor>* desc);
-};
-
 struct JavaUDFContext {
     JavaUDFContext() = default;
     ~JavaUDFContext();
 
-    std::unique_ptr<ClassLoader> udf_classloader;
-    std::unique_ptr<ClassAnalyzer> analyzer;
+    std::unique_ptr<JavaUdfClassLoader> udf_classloader;
+    std::unique_ptr<JavaUdfClassAnalyzer> analyzer;
     std::unique_ptr<BatchEvaluateStub> call_stub;
 
     JVMClass udf_class = nullptr;
     JavaGlobalRef udf_handle = nullptr;
 
     // Java Method
-    std::unique_ptr<JavaMethodDescriptor> prepare;
-    std::unique_ptr<JavaMethodDescriptor> evaluate;
-    std::unique_ptr<JavaMethodDescriptor> close;
+    std::unique_ptr<JavaUdfMethodDescriptor> prepare;
+    std::unique_ptr<JavaUdfMethodDescriptor> evaluate;
+    std::unique_ptr<JavaUdfMethodDescriptor> close;
 
     // Per-argument and return-type UdfTypeDesc Java objects mirroring the SQL
     // TypeDescriptor of each slot, with the formal Java record class captured at
@@ -589,23 +532,25 @@ struct JavaUDFContext {
 // Contains class references and method descriptors — no per-aggregation state.
 // Cached via UserFunctionCache::load_cacheable_java_udf.
 struct JavaUDAFSharedContext {
-    std::unique_ptr<ClassLoader> udf_classloader;
+    ~JavaUDAFSharedContext();
+
+    std::unique_ptr<JavaUdfClassLoader> udf_classloader;
 
     JVMClass udaf_class = nullptr;
     JVMClass udaf_state_class = nullptr;
 
-    std::unique_ptr<JavaMethodDescriptor> create;
-    std::unique_ptr<JavaMethodDescriptor> destory;
-    std::unique_ptr<JavaMethodDescriptor> update;
-    std::unique_ptr<JavaMethodDescriptor> merge;
-    std::unique_ptr<JavaMethodDescriptor> finalize;
-    std::unique_ptr<JavaMethodDescriptor> serialize;
-    std::unique_ptr<JavaMethodDescriptor> serialize_size;
+    std::unique_ptr<JavaUdfMethodDescriptor> create;
+    std::unique_ptr<JavaUdfMethodDescriptor> destory;
+    std::unique_ptr<JavaUdfMethodDescriptor> update;
+    std::unique_ptr<JavaUdfMethodDescriptor> merge;
+    std::unique_ptr<JavaUdfMethodDescriptor> finalize;
+    std::unique_ptr<JavaUdfMethodDescriptor> serialize;
+    std::unique_ptr<JavaUdfMethodDescriptor> serialize_size;
 
     // Window function methods (optional)
-    std::unique_ptr<JavaMethodDescriptor> reset;
-    std::unique_ptr<JavaMethodDescriptor> window_update;
-    std::unique_ptr<JavaMethodDescriptor> get_values;
+    std::unique_ptr<JavaUdfMethodDescriptor> reset;
+    std::unique_ptr<JavaUdfMethodDescriptor> window_update;
+    std::unique_ptr<JavaUdfMethodDescriptor> get_values;
 
     // Generated stub class/method — used to create a per-aggregator AggBatchCallStub
     JVMClass update_stub_clazz = nullptr;
@@ -688,8 +633,5 @@ JavaUDAFUniqueContext* get_java_udaf_context(FunctionContext* ctx);
 void attach_java_udaf_context(FunctionContext* ctx, std::unique_ptr<JavaUDAFUniqueContext> udaf_ctx);
 void clear_java_udaf_states(FunctionContext* ctx);
 void destroy_java_udaf_context(FunctionContext* ctx);
-
-// Check whether java runtime can work
-Status detect_java_runtime();
 
 } // namespace starrocks

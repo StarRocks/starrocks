@@ -26,7 +26,7 @@
 #include "common/system/mem_info.h"
 #include "platform/python/env.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/diagnose_daemon.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"

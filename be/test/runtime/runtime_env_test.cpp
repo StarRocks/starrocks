@@ -27,7 +27,7 @@
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "platform/platform_env.h"
-#include "runtime/env/diagnose_daemon.h"
+#include "runtime/diagnose_daemon.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
