@@ -2496,6 +2496,10 @@ public class Config extends ConfigBase {
             "generation and dump them to logs when plan generation fails (e.g. CBO timeout) for diagnosis.")
     public static boolean enable_dump_optimizer_trace_on_error = false;
 
+    @ConfField(mutable = true, comment = "Whether to push down non-grouped aggregations below Union " +
+            "in the physical plan")
+    public static boolean push_down_non_grouped_aggregate_below_union = false;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
