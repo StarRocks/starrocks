@@ -37,8 +37,6 @@
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "http/http_metrics.h"
 #include "io/io_profiler_metrics.h"
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
