@@ -251,7 +251,8 @@ protected:
     }
 
     std::string vi_location(const std::string& segment_name) {
-        return _tablet_mgr->segment_location(_tablet_metadata->id(), gen_vector_index_filename(segment_name, kIndexId));
+        return _tablet_mgr->segment_location(_tablet_metadata->id(),
+                                             gen_vector_index_filename(segment_name, _tablet_metadata->id(), kIndexId));
     }
 
     SegmentFooterPB read_footer(const std::string& segment_name) {

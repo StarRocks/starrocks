@@ -285,8 +285,10 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
                                                const SegmentMetadataPB& src_seg_meta, const std::string& src_path,
                                                const std::string& dest_path, FileInfo* file_info) {
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
-        auto src_vi = params.tablet->segment_location(gen_vector_index_filename(src_path, index_id));
-        auto dest_vi = params.tablet->segment_location(gen_vector_index_filename(dest_path, index_id));
+        auto src_vi =
+                params.tablet->segment_location(gen_vector_index_filename(src_path, params.tablet->id(), index_id));
+        auto dest_vi =
+                params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
         file_info->vector_index_ids.push_back(index_id);
     }
@@ -589,7 +591,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         if (!defer_vector_index_build) {
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 FileMetaPB vi_meta;
-                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), index_id));
+                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), params.tablet->id(), index_id));
                 orphan_files->push_back(std::move(vi_meta));
             }
         }

@@ -115,7 +115,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).
                 // This only runs for segments in the current batch (bounded by
                 // max_rowsets_per_batch), so S3 HEAD cost is minimal.
-                std::string vi_name = gen_vector_index_filename(seg_name, idx_id);
+                std::string vi_name = gen_vector_index_filename(seg_name, _tablet_id, idx_id);
                 std::string vi_path = _tablet_mgr->segment_location(_tablet_id, vi_name);
                 if (fs::path_exist(vi_path)) {
                     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id
@@ -290,7 +290,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         if (auto pos = seg_basename.rfind('/'); pos != std::string_view::npos) {
             seg_basename = seg_basename.substr(pos + 1);
         }
-        std::string vi_name = gen_vector_index_filename(seg_basename, index_id);
+        std::string vi_name = gen_vector_index_filename(seg_basename, _tablet_id, index_id);
         std::string vi_path = _tablet_mgr->segment_location(tablet_id, vi_name);
 
         ASSIGN_OR_RETURN(auto builder_type,

@@ -14,7 +14,11 @@
 
 #include "storage/index/vector/vector_index_writer.h"
 
+#include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
@@ -46,6 +50,7 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
+<<<<<<< HEAD
     // Step 1: enforce minimum threshold by algorithm type.
     // IVFPQ requires training points >= nlist. If the input is below this,
     // faiss will throw, so we floor the threshold at nlist to skip the build
@@ -71,6 +76,12 @@ Status VectorIndexWriter::init() {
         _start_vector_index_build_threshold = std::atoi(find_result->second.c_str());
     }
 
+=======
+    // Threshold resolution is the single source of truth shared with the async build
+    // path (lake::get_vector_index_build_threshold); see resolve_vector_index_build_threshold
+    // for the precedence rules (config default -> user override -> IVFPQ nlist floor).
+    _start_vector_index_build_threshold = resolve_vector_index_build_threshold(*_tablet_index);
+>>>>>>> 280c2d57caa... [Enhancement] Build vector index for shared-data bundle segments (#75542)
     return Status::OK();
 }
 
@@ -231,6 +242,54 @@ Status validate_vector_index_input(const ArrayColumn& array_col, size_t dim, boo
     }
 
     return Status::OK();
+}
+
+namespace {
+// Checked parse of a property value into uint32_t; returns false when the key is absent
+// or the value is malformed / out of range, so callers keep their default rather than
+// silently using atoi()'s 0 or a wrapped-negative value.
+bool parse_u32_property(const std::map<std::string, std::string>& props, const std::string& key, uint32_t* out) {
+    auto it = props.find(key);
+    if (it == props.end()) {
+        return false;
+    }
+    char* end = nullptr;
+    errno = 0;
+    unsigned long parsed = std::strtoul(it->second.c_str(), &end, 10);
+    if (errno != 0 || end == it->second.c_str() || *end != '\0' || parsed > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    *out = static_cast<uint32_t>(parsed);
+    return true;
+}
+} // namespace
+
+uint32_t resolve_vector_index_build_threshold(const TabletIndex& index) {
+    const auto& common = index.common_properties();
+
+    // 1. config default.
+    uint32_t threshold = static_cast<uint32_t>(config::config_vector_index_default_build_threshold);
+
+    // 2. user-specified property overrides the default.
+    uint32_t user_threshold = 0;
+    if (parse_u32_property(common, "index_build_threshold", &user_threshold)) {
+        threshold = user_threshold;
+    }
+
+    // 3. IVFPQ needs at least `nlist` training points or faiss throws, so floor the threshold
+    //    at nlist. Applied LAST so a user override can never drop the threshold below nlist.
+    auto type_it = common.find("index_type");
+    if (type_it != common.end()) {
+        std::string index_type = type_it->second;
+        std::transform(index_type.begin(), index_type.end(), index_type.begin(), ::tolower);
+        if (index_type == "ivfpq") {
+            uint32_t nlist = 0;
+            if (parse_u32_property(index.index_properties(), "nlist", &nlist)) {
+                threshold = std::max(threshold, nlist);
+            }
+        }
+    }
+    return threshold;
 }
 
 } // namespace starrocks

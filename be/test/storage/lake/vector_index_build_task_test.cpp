@@ -113,7 +113,7 @@ protected:
         opts.defer_vector_index_build = true;
 
         // Fill vector_index_file_paths so metadata is populated
-        std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+        std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
         std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
         opts.vector_index_file_paths[kIndexId] = vi_path;
 
@@ -185,7 +185,7 @@ TEST_F(VectorIndexBuildTaskTest, test_basic_build) {
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
     // Verify .vi does NOT exist before build
-    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
     std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
     ASSERT_FALSE(fs::path_exist(vi_path));
 
@@ -224,8 +224,8 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_built_rowsets) {
     ASSERT_EQ(response.new_built_version(), 3);
 
     // Only seg2's .vi should be built, seg1 was skipped
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
     ASSERT_FALSE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
 }
@@ -253,9 +253,9 @@ TEST_F(VectorIndexBuildTaskTest, test_batch_limit) {
     // Should have processed rowsets at version 2 and 3 (sorted by version, first 2)
     ASSERT_EQ(response.new_built_version(), 3);
 
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
-    std::string vi3 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg3, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
+    std::string vi3 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg3, kTabletId, kIndexId));
     ASSERT_TRUE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
     ASSERT_FALSE(fs::path_exist(vi3)); // Not processed yet
@@ -283,8 +283,8 @@ TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
     ASSERT_EQ(response.new_built_version(), 3);
 
     // Only seg2 should be built; seg1 skipped via request built_version
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
     ASSERT_FALSE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
 }
@@ -299,7 +299,7 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_existing_vi_files) {
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
     // Pre-create .vi file to simulate a previous partial build success
-    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
     std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
     ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(vi_path));
     ASSERT_OK(wf->append("dummy"));
@@ -464,9 +464,10 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
     EXPECT_EQ(2, response.new_built_version()) << "watermark should advance through v=2 and pause at v=3";
 
     // v=2's .vi was actually built; v=3's was not.
-    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
-    EXPECT_FALSE(
-            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+    EXPECT_TRUE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kTabletId, kIndexId))));
+    EXPECT_FALSE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kTabletId, kIndexId))));
 }
 
 // Persist segment_size and segment_encryption_metas on the rowset and verify they
@@ -501,7 +502,8 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     ASSERT_OK(task.execute(request, &response));
     ASSERT_EQ(response.new_built_version(), 2);
 
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 }
 

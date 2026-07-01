@@ -157,11 +157,11 @@ int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retr
 namespace {
 
 // Delete .vi files for segments in a rowset using segment_metas metadata.
-static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir,
+static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir, int64_t tablet_id,
                                      const RowsetMetadataPB& rowset) {
     for (const auto& segment_meta : rowset.segment_metas()) {
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
+            auto vi_name = gen_vector_index_filename(segment_meta.filename(), tablet_id, vi_id);
             RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, vi_name)));
         }
     }
@@ -326,7 +326,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
             }
         }
         // Delete associated .vi files using per-segment vector index metadata
-        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, base_dir, rowset));
+        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, base_dir, metadata.id(), rowset));
 
         for (const auto& del_file : rowset.del_files()) {
             if (del_file.shared() && shared_file_deleter != nullptr) {
@@ -1187,7 +1187,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                         }
                     }
                     // Delete associated .vi files using per-segment vector index metadata
-                    RETURN_IF_ERROR(delete_rowset_vi_files(&deleter, data_dir, rowset));
+                    RETURN_IF_ERROR(delete_rowset_vi_files(&deleter, data_dir, latest_metadata->id(), rowset));
                 }
                 if (latest_metadata->has_delvec_meta()) {
                     for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
@@ -1455,7 +1455,7 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
             // Protect associated .vi files using per-segment vector index metadata
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
+                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), check_meta->id(), vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }
