@@ -413,10 +413,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.ICEBERG;
     }
 
-    // Returns a one-line summary string for stats-collection logging.
-    // Subclasses can override to include connector-specific metadata (e.g. snapshot info).
-    public String getStatsCollectSummary() {
-        return "";
+    // Returns structured metadata about this table for stats-collection observability
+    // (e.g. snapshot_id/total_files/total_rows). Subclasses can override to include
+    // connector-specific metadata. Empty by default.
+    public Map<String, String> getStatsCollectMetadata() {
+        return Collections.emptyMap();
     }
 
     public boolean isDeltalakeTable() {
