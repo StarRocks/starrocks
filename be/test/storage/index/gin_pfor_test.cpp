@@ -109,6 +109,13 @@ TEST_F(GinPforTest, roundtrip_mixed_outliers) {
     check_roundtrip({1, 2, 100000, 3, 1, 70000, 2, 1, 4, 999999});
 }
 
+// An outlier at the very last position (pos == n-1) is a valid exception and must survive the
+// round-trip. This guards the decode-side exception-position bounds check against an off-by-one
+// (rejecting the last legal position would corrupt real data).
+TEST_F(GinPforTest, roundtrip_outlier_at_last_position) {
+    check_roundtrip({1, 2, 3, 1, 2, 3, 1, 999999});
+}
+
 // Two streams concatenated into one buffer (as a block stores gaps then tfs): decoding the first
 // must report the exact byte offset where the second begins.
 TEST_F(GinPforTest, decode_framing_two_streams) {
@@ -158,6 +165,27 @@ TEST_F(GinPforTest, decode_truncated_returns_zero) {
     EXPECT_EQ(gin_pfor::decode(buf.data(), buf.size() - 1, in.size(), out.data()), 0u);
     // A 1-byte buffer is too short even for the header.
     EXPECT_EQ(gin_pfor::decode(buf.data(), 1, in.size(), out.data()), 0u);
+}
+
+// A corrupt block whose exception position is >= n must be rejected, not applied. These bytes are
+// read from persisted segments on shared storage, so an out-of-range pos must return 0 rather than
+// write past the caller's out[0..n) buffer (heap overflow). Hand-crafted block: bit_width=2,
+// num_exceptions=1, exception {pos=10, high=1}, then 1 low-stream byte for n=4 values.
+TEST_F(GinPforTest, decode_rejects_out_of_range_exception_pos) {
+    const uint8_t corrupt[] = {0x02, 0x01, 0x0A, 0x01, 0x00};
+    std::vector<uint32_t> out(4, 0);
+    EXPECT_EQ(gin_pfor::decode(corrupt, sizeof(corrupt), 4, out.data()), 0u);
+}
+
+// bit_width=32 means every value already fits in 32 low bits, so a well-formed block can have no
+// exceptions. A corrupt block with bit_width=32 AND an exception is malformed and must be rejected;
+// otherwise applying the patch would evaluate (high << 32), a shift by the full type width (UB).
+// Hand-crafted block: bit_width=32, num_exceptions=1, exception {pos=0, high=1}, 4 low-stream bytes
+// for n=1 value.
+TEST_F(GinPforTest, decode_rejects_bit_width_32_with_exceptions) {
+    const uint8_t corrupt[] = {0x20, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
+    std::vector<uint32_t> out(1, 0);
+    EXPECT_EQ(gin_pfor::decode(corrupt, sizeof(corrupt), 1, out.data()), 0u);
 }
 
 } // namespace starrocks

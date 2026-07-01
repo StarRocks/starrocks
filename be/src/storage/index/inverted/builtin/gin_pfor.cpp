@@ -155,12 +155,19 @@ size_t decode(const uint8_t* data, size_t len, size_t n, uint32_t* out) {
     const int b = *p++;
     const uint8_t num_exc = *p++;
     if (b > 32) return 0; // malformed bit width
+    // b == 32 means every value already fits in 32 low bits, so a well-formed block has no
+    // exceptions. Reject b == 32 with exceptions from corrupt input so the patch step below never
+    // evaluates (high << 32), a shift by the full type width (undefined behavior).
+    if (b == 32 && num_exc > 0) return 0;
 
     uint8_t exc_pos[256];
     uint32_t exc_high[256];
     for (int e = 0; e < num_exc; ++e) {
         if (p >= limit) return 0;
         exc_pos[e] = *p++;
+        // Reject an out-of-range exception position from corrupt persisted bytes before it is used
+        // to index out[0..n) in the patch step below (otherwise an out-of-bounds write).
+        if (exc_pos[e] >= n) return 0;
         const uint8_t* np = get_varint(p, limit, &exc_high[e]);
         if (np == nullptr) return 0;
         p = np;
@@ -181,7 +188,8 @@ size_t decode(const uint8_t* data, size_t len, size_t n, uint32_t* out) {
     }
     p += stream_bytes;
 
-    // apply patches; b < 32 is guaranteed whenever num_exc > 0, so (high << b) never overflows.
+    // apply patches; the checks above guarantee b < 32 whenever num_exc > 0 (so (high << b) is
+    // well-defined) and every exc_pos < n (so the index stays in bounds).
     for (int e = 0; e < num_exc; ++e) {
         out[exc_pos[e]] |= (exc_high[e] << b);
     }
