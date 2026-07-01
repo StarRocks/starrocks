@@ -16,8 +16,11 @@
 
 #include <jni.h>
 
+#include <functional>
+#include <memory>
 #include <utility>
 
+#include "base/status.h"
 #include "base/statusor.h"
 
 // implemented by libhdfs
@@ -30,6 +33,29 @@
 extern "C" JNIEnv* getJNIEnv(void);
 
 namespace starrocks {
+
+class PriorityThreadPool;
+
+class JavaEnv {
+public:
+    static JavaEnv* GetInstance();
+
+    JavaEnv();
+    ~JavaEnv();
+
+    JavaEnv(const JavaEnv&) = delete;
+    const JavaEnv& operator=(const JavaEnv&) = delete;
+
+    Status init();
+    void shutdown();
+    void destroy();
+
+    PriorityThreadPool* jvm_call_pool() const { return _jvm_call_pool.get(); }
+    Status call_function_in_pthread(const std::function<Status()>& func);
+
+private:
+    std::unique_ptr<PriorityThreadPool> _jvm_call_pool;
+};
 
 // A global ref of the guard, handle can be shared across threads.
 class JavaGlobalRef {
