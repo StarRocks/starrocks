@@ -435,6 +435,14 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
         RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size));
     }
 
+    // Final memory check: the loop-top check does not cover the last batch's
+    // growth, and finish() below materializes/serializes the whole accumulated
+    // index. Check once more here so the largest peak still fails cleanly
+    // instead of risking an OOM in finish().
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+    }
+
     // Write the bitmap blob to the shared target file and emit the
     // ColumnIndexMetaPB that describes its in-file layout. The file offset
     // used by the blob is determined by target_wfile's current append
@@ -592,6 +600,13 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
         // Emit exactly one bloom filter for this data page (mirrors
         // finish_current_page()), so read_bloom_filter(page) lines up 1:1.
         RETURN_IF_ERROR(bf_writer->flush());
+    }
+
+    // Final memory check: the per-page check does not cover the last page's
+    // growth, and finish() below serializes all accumulated per-page filters.
+    // Check once more here so a last-page overshoot still fails cleanly.
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
     }
 
     RETURN_IF_ERROR(bf_writer->finish(target_wfile, out_meta));
