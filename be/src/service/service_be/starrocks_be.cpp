@@ -22,6 +22,7 @@
 #endif
 
 #include <algorithm>
+#include <utility>
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
@@ -63,8 +64,11 @@
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
 #endif
+<<<<<<< HEAD
 #include "cache/datacache_metrics.h"
 #include "common/system/cpu_info.h"
+=======
+>>>>>>> 9ee25ef340a... [Refactor] Move process memory metrics into RuntimeEnv (#75671)
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/thrift_server.h"
@@ -214,8 +218,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
-#ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
+    cache_env->set_mem_trackers(runtime_env->datacache_mem_tracker(), runtime_env->page_cache_mem_tracker());
+#ifndef __APPLE__
     std::vector<std::string> cache_storage_root_paths;
     cache_storage_root_paths.reserve(paths.size());
     for (const auto& path : paths) {
@@ -322,7 +327,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 #ifndef __APPLE__
     // Register datacache metrics
-    DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
+    EXIT_IF_ERROR(cache_env->enable_metrics_update_hook(process_metrics_registry->root_registry(),
+                                                        use_same_datacache_instance));
 #endif
 
     // Start thrift server

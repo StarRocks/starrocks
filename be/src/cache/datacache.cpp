@@ -14,7 +14,11 @@
 
 #include "cache/datacache.h"
 
+#include <utility>
+
 #include "base/string/parse_util.h"
+#include "cache/data_cache_hit_rate_counter.hpp"
+#include "cache/datacache_metrics.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/block_cache.h"
 #include "cache/disk_space_monitor.h"
@@ -26,13 +30,26 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "runtime/mem_tracker.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/peer_cache_engine.h"
 #endif
 
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
+
 namespace starrocks {
+
+namespace {
+
+// MetricRegistry triggers hooks in name order. Keep this before "process_memory_metrics"
+// because ProcessMemoryMetrics reads the datacache/page-cache MemTracker values.
+const char* const kUpdateDataCacheMetricsHookName = "datacache_metrics";
+
+} // namespace
 
 DataCache* DataCache::GetInstance() {
     static DataCache s_cache_env;
@@ -92,7 +109,91 @@ void DataCache::attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache) {
 #endif
 }
 
+Status DataCache::enable_metrics_update_hook(MetricRegistry* registry, bool use_same_starcache_instance) {
+    _use_same_starcache_instance = use_same_starcache_instance;
+    if (registry == nullptr) {
+        return Status::OK();
+    }
+    if (_metrics_registry != nullptr) {
+        DCHECK_EQ(_metrics_registry, registry);
+        update_metrics();
+        return Status::OK();
+    }
+    if (!registry->register_hook(kUpdateDataCacheMetricsHookName, [this] { update_metrics(); })) {
+        return Status::InternalError("register datacache metrics hook failed");
+    }
+    _metrics_registry = registry;
+    update_metrics();
+    return Status::OK();
+}
+
+void DataCache::disable_metrics_update_hook() {
+    if (_metrics_registry != nullptr) {
+        _metrics_registry->deregister_hook(kUpdateDataCacheMetricsHookName);
+        _metrics_registry = nullptr;
+    }
+    _use_same_starcache_instance = false;
+}
+
+void DataCache::set_mem_trackers(MemTracker* datacache_mem_tracker, MemTracker* pagecache_mem_tracker) {
+    _datacache_mem_tracker = datacache_mem_tracker;
+    _pagecache_mem_tracker = pagecache_mem_tracker;
+}
+
+void DataCache::update_mem_trackers() {
+    if (_datacache_mem_tracker != nullptr) {
+        int64_t datacache_mem_bytes = 0;
+        if (_local_mem_cache != nullptr && _local_mem_cache->is_initialized()) {
+            auto datacache_metrics = _local_mem_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!config::datacache_unified_instance_enable) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        _datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+
+    if (_pagecache_mem_tracker != nullptr && _page_cache != nullptr && _page_cache->is_initialized()) {
+        _pagecache_mem_tracker->set(_page_cache->memory_usage());
+    }
+}
+
+void DataCache::update_metrics() {
+    DataCacheMetricsSnapshot snapshot{};
+    if (_local_mem_cache != nullptr && _local_mem_cache->is_initialized()) {
+        auto mem_metrics = _local_mem_cache->cache_metrics();
+        snapshot.mem_quota_bytes = static_cast<int64_t>(mem_metrics.mem_quota_bytes);
+        snapshot.mem_used_bytes = static_cast<int64_t>(mem_metrics.mem_used_bytes);
+    }
+    if (_local_disk_cache != nullptr && _local_disk_cache->is_initialized()) {
+        auto disk_metrics = _local_disk_cache->cache_metrics();
+        snapshot.disk_quota_bytes = static_cast<int64_t>(disk_metrics.disk_quota_bytes);
+        snapshot.disk_used_bytes = static_cast<int64_t>(disk_metrics.disk_used_bytes);
+        snapshot.meta_used_bytes = static_cast<int64_t>(disk_metrics.meta_used_bytes);
+    }
+#ifdef USE_STAROS
+    if (!_use_same_starcache_instance) {
+        starcache::CacheMetrics starlet_cache_metrics{};
+        staros::starlet::fslib::star_cache_get_metrics(&starlet_cache_metrics);
+        snapshot.disk_quota_bytes += static_cast<int64_t>(starlet_cache_metrics.disk_quota_bytes);
+        snapshot.disk_used_bytes += static_cast<int64_t>(starlet_cache_metrics.disk_used_bytes);
+        snapshot.meta_used_bytes += static_cast<int64_t>(starlet_cache_metrics.mem_used_bytes);
+    }
+#endif
+
+    auto* hit_rate_counter = DataCacheHitRateCounter::instance();
+    snapshot.block_cache_hit_bytes = hit_rate_counter->block_cache_hit_bytes();
+    snapshot.block_cache_miss_bytes = hit_rate_counter->block_cache_miss_bytes();
+    DataCacheMetrics::instance()->update(snapshot);
+    update_mem_trackers();
+}
+
 void DataCache::destroy() {
+    disable_metrics_update_hook();
+    set_mem_trackers(nullptr, nullptr);
+
     if (_disk_space_monitor != nullptr) {
         _disk_space_monitor->stop();
         _disk_space_monitor.reset();

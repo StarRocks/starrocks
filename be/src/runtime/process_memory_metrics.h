@@ -17,15 +17,23 @@
 
 #pragma once
 
-#include <memory>
 #include <mutex>
 
 #include "base/metrics.h"
 
 namespace starrocks {
 
-class MemoryMetrics {
+class ProcessMemoryMetrics {
 public:
+    ProcessMemoryMetrics();
+    ~ProcessMemoryMetrics();
+
+    static ProcessMemoryMetrics* instance();
+
+    void install(MetricRegistry* registry);
+    void update();
+    void update_memory_metrics();
+
     METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_active_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_bytes, MetricUnit::BYTES);
@@ -64,35 +72,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(replication_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(vector_index_mem_bytes, MetricUnit::BYTES);
-};
-
-class SystemMetrics {
-public:
-    SystemMetrics();
-    ~SystemMetrics();
-
-    static SystemMetrics* instance();
-
-    // install higher-level system metrics to registry
-    void install(MetricRegistry* registry);
-
-    // update metrics
-    void update();
-
-    const MemoryMetrics* memory_metrics() const { return _memory_metrics.get(); }
-
-    void update_memory_metrics();
 
 private:
     void _install_memory_metrics(MetricRegistry* registry);
 
-    void _update_datacache_mem_tracker();
-    void _update_pagecache_mem_tracker();
-
 private:
     static const char* const _s_hook_name;
-
-    std::unique_ptr<MemoryMetrics> _memory_metrics;
 
     std::mutex _update_mutex;
     MetricRegistry* _registry = nullptr;
