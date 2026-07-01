@@ -810,7 +810,7 @@ public class MetadataMgr {
         if (result != null && !table.isNativeTableOrMaterializedView()) {
             if (result.getStatsSource() == Statistics.StatsSource.ANALYZE) {
                 MetricRepo.COUNTER_EXTERNAL_STATS_ANALYZE.increase(1L);
-            } else {
+            } else if (result.getStatsSource() == Statistics.StatsSource.TABLE_METADATA) {
                 MetricRepo.COUNTER_EXTERNAL_STATS_TABLE_METADATA.increase(1L);
             }
         }
