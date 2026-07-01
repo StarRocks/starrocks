@@ -865,14 +865,19 @@ protected:
         schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
         schema->set_num_rows_per_row_block(65535);
+        // Fixed, tablet-independent column unique ids: cross-cluster replication of the SAME
+        // logical table normally shares the column unique-id space between source and target,
+        // so calc_column_unique_id_map() is empty and the IDG (.idx) fast-path indexes replicate
+        // verbatim. (A per-tablet next_id() here would fabricate a divergent id space that does
+        // not model real same-table CCR and would trip the divergent-id skip guard.)
         auto c0 = schema->add_column();
-        c0->set_unique_id(next_id());
+        c0->set_unique_id(1);
         c0->set_name("c0");
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
         auto c1 = schema->add_column();
-        c1->set_unique_id(next_id());
+        c1->set_unique_id(2);
         c1->set_name("c1");
         c1->set_type("INT");
         c1->set_is_key(false);
@@ -1509,6 +1514,79 @@ TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_replicated_and_stale_drop
     EXPECT_EQ(1, built_entry.keys(0).col_unique_id());
     EXPECT_EQ(NGRAMBF, built_entry.keys(0).index_type());
     EXPECT_EQ(2, built_entry.version());
+}
+
+// Regression: when the source and target tablets assign DIFFERENT column unique ids to the same
+// logical column (fast-schema-change divergence, calc_column_unique_id_map non-empty), replication
+// must NOT copy the source idg_meta / .idx verbatim. The IDG entry keys and the col_unique_ids
+// embedded in the .idx payload footer are keyed by the SOURCE id, while the scan probe and
+// IndexFileReader::find() look up by the TARGET id, so a verbatim copy would be silently ignored or
+// (on a unique-id collision) mis-applied to a different column and prune rows wrongly. Until the
+// .idx-footer + IDG-key remap is implemented, the fast path is skipped and idg_meta stays empty on
+// the replica (index absent, to be rebuilt on the target) -- never a mismappable index.
+TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_skipped_on_divergent_column_ids) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Source tablet metadata (version 2) with one rowset + segment and a source IDG entry.
+    const std::string src_idx = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000aa.idx";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    // Diverge the source's column unique-id space from the target's (target c1 uid == 2). This makes
+    // calc_column_unique_id_map() non-empty and must trigger the IDG replication skip.
+    src_meta_v2->mutable_schema()->mutable_column(1)->set_unique_id(9999);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    src_meta_v2->set_next_rowset_id(2);
+    {
+        auto& src_ver = (*src_meta_v2->mutable_idg_meta()->mutable_idgs())[1];
+        auto* src_entry = src_ver.add_entries();
+        auto* k = src_entry->add_keys();
+        k->set_col_unique_id(2); // source-space id for column c1
+        k->set_index_type(NGRAMBF);
+        src_entry->set_index_file(src_idx);
+        src_entry->set_version(2);
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 1024; });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 512; });
+
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 0; // sequential path
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    (void)update_master_info(original_master_info);
+    ASSERT_OK(status);
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id));
+    ASSERT_TRUE(txn_log->has_op_replication());
+    ASSERT_TRUE(txn_log->op_replication().has_tablet_metadata());
+    const auto& built_meta = txn_log->op_replication().tablet_metadata();
+
+    // The rowset/segment still replicates; only the IDG fast-path index is skipped.
+    ASSERT_EQ(1, built_meta.rowsets_size());
+    // idg_meta must be empty: neither the source's entry nor any target stale entry survives.
+    EXPECT_TRUE(built_meta.idg_meta().idgs().empty());
 }
 
 // Regression companion: with transparent data encryption ON, the replicated source IDG entry must

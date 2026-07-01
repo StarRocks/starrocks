@@ -903,7 +903,33 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
     // uid, not the numeric rowset id), so the source's rssid keys stay valid against the
     // copied rowsets and need no remap. The target's own stale idg_meta was cleared above;
     // the publish-time applier orphans its now-unreferenced .idx via collect_idg_orphan_files.
-    if (src_tablet_meta->has_idg_meta()) {
+    //
+    // Fast-schema-change caveat: when the source and target tablets assign different column
+    // unique ids to the same logical column, replication remaps the ids embedded in
+    // segment/.cols footers via build_file_converters + column_unique_id_map. The IDG entry
+    // keys (IndexKey.col_unique_id / dropped_keys) AND the col_unique_ids embedded inside the
+    // .idx payload footer -- which IndexFileReader::find(col_unique_id, index_type) and the
+    // scan probe (ScalarColumnIterator matches k.col_unique_id == opts.col_unique_id) look up
+    // by the TARGET id -- are NOT converted here (build_file_converters only rewrites
+    // is_segment()/is_cols() footers). Copying idg_meta + .idx verbatim under a divergent id
+    // space would make the replica either silently ignore the index (target id misses the
+    // source-keyed entry) or, on a unique-id collision, apply an index built for a different
+    // column and prune rows wrongly. Until the .idx footer + IDG-key remap is implemented,
+    // skip IDG replication whenever the id spaces diverge: leave idg_meta cleared (index
+    // absent on the replica, to be rebuilt on the target) rather than publishing a
+    // mismappable index. The common identical-schema CCR path (empty map) is unaffected.
+    std::unordered_map<uint32_t, uint32_t> idg_column_unique_id_map;
+    if (target_tablet_meta->has_schema()) {
+        ReplicationUtils::calc_column_unique_id_map(src_tablet_meta->schema().column(),
+                                                    target_tablet_meta->schema().column(), &idg_column_unique_id_map);
+    }
+    if (src_tablet_meta->has_idg_meta() && !idg_column_unique_id_map.empty()) {
+        LOG(WARNING) << "Lake replicate storage task, skipping IDG (.idx) index replication because source/target "
+                        "column unique ids diverge (fast schema change); the fast-path index will be absent on the "
+                        "replica and must be rebuilt on the target. target_tablet_id: "
+                     << target_tablet_id << ", txn_id: " << txn_id
+                     << ", unique_id_map size: " << idg_column_unique_id_map.size();
+    } else if (src_tablet_meta->has_idg_meta()) {
         IndexDeltaGroupMetadataPB* dest_meta = new_metadata->mutable_idg_meta();
         dest_meta->CopyFrom(src_tablet_meta->idg_meta());
         for (auto& [rssid, idg_ver] : *dest_meta->mutable_idgs()) {
