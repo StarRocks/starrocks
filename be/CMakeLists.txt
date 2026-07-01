@@ -543,6 +543,7 @@ set(STARROCKS_LINK_LIBS
     Tools
     AgentServer
     Script
+    ModuleBootstrap
     ${WL_START_GROUP}
     Connector
     # Legacy connector registration pulls concrete connector objects that
@@ -971,6 +972,7 @@ add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/module)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)
 add_subdirectory(${SRC_DIR}/gen_cpp)
