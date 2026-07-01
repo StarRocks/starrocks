@@ -35,6 +35,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.MergeIntoPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.JoinOperator;
@@ -42,11 +43,14 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPlan;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
@@ -57,6 +61,7 @@ import java.util.List;
 import java.util.Queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -86,6 +91,13 @@ public class MergeIntoPlanTest extends PlanTestBase {
         ExecPlan execPlan = getMergeExecPlan(sql);
         return execPlan.getExplainString(TExplainLevel.NORMAL);
     }
+
+    private static boolean containsEnforceUnique(ExecPlan execPlan) {
+        // The EnforceUniqueRowLocatorNode sits in the merge join's fragment, which is
+        // not necessarily the sink fragment, so search across all fragments.
+        return findNode(execPlan, EnforceUniqueRowLocatorNode.class) != null;
+    }
+
 
     @Test
     public void testMergePlanContainsEnforceUnique() throws Exception {
@@ -159,6 +171,27 @@ public class MergeIntoPlanTest extends PlanTestBase {
                 "Partitioned MERGE should contain ENFORCE UNIQUE node");
         assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"),
                 "Partitioned MERGE should produce ICEBERG ROW DELTA SINK");
+    }
+
+    @Test
+    public void testMergeRejectsMergeJoinImplementation() {
+        // join_implementation_mode=merge makes the optimizer pick a sort-merge join (MergeJoinNode),
+        // which the BE cannot execute (exec_factory.cpp has no MERGE_JOIN_NODE branch). MERGE planning
+        // must fail fast at the FE with a clear error instead of emitting an unexecutable plan.
+        String prevJoinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        try {
+            connectContext.getSessionVariable().setJoinImplementationMode("merge");
+            String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                    "USING (SELECT id, data, date FROM iceberg0.partitioned_db.t1_v2) AS s " +
+                    "ON t.id = s.id AND t.data = s.data AND t.date = s.date " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data";
+            Exception e = assertThrows(Exception.class, () -> getMergeExecPlan(sql));
+            assertTrue(e.getMessage() != null && e.getMessage().toLowerCase().contains("unsupported join shape"),
+                    "MERGE under join_implementation_mode=merge must be rejected with a clear error; got: "
+                            + e.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setJoinImplementationMode(prevJoinImplementationMode);
+        }
     }
 
     @Test
@@ -374,6 +407,35 @@ public class MergeIntoPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testMergeHashJoinDisablesPostJoinPassthrough() throws Exception {
+        boolean previous = setHashJoinInterpolatePassthrough(true);
+        try {
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                    "USING (" +
+                    "  SELECT 1 AS id, 'a' AS data, '2024-01-01' AS date " +
+                    "  UNION ALL SELECT 2 AS id, 'b' AS data, '2024-01-01' AS date " +
+                    ") AS s " +
+                    "ON t.id = s.id " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data " +
+                    "WHEN NOT MATCHED THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)";
+            ExecPlan execPlan = getMergeExecPlan(sql);
+            HashJoinNode joinNode = findNode(execPlan, HashJoinNode.class);
+            assertNotNull(joinNode, "Plan must contain the merge HashJoinNode");
+            assertFalse(joinNode.getCanLocalShuffle(),
+                    "MERGE planner must suppress post-join passthrough on the target join");
+
+            TPlanNode thriftJoin = findThriftNode(joinNode.treeToThrift(), joinNode.getId().asInt());
+            assertNotNull(thriftJoin, "Join node must be serialized to thrift");
+            assertFalse(thriftJoin.hash_join_node.isSetInterpolate_passthrough()
+                            && thriftJoin.hash_join_node.isInterpolate_passthrough(),
+                    "MERGE duplicate checking relies on the join's local key distribution; "
+                            + "post-join passthrough must be disabled");
+        } finally {
+            setHashJoinInterpolatePassthrough(previous);
+        }
+    }
+
+    @Test
     public void testDuplicateConstantSourceMergeContainsEnforceUnique() throws Exception {
         int previousPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         int previousPipelineSinkDop = connectContext.getSessionVariable().getPipelineSinkDop();
@@ -483,6 +545,8 @@ public class MergeIntoPlanTest extends PlanTestBase {
         NestLoopJoinNode nestLoopJoin = findNode(execPlan, NestLoopJoinNode.class);
         assertNotNull(nestLoopJoin,
                 "Constant-source MERGE is expected to fold the ON equality and plan a nestloop join");
+        assertFalse(nestLoopJoin.getCanLocalShuffle(),
+                "MERGE planner must suppress post-join passthrough on the target join");
         EnforceUniqueRowLocatorNode enforceNode = findNode(execPlan, EnforceUniqueRowLocatorNode.class);
         assertNotNull(enforceNode, "Plan must contain an EnforceUniqueRowLocatorNode");
         assertEquals(enforceNode.getFragment(), nestLoopJoin.getFragment(),
@@ -620,6 +684,22 @@ public class MergeIntoPlanTest extends PlanTestBase {
             queue.addAll(node.getChildren());
         }
         return matches;
+    }
+
+    private static TPlanNode findThriftNode(TPlan plan, int nodeId) {
+        return plan.getNodes().stream()
+                .filter(node -> node.node_id == nodeId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static boolean setHashJoinInterpolatePassthrough(boolean value) throws Exception {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        Field field = SessionVariable.class.getDeclaredField("hashJoinInterpolatePassthrough");
+        field.setAccessible(true);
+        boolean previous = field.getBoolean(sessionVariable);
+        field.setBoolean(sessionVariable, value);
+        return previous;
     }
 
     @Test
