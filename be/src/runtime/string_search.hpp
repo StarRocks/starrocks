@@ -160,7 +160,11 @@ private:
 
     bool bloom_query(char c) const { return _mask & (1UL << (c & (BLOOM_WIDTH - 1))); }
 
+<<<<<<< HEAD:be/src/runtime/string_search.hpp
     const StringValue* _pattern{nullptr};
+=======
+    const Slice* _pattern = nullptr;
+>>>>>>> 881b7b1e27 ([BugFix] Initialize StringSearch::_pattern and fix split_debug_symbol log (#75614)):be/src/base/string/string_search.hpp
     int64_t _mask{0};
     int64_t _skip = 0;
 };
