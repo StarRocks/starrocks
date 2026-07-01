@@ -57,6 +57,7 @@ import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -236,9 +237,18 @@ public class MaterializedViewRule extends Rule {
                 }
                 rewriteContext.removeAll(percentileContexts);
 
+                // Group the contexts by their shared base query column so that all aggregates on the same
+                // base column (e.g. min(c) and max(c)) are rewritten together. Otherwise rewriting them one
+                // by one removes that base column from the scan on the first context, after which the sibling
+                // context can no longer find it and its rollup column is never projected.
+                Map<ColumnRefOperator, List<RewriteContext>> contextsByQueryColumn = new LinkedHashMap<>();
+                for (RewriteContext rc : rewriteContext) {
+                    contextsByQueryColumn.computeIfAbsent(rc.queryColumnRef, k -> Lists.newArrayList()).add(rc);
+                }
+
                 MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
-                for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
-                    optExpression = rewriter.rewrite(optExpression, rc);
+                for (List<RewriteContext> group : contextsByQueryColumn.values()) {
+                    optExpression = rewriter.rewrite(optExpression, group);
                 }
             }
         }

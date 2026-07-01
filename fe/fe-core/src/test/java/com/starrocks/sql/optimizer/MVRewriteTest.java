@@ -318,6 +318,67 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testAggQueryOnAggMVMinMaxSameColumn() throws Exception {
+        // min(salary) and max(salary) reference the SAME base column. Each aggregate produces its
+        // own RewriteContext that shares the base salary column ref but maps to a different rollup
+        // column (mv_min_salary / mv_max_salary). The scan must project BOTH rollup columns. Before
+        // the fix the first applied context removed the shared base column from the scan, so the
+        // second context could no longer locate the scan and its rollup column was never projected;
+        // the rewritten aggregate then referenced a column with no statistics and the optimizer
+        // threw "missing statistic of col: mv_min_salary" while costing the plan.
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary) from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, min(salary), max(salary) from " + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL).query(query)
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_max_salary");
+    }
+
+    @Test
+    public void testAggQueryOnAggMVMinMaxControls() throws Exception {
+        // Regression controls: none of these throw before the fix, and all must keep hitting the
+        // rollup after it. They differ from the broken case in that no two aggregates share the
+        // same base column (or only a single aggregate references a given column).
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary), min(commission), max(commission), sum(salary) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+
+        // single min
+        starRocksAssert.query("select deptno, min(salary) from " + EMPS_TABLE_NAME + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary");
+        // single max
+        starRocksAssert.query("select deptno, max(salary) from " + EMPS_TABLE_NAME + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_max_salary");
+        // min and max on DIFFERENT base columns
+        starRocksAssert.query("select deptno, min(salary), max(commission) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_max_commission");
+        // two min on different base columns
+        starRocksAssert.query("select deptno, min(salary), min(commission) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_min_commission");
+        // min and sum on the same base column (different functions, both have a rollup column)
+        starRocksAssert.query("select deptno, min(salary), sum(salary) from " + EMPS_TABLE_NAME
+                        + " group by deptno;")
+                .explainContains(QUERY_USE_EMPS_MV, "mv_min_salary", "mv_sum_salary");
+    }
+
+    @Test
+    public void testAggQueryOnAggMVMultiMinMaxPairs() throws Exception {
+        // Two independent shared-column pairs in one query: min/max(salary) and min/max(commission).
+        // Each pair triggers the same sibling-context interaction the fix addresses, so all four
+        // rollup columns must be projected by the scan.
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME
+                + " as select deptno, min(salary), max(salary), min(commission), max(commission) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, min(salary), max(salary), min(commission), max(commission) from "
+                + EMPS_TABLE_NAME + " group by deptno;";
+        starRocksAssert.withMaterializedView(createMVSQL).query(query)
+                .explainContains(QUERY_USE_EMPS_MV,
+                        "mv_min_salary", "mv_max_salary", "mv_min_commission", "mv_max_commission");
+    }
+
+    @Test
     public void testJoinOnLeftProjectToJoin() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME
                 + " as select deptno, sum(salary), sum(commission) from " + EMPS_TABLE_NAME + " group by deptno;";
