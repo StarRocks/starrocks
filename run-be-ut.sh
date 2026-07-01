@@ -243,7 +243,7 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
 split_debug_symbol() {
     local bin="$1"
     local symbol="${bin}.debuginfo"
-    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
     objcopy --only-keep-debug "$bin" "$symbol"
     strip --strip-debug "$bin"
     objcopy --add-gnu-debuglink="$symbol" "$bin"
