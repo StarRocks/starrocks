@@ -120,6 +120,9 @@ public:
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+        // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
+        // analysis, so by the time we get here it is always positive. Assert the invariant.
+        DCHECK_GT(bucket_num, 0);
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // Build bucket
