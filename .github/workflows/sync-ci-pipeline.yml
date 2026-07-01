@@ -113,7 +113,7 @@ jobs:
           labels: thirdparty
 
   thirdparty-update:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [code-checker]
     name: Thirdparty Update
     continue-on-error: true
@@ -166,7 +166,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   thirdparty-info:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs:
       - thirdparty-update
     name: Thirdparty Info
@@ -197,7 +197,7 @@ jobs:
           echo "ubuntu_image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
 
   build:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [thirdparty-info]
     name: BUILD
     env:
@@ -250,7 +250,7 @@ jobs:
           rm -f ${{ steps.run_build.outputs.RES_LOG }}
 
   result:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sync-normal]
     needs: [ pr-label, build ]
     name: RESULT
     if: >
