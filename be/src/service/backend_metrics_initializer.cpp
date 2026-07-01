@@ -51,7 +51,7 @@
 #include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/storage_metrics.h"
 #ifndef __APPLE__
-#include "util/jvm_metrics.h"
+#include "udf/java/jvm_metrics.h"
 #endif
 #include "base/logging.h"
 #include "compute_env/spill/spill_metrics.h"

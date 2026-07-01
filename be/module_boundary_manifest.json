@@ -1104,8 +1104,7 @@
         "runtime/",
         "storage/",
         "types/",
-        "udf/",
-        "util/"
+        "udf/"
       ],
       "forbidden_include_prefixes": [
         "service/",
@@ -1157,7 +1156,6 @@
         "ConnectorBuiltinRegistry",
         "Orchestration",
         "Udf",
-        "Util",
         "Geo",
         "StarRocksGen"
       ],
@@ -1193,7 +1191,7 @@
         "runtime/",
         "storage/",
         "types/",
-        "util/"
+        "udf/"
       ],
       "forbidden_include_prefixes": ["service/service_be/", "service_be/"],
       "allowed_target_deps": [
@@ -1227,7 +1225,7 @@
         "FormatCore",
         "Formats",
         "FormatOrc",
-        "Util",
+        "Udf",
         "ChunkCore",
         "ColumnCore",
         "Types"

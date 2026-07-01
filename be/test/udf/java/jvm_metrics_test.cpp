@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/jvm_metrics.h"
+#include "udf/java/jvm_metrics.h"
 
 #include <gtest/gtest.h>
 
