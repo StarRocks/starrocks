@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic.columns;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
@@ -125,6 +126,11 @@ public class ExternalPredicateColumnsStorage {
     public ExternalPredicateColumnsStorage() {
         this.executor = new SimpleExecutor("ext_predicate_col", TResultSinkType.HTTP_PROTOCAL);
         this.executor.setDop(1);
+    }
+
+    @VisibleForTesting
+    ExternalPredicateColumnsStorage(SimpleExecutor executor) {
+        this.executor = executor;
     }
 
     // ========================= In-memory state ========================= //
@@ -331,5 +337,10 @@ public class ExternalPredicateColumnsStorage {
     public void finishRestore() {
         lastPersist = systemStartTime;
         LOG.info("[ExternalPredicateCols] finish restore, lastPersist={}", lastPersist);
+    }
+
+    @VisibleForTesting
+    public void finishRestore(LocalDateTime customLastPersist) {
+        lastPersist = customLastPersist;
     }
 }
