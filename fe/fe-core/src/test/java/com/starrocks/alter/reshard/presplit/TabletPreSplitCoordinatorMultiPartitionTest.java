@@ -99,14 +99,20 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
 
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigReshardMinSplitSize;
 
     @BeforeEach
     public void setUp() {
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         Config.tablet_reshard_target_size = 50L * DebugUtil.MEGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        // These tests exercise per-partition K selection and orchestration at MB scale, not the
+        // min-split-size bound (covered in TabletPreSplitCoordinatorTest). Disable it (1 byte) so
+        // compute-node alignment still drives K as the assertions below expect.
+        Config.tablet_reshard_min_split_size = 1L;
 
         // Wire a fresh PARTITIONS_TOTAL counter; MetricRepo.init() is not run inside unit
         // tests so the static field is otherwise null and a hasInit=true bump would NPE.
@@ -143,6 +149,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = savedPartitionsTotal;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
     }
 
     // ---------- Tests ----------
