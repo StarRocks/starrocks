@@ -141,11 +141,9 @@ public class CachedStatisticStorageTest {
 
                 cachedStatisticStorage.getColumnStatistic(table, "v2");
                 result = ColumnStatistic.builder().setDistinctValuesCount(999).build();
-                minTimes = 0;
 
                 cachedStatisticStorage.getColumnStatistic(table, "v3");
                 result = ColumnStatistic.builder().setDistinctValuesCount(666).build();
-                minTimes = 0;
             }
         };
         ColumnStatistic columnStatistic1 =
@@ -444,6 +442,66 @@ public class CachedStatisticStorageTest {
         Map<String, Histogram> histogramMap =
                 cachedStatisticStorage.getConnectorHistogramStatistics(table, ImmutableList.of("c1"));
         Assertions.assertEquals(0, histogramMap.size());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testGetHistogramStatisticsSkipInStatisticsConnection(
+            @Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache) {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+
+        // A histogram-collect INSERT holds the histogram_statistics READ lock while its plan is
+        // optimized; estimating the source scan then calls getHistogramStatistics on the source
+        // table. If that synchronously loads the histogram, the loader re-acquires the
+        // histogram_statistics READ lock and (behind a queued publish WRITE) self-deadlocks.
+        // The guard must short-circuit for statistics-collect connections BEFORE touching the
+        // cache, so the loader is never dispatched. Assert getAll is never called.
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                times = 0;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+
+        connectContext.setThreadLocalInfo();
+        boolean prev = connectContext.isStatisticsConnection();
+        connectContext.setStatisticsConnection(true);
+        try {
+            Map<String, Histogram> result =
+                    cachedStatisticStorage.getHistogramStatistics(table, ImmutableList.of("v1"));
+            Assertions.assertTrue(result.isEmpty());
+        } finally {
+            connectContext.setStatisticsConnection(prev);
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void testGetHistogramStatisticsSkipForStatisticsInternalTable(
+            @Mocked AsyncLoadingCache<ColumnStatsCacheKey, Optional<Histogram>> histogramCache) {
+        Database statsDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+        Table statsTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(statsDb.getFullName(), "table_statistic_v1");
+        Assertions.assertNotNull(statsTable);
+
+        // The other guard branch: statistics-internal tables (in the collect blacklist DB) must also
+        // skip the load, independent of the connection type, so the cache is never touched.
+        new Expectations() {
+            {
+                histogramCache.getAll((Iterable<? extends ColumnStatsCacheKey>) any);
+                times = 0;
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ConnectContext.remove();
+        Map<String, Histogram> result =
+                cachedStatisticStorage.getHistogramStatistics(statsTable, ImmutableList.of("column_name"));
+        Assertions.assertTrue(result.isEmpty());
     }
 
     @Test
