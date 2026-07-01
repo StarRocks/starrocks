@@ -342,4 +342,22 @@ TEST_F(OrMatchFallbackVisitorTest, recurses_through_nested_compound) {
     EXPECT_FALSE(has_fallback);
 }
 
+// Unit-tests the extracted query-type decision used by inverted-index pushdown,
+// including the new fallback (std::nullopt) for LIKE patterns containing '_'.
+TEST(ChooseInvertedIndexQueryTypeTest, all_branches) {
+    using QT = InvertedIndexQueryType;
+    // For valid_like cases valid_match is false, so `op` is ignored; pass any value.
+    const auto IGN = TExprOpcode::MATCH_ANY;
+
+    EXPECT_EQ(QT::MATCH_ANY_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ANY, "x").value());
+    EXPECT_EQ(QT::MATCH_ALL_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ALL, "x").value());
+
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "foo_bar").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "中_文").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "a_b%c").has_value());
+
+    EXPECT_EQ(QT::MATCH_WILDCARD_QUERY, choose_inverted_index_query_type(true, false, IGN, "foo%bar").value());
+    EXPECT_EQ(QT::EQUAL_QUERY, choose_inverted_index_query_type(true, false, IGN, "foobar").value());
+}
+
 } // namespace starrocks
