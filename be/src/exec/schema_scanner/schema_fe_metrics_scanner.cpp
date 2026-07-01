@@ -16,16 +16,16 @@
 
 #include <simdjson.h>
 
-#include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "gutil/strings/numbers.h"
+#include "gen_cpp/FrontendService.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_client.h"
+#include "runtime/client_cache.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
+#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -42,17 +42,30 @@ SchemaFeMetricsScanner::SchemaFeMetricsScanner()
 SchemaFeMetricsScanner::~SchemaFeMetricsScanner() = default;
 
 Status SchemaFeMetricsScanner::_get_fe_metrics(RuntimeState* state) {
+    int32_t timeout = state->query_options().query_timeout * 1000 / 2;
     for (const TFrontend& frontend : _param->frontends) {
-        std::string metrics;
-        std::string url = "http://" + frontend.ip + ":" + SimpleItoa(frontend.http_port) + "/metrics?type=json";
-        auto timeout = state->query_options().query_timeout * 1000 / 2;
-        auto mmetrics_cb = [&url, &metrics, &timeout](HttpClient* client) {
-            RETURN_IF_ERROR(client->init(url));
-            client->set_timeout_ms(timeout);
-            RETURN_IF_ERROR(client->execute(&metrics));
-            return Status::OK();
-        };
-        RETURN_IF_ERROR(HttpClient::execute_with_retry(2 /* retry times */, 1 /* sleep interval */, mmetrics_cb));
+        // Defensive guard: the FE planner always sets rpc_port (Config.rpc_port); a missing or
+        // non-positive port only happens under FE/BE version skew. Skip such a frontend with a
+        // warning rather than connecting to port 0 or failing the whole fe_metrics query.
+        if (!frontend.__isset.rpc_port || frontend.rpc_port <= 0) {
+            LOG(WARNING) << "skip fe_metrics for frontend " << frontend.id << " (" << frontend.ip
+                         << "): missing/invalid rpc_port";
+            continue;
+        }
+        // Fetch each FE's metrics over the FrontendService Thrift RPC. This replaces the
+        // previous HTTP scrape of /metrics?type=json, so fe_metrics works regardless of
+        // `enable_http_auth` (the RPC needs no HTTP Basic credentials). It takes no arguments —
+        // FE process metrics are global, with no per-object RBAC to authorize.
+        TFeMetricsResult result;
+        auto rpc_cb = [&result](FrontendServiceConnection& client) { client->getFeMetrics(result); };
+        RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(frontend.ip, frontend.rpc_port, rpc_cb, timeout));
+        if (result.__isset.status) {
+            RETURN_IF_ERROR(Status(result.status));
+        }
+        if (!result.__isset.json_metrics) {
+            return Status::InternalError("fe metrics response missing json_metrics from " + frontend.ip);
+        }
+        const std::string& metrics = result.json_metrics;
         VLOG(2) << "metrics: " << metrics;
 
         simdjson::ondemand::parser parser;

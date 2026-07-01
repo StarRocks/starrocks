@@ -207,6 +207,7 @@ set(EXEC_FILES
         ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
+        ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -480,6 +481,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp

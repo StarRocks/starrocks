@@ -35,6 +35,7 @@
 #include "http_service.h"
 
 #include "fs/fs_util.h"
+#include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
@@ -61,9 +62,11 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
+#include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
+#include "service/service_be/http_auth_response.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -90,6 +93,8 @@ void HttpServiceBE::join() {
 
 Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), GlobalEnv::GetInstance()->process_mem_tracker());
+
+    _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
     auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
