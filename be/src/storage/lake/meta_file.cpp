@@ -99,22 +99,28 @@ MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMet
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
-        const uint64_t offset = _buf.size();
-        std::string delvec_str;
-        delvec->save_to(&delvec_str);
-        _buf.insert(_buf.end(), delvec_str.begin(), delvec_str.end());
-        const uint64_t size = _buf.size() - offset;
-        _delvecs[segment_id].set_offset(offset);
-        _delvecs[segment_id].set_size(size);
-        _delvecs[segment_id].set_crc32c(crc32c::Mask(crc32c::Value(delvec_str.data(), delvec_str.size())));
+        DelvecPagePB page = _append_delvec_to_buf(delvec);
+        _delvecs[segment_id] = std::move(page);
         _segmentid_to_delvec[segment_id] = delvec;
     }
 }
 
-void MetaFileBuilder::append_dcg(uint32_t rssid,
-                                 const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                                 const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
-                                 const std::vector<int64_t>& file_sizes) {
+DelvecPagePB MetaFileBuilder::_append_delvec_to_buf(const DelVectorPtr& delvec) {
+    const uint64_t offset = _buf.size();
+    std::string delvec_str;
+    delvec->save_to(&delvec_str);
+    _buf.insert(_buf.end(), delvec_str.begin(), delvec_str.end());
+    DelvecPagePB page;
+    page.set_offset(offset);
+    page.set_size(_buf.size() - offset);
+    page.set_crc32c(crc32c::Mask(crc32c::Value(delvec_str.data(), delvec_str.size())));
+    return page;
+}
+
+Status MetaFileBuilder::append_dcg(uint32_t rssid,
+                                   const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                                   const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                                   const std::vector<int64_t>& file_sizes, const Roaring& updated_rowids) {
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
@@ -168,6 +174,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     }
 
     (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid] = new_dcg_ver;
+
+    // 3. update cdc metadata
+    return _collect_cdc_column_overlay_vecs(rssid, updated_rowids);
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
@@ -662,6 +671,9 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         return Status::InternalError("failed to find all input rowsets in apply_opcompaction");
     }
 
+    // collect cdc compaction input delvecs before erasing them from DelvecMetadataPB and _delvecs
+    _collect_cdc_compaction_input_delvecs(delete_delvec_sids);
+
     // delete delvec by input rowsets
     auto delvecs = _tablet_meta->mutable_delvec_meta()->mutable_delvecs();
     using T_DELVEC = std::decay_t<decltype(*delvecs)>;
@@ -674,11 +686,6 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
     for (uint32_t sid : delete_delvec_sids) {
         _delvecs.erase(sid);
         _segmentid_to_delvec.erase(sid);
-    }
-    // If all pending delvecs were for compacted segments, clear _buf to avoid
-    // writing an unnecessary delvec file during _finalize_delvec().
-    if (_delvecs.empty()) {
-        _buf.clear();
     }
     // delete dcg by input rowsets
     auto dcgs = _tablet_meta->mutable_dcg_meta()->mutable_dcgs();
@@ -748,6 +755,13 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
         has_output_rowset = true;
         output_rowset_id = rowset->id();
+        _collect_cdc_compaction_output_delvecs(*rowset);
+    }
+
+    // Clear _buf (so _finalize_delvec skips an empty delvec file) once nothing — a live delvec or a
+    // CDC capture — references it. After output-delvec collection so _is_cdc_using_buffer() counts those.
+    if (_delvecs.empty() && !_is_cdc_using_buffer()) {
+        _buf.clear();
     }
 
     // update rowset schema id
@@ -901,7 +915,10 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
-    // 3. write to delvec file
+    // 3. finalize cdc metadata
+    _finalize_cdc_metadata(version);
+
+    // 4. write to delvec file
     if (_buf.size() > 0) {
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
         auto delvec_file_name = gen_delvec_filename(txn_id);
@@ -917,7 +934,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         TRACE("end write delvec");
     }
 
-    // 4. clear delvec file record in version_to_file if it's not refered any more
+    // 5. clear delvec file record in version_to_file if it's not refered any more
     // collect all versions still refered
     std::set<int64_t> refered_versions;
     for (const auto& item : _tablet_meta->delvec_meta().delvecs()) {
@@ -929,6 +946,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             refered_versions.insert(sst.delvec().version());
         }
     }
+    _collect_cdc_referenced_delvec_file_versions(refered_versions);
 
     auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->begin();
     for (; itr != _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->end();) {
@@ -1343,6 +1361,120 @@ void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
 
     // Accumulate into pending rowset
     add_rowset(op_write.rowset(), replace_segments, orphan_files, dels);
+}
+
+void MetaFileBuilder::_collect_cdc_compaction_input_delvecs(const std::unordered_set<uint32_t>& rssids) {
+    for (uint32_t sid : rssids) {
+        auto page_in_buf = _delvecs.find(sid);
+        if (page_in_buf != _delvecs.end()) {
+            DelvecPagePB page = page_in_buf->second;
+            _cdc_metadata.compaction_input_delvecs[sid] = page;
+        } else {
+            // if this is a batch publish attempt, the previous load in this batch may have produced
+            // a persisted delvec for this segment, so also need to search the delvec_meta and keep it
+            auto page_in_meta = _tablet_meta->delvec_meta().delvecs().find(sid);
+            if (page_in_meta != _tablet_meta->delvec_meta().delvecs().end()) {
+                _cdc_metadata.compaction_input_delvecs[sid] = page_in_meta->second;
+            }
+        }
+    }
+}
+
+void MetaFileBuilder::_collect_cdc_compaction_output_delvecs(const RowsetMetadata& output_rowset) {
+    for (int i = 0; i < output_rowset.segment_metas_size(); ++i) {
+        const uint32_t rssid = output_rowset.id() + get_segment_idx(output_rowset, i);
+        auto iter = _delvecs.find(rssid);
+        if (iter != _delvecs.end()) {
+            _cdc_metadata.compaction_output_delvecs[rssid] = iter->second;
+        }
+    }
+}
+
+Status MetaFileBuilder::_collect_cdc_column_overlay_vecs(uint32_t rssid, const Roaring& updated_rowids) {
+    const int64_t version = _tablet_meta->version();
+    // When the same segment is updated by multiple column partial updates within one batch publish,
+    // union the rowids accross multipe updates. The previous vector can be
+    // 1. in memory _cdc_metadata.column_overlay_vecs, or
+    // 2. persisted in _tablet_meta->cdc_metadata().column_overlay_vecs().
+    //    This can happend when batch publish is retried. Last update was applied in the previous publish attempt,
+    //    and it's vector has been persisted in the tablet metadata. Current tablet metadata is copied from
+    //    the previous tablet metadata, and inherited the last vector.
+    DelVectorPtr unioned_row_vec;
+    auto in_memory_itr = _cdc_metadata.column_overlay_vecs.find(rssid);
+    if (in_memory_itr != _cdc_metadata.column_overlay_vecs.end()) {
+        // in-place update the in-memory vector
+        unioned_row_vec = in_memory_itr->second;
+    } else {
+        unioned_row_vec = std::make_shared<DelVector>();
+        const auto& cdc_column_overlay_vecs_map = _tablet_meta->cdc_metadata().column_overlay_vecs();
+        const auto& inherited_itr = cdc_column_overlay_vecs_map.find(rssid);
+        if (inherited_itr != cdc_column_overlay_vecs_map.end()) {
+            RETURN_IF_ERROR(get_del_vec(_tablet.tablet_mgr(), *_tablet_meta, inherited_itr->second,
+                                        /*fill_cache=*/false, LakeIOOptions{}, unioned_row_vec.get()));
+        }
+    }
+    unioned_row_vec->union_with(version, updated_rowids);
+
+    DelvecPagePB page = _append_delvec_to_buf(unioned_row_vec);
+    _cdc_metadata.column_overlay_vecs[rssid] = std::move(unioned_row_vec);
+    _cdc_metadata.column_overlay_vec_pages[rssid] = std::move(page);
+    return Status::OK();
+}
+
+bool MetaFileBuilder::_is_cdc_using_buffer() {
+    for (const auto& each_delvec : _cdc_metadata.compaction_input_delvecs) {
+        if (!each_delvec.second.has_version() || each_delvec.second.version() == _tablet_meta->version()) {
+            return true;
+        }
+    }
+    return !_cdc_metadata.compaction_output_delvecs.empty() || !_cdc_metadata.column_overlay_vecs.empty();
+}
+
+void MetaFileBuilder::_finalize_cdc_metadata(int64_t version) {
+    // 1. finalize compaction input delvecs
+    for (auto& each_delvec : _cdc_metadata.compaction_input_delvecs) {
+        // use has_version() to distinguish which delvec is generated in this publish, and needs to set version
+        // those generated in previous publish attempts need to keep the version in the delvec_meta
+        if (!each_delvec.second.has_version()) {
+            each_delvec.second.set_version(version);
+            each_delvec.second.set_crc32c_gen_version(version);
+        }
+        (*_tablet_meta->mutable_cdc_metadata()->mutable_compaction_input_delvecs())[each_delvec.first] =
+                each_delvec.second;
+    }
+
+    // 2. finalize compaction output delvecs
+    for (auto& each_delvec : _cdc_metadata.compaction_output_delvecs) {
+        // all compaction output delvecs must be generated in this publish attempt, and need to set version
+        each_delvec.second.set_version(version);
+        each_delvec.second.set_crc32c_gen_version(version);
+        (*_tablet_meta->mutable_cdc_metadata()->mutable_compaction_output_delvecs())[each_delvec.first] =
+                each_delvec.second;
+    }
+
+    // 3. finalize column partial update row vectors
+    for (auto& each_vec : _cdc_metadata.column_overlay_vec_pages) {
+        // all in-memory vectors must be generated in this publish attempt, and need to set version
+        each_vec.second.set_version(version);
+        each_vec.second.set_crc32c_gen_version(version);
+        (*_tablet_meta->mutable_cdc_metadata()->mutable_column_overlay_vecs())[each_vec.first] = each_vec.second;
+    }
+}
+
+void MetaFileBuilder::_collect_cdc_referenced_delvec_file_versions(std::set<int64_t>& referenced_versions) {
+    // Read the persisted cdc metadata, not the in-memory staged maps: _finalize_cdc_metadata has already merged
+    // this attempt's captures into it, and on a batch-publish retry it also carries entries inherited from a
+    // previous attempt whose delvec files must stay alive even though this attempt did not re-capture them.
+    const auto& cdc_metadata = _tablet_meta->cdc_metadata();
+    for (const auto& each_delvec : cdc_metadata.compaction_input_delvecs()) {
+        referenced_versions.insert(each_delvec.second.version());
+    }
+    for (const auto& each_delvec : cdc_metadata.compaction_output_delvecs()) {
+        referenced_versions.insert(each_delvec.second.version());
+    }
+    for (const auto& each_delvec : cdc_metadata.column_overlay_vecs()) {
+        referenced_versions.insert(each_delvec.second.version());
+    }
 }
 
 } // namespace starrocks::lake

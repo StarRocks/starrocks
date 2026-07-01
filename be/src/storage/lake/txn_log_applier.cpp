@@ -491,6 +491,8 @@ private:
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;
             }
+            Status::NotSupported("Change data capture does not support primary key recover")
+                    .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
             if (need_re_publish(ret)) {
                 _builder.set_recover_flag(RecoverFlag::OK);
                 // duplicate primary key happen when prepare index, so we need to re-publish it.
@@ -844,6 +846,9 @@ private:
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
+
+        Status::NotSupported("Change data capture does not support replication")
+                .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
 
         return Status::OK();
     }
@@ -1381,6 +1386,9 @@ private:
         if (op_replication.has_source_schema()) {
             _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
+
+        Status::NotSupported("Change data capture does not support replication")
+                .to_protobuf(_metadata->mutable_cdc_metadata()->mutable_capture_status());
 
         return Status::OK();
     }

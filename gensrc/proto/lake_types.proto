@@ -21,6 +21,7 @@ import "types.proto";
 import "tablet_schema.proto";
 import "olap_file.proto";
 import "olap_common.proto";
+import "status.proto";
 
 message DelvecDataPB {
     optional int64 version = 1;
@@ -87,6 +88,7 @@ message DelvecMetadataPB {
     // map from version to delete vector file meta
     // so that we no need to keep file name (consume more memory) in each DelvecPagePB
     // instead we can lookup delete vector file name by version saved in DelvecPagePB
+    // **NOTE**: file may be also refereneced by delvecs in |CdcMetadataPB|
     map<int64, FileMetaPB> version_to_file = 1;
     // from segment id to delvec page
     map<uint32, DelvecPagePB> delvecs = 2;
@@ -111,8 +113,34 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+// Metadata describing the data changes in this publish, used by Change Data Capture (CDC) to derive the
+// changes that the publish's loads introduced. It never carries over between publishes, so it must be
+// cleared whenever a new publish copies the previous metadata.
 message CdcMetadataPB {
-    // no implementation, only used for placeholder in TabletMetadataPB
+    // Whether the load changes in this publish can be captured, and if not, why (e.g. replication or pk
+    // recover are not capturable). Unset or Status::OK means capturable.
+    optional StatusPB capture_status = 1;
+    // Input-segment delvecs captured before compaction is applied (file in |DelvecMetadataPB.version_to_file|).
+    // Once compaction is applied, those input-segment delvecs are removed from |DelvecMetadataPB.delvecs|,
+    // so if a load is followed by a compaction on the same input segment within one batch publish, the
+    // load-produced delvec can no longer be read from |DelvecMetadataPB.delvecs|. Recording it here lets CDC
+    // recover the load's "before" image by diffing against the delvec in the previous metadata.
+    // Segments here never overlap with those in |DelvecMetadataPB.delvecs|.
+    map<uint32, DelvecPagePB> compaction_input_delvecs = 2;
+    // Output-segment delvecs produced when compaction is applied (file in |DelvecMetadataPB.version_to_file|).
+    // Take a batch publish that applies load L1, then compaction, then load L2:
+    //   - applying compaction produces delvec D1, marking the compaction-output rows that conflict with L1;
+    //   - applying L2 extends it to delvec D2, which additionally marks the rows L2 deletes or updates.
+    // |DelvecMetadataPB.delvecs| only keeps the final D2, so recording D1 here lets CDC isolate L2's
+    // "before" image as |D2 - D1|.
+    // Segments here overlap with those in |DelvecMetadataPB.delvecs|; if no load follows the compaction, the
+    // two hold the same delvec, pointing to the same byte range (same offset and size) in the same file
+    // resolved via |DelvecMetadataPB.version_to_file|.
+    map<uint32, DelvecPagePB> compaction_output_delvecs = 3;
+    // Segment rows updated by column-mode partial update (file in |DelvecMetadataPB.version_to_file|), which
+    // lets CDC locate each row's position before and after the update. When the same segment is updated by
+    // multiple column partial updates within one batch publish, the recorded result is their union.
+    map<uint32, DelvecPagePB> column_overlay_vecs = 4;
 }
 
 // An Index Delta Group (IDG) entry describes a standalone .idx file
@@ -331,8 +359,6 @@ message TabletMetadataPB {
     // chain[0] = direct parent version; subsequent elements = older ancestors.
     // Length capped at max(1, cloud_native_tablet_metadata_ancestors_recorded) (default 5).
     repeated int64 metadata_ancestors = 50;
-
-    // Placeholder reserved for upcoming CDC metadata; not read or written yet.
     optional CdcMetadataPB cdc_metadata = 51;
 }
 

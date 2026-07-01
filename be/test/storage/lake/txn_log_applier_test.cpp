@@ -860,6 +860,41 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
     EXPECT_EQ(10u, meta->next_rowset_id());
 }
 
+TEST(TxnLogApplierBatchTest, PKIncrementalReplicationMarksCdcNotTrackable) {
+    // A replication publish imports another cluster's rowsets, which are not produced by local DML
+    // and are not described by this tablet's CDC capture maps (a shared-nothing source's segments
+    // even lack per-segment row counts), so it cannot be reconstructed as a CHANGES diff. The
+    // INCREMENTAL branch must mark cdc_metadata degraded just like the full branch, so the connector
+    // returns NotSupported for a range spanning it instead of silently emitting an incomplete diff.
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50007);
+    auto meta = build_pk_metadata(50007);
+    meta->set_next_rowset_id(10);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(50007);
+    log->set_txn_id(210);
+    auto* op_rep = log->mutable_op_replication();
+    auto* txn_meta = op_rep->mutable_txn_meta();
+    txn_meta->set_txn_id(210);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(4);
+    txn_meta->set_data_version(3);
+    txn_meta->set_incremental_snapshot(true);
+    // Empty op_write (num_rows=0) is skipped by apply_write_log in this lightweight env.
+    auto* op_write = op_rep->add_op_writes();
+    auto* rowset = op_write->mutable_rowset();
+    rowset->set_id(5);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+
+    ASSERT_TRUE(applier->apply(*log).ok());
+    ASSERT_TRUE(meta->has_cdc_metadata());
+    ASSERT_TRUE(meta->cdc_metadata().has_capture_status());
+    EXPECT_NE(0, meta->cdc_metadata().capture_status().status_code())
+            << "incremental replication must mark cdc_metadata.capture_status non-OK";
+}
+
 TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
     // --- Sub-case 1: Non-lake path (rssid_remap) ---
     {

@@ -2466,6 +2466,351 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
     }
 }
 
+// A compaction merges an input segment, while a concurrent upsert published earlier in the same
+// batch has already re-written (superseded) one of that segment's keys. When the compaction
+// publishes, the primary index maps the superseded key to the upsert's rowset, whose id is greater
+// than the largest input rowset id, so the compaction stamps a delete bit on its own output segment.
+// That delete bit is the conflict subset, and it must be captured into
+// cdc_metadata().compaction_output_delvecs() keyed by the output segment's rssid.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_output_delvecs_captured) {
+    // try_replace(... max_src_rssid ...) only runs on the non-light publish path; the light path
+    // resolves conflicts from the input segments' base-version delvec and would not exercise the
+    // in-batch superseded-key case. Force the non-light path for the duration of this test.
+    ConfigResetGuard<bool> light_publish_guard(&config::enable_light_pk_compaction_publish, false);
+
+    // The three input rowsets carry the same key set so the compaction has overlapping keys to
+    // merge into a single output segment.
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    auto base_version = version;
+
+    // Create the compaction against base_version so its input rowsets are the three already-published
+    // ones. Its largest input rowset id becomes max_src_rssid at publish time.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, base_version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+
+    // Concurrent upsert that re-writes the same key set into a new rowset. Its rowset id is larger
+    // than any compaction input rowset id, so the index entries it produces look superseded to the
+    // compaction's try_replace. Leave it unpublished; the batch below publishes it before the
+    // compaction.
+    auto write_txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Batch publish with the upsert ordered before the compaction. The upsert applies first and
+    // remaps every key to its new rowset; the compaction then resolves the conflict by deleting
+    // those rows from its output segment.
+    std::vector<int64_t> txn_ids{write_txn_id, compaction_txn_id};
+    auto new_version = base_version + txn_ids.size();
+    ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
+
+    const auto& output_delvecs = metadata->cdc_metadata().compaction_output_delvecs();
+    ASSERT_FALSE(output_delvecs.empty());
+    // The only conflict entry belongs to the compaction output segment; all kChunkSize keys were
+    // superseded, so the captured subset is non-empty and stamped at the compaction publish version.
+    bool found_output_segment_entry = false;
+    for (const auto& [output_rssid, page] : output_delvecs) {
+        EXPECT_GT(page.size(), 0);
+        EXPECT_EQ(page.version(), new_version);
+        found_output_segment_entry = true;
+    }
+    EXPECT_TRUE(found_output_segment_entry);
+
+    // Sanity check that the upsert really superseded the merged keys: the surviving rows live in the
+    // upsert's rowset, the compaction output segment is fully deleted.
+    EXPECT_EQ(kChunkSize, read(new_version));
+}
+
+// The mirror of test_cdc_compaction_output_delvecs_captured. There a concurrent upsert published
+// BEFORE the compaction superseded the merged keys, so the compaction stamped conflict-resolution
+// delete bits on its own output and recorded them in compaction_output_delvecs. Here the batch
+// orders the compaction FIRST, so it merges a clean output -- no key is superseded while it publishes,
+// and compaction_output_delvecs stays empty. A load ordered AFTER it then updates the first half of
+// the merged keys: the index already maps those keys to the output, so the upsert stamps an ordinary
+// op_write delete vector on the output segment (not a conflict capture) and writes the new values into
+// its own rowset. This is the clean-output delete path the changes connector reads with an empty
+// conflict baseline (changes_connector_test.cpp test_primary_keys_before_values_compaction_output
+// sub-case G), the branch its conflict-bearing sub-cases never reach. Runs on the default light
+// compaction publish path: op_write delete-vector stamping is independent of that config, and a
+// compaction with no concurrent supersede produces no conflict capture on either path.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_then_load_records_no_output_delvecs) {
+    // Three input rowsets carrying the same key set [0, kChunkSize) so the compaction has overlapping
+    // keys to merge into a single output segment.
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    auto base_version = version;
+
+    // Compaction created against base_version; its inputs are the three published rowsets. Executed
+    // now, published below ordered before the load.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, base_version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+
+    // A load that upserts the first half of the key set ([0, kUpdated) is a subset of the merged
+    // [0, kChunkSize)). Ordered AFTER the compaction in the batch below, it updates keys the compaction
+    // has already merged into its output. Leave it unpublished.
+    const int kUpdated = kChunkSize / 2;
+    auto update_chunk = generate_data(kUpdated, 0);
+    auto update_indexes = std::vector<uint32_t>(kUpdated);
+    for (int i = 0; i < kUpdated; i++) {
+        update_indexes[i] = i;
+    }
+    auto write_txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(update_chunk, update_indexes.data(), update_indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Batch publish with the compaction ordered before the load. The compaction merges cleanly, then
+    // the load supersedes the first half of the keys.
+    std::vector<int64_t> txn_ids{compaction_txn_id, write_txn_id};
+    auto new_version = base_version + txn_ids.size();
+    ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
+
+    // The compaction was clean: nothing recorded in the conflict capture.
+    EXPECT_TRUE(metadata->cdc_metadata().compaction_output_delvecs().empty());
+
+    // The load's deletes landed on the compaction output as an ordinary op_write delete vector: the
+    // single output rowset (the one carrying max_compact_input_rowset_id) is half deleted; its merged-
+    // but-untouched half plus the load's own kUpdated new rows leave kChunkSize live rows.
+    int output_rowsets = 0;
+    for (int i = 0; i < metadata->rowsets_size(); i++) {
+        if (metadata->rowsets(i).has_max_compact_input_rowset_id()) {
+            output_rowsets++;
+            EXPECT_EQ(kUpdated, metadata->rowsets(i).num_dels());
+        }
+    }
+    EXPECT_EQ(1, output_rowsets);
+    EXPECT_EQ(kChunkSize, read(new_version));
+}
+
+// Write the same key set three times (so the first two rowsets carry full delete vectors), then
+// compact them into one rowset at version V. The compaction captures those input segments' delvecs
+// into compaction_input_delvecs, each page stamped at version V. A following normal publish at V+1 has
+// ori_base_version == V, so every captured page (version V <= V) is pruned at publish start and the
+// three CDC maps come up empty on the V+1 metadata.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_next_normal_publish) {
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Compact at the current version; the merged input segments' delvecs land in compaction_input_delvecs.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, compaction_txn_id).status());
+    version++;
+    auto compaction_version = version;
+
+    ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, compaction_version));
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().compaction_input_delvecs().empty());
+    // Each captured page keeps the version at which its delete bits were written (the overwrite
+    // publishes before this compaction), so every page.version() <= base of the compaction publish,
+    // hence < compaction_version. That is exactly why the next publish (whose ori_base ==
+    // compaction_version) prunes them all.
+    for (const auto& [rssid, page] : metadata_after_compaction->cdc_metadata().compaction_input_delvecs()) {
+        EXPECT_LT(page.version(), compaction_version);
+    }
+
+    // A second normal publish (overwriting the same keys again) at compaction_version + 1.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSIGN_OR_ABORT(auto metadata_next, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_TRUE(metadata_next->cdc_metadata().compaction_input_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().compaction_output_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().column_overlay_vecs().empty());
+}
+
+// After a compaction leaves a compaction_input_delvecs entry at version V, an empty publish (a single
+// txn whose txn_id is EMPTY_TXNLOG_TXNID, taking publish_version's fast path) advances to V+1. The fast
+// path leaves the CDC capture cleared, so the V+1 metadata's maps are empty and it carries no
+// cdc_metadata capture status.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, compaction_txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().compaction_input_delvecs().empty());
+
+    // Empty publish (no txnlog) -> publish_version's reshard/empty fast path.
+    {
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(-1 /* EMPTY_TXNLOG_TXNID */);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_force_publish(false);
+        std::vector<TxnInfoPB> txns{txn_info};
+        ASSIGN_OR_ABORT(auto empty_meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version,
+                                                         version + 1, txns, false));
+        version++;
+        EXPECT_TRUE(empty_meta->cdc_metadata().compaction_input_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().compaction_output_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().column_overlay_vecs().empty());
+        EXPECT_TRUE(!empty_meta->has_cdc_metadata() || !empty_meta->cdc_metadata().has_capture_status() ||
+                    empty_meta->cdc_metadata().capture_status().status_code() == 0);
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},

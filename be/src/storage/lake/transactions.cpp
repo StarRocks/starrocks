@@ -290,6 +290,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         // so base_version is the direct parent and `metadata` is the tablet
         // metadata at base_version.
         build_metadata_ancestors(new_metadata.get(), base_version, metadata.get());
+        new_metadata->mutable_cdc_metadata()->Clear();
         if (!skip_write_tablet_metadata) {
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
@@ -520,6 +521,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
             if (new_metadata->orphan_files_size() > 0) {
                 new_metadata->mutable_orphan_files()->Clear();
+            }
+
+            // new_metadata is copied, and inherits the cdc metadata of base tablet metadata. If this is a
+            // publish from scrach, should clear the cdc metadata because cdc metadata is publish-granular.
+            // Otherwise this is a retry of batch publish, and should keep it which has the cdc metas for
+            // the previous txn in this batch publish.
+            if (ori_base_version == base_version) {
+                new_metadata->mutable_cdc_metadata()->Clear();
             }
 
             // force update prev_garbage_version at most config::lake_max_garbage_version_distance,

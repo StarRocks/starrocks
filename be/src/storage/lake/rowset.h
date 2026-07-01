@@ -104,6 +104,15 @@ public:
             const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr,
             const std::vector<OlapReaderStatistics*>* per_segment_stats = nullptr);
 
+    // Build one iterator per segment, never applying a delete vector: the rows the caller selects via
+    // rowid_range_per_segment[i] (size must equal num_segments()) are returned as-is, not re-filtered
+    // by deletes. When |apply_dcg| is set, the delta column group overlay (this rowset's tablet
+    // metadata at |version|) is applied so column-updated rows surface their updated values; otherwise
+    // the stored bytes are read raw.
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_no_delvec(
+            const Schema& schema, int64_t version, OlapReaderStatistics* stats, bool apply_dcg,
+            const std::vector<SparseRangePtr>* rowid_range_per_segment = nullptr);
+
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
     // if _compaction_segment_limit is set > 0, it means only partial segments will be used
@@ -183,6 +192,14 @@ public:
 
 private:
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
+
+    // Load this rowset's segments and build one iterator per segment from |seg_options|. The result
+    // is positionally aligned with the segments: a segment that yields no iterator keeps a null
+    // placeholder, so callers can index by position to derive the rssid and must skip the nulls.
+    StatusOr<std::vector<ChunkIteratorPtr>> _build_segment_iterators(
+            const Schema& schema, SegmentReadOptions seg_options,
+            const std::vector<SparseRangePtr>* rowid_range_per_segment,
+            const std::vector<OlapReaderStatistics*>* per_segment_stats);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;

@@ -165,15 +165,28 @@ public class ChangesSyntaxTest extends BookmarkTestBase {
     }
 
     @Test
-    public void testHintRejectsPkAndUniqueTable() {
-        String[] tableNames = {"pk_t", "unique_t"};
-        for (String tableName : tableNames) {
-            String sql = "SELECT * FROM " + tableName + " [_CHANGES_1_2_]";
-            AnalysisException ex = assertThrows(AnalysisException.class,
-                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-            assertTrue(ex.getMessage().contains("CHANGES hint is only supported on DUPLICATE / AGGREGATE table"),
-                    "actual for " + tableName + ": " + ex.getMessage());
-        }
+    public void testHintRejectsUniqueTable() {
+        // UNIQUE KEYS is the one keys type CHANGES still does not support; PK,
+        // DUP, and AGG all pass the gate.
+        String sql = "SELECT * FROM unique_t [_CHANGES_1_2_]";
+        AnalysisException ex = assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        assertTrue(ex.getMessage().contains("CHANGES hint is only supported on PRIMARY / DUPLICATE / AGGREGATE table"),
+                "actual: " + ex.getMessage());
+    }
+
+    @Test
+    public void testHintAllowsPkTable() throws Exception {
+        // PRIMARY KEYS is supported: the hint parses into a BookmarkRange just
+        // like a DUP table, without tripping the keys-type guard.
+        String sql = "SELECT * FROM pk_t [_CHANGES_5_7_]";
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                sql, connectContext);
+        TableRelation tr = (TableRelation) ((SelectRelation) stmt.getQueryRelation()).getRelation();
+        Optional<BookmarkRange> range = tr.getBookmarkRange();
+        assertTrue(range.isPresent());
+        assertEquals(5L, range.get().base());
+        assertEquals(7L, range.get().head());
     }
 
     @Test

@@ -45,7 +45,8 @@ private:
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
-                                       ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema);
+                                       ChunkPtr* source_chunk, int32_t condition_idx_in_partial_schema,
+                                       Roaring* updated_rowids = nullptr);
     StatusOr<ChunkPtr> _read_from_source_segment(const RowsetUpdateStateParams& params, const Schema& schema,
                                                  uint32_t rssid);
     // Resolve txn_meta.merge_condition() to a column id in `tschema`.

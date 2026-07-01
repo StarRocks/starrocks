@@ -32,6 +32,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
@@ -234,7 +235,8 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // UpdateManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                                    const Schema& partial_schema, ChunkPtr* source_chunk,
-                                                                   int32_t condition_idx_in_partial_schema) {
+                                                                   int32_t condition_idx_in_partial_schema,
+                                                                   Roaring* updated_rowids) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
@@ -287,6 +289,9 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         }
         if (sorted_source_rowids.empty()) {
             continue;
+        }
+        if (updated_rowids != nullptr) {
+            updated_rowids->addMany(sorted_source_rowids.size(), sorted_source_rowids.data());
         }
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
@@ -419,6 +424,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
+    // the rows actually updated for each segment
+    std::map<uint32_t, Roaring> updated_rowids_per_segment;
     std::map<uint32_t, std::vector<std::pair<std::string, std::string>>> dcg_column_file_with_encryption_metas;
     // Parallel to dcg_column_file_with_encryption_metas: byte size of each `.cols` file,
     // captured from finalize() so readers can avoid a stat/HeadObject when opening the segment.
@@ -462,7 +469,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             const auto* upt_pairs_ptr = &each.second;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
-                         upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
+                         upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids, &updated_rowids_per_segment,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
                          &shared_status]() {
                 // 3.3 read from source segment
@@ -478,8 +485,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
 
                 // 3.4 read from update segment and apply updates
+                Roaring updated_rowids;
                 auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr,
-                                                      condition_idx_in_partial_schema);
+                                                      condition_idx_in_partial_schema, &updated_rowids);
                 if (!st.ok()) {
                     std::lock_guard<std::mutex> l(result_mutex);
                     shared_status.update(st);
@@ -514,6 +522,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             file_name(delta_column_group_writer->segment_path()),
                             delta_column_group_writer->encryption_meta());
                     dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
+                    updated_rowids_per_segment[rssid] |= updated_rowids;
                 }
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
             };
@@ -536,8 +545,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     }
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
-        builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first],
-                            dcg_column_file_sizes[each.first]);
+        const auto& updated_rowids = updated_rowids_per_segment[each.first];
+        RETURN_IF_ERROR(builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first],
+                                            dcg_column_ids[each.first], dcg_column_file_sizes[each.first],
+                                            updated_rowids));
     }
     builder->apply_column_mode_partial_update(params.op_write);
 

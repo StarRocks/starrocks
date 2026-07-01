@@ -397,7 +397,7 @@ TEST_F(MetaFileTest, test_dcg) {
         unique_column_id_list.push_back({3, 4, 5});
         unique_column_id_list.push_back({6, 7, 8});
         std::vector<int64_t> file_sizes{111, 222};
-        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
+        ASSERT_OK(builder.append_dcg(110, filenames, unique_column_id_list, file_sizes, Roaring{0}));
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -416,7 +416,7 @@ TEST_F(MetaFileTest, test_dcg) {
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({4, 7});
         std::vector<int64_t> file_sizes{333};
-        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
+        ASSERT_OK(builder.append_dcg(110, filenames, unique_column_id_list, file_sizes, Roaring{0}));
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -436,7 +436,7 @@ TEST_F(MetaFileTest, test_dcg) {
         std::vector<std::vector<ColumnUID>> unique_column_id_list;
         unique_column_id_list.push_back({3, 5});
         std::vector<int64_t> file_sizes{444};
-        builder.append_dcg(110, filenames, unique_column_id_list, file_sizes);
+        ASSERT_OK(builder.append_dcg(110, filenames, unique_column_id_list, file_sizes, Roaring{0}));
         builder.apply_column_mode_partial_update(op_write);
         Status st = builder.finalize(next_id());
         EXPECT_TRUE(st.ok());
@@ -1438,26 +1438,116 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
         // Step 3: Finalize - this is where the bug would manifest
         ASSERT_OK(builder.finalize(next_id()));
 
-        // Verify: segment 100's delvec should NOT exist in metadata (it was compacted away)
+        // Verify: segment 100's LIVE delvec should NOT exist in metadata (it was compacted away)
         const auto& delvecs_map = metadata->delvec_meta().delvecs();
         EXPECT_TRUE(delvecs_map.find(100) == delvecs_map.end())
                 << "Orphan delvec entry found for compacted segment 100";
 
+        // PK CDC (Gap 2 A): the merged segment's delvec is kept in compaction_input_delvecs (captured
+        // this batch, version 13) so the changes connector can still read its pre-change rows. The
+        // delvec file is therefore NOT an orphan and must survive the prune below.
+        const auto& compacted = metadata->cdc_metadata().compaction_input_delvecs();
+        auto cit = compacted.find(100);
+        ASSERT_TRUE(cit != compacted.end()) << "compaction_input_delvecs should capture merged segment 100";
+        EXPECT_EQ(13, cit->second.version());
+
         // Verify: rowset 100 should be gone, only rowset 101 and the new compaction output remain
         EXPECT_EQ(2, metadata->rowsets_size());
 
-        // Verify: version_to_file should not hold unreferenced entries
-        for (const auto& vtf_entry : metadata->delvec_meta().version_to_file()) {
-            bool referenced = false;
-            for (const auto& dv_entry : delvecs_map) {
-                if (dv_entry.second.version() == vtf_entry.first) {
-                    referenced = true;
-                    break;
-                }
+        // Verify: every version_to_file entry is referenced by a live delvec OR a CDC capture map
+        // (compaction_input_delvecs / compaction_output_delvecs / column_overlay_vecs). A
+        // version referenced only by a CDC map is a legitimate capture, not an orphan.
+        auto referenced_by_any = [&](int64_t ver) {
+            const auto& dm = metadata->delvec_meta();
+            const auto& cdc = metadata->cdc_metadata();
+            for (const auto& e : dm.delvecs()) {
+                if (e.second.version() == ver) return true;
             }
-            EXPECT_TRUE(referenced) << "version_to_file entry for version " << vtf_entry.first
-                                    << " is not referenced by any delvec";
+            for (const auto& e : cdc.compaction_input_delvecs()) {
+                if (e.second.version() == ver) return true;
+            }
+            for (const auto& e : cdc.compaction_output_delvecs()) {
+                if (e.second.version() == ver) return true;
+            }
+            for (const auto& e : cdc.column_overlay_vecs()) {
+                if (e.second.version() == ver) return true;
+            }
+            return false;
+        };
+        for (const auto& vtf_entry : metadata->delvec_meta().version_to_file()) {
+            EXPECT_TRUE(referenced_by_any(vtf_entry.first))
+                    << "version_to_file entry for version " << vtf_entry.first << " is not referenced";
         }
+        // The merged segment's delvec file (version 13) is kept precisely because
+        // compaction_input_delvecs references it; a naive prune over live delvecs only would have
+        // dropped it.
+        EXPECT_TRUE(metadata->delvec_meta().version_to_file().find(13) !=
+                    metadata->delvec_meta().version_to_file().end());
+    }
+}
+
+// PK CDC (Gap 2 A, cross-publish): when a segment's delete bits were written in an EARLIER publish
+// and the segment is merged away by a LATER compaction publish, compaction_input_delvecs copies the
+// segment's existing page (which references the earlier publish's delvec file). The vacuum prune in
+// _finalize_delvec must keep that older version_to_file entry alive even though no live delvec
+// references it anymore. This exercises Hook B's "older page" branch + the vacuum union.
+TEST_F(MetaFileTest, test_cdc_compaction_input_delvec_keeps_older_publish_file) {
+    const int64_t tablet_id = 40050;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    { // v10: baseline
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    { // v11: write rowset 100 (segment "a.dat")
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    int64_t delete_version = 12;
+    { // v12: delete bits on segment 100 -> live delvec + version_to_file[12]
+        metadata->set_version(delete_version);
+        MetaFileBuilder builder(*tablet, metadata);
+        DelVector dv;
+        dv.set_empty();
+        std::shared_ptr<DelVector> ndv;
+        std::vector<uint32_t> dels = {1, 3, 5};
+        dv.add_dels_as_new_version(dels, delete_version, &ndv);
+        builder.append_delvec(ndv, 100);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    ASSERT_TRUE(metadata->delvec_meta().version_to_file().find(delete_version) !=
+                metadata->delvec_meta().version_to_file().end());
+
+    { // v13: compaction merges rowset 100 away in a SEPARATE publish (no new delvec on 100 this batch)
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(100);
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("compacted.dat");
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // segment 100's live delvec is gone, but compaction_input_delvecs captured its older page
+        // (version 12).
+        const auto& dm = metadata->delvec_meta();
+        const auto& cdc = metadata->cdc_metadata();
+        EXPECT_TRUE(dm.delvecs().find(100) == dm.delvecs().end());
+        auto cit = cdc.compaction_input_delvecs().find(100);
+        ASSERT_TRUE(cit != cdc.compaction_input_delvecs().end());
+        EXPECT_EQ(delete_version, cit->second.version());
+        // The older delvec file (version 12) must survive: it is now referenced only by
+        // compaction_input_delvecs.
+        EXPECT_TRUE(dm.version_to_file().find(delete_version) != dm.version_to_file().end())
+                << "older delvec file (version " << delete_version << ") must be kept for compaction_input_delvecs";
     }
 }
 
@@ -2487,6 +2577,154 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(BITMAP, schema->table_indices(0).index_type());
     ASSERT_EQ(1, schema->dropped_table_indices_size());
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
+// PK CDC: the three cdc_metadata capture maps and its capture_status survive a serialize/parse
+// round-trip (confirms the proto fields and their generated accessors).
+TEST_F(MetaFileTest, test_cdc_maps_and_cdc_metadata_roundtrip) {
+    TabletMetadataPB meta;
+    meta.set_id(12345);
+    meta.set_version(7);
+    auto* cdc = meta.mutable_cdc_metadata();
+    DelvecPagePB page;
+    page.set_version(7);
+    page.set_offset(0);
+    page.set_size(8);
+    page.set_crc32c(123);
+    (*cdc->mutable_compaction_input_delvecs())[100] = page;
+    (*cdc->mutable_compaction_output_delvecs())[200] = page;
+    (*cdc->mutable_column_overlay_vecs())[300] = page;
+    meta.mutable_cdc_metadata()->mutable_capture_status()->set_status_code(8); // non-OK
+    meta.mutable_cdc_metadata()->mutable_capture_status()->add_error_msgs("degraded: test");
+
+    std::string buf;
+    ASSERT_TRUE(meta.SerializeToString(&buf));
+    TabletMetadataPB parsed;
+    ASSERT_TRUE(parsed.ParseFromString(buf));
+
+    const auto& pcdc = parsed.cdc_metadata();
+    auto c = pcdc.compaction_input_delvecs().find(100);
+    ASSERT_TRUE(c != pcdc.compaction_input_delvecs().end());
+    EXPECT_EQ(7, c->second.version());
+    EXPECT_TRUE(pcdc.compaction_output_delvecs().find(200) != pcdc.compaction_output_delvecs().end());
+    EXPECT_TRUE(pcdc.column_overlay_vecs().find(300) != pcdc.column_overlay_vecs().end());
+    ASSERT_TRUE(parsed.has_cdc_metadata());
+    EXPECT_EQ(8, parsed.cdc_metadata().capture_status().status_code());
+    ASSERT_EQ(1, parsed.cdc_metadata().capture_status().error_msgs_size());
+    EXPECT_EQ("degraded: test", parsed.cdc_metadata().capture_status().error_msgs(0));
+}
+
+// Regression for the PK CDC column-update capture: when two column-mode partial updates in ONE
+// publish overlay different rows of the SAME source segment, the capture must UNION the later
+// op_write's rows with the earlier op_write's instead of overwriting them. The CHANGES diff reads
+// column_overlay_vecs[rssid] as the full set of rows the publish overlaid on that segment,
+// so dropping the first op_write's rows would silently lose them from both the DELETE and INSERT
+// sides of the CDC result.
+TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_same_segment_in_one_publish) {
+    const int64_t tablet_id = 40060;
+    const uint32_t rssid = 7;
+    const int64_t version = 11;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    // column_overlay_vecs is a primary-key concept; _finalize_delvec only persists the delvec
+    // file (and its version_to_file entry) for a primary-key tablet.
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // First op_write of the publish overlays rows {1, 2} of the source segment.
+    Roaring r1;
+    r1.add(1);
+    r1.add(2);
+    ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r1));
+
+    // Second op_write of the SAME publish overlays {2, 3} of the SAME segment (overlapping, not equal).
+    Roaring r2;
+    r2.add(2);
+    r2.add(3);
+    ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r2));
+
+    ASSERT_OK(builder.finalize(next_id()));
+
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    const auto& dcg_map = persisted->cdc_metadata().column_overlay_vecs();
+    auto it = dcg_map.find(rssid);
+    ASSERT_TRUE(it != dcg_map.end());
+
+    DelVector read_dv;
+    LakeIOOptions lake_io_opts;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *persisted, it->second, true, lake_io_opts, &read_dv));
+    // Before the fix the assign kept only the second op_write's {2, 3}; after it, the union {1, 2, 3}.
+    ASSERT_TRUE(read_dv.roaring() != nullptr);
+    EXPECT_EQ(3, read_dv.cardinality());
+    EXPECT_TRUE(read_dv.roaring()->contains(1));
+    EXPECT_TRUE(read_dv.roaring()->contains(2));
+    EXPECT_TRUE(read_dv.roaring()->contains(3));
+}
+
+// Regression for the PK CDC column-update capture across a base-advancement publish retry: a batch
+// publish's prior attempt finalized meta@advanced_base with a column-update of one segment; the retry
+// deep-copies that metadata (inheriting column_overlay_vecs[rssid] and its delvec file) and
+// replays only the tail. When the tail column-updates the SAME segment, the capture must UNION the
+// tail's rows with the inherited window capture (read back from the deep-copied delvec file) instead
+// of overwriting it, so the page still covers the whole (ori_base, new] edge.
+TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_inherited_window_on_retry) {
+    const int64_t tablet_id = 40061;
+    const uint32_t rssid = 9;
+    const int64_t advanced_base = 11; // version the prior attempt finalized
+    const int64_t new_version = 12;   // the retry's finalized version
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+
+    // Prior attempt: finalize meta@advanced_base capturing the window's column-update of rows {1, 2}.
+    auto meta_base = std::make_shared<TabletMetadata>();
+    meta_base->set_id(tablet_id);
+    meta_base->set_version(advanced_base);
+    meta_base->set_next_rowset_id(110);
+    meta_base->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    {
+        MetaFileBuilder builder(*tablet, meta_base);
+        Roaring r;
+        r.add(1);
+        r.add(2);
+        ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r));
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    // Retry: deep-copy meta@advanced_base (inherits column_overlay_vecs[rssid]={1,2} and its
+    // version_to_file), bump to new_version. The entry is retained on a base-advancement retry (its
+    // version advanced_base > ori_base), so the deep copy models the inherited state directly.
+    ASSIGN_OR_ABORT(auto reloaded_base, _tablet_manager->get_tablet_metadata(tablet_id, advanced_base));
+    auto meta_retry = std::make_shared<TabletMetadata>(*reloaded_base);
+    meta_retry->set_version(new_version);
+    ASSERT_TRUE(meta_retry->cdc_metadata().column_overlay_vecs().find(rssid) !=
+                meta_retry->cdc_metadata().column_overlay_vecs().end());
+
+    // Replayed tail column-updates the SAME segment, rows {2, 3} (overlapping the window, not equal).
+    {
+        MetaFileBuilder builder(*tablet, meta_retry);
+        Roaring r;
+        r.add(2);
+        r.add(3);
+        ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r));
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, new_version));
+    auto it = persisted->cdc_metadata().column_overlay_vecs().find(rssid);
+    ASSERT_TRUE(it != persisted->cdc_metadata().column_overlay_vecs().end());
+
+    DelVector read_dv;
+    LakeIOOptions lake_io_opts;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *persisted, it->second, true, lake_io_opts, &read_dv));
+    // Without the inherited-window union the tail's append keeps only {2, 3}; with it, {1, 2, 3}.
+    ASSERT_TRUE(read_dv.roaring() != nullptr);
+    EXPECT_EQ(3, read_dv.cardinality());
+    EXPECT_TRUE(read_dv.roaring()->contains(1));
+    EXPECT_TRUE(read_dv.roaring()->contains(2));
+    EXPECT_TRUE(read_dv.roaring()->contains(3));
 }
 
 } // namespace starrocks::lake

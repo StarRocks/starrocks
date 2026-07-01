@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <set>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -34,6 +35,7 @@
 #include "common/logging.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
@@ -262,8 +264,9 @@ TEST_P(LakePartialUpdateTest, test_write) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols files into orphan files.
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
+                // move old .cols files into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -480,6 +483,256 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
+}
+
+// Decision B: a column-mode partial update with a merge condition records, per source segment, the
+// rows it actually changed (the condition winners, old <= new) as a bitmap page in column_overlay_vecs.
+// The losers (old > new) keep their previous values and must be absent from the bitmap.
+TEST_P(LakePartialUpdateTest, test_column_mode_dcg_update_row_vec_records_only_winners) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    // Baseline written with c0 in ascending order, so physical source rowid i corresponds to c0 == i.
+    // c1 = c0 * 3, c2 = c0 * 4. One full write -> one source segment.
+    std::vector<int> full_c0(kChunkSize), full_c1(kChunkSize), full_c2(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        full_c0[i] = i;
+        full_c1[i] = i * 3;
+        full_c2[i] = i * 4;
+    }
+    auto fc0 = Int32Column::create();
+    auto fc1 = Int32Column::create();
+    auto fc2 = Int32Column::create();
+    fc0->append_numbers(full_c0.data(), full_c0.size() * sizeof(int));
+    fc1->append_numbers(full_c1.data(), full_c1.size() * sizeof(int));
+    fc2->append_numbers(full_c2.data(), full_c2.size() * sizeof(int));
+    Chunk full_chunk({std::move(fc0), std::move(fc1), std::move(fc2)}, _slot_cid_map);
+
+    // Partial update (c0, c1) with merge condition on c1. Even keys raise c1 above the old value
+    // (winners), odd keys lower it below the old value (losers). Same key order as the baseline,
+    // so the expected winner source rowids are exactly the even ones.
+    std::set<uint32_t> expected_winner_rowids;
+    std::vector<int> upt_c0(kChunkSize), upt_c1(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        upt_c0[i] = i;
+        if (i % 2 == 0) {
+            upt_c1[i] = i * 3 + 100; // new > old -> winner
+            expected_winner_rowids.insert(static_cast<uint32_t>(i));
+        } else {
+            upt_c1[i] = i * 3 - 1; // new < old -> loser
+        }
+    }
+    auto pc0 = Int32Column::create();
+    auto pc1 = Int32Column::create();
+    pc0->append_numbers(upt_c0.data(), upt_c0.size() * sizeof(int));
+    pc1->append_numbers(upt_c1.data(), upt_c1.size() * sizeof(int));
+    Chunk partial_chunk({std::move(pc0), std::move(pc1)}, _slot_cid_map);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Baseline full write.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(full_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column partial update with merge condition.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition("c1")
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(partial_chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Read-back sanity: even keys took the new c1 (c0*3+100), odd keys kept the old c1 (c0*3).
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) {
+                  const int expected_c1 = (c0 % 2 == 0) ? (c0 * 3 + 100) : (c0 * 3);
+                  return (c1 == expected_c1) && (c2 == c0 * 4);
+              }));
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    const auto& row_vecs = metadata->cdc_metadata().column_overlay_vecs();
+    ASSERT_EQ(row_vecs.size(), 1) << "exactly one source segment was column-updated";
+
+    const auto& seg_page = *row_vecs.begin();
+    DelVector winners;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    ASSERT_OK(get_del_vec(_tablet_mgr.get(), *metadata, seg_page.second, true, lake_io_opts, &winners));
+    ASSERT_NE(winners.roaring(), nullptr);
+    EXPECT_EQ(winners.cardinality(), expected_winner_rowids.size());
+    for (uint32_t rowid : expected_winner_rowids) {
+        EXPECT_TRUE(winners.roaring()->contains(rowid)) << "winner rowid " << rowid << " missing from bitmap";
+    }
+    // Losers (old > new) kept their values and must not be present.
+    for (int i = 1; i < kChunkSize; i += 2) {
+        EXPECT_FALSE(winners.roaring()->contains(static_cast<uint32_t>(i)))
+                << "loser rowid " << i << " unexpectedly present in bitmap";
+    }
+}
+
+// PK CDC §8.6 G1: a base-advancement retry must inherit the CDC captures finalized by the prefix it
+// already published. Driven entirely through real publish_version calls.
+//
+//   - Two disjoint baseline segments A (keys 0..) and B (keys 1000..), one rowset each.
+//   - Two column-mode partial-update txns: t1 raises c1 on A's keys (winners on segment A),
+//     t2 raises c1 on B's keys (winners on segment B). Each capture lands in column_overlay_vecs
+//     keyed by its source segment's rssid, so the two never overwrite each other.
+//   - PREFIX publish [t1] (base=v0, new=v0+1) finalizes the intermediate version vA and advances the
+//     in-memory primary index data_version to vA, while FE's base stays at v0.
+//   - FULL publish [t1, t2] (base=v0, new=v0+2): cal_new_base_version sees index_version==vA (> v0),
+//     finds metadata@vA, and advances base to vA, so only t2 is replayed. At publish start the deep
+//     copy source is metadata@vA, whose column_overlay_vecs[A]@vA must be kept (vA > ori_base v0) so
+//     the diff still covers (v0, new]. A naive "clear all at start" would have dropped it.
+TEST_P(LakePartialUpdateTest, test_cdc_retry_inherits_prefix_capture) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+    // Keep both writes a single source segment each and avoid persistent-index reload churn that
+    // could drop the cached data_version between publishes.
+    if (GetParam().enable_persistent_index) {
+        return;
+    }
+
+    auto tablet_id = _tablet_metadata->id();
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    // Two disjoint baseline segments, one rowset each.
+    auto write_full = [&](int base, int64_t new_version) {
+        std::vector<int> v0(kChunkSize), v1(kChunkSize), v2(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = base + i;
+            v1[i] = v0[i] * 3;
+            v2[i] = v0[i] * 4;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        c2->append_numbers(v2.data(), v2.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id).status());
+    };
+
+    write_full(0, 2);    // segment A, version 2
+    write_full(1000, 3); // segment B, version 3
+    int64_t v0 = 3;      // FE base for the partial-update batch
+
+    // Build a column-mode partial-update txn that raises c1 above the old value on keys [base, base+N)
+    // (every row a winner under merge condition on c1). Returns the txn_id; leaves it unpublished.
+    auto build_partial_winner_txn = [&](int base) -> int64_t {
+        std::vector<int> u0(kChunkSize), u1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            u0[i] = base + i;
+            u1[i] = u0[i] * 3 + 100; // new > old -> winner
+        }
+        auto pc0 = Int32Column::create();
+        auto pc1 = Int32Column::create();
+        pc0->append_numbers(u0.data(), u0.size() * sizeof(int));
+        pc1->append_numbers(u1.data(), u1.size() * sizeof(int));
+        Chunk partial_chunk({std::move(pc0), std::move(pc1)}, _slot_cid_map);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition("c1")
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(partial_chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    auto t1 = build_partial_winner_txn(0);    // updates segment A
+    auto t2 = build_partial_winner_txn(1000); // updates segment B
+
+    // PREFIX publish [t1]: base=v0(3), new=vA(4). Finalizes the intermediate version and advances the
+    // in-memory index data_version to vA.
+    int64_t vA = v0 + 1; // 4
+    {
+        std::vector<int64_t> prefix_txns{t1};
+        ASSIGN_OR_ABORT(auto prefix_meta, batch_publish(tablet_id, v0, vA, prefix_txns));
+        // t1's capture is present at vA, keyed by segment A's rssid.
+        ASSERT_EQ(prefix_meta->cdc_metadata().column_overlay_vecs().size(), 1);
+        for (const auto& [rssid, page] : prefix_meta->cdc_metadata().column_overlay_vecs()) {
+            EXPECT_EQ(page.version(), vA);
+        }
+    }
+
+    // FULL publish [t1, t2]: base=v0(3), new=v0+2(5). cal_new_base_version advances base to vA and
+    // replays only t2.
+    int64_t final_version = v0 + 2; // 5
+    std::vector<int64_t> full_txns{t1, t2};
+    ASSIGN_OR_ABORT(auto final_meta, batch_publish(tablet_id, v0, final_version, full_txns));
+
+    // The inheritance window survived: t1's capture (version vA, in (v0, vA]) is still present, and
+    // t2's fresh capture (version final_version) was added by the replay.
+    const auto& row_vecs = final_meta->cdc_metadata().column_overlay_vecs();
+    ASSERT_EQ(row_vecs.size(), 2) << "both the inherited t1 capture and the replayed t2 capture must be present";
+    bool found_inherited = false;
+    bool found_fresh = false;
+    for (const auto& [rssid, page] : row_vecs) {
+        if (page.version() == vA) found_inherited = true;
+        if (page.version() == final_version) found_fresh = true;
+    }
+    EXPECT_TRUE(found_inherited) << "prefix capture at version " << vA << " must be inherited, not pruned";
+    EXPECT_TRUE(found_fresh) << "replayed t2 must add a capture at version " << final_version;
 }
 
 // Validates that column-mode partial update rejects a merge_condition when the condition column
@@ -790,8 +1043,9 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                // move old .cols into orphan files.
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // move old .cols into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
@@ -875,8 +1129,9 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                // move old .cols into orphan files.
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // move old .cols into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
@@ -1116,8 +1371,9 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols into orphan files.
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
+                // move old .cols into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -1196,8 +1452,9 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
             } else {
-                // move old .cols into orphan files.
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
+                // move old .cols into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
@@ -1739,7 +1996,9 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
             if (i == 0) {
                 EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
             } else {
-                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+                // move old .cols into orphan files, plus the prior publish's per-publish
+                // column_overlay_vecs delvec file (superseded each column-update publish).
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 4);
             }
         } else {
             EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);

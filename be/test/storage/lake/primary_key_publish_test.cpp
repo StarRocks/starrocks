@@ -749,6 +749,79 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
     config::enable_primary_key_recover = false;
 }
 
+// Drive a publish through the primary-key recover path via the delvec_inconsistent sync point. Recover
+// rebuilds delvec_meta from scratch, dropping any CDC capture maps, so the publish must mark its
+// metadata's cdc_metadata.capture_status non-OK (NotSupported) so the changes connector reports degradation.
+TEST_P(LakePrimaryKeyPublishTest, test_recover_marks_cdc_not_trackable) {
+    config::enable_primary_key_recover = true;
+    DeferOp reset_recover([]() { config::enable_primary_key_recover = false; });
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // First publish: no recover, lays down a rowset.
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        version++;
+    }
+
+    // Second publish: force one delvec inconsistency so the publish recovers (rebuilds delvec_meta).
+    bool inject = true;
+    std::string sync_point = "delvec_inconsistent";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        if (inject) {
+            *(Status*)arg = Status::AlreadyExist("ut_test");
+            inject = false;
+        } else {
+            inject = true;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        version++;
+    }
+    SyncPoint::GetInstance()->ClearCallBack(sync_point);
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_TRUE(metadata->has_cdc_metadata());
+    ASSERT_TRUE(metadata->cdc_metadata().has_capture_status());
+    EXPECT_NE(metadata->cdc_metadata().capture_status().status_code(), 0)
+            << "recover must mark cdc_metadata.capture_status non-OK";
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
     config::enable_primary_key_recover = true;
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
@@ -2458,6 +2531,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
     EXPECT_TRUE(found_delvec_file) << "Expected delvec file to be in orphan_files";
     EXPECT_TRUE(found_dcg_file1) << "Expected dcg file 1 to be in orphan_files";
     EXPECT_TRUE(found_dcg_file2) << "Expected dcg file 2 to be in orphan_files";
+
+    // Full replication rebuilds delvec_meta from the source, dropping the CDC capture maps, so the
+    // publish marks cdc_metadata.capture_status non-OK (NotSupported) for the changes connector.
+    ASSERT_TRUE(metadata_after_replication->has_cdc_metadata());
+    ASSERT_TRUE(metadata_after_replication->cdc_metadata().has_capture_status());
+    EXPECT_NE(metadata_after_replication->cdc_metadata().capture_status().status_code(), 0)
+            << "full replication must mark cdc_metadata.capture_status non-OK";
 }
 
 // Test that persistent index rebuild skips rows already covered by SSTables.

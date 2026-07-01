@@ -237,9 +237,10 @@ public class QueryAnalyzer {
                     "CHANGES hint is only supported on cloud-native OlapTable");
         }
         KeysType keysType = ((OlapTable) table).getKeysType();
-        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.AGG_KEYS) {
+        if (keysType != KeysType.DUP_KEYS && keysType != KeysType.AGG_KEYS
+                && keysType != KeysType.PRIMARY_KEYS) {
             throw new SemanticException(
-                    "CHANGES hint is only supported on DUPLICATE / AGGREGATE table");
+                    "CHANGES hint is only supported on PRIMARY / DUPLICATE / AGGREGATE table");
         }
         // _META_ / _CACHE_STATS_ are live introspection views; _BOOKMARK_ is a
         // PITQ scope. None of these can share a TableRelation with CHANGES,

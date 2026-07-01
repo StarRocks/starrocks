@@ -20,6 +20,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
+#include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -51,10 +52,13 @@ public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
-    // append delta column group to builder
-    void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
-                    const std::vector<int64_t>& file_sizes);
+    // append delta column group to builder. |updated_rowids| holds the rows this column-mode partial
+    // update overlaid on |rssid|, recorded so change data capture can reconstruct this publish's
+    // before/after images. Every dcg write must record the rows it changed.
+    Status append_dcg(uint32_t rssid,
+                      const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                      const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                      const std::vector<int64_t>& file_sizes, const Roaring& updated_rowids);
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
@@ -124,6 +128,7 @@ public:
     }
 
 private:
+    DelvecPagePB _append_delvec_to_buf(const DelVectorPtr& delvec);
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
     // fill delvec cache, for better reading latency
@@ -133,6 +138,14 @@ private:
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
     // clean sstable meta after alter type
     void _sstable_meta_clean_after_alter_type();
+
+    void _collect_cdc_compaction_input_delvecs(const std::unordered_set<uint32_t>& rssids);
+    void _collect_cdc_compaction_output_delvecs(const RowsetMetadata& output_rowset);
+    Status _collect_cdc_column_overlay_vecs(uint32_t rssid, const Roaring& updated_rowids);
+    // whether there is any delvec in buffer _buf used by cdc
+    bool _is_cdc_using_buffer();
+    void _finalize_cdc_metadata(int64_t version);
+    void _collect_cdc_referenced_delvec_file_versions(std::set<int64_t>& referenced_versions);
 
 private:
     struct PendingRowsetData {
@@ -144,6 +157,19 @@ private:
         // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
         std::vector<FileMetaPB> dels;
         uint32_t assigned_segment_idx = 0;
+    };
+
+    // Metadata describing the data changes in this publish, used by Change Data Capture (CDC) to derive the
+    // changes that the publish's loads introduced. These will be saved to CdcMetadataPB.
+    struct CdcMetadata {
+        // newly-generated compaction input delvecs, and need to be saved to CdcMetadataPB.compaction_input_delvecs
+        std::unordered_map<uint32_t, DelvecPagePB> compaction_input_delvecs;
+        // newly-generated compaction output delvecs, and need to be saved to CdcMetadataPB.compaction_output_delvecs
+        std::unordered_map<uint32_t, DelvecPagePB> compaction_output_delvecs;
+        // newly-generated column partial update row positions (reuse data structure DelVector),
+        // and need to be saved to CdcMetadataPB.column_overlay_vecs.
+        std::unordered_map<uint32_t, DelVectorPtr> column_overlay_vecs;
+        std::unordered_map<uint32_t, DelvecPagePB> column_overlay_vec_pages;
     };
 
     Tablet _tablet;
@@ -159,6 +185,7 @@ private:
     RecoverFlag _recover_flag = RecoverFlag::OK;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
+    CdcMetadata _cdc_metadata;
 };
 
 struct DelvecFileInfo {

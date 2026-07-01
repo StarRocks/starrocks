@@ -96,8 +96,12 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             return Pair.create(dc.getBasePartition().getVisibleVersion(),
                     dc.getHeadPartition().getVisibleVersion());
         } else if (change instanceof BookmarkChange.PartitionAdded pa) {
-            // Partition was absent at base; emit every rowset reachable at head.
-            return Pair.create(0L, pa.getHeadPartition().getVisibleVersion());
+            // Partition was absent at base; emit every rowset reachable at head as inserts. The base is
+            // the tablet's initial (empty) version, not 0: the BE walks the metadata-ancestor chain down
+            // to base, and a tablet's chain bottoms out at PARTITION_INIT_VERSION (its empty initial
+            // metadata), so any lower base is unreachable. Diffing head against that empty version
+            // surfaces every rowset as new.
+            return Pair.create(PhysicalPartition.PARTITION_INIT_VERSION, pa.getHeadPartition().getVisibleVersion());
         } else {
             throw new IllegalStateException(String.format(
                     "non-trackable change in CDC plan for table '%s', physical partition %d: %s",

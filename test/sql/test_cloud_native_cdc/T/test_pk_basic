@@ -1,0 +1,120 @@
+-- name: test_cdc_pk_basic @cloud
+
+CREATE TABLE pk_t (k int, v int, c varchar(10))
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "pk_t", "pk")
+
+-- bk0->bk1: three inserts.
+INSERT INTO pk_t VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
+[UC]function: bk1=create_bookmark("${db[0]}", "pk_t", "pk")
+
+-- bk1->bk2: a whole-row update. PK is the first table type to surface the old
+-- value, so this publish must emit DELETE(2,20) paired with INSERT(2,200).
+UPDATE pk_t SET v = 200 WHERE k = 2;
+[UC]function: bk2=create_bookmark("${db[0]}", "pk_t", "pk")
+
+-- bk2->bk3: a pure delete emits only a DELETE, no paired INSERT.
+DELETE FROM pk_t WHERE k = 3;
+[UC]function: bk3=create_bookmark("${db[0]}", "pk_t", "pk")
+
+-- bk3->bk4: an insert of a fresh key.
+INSERT INTO pk_t VALUES (4, 40, 'd');
+[UC]function: bk4=create_bookmark("${db[0]}", "pk_t", "pk")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "pk_t", ${bk0}, "pk")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk1}, "pk")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk2}, "pk")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk3}, "pk")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk4}, "pk")
+} END CLEANUP
+
+-- Empty window returns 0 rows.
+SELECT k, v, c FROM pk_t [_CHANGES_${bk0}_${bk0}_] ORDER BY k;
+
+-- Insert-only window: three INSERTs (change_type 0).
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+-- Whole-row update window: the old value (DELETE, change_type 1) paired with the
+-- new value (INSERT, change_type 0) at the same publish version. DELETE first.
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_]
+ORDER BY __CHANGE_TYPE__ DESC, k;
+
+-- Pure-delete window: one DELETE carrying the deleted row's values, no INSERT.
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk2}_${bk3}_] ORDER BY k;
+
+-- Full window is the union of every per-publish diff, ordered by version then
+-- DELETE-before-INSERT: 3 inserts, then DEL(2,20)+INS(2,200), then DEL(3,30),
+-- then INS(4,40). __ROW_VERSION__ drives the order but is not projected (its
+-- absolute value is assigned at publish time).
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk0}_${bk4}_]
+ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC, k;
+
+-- Five INSERTs (k1,k2,k3, k2-new, k4) and two DELETEs (k2-old, k3); four
+-- distinct publish versions produced changes.
+SELECT __CHANGE_TYPE__, count(*) FROM pk_t [_CHANGES_${bk0}_${bk4}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM pk_t [_CHANGES_${bk0}_${bk4}_];
+
+-- Adjacent windows partition the full delta exactly.
+SELECT count(*) FROM pk_t [_CHANGES_${bk0}_${bk1}_];
+SELECT count(*) FROM pk_t [_CHANGES_${bk1}_${bk2}_];
+SELECT count(*) FROM pk_t [_CHANGES_${bk2}_${bk3}_];
+SELECT count(*) FROM pk_t [_CHANGES_${bk3}_${bk4}_];
+
+-- Predicate on a data column pushes down onto the CHANGES scan node.
+SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE k >= 2 ORDER BY k, v;
+function: assert_explain_contains("SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE k >= 2", "ChangesScanNode", "PREDICATES: ", "k >= 2")
+
+-- Filter on the surfaced __CHANGE_TYPE__ selects only the old-value (DELETE) rows.
+SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE __CHANGE_TYPE__ = 1 ORDER BY k;
+
+
+-- name: test_cdc_pk_update_compaction @cloud
+
+CREATE TABLE pk_t (k int, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO pk_t VALUES (1, 10), (2, 20), (3, 30);
+
+[UC]function: bk_pre=create_bookmark("${db[0]}", "pk_t", "pkc")
+
+-- Update and delete before compaction, then compact: the compaction repackages
+-- the surviving rows and must not by itself surface any change. CDC reconstructs
+-- the pre-compaction old values from the carve-out maps.
+UPDATE pk_t SET v = 200 WHERE k = 2;
+DELETE FROM pk_t WHERE k = 3;
+[UC]ALTER TABLE pk_t COMPACT;
+SELECT sleep(15);
+
+[UC]function: bk_post=create_bookmark("${db[0]}", "pk_t", "pkc")
+
+-- More DML after compaction.
+UPDATE pk_t SET v = 11 WHERE k = 1;
+INSERT INTO pk_t VALUES (5, 50);
+
+[UC]function: bk_after=create_bookmark("${db[0]}", "pk_t", "pkc")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "pk_t", ${bk_pre}, "pkc")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk_post}, "pkc")
+    function: release_bookmark("${db[0]}", "pk_t", ${bk_after}, "pkc")
+} END CLEANUP
+
+-- Window spanning the compaction: the update and delete still surface their
+-- old/new values exactly once; compaction itself adds nothing.
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk_pre}_${bk_post}_]
+ORDER BY __CHANGE_TYPE__ DESC, k;
+
+-- Post-compaction window: update of k1 (DEL+INS) and insert of k5.
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk_post}_${bk_after}_]
+ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC, k;
+
+-- Whole span returns every per-publish change across the compaction boundary.
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk_pre}_${bk_after}_]
+ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC, k;
+SELECT __CHANGE_TYPE__, count(*) FROM pk_t [_CHANGES_${bk_pre}_${bk_after}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;

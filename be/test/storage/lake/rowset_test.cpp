@@ -31,8 +31,12 @@
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_factory.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/del_vector.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -41,6 +45,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage/primitive/range.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -905,6 +910,37 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
 }
 
+// Same true-metadata-index requirement as test_read_range_mode_uses_true_segment_shared_flag, for
+// the delta-column-group read path the CHANGES connector uses to surface one segment per publish.
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_no_delvec_range_mode_uses_true_segment_shared_flag) {
+    create_rowsets_for_testing();
+    auto* rs_meta = _tablet_metadata->mutable_rowsets(0);
+    set_tablet_range_int(_tablet_metadata.get(), 10, true, 12, false);
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+
+    rs_meta->mutable_segment_metas(0)->set_shared(false);
+    rs_meta->mutable_segment_metas(1)->set_shared(true);
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, /*segment_start=*/1,
+                                                     /*segment_end=*/2);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters,
+                        rowset->get_each_segment_iterator_no_delvec(input_schema, 1, &stats, /*apply_dcg=*/true));
+        EXPECT_EQ(count_rows_from_iters(iters), 2);
+    }
+
+    rs_meta->mutable_segment_metas(0)->set_shared(true);
+    rs_meta->mutable_segment_metas(1)->set_shared(false);
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, /*segment_start=*/1,
+                                                     /*segment_end=*/2);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters,
+                        rowset->get_each_segment_iterator_no_delvec(input_schema, 1, &stats, /*apply_dcg=*/true));
+        EXPECT_EQ(count_rows_from_iters(iters), 34);
+    }
+}
+
 // Test class for segment metadata filter and parallel load with skip_segment_idxs
 class LakeRowsetSegmentMetadataFilterTest : public TestBase {
 public:
@@ -1659,6 +1695,245 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     // The one segment_meta entry sits at index 0; the new-segment window starts
     // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
     EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
+}
+
+// Fixture for a PRIMARY_KEYS rowset whose single segment carries both a delta column
+// group overlay (produced by a column-mode partial update) and a recorded delete vector.
+// Used to contrast get_each_segment_iterator_no_delvec with apply_dcg (overlay, no delete vector)
+// against get_each_segment_iterator_with_delvec (overlay plus delete vector).
+class LakeRowsetDcgTest : public TestBase {
+public:
+    LakeRowsetDcgTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        //
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  YES |
+        //  |   c2   |  INT | NO  |  YES |
+        // c2 exists only so a column-mode update of (c0, c1) is a genuine partial update of the
+        // value columns and lands as a delta column group overlay on the existing segment rather
+        // than appending a new rowset.
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("INT");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+            c2->set_default_value("0");
+        }
+
+        // The column-mode partial update writes only (c0, c1).
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+
+        _tablet_schema = TabletSchema::create(*schema);
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    // Full row (c0, c1, c2) chunk for the initial write.
+    static Chunk make_full_chunk(const std::vector<int>& keys, const std::vector<int>& c1_vals,
+                                 const std::vector<int>& c2_vals, const Chunk::SlotHashMap& slot_cid_map) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(c1_vals.data(), c1_vals.size() * sizeof(int));
+        c2->append_numbers(c2_vals.data(), c2_vals.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
+    }
+
+    // Partial (c0, c1) chunk for the column-mode update.
+    static Chunk make_partial_chunk(const std::vector<int>& keys, const std::vector<int>& c1_vals,
+                                    const Chunk::SlotHashMap& slot_cid_map) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(c1_vals.data(), c1_vals.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, slot_cid_map);
+    }
+
+    // Collect c1 of every surfaced row, in iteration order, across all per-segment iterators.
+    static std::vector<int> collect_c1(const std::vector<ChunkIteratorPtr>& iters) {
+        std::vector<int> values;
+        for (const auto& it : iters) {
+            CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+            CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
+            auto chunk = ChunkFactory::new_chunk(it->schema(), 128);
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                CHECK(st.ok()) << st.to_string();
+                // c1 is nullable, so read through the generic Datum accessor rather than
+                // down-casting to a concrete fixed-length column.
+                const auto& c1 = chunk->columns()[1];
+                for (int i = 0; i < chunk->num_rows(); ++i) {
+                    values.push_back(c1->get(i).get_int32());
+                }
+            }
+        }
+        return values;
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_rowset_dcg";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    int64_t _partition_id = 4561;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _slot_cid_map;
+};
+
+// get_each_segment_iterator_no_delvec with apply_dcg must apply the delta column group overlay but must NOT
+// apply the delete vector: every selected rowid surfaces, and the surfaced value column reflects
+// the column-update overlay. The with_delvec sibling reading the same version drops the
+// delete-vector'd row, proving the two methods differ only by the delete vector.
+TEST_F(LakeRowsetDcgTest, get_each_segment_iterator_no_delvec_applies_overlay_skips_delvec) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // 1. Full write: one segment, keys 0..3 with c1 = [10, 11, 12, 13] (c2 unused by the assertions).
+    {
+        auto chunk = make_full_chunk({0, 1, 2, 3}, {10, 11, 12, 13}, {0, 0, 0, 0}, _slot_cid_map);
+        std::vector<uint32_t> indexes{0, 1, 2, 3};
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 2. Column-mode partial update overlaying c1 for keys 1, 2 -> [21, 22]. Only (c0, c1) is
+    //    written, so c2 is left untouched and this lands as a delta column group (.cols file)
+    //    on the existing segment without rewriting it.
+    {
+        auto chunk = make_partial_chunk({1, 2}, {21, 22}, _slot_cid_map);
+        std::vector<uint32_t> indexes{0, 1};
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 3. Record a delete vector marking rowid 1 deleted at the read version. The single segment's
+    //    rssid equals the rowset id (segment index 0).
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(metadata->rowsets_size(), 1);
+    const uint32_t segment_id = metadata->rowsets(0).id();
+    int64_t delvec_version = version + 1;
+    {
+        auto tablet = std::make_shared<Tablet>(_tablet_mgr.get(), tablet_id);
+        auto mutable_metadata = std::make_shared<TabletMetadata>(*metadata);
+        mutable_metadata->set_version(delvec_version);
+        MetaFileBuilder builder(*tablet, mutable_metadata);
+        DelVector dv;
+        dv.set_empty();
+        std::shared_ptr<DelVector> ndv;
+        std::vector<uint32_t> dels{1};
+        dv.add_dels_as_new_version(dels, delvec_version, &ndv);
+        builder.append_delvec(ndv, segment_id);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    version = delvec_version;
+
+    ASSIGN_OR_ABORT(auto read_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(read_metadata->rowsets_size(), 1);
+
+    // Range covering all 4 rowids of the single segment.
+    auto full_range = std::make_shared<SparseRange<>>();
+    full_range->add(Range<>(0, 4));
+    std::vector<SparseRangePtr> ranges{full_range};
+
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0, 1});
+
+    // apply_dcg: overlay applied, delete vector NOT applied -> all 4 rows, c1 = [10, 21, 22, 13].
+    {
+        auto rowset =
+                std::make_shared<lake::Rowset>(_tablet_mgr.get(), read_metadata, 0, 0 /* compaction_segment_limit */);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator_no_delvec(input_schema, version, &stats,
+                                                                                /*apply_dcg=*/true, &ranges));
+        auto c1 = collect_c1(iters);
+        EXPECT_EQ(c1, (std::vector<int>{10, 21, 22, 13}));
+    }
+
+    // with_delvec at the same version drops rowid 1 (key 1, overlaid value 21) -> c1 = [10, 22, 13].
+    {
+        auto rowset =
+                std::make_shared<lake::Rowset>(_tablet_mgr.get(), read_metadata, 0, 0 /* compaction_segment_limit */);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters,
+                        rowset->get_each_segment_iterator_with_delvec(input_schema, version, nullptr, &stats, &ranges));
+        auto c1 = collect_c1(iters);
+        EXPECT_EQ(c1, (std::vector<int>{10, 22, 13}));
+    }
 }
 
 // Regression: the lake read-options propagation chain must carry has_predicate_above_iterator

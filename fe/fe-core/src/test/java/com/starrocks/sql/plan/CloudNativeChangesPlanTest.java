@@ -311,6 +311,28 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             // Only the new partition is in the delta, so partitions=1/1.
             assertTrue(plan.contains("partitions=1/1"),
                     "plan should report only the added partition:\n" + plan);
+
+            // The added partition's scan range must base at its initial (empty) version, not 0: the
+            // BE walks each tablet's metadata-ancestor chain down to base, and a freshly-created
+            // tablet's chain bottoms out at PARTITION_INIT_VERSION (its empty initial metadata), so
+            // base 0 is unreachable and the scan fails with "cannot reach base version 0". Diffing
+            // head against that empty initial version surfaces every rowset as an insert.
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            ChangesScanNode scan = null;
+            for (ScanNode node : planPair.second.getScanNodes()) {
+                if (node instanceof ChangesScanNode) {
+                    scan = (ChangesScanNode) node;
+                    break;
+                }
+            }
+            assertNotNull(scan, "ExecPlan should contain a ChangesScanNode");
+            var ranges = scan.getScanRangeLocations(0);
+            assertFalse(ranges.isEmpty(), "added partition should emit a scan range");
+            for (var loc : ranges) {
+                assertEquals(PhysicalPartition.PARTITION_INIT_VERSION,
+                        loc.getScan_range().getChanges_scan_range().getBase_version(),
+                        "added-partition scan range must base at PARTITION_INIT_VERSION, not 0");
+            }
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
