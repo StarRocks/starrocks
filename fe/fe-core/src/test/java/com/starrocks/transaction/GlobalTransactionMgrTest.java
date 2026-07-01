@@ -90,6 +90,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -1438,6 +1439,69 @@ public class GlobalTransactionMgrTest {
                     "error must mention shared-data/lake requirement, got: " + ex.getMessage());
         } finally {
             Config.enable_admin_skip_committed_txn = original;
+        }
+    }
+
+    @Test
+    public void testExistCommittedTxnsReturnsFalseForAbsentDb() {
+        // existCommittedTxns is invoked lock-free by the online optimize visibility gate. When the database
+        // was dropped concurrently its DatabaseTransactionMgr is absent; the method must short-circuit to
+        // "no committed txns" (return false) instead of NPEing on the missing manager.
+        long absentDbId = 987654321L;
+        Assertions.assertFalse(masterTransMgr.existCommittedTxns(absentDbId, 1L, 1L),
+                "existCommittedTxns must return false (not NPE) for an absent DatabaseTransactionMgr");
+    }
+
+    @Test
+    public void testExistCommittedTxnsTrueForPopulatedPartitionCommitInfo() {
+        // A registered db whose committed txn lists the table and has a populated TableCommitInfo with the
+        // queried PartitionCommitInfo must report an existing committed txn.
+        long dbId = 222333444L;
+        long tableId = 555L;
+        long partitionId = 666L;
+
+        TableCommitInfo tableCommitInfo = Mockito.mock(TableCommitInfo.class);
+        Mockito.when(tableCommitInfo.getPartitionCommitInfo(partitionId))
+                .thenReturn(Mockito.mock(PartitionCommitInfo.class));
+        TransactionState txnState = Mockito.mock(TransactionState.class);
+        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
+        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(tableCommitInfo);
+        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
+        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
+
+        Map<Long, DatabaseTransactionMgr> dbMgrs = masterTransMgr.getAllDatabaseTransactionMgrs();
+        dbMgrs.put(dbId, dbTransactionMgr);
+        try {
+            Assertions.assertTrue(masterTransMgr.existCommittedTxns(dbId, tableId, partitionId),
+                    "existCommittedTxns must report the committed txn whose TableCommitInfo is populated");
+        } finally {
+            dbMgrs.remove(dbId);
+        }
+    }
+
+    @Test
+    public void testExistCommittedTxnsFalseWhenTableCommitInfoNull() {
+        // A committed txn can list the table in its tableIdList before its TableCommitInfo is populated.
+        // With a non-null partitionId, the `tableCommitInfo != null` guard must short-circuit and the method
+        // must fall through to return false rather than NPE (it is called lock-free by the optimize gate).
+        long dbId = 222333445L;
+        long tableId = 777L;
+        long partitionId = 888L;
+
+        TransactionState txnState = Mockito.mock(TransactionState.class);
+        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
+        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(null);
+        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
+        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
+
+        Map<Long, DatabaseTransactionMgr> dbMgrs = masterTransMgr.getAllDatabaseTransactionMgrs();
+        dbMgrs.put(dbId, dbTransactionMgr);
+        try {
+            Assertions.assertFalse(masterTransMgr.existCommittedTxns(dbId, tableId, partitionId),
+                    "existCommittedTxns must return false (not NPE) when the committed txn's TableCommitInfo "
+                            + "is not yet populated");
+        } finally {
+            dbMgrs.remove(dbId);
         }
     }
 }
