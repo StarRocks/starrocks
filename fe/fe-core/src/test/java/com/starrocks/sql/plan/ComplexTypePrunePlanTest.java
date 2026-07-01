@@ -329,19 +329,19 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         // differed from its input element -> StructColumn::append field-count mismatch in the BE.
         String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
         // input array element narrowed ...
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
         // ... and the unnest result type narrowed in sync (this is the fix).
-        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11)>]");
+        assertVerbosePlanContains(sql, "returnTypes: [struct<c2_sub1 int(11)>]");
 
         // Nested case: unnest over an array nested inside a struct.
         sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
-        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
-        assertVerbosePlanContains(sql, "returnTypes: [struct<`c3_sub1_sub1` int(11)>]");
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<c3_sub1_sub1 int(11)>>>]");
+        assertVerbosePlanContains(sql, "returnTypes: [struct<c3_sub1_sub1 int(11)>]");
 
         // All subfields used: nothing to prune, output keeps full width (still consistent).
         sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
-        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11), `c2_sub2` int(11)>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        assertVerbosePlanContains(sql, "returnTypes: [struct<c2_sub1 int(11), c2_sub2 int(11)>]");
         FeConstants.runningUnitTest = false;
     }
 
