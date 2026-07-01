@@ -18,15 +18,79 @@
 
 #include <mutex>
 
-#include "common/metrics/process_metrics_registry.h"
-
-#ifdef WITH_STARCACHE
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/datacache.h"
-#endif
+#include "common/metrics/process_metrics_registry.h"
 
 namespace starrocks {
 
 namespace {
+
+class FakeMemCacheEngine final : public LocalMemCacheEngine {
+public:
+    bool is_initialized() const override { return initialized; }
+
+    Status insert(const std::string& key, void* value, size_t size, MemCacheDeleter deleter, MemCacheHandlePtr* handle,
+                  const MemCacheWriteOptions& options) override {
+        return Status::OK();
+    }
+
+    Status lookup(const std::string& key, MemCacheHandlePtr* handle, MemCacheReadOptions* options) override {
+        return Status::NotFound("not found");
+    }
+
+    void release(MemCacheHandlePtr handle) override {}
+    const void* value(MemCacheHandlePtr handle) override { return nullptr; }
+    bool exist(const std::string& key) const override { return false; }
+    Status remove(const std::string& key) override { return Status::OK(); }
+    Status adjust_mem_quota(int64_t delta, size_t min_capacity) override { return Status::OK(); }
+    Status update_mem_quota(size_t quota_bytes) override { return Status::OK(); }
+    const DataCacheMemMetrics cache_metrics() const override { return metrics; }
+    Status shutdown() override { return Status::OK(); }
+    bool has_mem_cache() const override { return true; }
+    bool available() const override { return initialized; }
+    bool mem_cache_available() const override { return initialized; }
+    size_t mem_quota() const override { return metrics.mem_quota_bytes; }
+    size_t mem_usage() const override { return metrics.mem_used_bytes; }
+    size_t lookup_count() const override { return 0; }
+    size_t hit_count() const override { return 0; }
+    size_t insert_count() const override { return 0; }
+    size_t insert_evict_count() const override { return 0; }
+    size_t release_evict_count() const override { return 0; }
+    Status prune() override { return Status::OK(); }
+
+    bool initialized = true;
+    DataCacheMemMetrics metrics;
+};
+
+class FakeDiskCacheEngine final : public LocalDiskCacheEngine {
+public:
+    bool is_initialized() const override { return initialized; }
+    Status write(const std::string& key, const IOBuffer& buffer, DiskCacheWriteOptions* options) override {
+        return Status::OK();
+    }
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        return Status::OK();
+    }
+    bool exist(const std::string& key) const override { return false; }
+    Status remove(const std::string& key) override { return Status::OK(); }
+    Status update_disk_spaces(const std::vector<DirSpace>& spaces) override { return Status::OK(); }
+    Status update_inline_cache_count_limit(int32_t limit) override { return Status::OK(); }
+    const DataCacheDiskMetrics cache_metrics() const override { return metrics; }
+    void record_read_remote(size_t size, int64_t latency_us) override {}
+    void record_read_cache(size_t size, int64_t latency_us) override {}
+    Status shutdown() override { return Status::OK(); }
+    bool has_disk_cache() const override { return true; }
+    bool available() const override { return initialized; }
+    void disk_spaces(std::vector<DirSpace>* spaces) const override { spaces->clear(); }
+    size_t lookup_count() const override { return 0; }
+    size_t hit_count() const override { return 0; }
+    Status prune() override { return Status::OK(); }
+
+    bool initialized = true;
+    DataCacheDiskMetrics metrics;
+};
 
 ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
     static auto* registry = new ProcessMetricsRegistry("starrocks_be");
@@ -52,18 +116,15 @@ public:
 protected:
     void SetUp() override { init_backend_metrics_for_test(); }
 
-    void TearDown() override {}
+    void TearDown() override {
+        auto* cache = DataCache::GetInstance();
+        cache->disable_metrics_update_hook();
+        cache->_local_mem_cache.reset();
+        cache->set_local_disk_cache(nullptr);
+        DataCacheHitRateCounter::instance()->reset();
+    }
 };
 
-// Test that DataCacheMetrics update hook registration can be called without crashing.
-TEST_F(DataCacheMetricsTest, test_enable_update_hook_basic) {
-    // This should not crash regardless of WITH_STARCACHE
-    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(false));
-    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(true));
-}
-
-#ifdef WITH_STARCACHE
-// Test metrics registration with StarCache enabled
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
     auto metrics = backend_metrics_registry_for_test();
 
@@ -77,7 +138,6 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_bytes"));
 }
 
-// Test that metrics have correct initial values
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
     auto instance = DataCacheMetrics::instance();
 
@@ -91,32 +151,53 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
     ASSERT_GE(instance->block_cache_miss_bytes.value(), 0);
 }
 
-// Test metrics update through hook mechanism
-TEST_F(DataCacheMetricsTest, test_metrics_update_hook) {
+TEST_F(DataCacheMetricsTest, test_update_snapshot_sets_values) {
     auto instance = DataCacheMetrics::instance();
-    auto metrics = backend_metrics_registry_for_test();
+    DataCacheMetricsSnapshot snapshot{.mem_quota_bytes = 1,
+                                      .mem_used_bytes = 2,
+                                      .disk_quota_bytes = 3,
+                                      .disk_used_bytes = 4,
+                                      .meta_used_bytes = 5,
+                                      .block_cache_hit_bytes = 6,
+                                      .block_cache_miss_bytes = 7};
 
-    // Register the metrics hook
-    DataCacheMetrics::instance()->enable_update_hook(false);
+    instance->update(snapshot);
 
-    // Trigger the hook manually
-    metrics->trigger_hook();
-
-    // After hook execution, values should still be non-negative
-    ASSERT_GE(instance->datacache_mem_quota_bytes.value(), 0);
-    ASSERT_GE(instance->datacache_mem_used_bytes.value(), 0);
-    ASSERT_GE(instance->datacache_disk_quota_bytes.value(), 0);
-    ASSERT_GE(instance->datacache_disk_used_bytes.value(), 0);
-    ASSERT_GE(instance->datacache_meta_used_bytes.value(), 0);
-    ASSERT_GE(instance->block_cache_hit_bytes.value(), 0);
-    ASSERT_GE(instance->block_cache_miss_bytes.value(), 0);
-
-    // Used bytes should not exceed quota bytes
-    ASSERT_LE(instance->datacache_mem_used_bytes.value(), instance->datacache_mem_quota_bytes.value());
-    ASSERT_LE(instance->datacache_disk_used_bytes.value(), instance->datacache_disk_quota_bytes.value());
+    ASSERT_EQ(1, instance->datacache_mem_quota_bytes.value());
+    ASSERT_EQ(2, instance->datacache_mem_used_bytes.value());
+    ASSERT_EQ(3, instance->datacache_disk_quota_bytes.value());
+    ASSERT_EQ(4, instance->datacache_disk_used_bytes.value());
+    ASSERT_EQ(5, instance->datacache_meta_used_bytes.value());
+    ASSERT_EQ(6, instance->block_cache_hit_bytes.value());
+    ASSERT_EQ(7, instance->block_cache_miss_bytes.value());
 }
 
-// Test metrics types are correct (should be INT_GAUGE)
+TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
+    auto* cache = DataCache::GetInstance();
+    auto mem_cache = std::make_shared<FakeMemCacheEngine>();
+    mem_cache->metrics = {.mem_quota_bytes = 100, .mem_used_bytes = 20};
+    auto disk_cache = std::make_shared<FakeDiskCacheEngine>();
+    disk_cache->metrics = {
+            .status = DataCacheStatus::NORMAL, .disk_quota_bytes = 1000, .disk_used_bytes = 200, .meta_used_bytes = 30};
+    cache->_local_mem_cache = mem_cache;
+    cache->set_local_disk_cache(disk_cache);
+    DataCacheHitRateCounter::instance()->update_block_cache_stat(7, 9);
+
+    auto status = cache->enable_metrics_update_hook(backend_metrics_registry_for_test(), true);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+
+    backend_metrics_registry_for_test()->trigger_hook();
+
+    auto* instance = DataCacheMetrics::instance();
+    ASSERT_EQ(100, instance->datacache_mem_quota_bytes.value());
+    ASSERT_EQ(20, instance->datacache_mem_used_bytes.value());
+    ASSERT_EQ(1000, instance->datacache_disk_quota_bytes.value());
+    ASSERT_EQ(200, instance->datacache_disk_used_bytes.value());
+    ASSERT_EQ(30, instance->datacache_meta_used_bytes.value());
+    ASSERT_EQ(7, instance->block_cache_hit_bytes.value());
+    ASSERT_EQ(9, instance->block_cache_miss_bytes.value());
+}
+
 TEST_F(DataCacheMetricsTest, test_metrics_types) {
     auto metrics = backend_metrics_registry_for_test();
 
@@ -156,18 +237,5 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_EQ(MetricUnit::BYTES, hit_bytes_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, miss_bytes_metric->unit());
 }
-
-#else // !WITH_STARCACHE
-
-// Test that without StarCache, registration is a no-op
-TEST_F(DataCacheMetricsTest, test_without_starcache) {
-    // When WITH_STARCACHE is not defined, these should be no-ops
-    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(false));
-    ASSERT_NO_THROW(DataCacheMetrics::instance()->enable_update_hook(true));
-
-    // The function should compile and execute successfully even without StarCache
-}
-
-#endif // WITH_STARCACHE
 
 } // namespace starrocks

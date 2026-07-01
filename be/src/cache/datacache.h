@@ -52,6 +52,9 @@ public:
 
     Status init(const DataCacheInitOptions& options);
     void attach_peer_cache_stub_cache(BrpcStubCache* brpc_stub_cache);
+    Status enable_metrics_update_hook(MetricRegistry* registry, bool use_same_starcache_instance = false);
+    void disable_metrics_update_hook();
+    void update_metrics();
     void destroy();
 
     void release_memory_before_core_dump();
@@ -102,6 +105,9 @@ private:
 
     std::shared_ptr<DiskSpaceMonitor> _disk_space_monitor;
     std::shared_ptr<MemSpaceMonitor> _mem_space_monitor;
+
+    MetricRegistry* _metrics_registry = nullptr;
+    bool _use_same_starcache_instance = false;
 };
 
 } // namespace starrocks

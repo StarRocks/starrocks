@@ -19,6 +19,7 @@
 #endif
 
 #include <algorithm>
+#include <utility>
 
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
@@ -60,7 +61,6 @@
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
 #endif
-#include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
 #include "storage/storage_engine.h"
@@ -289,7 +289,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 #ifndef __APPLE__
     // Register datacache metrics
-    DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
+    EXIT_IF_ERROR(cache_env->enable_metrics_update_hook(process_metrics_registry->root_registry(),
+                                                        use_same_datacache_instance));
 #endif
 
     // Start thrift server
