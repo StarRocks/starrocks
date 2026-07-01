@@ -319,6 +319,11 @@ public class AggStateCombinatorTest extends MVTestBase {
             if (argTypes.stream().anyMatch(Type::containsVariant)) {
                 continue;
             }
+            // Same reason as VARIANT above: BITMAP/HLL/PERCENTILE need an aggregate table, so they
+            // cannot be raw t1 columns. bitmap_union/hll_union/percentile_union now take such an arg.
+            if (argTypes.stream().anyMatch(t -> t.isBitmapType() || t.isHllType() || t.isPercentile())) {
+                continue;
+            }
             List<String> argTypeStr = argTypes.stream().map(this::mockType).map(Type::toSql).collect(Collectors.toList());
             aggArgTypes.add(argTypeStr);
             for (String argType : argTypeStr) {
