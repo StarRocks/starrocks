@@ -44,6 +44,8 @@
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
 #include "platform/platform_metrics.h"
+#include "runtime/process_memory_metrics.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/service_metrics.h"
 #include "storage/index/vector/vector_index_cache_metrics.h"
@@ -57,7 +59,6 @@
 #include "exec/catalog_scan_metrics.h"
 #include "exec/query_scan_metrics.h"
 #include "storage/flat_json_metrics.h"
-#include "util/system_metrics.h"
 
 namespace starrocks {
 
@@ -269,7 +270,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
 
     if (options.init_system_metrics) {
         PlatformMetrics::instance()->install(registry, disk_devices, network_interfaces);
-        SystemMetrics::instance()->install(registry);
+        RuntimeEnv::GetInstance()->process_memory_metrics()->install(registry);
         IOProfilerMetrics::instance()->install(registry);
     }
 

@@ -250,6 +250,7 @@
         "be/src/runtime/mem_tracker_fwd.h",
         "be/src/runtime/merge_commit_trace.h",
         "be/src/runtime/multi_precision.h",
+        "be/src/runtime/process_memory_metrics.h",
         "be/src/runtime/query_context_lifetime.h",
         "be/src/runtime/raw_container_checked.h",
         "be/src/runtime/rest_monitor_iface.h",

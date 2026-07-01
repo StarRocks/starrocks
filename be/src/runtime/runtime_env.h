@@ -28,6 +28,7 @@ namespace starrocks {
 class HeartbeatFlags;
 class DiagnoseDaemon;
 class MetricRegistry;
+class ProcessMemoryMetrics;
 
 class RuntimeEnv {
 public:
@@ -46,6 +47,7 @@ public:
 
     HeartbeatFlags* heartbeat_flags() const { return _heartbeat_flags.get(); }
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon.get(); }
+    ProcessMemoryMetrics* process_memory_metrics() const;
 
     MemTracker* process_mem_tracker() const { return _process_mem_tracker.get(); }
     MemTracker* query_pool_mem_tracker() const { return _query_pool_mem_tracker.get(); }
