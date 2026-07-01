@@ -246,8 +246,11 @@ Status ConnectorScanOperatorFactory::mark_split_source_morsel_finished() {
 // ===============================================================
 struct ConnectorScanOperatorAdaptiveProcessor {
     // ----------------------
-    // op expected io tasks in this cycle.
-    int expected_io_tasks = 0;
+    // op expected io tasks in this cycle. Atomic because the adaptive governor writes it on the
+    // pull thread (available_pickup_morsel_count) while the footer prefetcher reads it on executor
+    // threads (current_io_task_target from io-finish / warm-resubmit); the write publishes a fully
+    // computed value (store once at end), never mid-adjustment intermediates.
+    std::atomic<int> expected_io_tasks{0};
     // if scan operator is in drive process cycle.
     bool in_driver_process = false;
 
@@ -492,6 +495,19 @@ void ConnectorScanOperator::_stash_reusable_chunk_source(RuntimeState* state, in
 }
 
 void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
+    // Stop feeding warm once the pushed-down LIMIT is reached: otherwise a small-LIMIT query whose
+    // downstream stopped consuming keeps is_buffer_full() true, and the warm self-re-submit loop
+    // would drain the entire lead window of footers before is_finished() (which waits on
+    // _num_running_warm_tasks) can report done -- a large teardown latency on the cheapest queries.
+    // Bailing here leaves only the already-in-flight warm tasks (<= connector_footer_prefetch_max_inflight)
+    // to drain, so the operator finishes promptly. reach_limit() reads MorselQueue's atomic flag (set
+    // on the pull thread), so this is race-free -- unlike the non-atomic _is_finished, which
+    // set_finishing writes under _task_mutex and this executor-thread path must not read unlocked.
+    // Finish for other reasons is covered by fp->cancelled() (factory close) and natural frontier
+    // catch-up on exhaustion.
+    if (_morsel_queue != nullptr && _morsel_queue->reach_limit()) {
+        return;
+    }
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     const std::shared_ptr<FooterPrefetchState>& fp = factory->footer_prefetch_state();
     if (fp == nullptr || fp->cancelled() || !fp->warmable()) {
@@ -612,7 +628,8 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
     }
 
     ConnectorScanOperatorAdaptiveProcessor& P = *_adaptive_processor;
-    bool ret = (P.expected_io_tasks != 0) && (_num_running_io_tasks >= P.expected_io_tasks);
+    const int expected = P.expected_io_tasks.load();
+    bool ret = (expected != 0) && (_num_running_io_tasks >= expected);
 
     // when in poll state, we don't want this operator sleeps too long time and miss out the chance
     // to adjust io tasks. so we will break it when it runs for too long time
@@ -633,7 +650,7 @@ int ConnectorScanOperator::current_io_task_target() const {
     if (!_enable_adaptive_io_tasks) {
         return _io_tasks_per_scan_operator;
     }
-    int target = _adaptive_processor->expected_io_tasks;
+    int target = _adaptive_processor->expected_io_tasks.load();
     // Before the governor establishes a target (0), leave no spare so warm does not grab slots data
     // is about to take. Clamp to the cap.
     if (target <= 0 || target > _io_tasks_per_scan_operator) {
@@ -665,11 +682,14 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         P.cs_total_halt_time += halt_time;
     }
 
-    // to avoid frequent adjustment.
-    int& io_tasks = P.expected_io_tasks;
+    // to avoid frequent adjustment. Work on a local and publish once (store) at each return so
+    // concurrent readers (current_io_task_target on executor threads) never see a mid-adjustment
+    // intermediate.
+    int io_tasks = P.expected_io_tasks.load();
     io_tasks = std::max(min_io_tasks, io_tasks);
     io_tasks = std::min(max_io_tasks, io_tasks);
     if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_adjust_interval_ms * 1000) {
+        P.expected_io_tasks.store(io_tasks);
         return io_tasks;
     }
     P.adjust_io_tasks_last_timestamp = now;
@@ -792,6 +812,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     P.last_cs_scan_speed = cs_scan_speed;
     P.last_cs_total_scan_bytes = cs_total_scan_bytes;
+    P.expected_io_tasks.store(io_tasks);
     return io_tasks;
 }
 

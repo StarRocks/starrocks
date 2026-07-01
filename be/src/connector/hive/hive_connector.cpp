@@ -1114,6 +1114,10 @@ std::string resolve_footer_native_path(const THdfsScanRange& scan_range, const H
 
 FooterPrefetchPlan HiveDataSourceProvider::build_footer_prefetch_items(
         RuntimeState* state, const std::vector<TScanRangeParams>& scan_ranges) {
+    // Serialize the shared _footer_open_ctx lazy init: this runs on the prepare thread (decompose /
+    // initial feed) and on brpc handler threads (incremental scan-range delivery), which can race.
+    // The work here is per-file (a few calls per scan), never per-row, so a plain mutex is free.
+    std::lock_guard<std::mutex> l(_footer_open_ctx_mutex);
     FooterPrefetchPlan plan;
     // Partition-only scans resolve through HdfsPartitionScanner and never open the data file, so
     // there are no footers to warm. Mirror HiveDataSource::_use_partition_column_value_only.
