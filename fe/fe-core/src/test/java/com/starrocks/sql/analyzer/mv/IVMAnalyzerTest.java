@@ -119,6 +119,44 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy());
     }
 
+    @Test
+    public void testHllUnionAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("hll_union(hll_hash(c1))");
+    }
+
+    @Test
+    public void testPercentileUnionAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("percentile_union(percentile_hash(c1))");
+    }
+
+    @Test
+    public void testBitmapUnionHashAggregateYieldsIvmRewrite() throws Exception {
+        assertMetricUnionYieldsIvmRewrite("bitmap_union(bitmap_hash(c1))");
+    }
+
+    /**
+     * The metric-state unions roll up an already-built sketch (bitmap_hash/hll_hash/percentile_hash
+     * here). Unlike bitmap_union(to_bitmap(...)), they are not normalized away, so IVM must accept
+     * each union directly and maintain it via its agg-state combinators.
+     */
+    private void assertMetricUnionYieldsIvmRewrite(String aggExpr) throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_metric_union "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, " + aggExpr + " FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+
+        CreateMaterializedViewStatement stmt = parseMvDdl(ddl);
+        QueryStatement qs = stmt.getQueryStatement();
+        Analyzer.analyze(qs, connectContext);
+
+        IVMAnalyzer analyzer = new IVMAnalyzer(connectContext, stmt, qs);
+        Optional<IVMAnalyzer.IVMAnalyzeResult> result =
+                analyzer.rewrite(MaterializedView.RefreshMode.INCREMENTAL);
+
+        assertTrue(result.isPresent(), aggExpr + " MV must produce an IVM rewrite result");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, result.get().rowIdStrategy());
+    }
+
     /**
      * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
      * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
