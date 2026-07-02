@@ -1,0 +1,39 @@
+-- name: test_nested_dict_expr_exchange
+
+set cbo_enable_low_cardinality_optimize = true;
+set low_cardinality_optimize_v2 = true;
+
+CREATE TABLE `dict_expr_exchange` (
+  `id` int NULL,
+  `lot_state` varchar(32) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into dict_expr_exchange
+select
+    generate_series,
+    case
+        when generate_series % 4 = 0 then 'created'
+        when generate_series % 7 = 0 then null
+        else 'running'
+    end
+from TABLE(generate_series(1, 4096));
+
+[UC] analyze full table dict_expr_exchange;
+
+function: wait_global_dict_ready('lot_state', 'dict_expr_exchange')
+
+function: assert_explain_contains('select case when subq.wip_status is null then \'-\' else subq.wip_status end as wip_status from (select distinct case when lot_state in (\'created\') then \'Created\' else \'WIP\' end as wip_status from dict_expr_exchange) subq order by wip_status', 'Decode')
+
+[ORDER]select
+    case when subq.wip_status is null then '-' else subq.wip_status end as wip_status
+from (
+    select distinct
+        case when lot_state in ('created') then 'Created' else 'WIP' end as wip_status
+    from dict_expr_exchange
+) subq
+order by wip_status;
