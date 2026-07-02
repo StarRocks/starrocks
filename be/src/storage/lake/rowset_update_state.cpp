@@ -608,10 +608,15 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // unreachable after the replace (the dest segment has its own copy); orphan it too. In
         // async mode the src ids only marked a scheduled build — no .vi file ever existed.
         if (!defer_vector_index_build) {
-            // The replaced src .vi was named by the src segment's owner tablet id.
+            // The replaced src .vi was named by the src segment's owner tablet id. Carry the src's
+            // shared flag (like the segment orphan above) so a split-shared .vi still referenced by
+            // sibling tablets is routed through the shared-file deleter and delayed, not deleted.
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 FileMetaPB vi_meta;
                 vi_meta.set_name(gen_vector_index_filename_for_segment(src_seg_meta, params.tablet->id(), index_id));
+                if (src_seg_meta.has_shared()) {
+                    vi_meta.set_shared(src_seg_meta.shared());
+                }
                 orphan_files->push_back(std::move(vi_meta));
             }
         }

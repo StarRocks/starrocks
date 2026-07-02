@@ -1970,6 +1970,103 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     }
 }
 
+// A split-shared segment's .vi is named by the recorded owner, so it is the SAME file for every
+// sibling tablet. It must follow the shared segment's deletion policy: kept while any sibling still
+// references the segment, deleted only once none do. Owner (710) differs from the sibling (711) to
+// prove the .vi name is owner-based, not per-vacuuming-tablet.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_shared_vector_index_files) {
+    const std::string shared_segment = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat";
+    // gen_vector_index_filename(shared_segment, owner=710, index=100)
+    const std::string shared_vi = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1_710_100.vi";
+    // Decoy named by the sibling tablet id (711): must never be touched (proves owner-based naming).
+    const std::string decoy_vi = "0000000000f159e5_22222222-2222-2222-2222-2222222222b1_711_100.vi";
+    create_data_file(shared_segment);
+    create_data_file(shared_vi);
+    create_data_file(decoy_vi);
+
+    auto t710_v1 = json_to_pb<TabletMetadataPB>(R"DEL({"id": 710, "version": 1, "rowsets": []})DEL");
+    auto t711_v1 = json_to_pb<TabletMetadataPB>(R"DEL({"id": 711, "version": 1, "rowsets": []})DEL");
+
+    // Both tablets reference the shared segment, which records owner 710 (carried verbatim by the
+    // split cross-publish CopyFrom), so both resolve the .vi to ..._710_100.vi.
+    auto t710_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 710,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
+                            "shared": true,
+                            "vector_index_ids": [100],
+                            "vector_index_tablet_id": 710
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    auto t711_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 711,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
+                            "shared": true,
+                            "vector_index_ids": [100],
+                            "vector_index_tablet_id": 710
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v1{{710, *t710_v1}, {711, *t711_v1}};
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v1));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2{{710, *t710_v2}, {711, *t711_v2}};
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    {
+        // Delete tablet 710 only: 711 still references the shared segment, so its owner-named .vi
+        // must be kept.
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(710);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_TRUE(file_exist(shared_segment));
+        EXPECT_TRUE(file_exist(shared_vi));
+        EXPECT_TRUE(file_exist(decoy_vi));
+    }
+
+    {
+        // Delete both: nothing references the shared segment now, so its .vi is deleted too.
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(710);
+        request.add_tablet_ids(711);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_FALSE(file_exist(shared_segment));
+        EXPECT_FALSE(file_exist(shared_vi));
+        // The decoy (sibling-id name) was never referenced by metadata, so vacuum leaves it to the
+        // orphan-file sweep, not this path — it must remain untouched here.
+        EXPECT_TRUE(file_exist(decoy_vi));
+    }
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files_with_dcg) {
     const std::string shared_dcg_file = "0000000000f359e4_33333333-3333-3333-3333-3333333333c1.dat";
