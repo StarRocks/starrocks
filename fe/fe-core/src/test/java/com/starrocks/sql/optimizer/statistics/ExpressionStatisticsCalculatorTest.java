@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableList;
@@ -152,6 +151,7 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.INT, "id", true);
         CallOperator callOperator = new CallOperator(FunctionSet.MAX, Type.INT, Lists.newArrayList(columnRefOperator));
 
+        LocalDate epochDay = LocalDate.of(1970, 1, 1);
         Statistics.Builder builder = Statistics.builder();
         double min = 0.0;
         double max = 100.0;
@@ -223,6 +223,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 12, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 1, 0.001);
+        // test monthname function
+        callOperator = new CallOperator(FunctionSet.MONTHNAME, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 12);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Double.POSITIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Double.NEGATIVE_INFINITY, 0.001);
         // test weekofyear function
         callOperator = new CallOperator(FunctionSet.WEEKOFYEAR, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -273,14 +279,62 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 59, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
-        // test to_date function
-        callOperator = new CallOperator(FunctionSet.TO_DATE, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
-        LocalDate epochDay = LocalDate.of(1970, 1, 1);
-        Assertions.assertEquals(columnStatistic.getMaxValue(),
-                epochDay.atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+        // test from_unix function
+        callOperator = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), columnStatistic.getDistinctValuesCount(), 0.001);
+        // test to_date function - columnStatistics for a date column are calculated.
+        // Input provided as date+time. Function strips the time part.
+        List<LocalDateTime> toDateValues = Lists.newArrayList(
+                LocalDateTime.of(2021, 1, 10, 8, 30, 0),
+                LocalDateTime.of(2021, 12, 25, 23, 59, 59));
+        LocalDateTime toDateMinInput = Collections.min(toDateValues);
+        LocalDateTime toDateMaxInput = Collections.max(toDateValues);
+        double toDateDistinctValues = 5;
+        ColumnRefOperator toDateColumn = new ColumnRefOperator(1, Type.DOUBLE, "to_date_col", true);
+        Statistics toDateStatistics = builder.addColumnStatistic(toDateColumn,
+                        ColumnStatistic.builder().setMinValue(getLongFromDateTime(toDateMinInput))
+                                .setMaxValue(getLongFromDateTime(toDateMaxInput))
+                                .setDistinctValuesCount(toDateDistinctValues)
+                                .setNullsFraction(0).setAverageRowSize(10).build())
+                .build();
+        callOperator = new CallOperator(FunctionSet.TO_DATE, Type.DOUBLE, Lists.newArrayList(toDateColumn));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, toDateStatistics);
         Assertions.assertEquals(columnStatistic.getMinValue(),
-                epochDay.atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+                toDateMinInput.toLocalDate().atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(),
+                toDateMaxInput.toLocalDate().atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+        Assertions.assertEquals(5, columnStatistic.getDistinctValuesCount(), 0.001);
+        // test date function - columnStatistics for date column are calculated.
+        // Input provided as date+time. Function strips the time part.
+        List<LocalDateTime> dateValues = Lists.newArrayList(
+                LocalDateTime.of(2022, 1, 10, 8, 30, 0),
+                LocalDateTime.of(2022, 12, 25, 23, 59, 59));
+        LocalDateTime dateMinInput = Collections.min(dateValues);
+        LocalDateTime dateMaxInput = Collections.max(dateValues);
+        double dateDistinctValues = 5;
+        ColumnRefOperator dateColumn = new ColumnRefOperator(1, Type.DOUBLE, "to_date_col", true);
+        Statistics dateStatistics = builder.addColumnStatistic(dateColumn,
+                        ColumnStatistic.builder().setMinValue(getLongFromDateTime(dateMinInput))
+                                .setMaxValue(getLongFromDateTime(dateMaxInput))
+                                .setDistinctValuesCount(dateDistinctValues)
+                                .setNullsFraction(0).setAverageRowSize(10).build())
+                .build();
+        callOperator = new CallOperator(FunctionSet.DATE, Type.DOUBLE, Lists.newArrayList(dateColumn));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, dateStatistics);
+        Assertions.assertEquals(columnStatistic.getMinValue(),
+                dateMinInput.toLocalDate().atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+        Assertions.assertEquals(columnStatistic.getMaxValue(),
+                dateMaxInput.toLocalDate().atStartOfDay(ZoneId.systemDefault()).toEpochSecond(), 0.001);
+        Assertions.assertEquals(5, columnStatistic.getDistinctValuesCount(), 0.001);
+        // test DAYNAME function
+        callOperator = new CallOperator(FunctionSet.DAYNAME, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), Double.POSITIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), Double.NEGATIVE_INFINITY, 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), 7);
         // test to_days function
         callOperator = new CallOperator(FunctionSet.TO_DAYS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -298,6 +352,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), max, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), min, 0.001);
+        // test time_to_sec function
+        callOperator = new CallOperator(FunctionSet.TIME_TO_SEC, Type.BIGINT, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(columnStatistic.getDistinctValuesCount(), distinctValue);
         // test abs function
         callOperator = new CallOperator(FunctionSet.ABS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -491,6 +551,12 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assertions.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
+        // test from_unix function
+        callOperator = new CallOperator(FunctionSet.FROM_UNIXTIME, Type.VARCHAR, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(leftStatistic.getDistinctValuesCount(), columnStatistic.getDistinctValuesCount(), 0.001);
         // test years_diff function
         callOperator = new CallOperator(FunctionSet.YEARS_DIFF, Type.BIGINT, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
@@ -566,7 +632,6 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assertions.assertEquals(-1, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
-        
         callOperator = new CallOperator(FunctionSet.LIKE, Type.BOOLEAN, Lists.newArrayList(left, right));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
@@ -850,7 +915,6 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(300_000L, isNullStat.getHistogram().getMCV().get("1"));
         Assertions.assertEquals(700_000L, isNullStat.getHistogram().getMCV().get("0"));
     }
-
 
     @Test
     public void testArrayMapWithDependentLambda() {
@@ -1954,7 +2018,6 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnRefOperator col1 = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator col2 = new ColumnRefOperator(1, Type.INT, "col2", true);
 
-
         Map<String, Long> integerMcvs = Map.of("1", 200L, "20", 300L, "30", 500L);
         Histogram intHistogram = new Histogram(Collections.emptyList(), integerMcvs);
 
@@ -2030,6 +2093,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(stat.getHistogram());
         assertBooleanDistribution(stat, 750, 250, 0.0);
     }
+
     @Test
     public void testNonBooleanZeroOneColumnDoesNotUseBooleanMcvFastPath() {
         final var col = new ColumnRefOperator(0, Type.INT, "flag", true);
@@ -2089,7 +2153,6 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(0, result.getMinValue(), 0.0);
         Assertions.assertEquals(1, result.getMaxValue(), 0.0);
     }
-
 
     @Test
     public void testCompoundPredicateOrIgnoresNonBooleanChildMcvs() {
