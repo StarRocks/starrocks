@@ -365,8 +365,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
-    std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(segments.size());
+    // Size the result up front so each iterator is written to its segment's position. The returned
+    // vector must stay positionally aligned with `segments`: callers index it by segment position to
+    // derive the rssid (rowset id + segment idx), skip null entries, and assert the size equals the
+    // segment count. A segment that produces no iterator (e.g. fully pruned by zonemap predicate
+    // filtering) is left as the default null, never compacting away its slot.
+    std::vector<ChunkIteratorPtr> seg_iterators(segments.size());
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
@@ -385,15 +389,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
     }
 
-    for (auto& seg_ptr : segments) {
+    for (size_t i = 0; i < segments.size(); ++i) {
+        auto& seg_ptr = segments[i];
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave seg_iterators[i] as the default null placeholder, preserving alignment.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
 }
