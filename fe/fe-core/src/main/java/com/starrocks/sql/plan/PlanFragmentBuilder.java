@@ -351,6 +351,9 @@ public class PlanFragmentBuilder {
     // LogicalProperty), so the physical single-tablet gather output must be disabled too. Otherwise a now
     // two-phase (shuffled, multi-instance) aggregation could be wrongly pinned to a single-tablet gather.
     private static boolean hasOversizedSingleTablet(ExecPlan execPlan) {
+        if (execPlan.getConnectContext() == null) {
+            return false;
+        }
         long maxTabletRows = execPlan.getConnectContext().getSessionVariable().getOneTabletAggOptMaxTabletRows();
         if (maxTabletRows < 0) {
             return false;
