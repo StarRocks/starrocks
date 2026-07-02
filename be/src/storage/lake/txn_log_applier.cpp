@@ -662,7 +662,7 @@ private:
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
-            // Schema-change conversion segments were written by this (shadow) tablet; backstop
+            // Schema-change conversion segments were written by this (shadow) tablet; stamp
             // the .vi owner id. ADD VECTOR INDEX rewrites flow through here.
             fill_missing_vector_index_owner(new_rowset, _metadata->id());
         }
@@ -1076,7 +1076,7 @@ private:
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
-            // These segments were written by this tablet; backstop the .vi owner id.
+            // These segments were written by this tablet; stamp the .vi owner id.
             fill_missing_vector_index_owner(rowset, _metadata->id());
             rowset->set_id(_metadata->next_rowset_id());
             rowset->set_version(_new_version);
@@ -1190,7 +1190,7 @@ private:
             // Replace the first input rowset with output rowset
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
             output_rowset->CopyFrom(op_compaction.output_rowset());
-            // Compaction outputs are written by this tablet; backstop the .vi owner id.
+            // Compaction outputs are written by this tablet; stamp the .vi owner id.
             fill_missing_vector_index_owner(output_rowset, _metadata->id());
             output_rowset->set_id(_metadata->next_rowset_id());
             output_rowset->set_version(_new_version);
@@ -1273,7 +1273,7 @@ private:
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
-            // Schema-change conversion segments were written by this (shadow) tablet; backstop
+            // Schema-change conversion segments were written by this (shadow) tablet; stamp
             // the .vi owner id. ADD VECTOR INDEX rewrites flow through here.
             fill_missing_vector_index_owner(new_rowset, _metadata->id());
         }

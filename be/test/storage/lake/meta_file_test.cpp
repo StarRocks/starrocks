@@ -868,11 +868,11 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(118, metadata->next_rowset_id());
 }
 
-// The publish funnel backstops SegmentMetadataPB::vector_index_tablet_id: a writer path that
-// records vector_index_ids but forgets to stamp the owner still persists a correct owner
-// (= the publishing tablet, which wrote the segment). Segments arriving from a tablet-split
-// cross-publish (shared=true) were written by ANOTHER tablet and must be carried verbatim.
-TEST_F(MetaFileTest, test_apply_opwrite_backstops_vector_index_owner) {
+// The publish funnel is the SOLE producer of SegmentMetadataPB::vector_index_tablet_id: writers
+// never set it; apply stamps the publishing tablet (= the tablet that wrote the segment) on every
+// segment recording vector_index_ids. Segments arriving from a tablet-split cross-publish
+// (shared=true) were written by ANOTHER tablet and must be carried verbatim.
+TEST_F(MetaFileTest, test_apply_opwrite_stamps_vector_index_owner) {
     const int64_t tablet_id = 31003;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -884,16 +884,16 @@ TEST_F(MetaFileTest, test_apply_opwrite_backstops_vector_index_owner) {
     TxnLogPB_OpWrite op_write;
     auto* rowset = op_write.mutable_rowset();
     {
-        // ids recorded, owner forgotten, not shared: the backstop fills the publishing tablet.
-        auto* forgot_owner = rowset->add_segment_metas();
-        forgot_owner->set_filename("forgot_owner.dat");
-        forgot_owner->add_vector_index_ids(100);
-        // ids + explicit owner: preserved, never overwritten.
+        // ids recorded, no owner (the normal writer output): apply stamps the publishing tablet.
+        auto* plain = rowset->add_segment_metas();
+        plain->set_filename("plain.dat");
+        plain->add_vector_index_ids(100);
+        // pre-set owner (e.g. carried metadata): preserved, never overwritten.
         auto* has_owner = rowset->add_segment_metas();
         has_owner->set_filename("has_owner.dat");
         has_owner->add_vector_index_ids(100);
         has_owner->set_vector_index_tablet_id(9999);
-        // ids, owner forgotten, but shared (split cross-publish): written by another tablet,
+        // ids without owner but shared (split cross-publish): written by another tablet,
         // stamping the local id would be wrong — must stay absent.
         auto* shared_seg = rowset->add_segment_metas();
         shared_seg->set_filename("shared.dat");
