@@ -657,11 +657,67 @@ TEST_F(BuiltinInvertedIndexTest, test_iterator_unsupported_ops) {
     ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
 
     roaring::Roaring bitmap;
-    ASSERT_TRUE(iter->read_null("c0", &bitmap).is_internal_error());
+    ASSERT_OK(iter->read_null("c0", &bitmap));
+    ASSERT_TRUE(bitmap.isEmpty());
 
     Slice query("test");
     ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, static_cast<InvertedIndexQueryType>(-1), &bitmap)
                         .is_invalid_argument());
+
+    delete iter;
+}
+
+// Test BuiltinInvertedIndexIterator::read_null returns exactly the NULL rowids.
+TEST_F(BuiltinInvertedIndexTest, test_iterator_read_null) {
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+
+    std::string file_name = kTestDir + "/read_null";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+
+        // Interleave values and NULLs so NULL rows land at rowids 2 and 4:
+        //   rowid 0,1 -> "apple","banana"; rowid 2 -> NULL; rowid 3 -> "cherry"; rowid 4 -> NULL.
+        std::vector<std::string> head = {"apple", "banana"};
+        std::vector<Slice> head_slices;
+        for (auto& v : head) {
+            head_slices.emplace_back(v.data(), v.size());
+        }
+        writer->add_values(head_slices.data(), head_slices.size());
+        writer->add_nulls(1);
+        std::string tail = "cherry";
+        Slice tail_slice(tail.data(), tail.size());
+        writer->add_values(&tail_slice, 1);
+        writer->add_nulls(1);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = 5;
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    ASSERT_OK(iter->read_null("c0", &bitmap));
+    ASSERT_EQ(2, bitmap.cardinality());
+    ASSERT_TRUE(bitmap.contains(2));
+    ASSERT_TRUE(bitmap.contains(4));
+    ASSERT_FALSE(bitmap.contains(0));
+    ASSERT_FALSE(bitmap.contains(1));
+    ASSERT_FALSE(bitmap.contains(3));
 
     delete iter;
 }
