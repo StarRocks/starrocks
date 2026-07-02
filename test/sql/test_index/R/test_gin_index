@@ -251,3 +251,38 @@ PROPERTIES (
 drop database test_gin_index;
 -- result:
 -- !result
+-- name: test_gin_not_match_excludes_null @native
+create database test_gin_null_${uuid0};
+-- result:
+-- !result
+use test_gin_null_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE t_null (
+    id int NOT NULL,
+    c  varchar(30) NULL,
+    INDEX idx_c (c) USING GIN ("parser" = "none")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_null values (1, 'hello'), (2, 'world'), (3, NULL), (4, 'hxllo');
+-- result:
+-- !result
+[ORDER] select id, c from t_null where c match 'hello';
+-- result:
+1	hello
+-- !result
+[ORDER] select id, c from t_null where c not match 'hello';
+-- result:
+2	world
+4	hxllo
+-- !result
+drop database test_gin_null_${uuid0};
+-- result:
+-- !result
