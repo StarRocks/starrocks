@@ -130,7 +130,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
         String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
-        context.put("tableUUID", table.getUUID());
+        context.put("tableUUID", StatisticUtils.hashTableUuidForPkStorage(table.getUUID()));
         context.put("columnName", quoteColumName);
         context.put("columnNameStr", columnName);
         context.put("catalogName", catalogName);

@@ -206,18 +206,32 @@ public class StatisticSQLBuilder {
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
+        String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
             VelocityContext context = new VelocityContext();
             context.put("type", type);
             context.put("predicate",
-                    "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
+                    tableUUIDPredicate + " and column_name in (" +
                             names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
             querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
         });
 
         return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    // external_column_statistics / external_histogram_statistics store table_uuid hashed
+    // (StatisticUtils.hashTableUuidForPkStorage) to keep the PRIMARY KEY within BE's
+    // primary_key_limit_size. Matching on both the hashed and the raw value keeps historical
+    // rows (written before this hashing was introduced) visible until they naturally age out.
+    private static String buildTableUUIDInPredicate(String tableUUID) {
+        return "table_uuid in (\"" + StatisticUtils.hashTableUuidForPkStorage(tableUUID) + "\", \"" + tableUUID + "\")";
+    }
+
+    // Same as buildTableUUIDInPredicate but single-quoted, for call sites that build their SQL with '...'.
+    private static String buildTableUUIDInPredicateQuoted(String tableUUID) {
+        return "table_uuid in ('" + StatisticUtils.hashTableUuidForPkStorage(tableUUID) + "', '" + tableUUID + "')";
     }
 
     public static String buildMultiColumnCombinedStatisticsSQL(List<Long> tableIds) {
@@ -280,7 +294,7 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildDropExternalStatSQL(String tableUUID) {
-        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID);
     }
 
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
@@ -329,7 +343,7 @@ public class StatisticSQLBuilder {
 
         List<String> predicateList = Lists.newArrayList();
         if (tableUUID != null) {
-            predicateList.add("table_uuid = '" + tableUUID + "'");
+            predicateList.add(buildTableUUIDInPredicateQuoted(tableUUID));
         }
 
         if (!columnNames.isEmpty()) {
@@ -354,8 +368,8 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {
-        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
-                + tableUUID + "' and column_name in (" + Joiner.on(", ")
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where "
+                + buildTableUUIDInPredicateQuoted(tableUUID) + " and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
