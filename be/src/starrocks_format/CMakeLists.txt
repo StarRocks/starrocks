@@ -54,7 +54,7 @@ SET(STARROCKS_FORMAT_LIBS
     ${STARROCKS_LIBS}
     ${STARROCKS_DEPENDENCIES}
     -static-libstdc++ -static-libgcc
-    -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    -lresolv -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
     hdfs_so
 )
 message(STATUS "STARROCKS_FORMAT_LIBS is ${STARROCKS_FORMAT_LIBS}")
