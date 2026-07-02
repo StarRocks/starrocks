@@ -28,13 +28,13 @@
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
+#include "runtime/java/java_env.h"
 #include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/java_udf_reflection.h"
-#include "udf/java/utils.h"
 
 namespace starrocks {
 const TableFunction* getJavaUDTFFunction() {
@@ -157,13 +157,13 @@ Status JavaUDTFFunction::open(RuntimeState* runtime_state, TableFunctionState* s
         RETURN_IF_ERROR(down_cast<JavaUDTFState*>(state)->open());
         return Status::OK();
     };
-    auto promise = call_function_in_pthread(runtime_state, open_status);
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(runtime_state, open_status);
     RETURN_IF_ERROR(promise->get_future().get());
     return Status::OK();
 }
 
 Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* state) const {
-    auto promise = call_function_in_pthread(runtime_state, [state]() {
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(runtime_state, [state]() {
         delete state;
         return Status::OK();
     });
