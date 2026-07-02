@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.util.Strings;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
@@ -81,6 +82,11 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+    // Grouped by column_name only (not table_uuid): the predicate already scopes rows to a single
+    // logical table via table_uuid in (hash, raw) (see buildTableUUIDInPredicate), and table_uuid
+    // isn't part of the projection anyway. Grouping by table_uuid too would split a table's rows
+    // into two separate groups whenever both representations are present, silently dropping one
+    // group's aggregated data downstream (only one group survives the caller's per-column map).
     private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
@@ -88,7 +94,7 @@ public class StatisticSQLBuilder {
                     + " max(update_time)"
                     + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
-                    + " GROUP BY table_uuid, column_name";
+                    + " GROUP BY column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
@@ -295,6 +301,30 @@ public class StatisticSQLBuilder {
 
     public static String buildDropExternalStatSQL(String tableUUID) {
         return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID);
+    }
+
+    // Cleans up the stale raw-keyed row(s) for exactly the (partition, column) pairs just
+    // (re-)written under the hashed table_uuid, so a partition never has both a raw and a hashed
+    // row alive at once (which would otherwise get double-counted by the SUM aggregates in
+    // buildQueryExternalFullStatisticsSQL). Only ever targets the raw uuid - never the hash.
+    public static String buildDropExternalStatSQLForPartitions(String rawTableUUID, List<String> partitionNames,
+                                                                List<String> columnNames) {
+        String partitionsIn = partitionNames.stream()
+                .map(p -> "'" + StringEscapeUtils.escapeSql(p) + "'").collect(Collectors.joining(", "));
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + StringEscapeUtils.escapeSql(c) + "'").collect(Collectors.joining(", "));
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + rawTableUUID + "'" +
+                " AND PARTITION_NAME IN (" + partitionsIn + ")" +
+                " AND COLUMN_NAME IN (" + columnsIn + ")";
+    }
+
+    // Same cleanup purpose as buildDropExternalStatSQLForPartitions, for external_histogram_statistics
+    // (PK is table_uuid + column_name, no partition dimension).
+    public static String buildDropExternalHistogramSQLForRawUuid(String rawTableUUID, List<String> columnNames) {
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + StringEscapeUtils.escapeSql(c) + "'").collect(Collectors.joining(", "));
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                " where table_uuid = '" + rawTableUUID + "' and column_name in (" + columnsIn + ")";
     }
 
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {

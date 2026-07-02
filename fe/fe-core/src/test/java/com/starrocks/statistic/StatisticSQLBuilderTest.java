@@ -64,4 +64,38 @@ class StatisticSQLBuilderTest {
         Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', '" + TABLE_UUID + "')"),
                 "delete predicate must match both hashed and raw table_uuid: " + sql);
     }
+
+    @Test
+    void buildQueryExternalFullStatisticsSQLGroupsByColumnNameOnly() {
+        // Regression test: grouping by table_uuid too would split a table's rows into two groups
+        // whenever both the hashed and raw representations are present, silently dropping one
+        // group's aggregated data downstream (see the collect-vs-read consistency discussion).
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(
+                TABLE_UUID, ImmutableList.of("col1"), ImmutableList.of(IntegerType.BIGINT));
+        Assertions.assertTrue(sql.endsWith("GROUP BY column_name"), "must group by column_name only: " + sql);
+        Assertions.assertFalse(sql.contains("GROUP BY table_uuid"), "must not group by table_uuid: " + sql);
+    }
+
+    @Test
+    void buildDropExternalStatSQLForPartitionsOnlyMatchesRawUuid() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(
+                TABLE_UUID, ImmutableList.of("p1", "p2"), ImmutableList.of("col1", "col2"));
+        Assertions.assertTrue(sql.contains("TABLE_UUID = '" + TABLE_UUID + "'"),
+                "cleanup delete must target only the raw uuid: " + sql);
+        Assertions.assertFalse(sql.contains(hashed),
+                "cleanup delete must never also match the hashed uuid (it holds the fresh data): " + sql);
+        Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p1', 'p2')"), sql);
+        Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('col1', 'col2')"), sql);
+    }
+
+    @Test
+    void buildDropExternalHistogramSQLForRawUuidOnlyMatchesRawUuid() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(TABLE_UUID, ImmutableList.of("col1"));
+        Assertions.assertTrue(sql.contains("table_uuid = '" + TABLE_UUID + "'"),
+                "cleanup delete must target only the raw uuid: " + sql);
+        Assertions.assertFalse(sql.contains(hashed),
+                "cleanup delete must never also match the hashed uuid (it holds the fresh data): " + sql);
+    }
 }

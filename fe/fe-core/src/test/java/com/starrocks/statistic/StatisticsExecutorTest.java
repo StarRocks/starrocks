@@ -155,13 +155,13 @@ public class StatisticsExecutorTest extends PlanTestBase {
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
                                 "cast(min(cast(min as string)) as string), max(update_time) FROM external_column_statistics " +
                                 "WHERE table_uuid in (\"" + hashedTableUUID + "\", \"" + tableUUID + "\") " +
-                                "and column_name in (\"c2\") GROUP BY table_uuid, column_name UNION ALL " +
+                                "and column_name in (\"c2\") GROUP BY column_name UNION ALL " +
                                 "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
                                 "cast(min(cast(min as bigint)) as string), max(update_time) " +
                                 "FROM external_column_statistics WHERE table_uuid in (\"" + hashedTableUUID + "\", \""
                                 + tableUUID + "\")" +
-                                " and column_name in (\"c1\") GROUP BY table_uuid, column_name", sql);
+                                " and column_name in (\"c1\") GROUP BY column_name", sql);
                 return Lists.newArrayList();
             }
         };

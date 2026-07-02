@@ -99,6 +99,9 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
             collectStatisticSync(sql, context, analyzeStatus);
+            // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
+            // superseded, so a later read never has to arbitrate between two rows for one column.
+            new StatisticExecutor().dropExternalHistogramRawColumn(context, table.getUUID(), columnName);
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);

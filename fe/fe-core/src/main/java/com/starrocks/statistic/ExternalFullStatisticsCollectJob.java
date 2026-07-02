@@ -185,6 +185,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             flushInsertStatisticsData(context, true);
+            cleanupStaleRawKeyedRows(context, jobId);
         } catch (Exception e) {
             status = "FAILED";
             failureReason = e.getMessage();
@@ -212,6 +213,21 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                             "maxPartitionNameLen={} maxColumnNameLen={} estimatedRawPkLen={} limitEstimate={}",
                     jobId, catalogName, db.getOriginName(), table.getName(), rawTableUuid.length(),
                     maxPartitionNameLen, maxColumnNameLen, estimatedRawPkLen, EXTERNAL_STATS_PK_LIMIT_ESTIMATE);
+        }
+    }
+
+    // Deletes the stale raw-keyed rows for exactly the (partition, column) pairs this job just
+    // (re-)wrote under the hashed table_uuid. Without this, a partition that gets re-collected
+    // would keep both its old raw-keyed row and its new hashed-keyed row alive at once, and the
+    // SUM-based aggregation in buildQueryExternalFullStatisticsSQL would double-count it. This is
+    // best-effort: a failure here only means the stale row lingers until next collection, it must
+    // never fail a job whose actual stats write already succeeded.
+    private void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        String rawTableUuid = table.getUUID();
+        boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
+        if (!ok) {
+            LOG.warn("[ExternalStats] failed to clean up stale raw-keyed rows | jobId={} catalog={} db={} table={}",
+                    jobId, catalogName, db.getOriginName(), table.getName());
         }
     }
 
