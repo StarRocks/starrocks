@@ -36,12 +36,18 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -65,6 +71,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
+import java.util.TreeSet;
 
 public class MergeIntoPlanner {
 
@@ -240,7 +248,174 @@ public class MergeIntoPlanner {
         // Insert EnforceUniqueRowLocatorNode to check that each target row is matched at most once.
         // Key columns are _file and _pos, identified by SLOT ID — the BE resolves the
         // chunk columns through the chunk's slot-id map.
-        insertEnforceUniqueRowLocatorNode(execPlan, mergeTargetContext);
+        // Elide the check when source uniqueness over the ON keys already guarantees
+        // at-most-one match (see canElideEnforceUnique).
+        if (!canElideEnforceUnique(mergeIntoStmt)) {
+            insertEnforceUniqueRowLocatorNode(execPlan, mergeTargetContext);
+        }
+    }
+
+    /**
+     * MERGE requires at most one source row to match each target row. If the source
+     * relation is known to be unique on key set U, and every column in U is covered
+     * by an equality predicate between target and source in the ON clause, then any
+     * fixed target row can match at most one source row: two matching source rows
+     * would have identical U values, contradicting source uniqueness. In that case
+     * the runtime EnforceUniqueRowLocatorNode is redundant and can be safely omitted.
+     */
+    private boolean canElideEnforceUnique(MergeIntoStmt mergeIntoStmt) {
+        Set<String> sourceUniqueKeyColumns = extractSourceUniqueKeyColumns(mergeIntoStmt.getSourceRelation());
+        if (sourceUniqueKeyColumns.isEmpty()) {
+            return false;
+        }
+
+        Set<String> sourceJoinKeyColumns = collectSourceJoinKeyColumns(mergeIntoStmt);
+        return sourceJoinKeyColumns.containsAll(sourceUniqueKeyColumns);
+    }
+
+    private static Set<String> extractSourceUniqueKeyColumns(Relation sourceRelation) {
+        SelectRelation selectRelation = unwrapSelectRelation(sourceRelation);
+        if (selectRelation == null) {
+            return newCaseInsensitiveSet();
+        }
+
+        if (selectRelation.isDistinct()) {
+            return collectUnambiguousOutputNames(selectRelation.getColumnOutputNames());
+        }
+
+        List<Expr> groupBy = selectRelation.getGroupBy();
+        if (groupBy == null || groupBy.isEmpty()
+                || (selectRelation.getGroupingSetsList() != null && !selectRelation.getGroupingSetsList().isEmpty())
+                || (selectRelation.getGroupingFunctionCallExprs() != null
+                && !selectRelation.getGroupingFunctionCallExprs().isEmpty())) {
+            return newCaseInsensitiveSet();
+        }
+
+        Set<String> uniqueKeyColumns = newCaseInsensitiveSet();
+        List<Expr> outputExprs = selectRelation.getOutputExpression();
+        List<String> outputNames = selectRelation.getColumnOutputNames();
+        for (Expr groupByExpr : groupBy) {
+            String outputName = findOutputNameForExpression(groupByExpr, outputExprs, outputNames);
+            if (outputName == null || !uniqueKeyColumns.add(outputName)) {
+                return newCaseInsensitiveSet();
+            }
+        }
+        return uniqueKeyColumns;
+    }
+
+    private static SelectRelation unwrapSelectRelation(Relation relation) {
+        if (relation instanceof SubqueryRelation subqueryRelation) {
+            QueryRelation queryRelation = subqueryRelation.getQueryStatement().getQueryRelation();
+            return queryRelation instanceof SelectRelation selectRelation ? selectRelation : null;
+        }
+        return relation instanceof SelectRelation selectRelation ? selectRelation : null;
+    }
+
+    private static Set<String> collectUnambiguousOutputNames(List<String> outputNames) {
+        Set<String> uniqueNames = newCaseInsensitiveSet();
+        if (outputNames == null || outputNames.isEmpty()) {
+            return uniqueNames;
+        }
+        for (String outputName : outputNames) {
+            if (outputName == null || !uniqueNames.add(outputName)) {
+                return newCaseInsensitiveSet();
+            }
+        }
+        return uniqueNames;
+    }
+
+    private static String findOutputNameForExpression(Expr expr, List<Expr> outputExprs, List<String> outputNames) {
+        if (outputExprs == null || outputNames == null || outputExprs.size() != outputNames.size()) {
+            return null;
+        }
+
+        // Relate a GROUP BY key to an output column only when it is a plain SlotRef, matched by column
+        // name (aggregation may reassign slot ids). A non-SlotRef key (e.g. GROUP BY f(x)) is not
+        // matched: a toSql() string compare can collide for distinct exprs and wrongly elide the check.
+        // Returning null just keeps EnforceUnique (conservative and always safe).
+        if (!(expr instanceof SlotRef groupBySlot) || groupBySlot.getColumnName() == null) {
+            return null;
+        }
+        for (int i = 0; i < outputExprs.size(); i++) {
+            if (outputExprs.get(i) instanceof SlotRef outputSlot
+                    && groupBySlot.getColumnName().equalsIgnoreCase(outputSlot.getColumnName())) {
+                return outputNames.get(i);
+            }
+        }
+        return null;
+    }
+
+    private static Set<String> collectSourceJoinKeyColumns(MergeIntoStmt mergeIntoStmt) {
+        Set<String> sourceJoinKeyColumns = newCaseInsensitiveSet();
+        String sourceName = resolveSourceName(mergeIntoStmt.getSourceRelation(), mergeIntoStmt.getSourceAlias());
+        String targetName = mergeIntoStmt.getTargetAlias() == null
+                ? mergeIntoStmt.getTable().getName()
+                : mergeIntoStmt.getTargetAlias();
+        if (sourceName == null || targetName == null) {
+            return sourceJoinKeyColumns;
+        }
+        // If source and target share one identifier (e.g. a USING subquery aliased to the target's
+        // bare name), isSlotFromRelation cannot tell their slots apart, so a target-only ON key
+        // (target.k = target.k) would be miscounted as covering the source key and wrongly elide the
+        // check. Credit nothing and keep the runtime EnforceUnique check.
+        if (sourceName.equalsIgnoreCase(targetName)) {
+            return sourceJoinKeyColumns;
+        }
+
+        for (Expr conjunct : AnalyzerUtils.extractConjuncts(mergeIntoStmt.getMergeCondition())) {
+            if (!(conjunct instanceof BinaryPredicate binaryPredicate)
+                    || binaryPredicate.getOp() != BinaryType.EQ) {
+                continue;
+            }
+
+            Expr left = binaryPredicate.getChild(0);
+            Expr right = binaryPredicate.getChild(1);
+            if (left instanceof SlotRef leftSlot && right instanceof SlotRef rightSlot) {
+                addSourceJoinKeyColumn(sourceJoinKeyColumns, leftSlot, rightSlot, sourceName, targetName);
+                addSourceJoinKeyColumn(sourceJoinKeyColumns, rightSlot, leftSlot, sourceName, targetName);
+            }
+        }
+        return sourceJoinKeyColumns;
+    }
+
+    private static void addSourceJoinKeyColumn(Set<String> sourceJoinKeyColumns, SlotRef sourceSlot,
+                                               SlotRef targetSlot, String sourceName, String targetName) {
+        if (!isSlotFromRelation(sourceSlot, sourceName) || !isSlotFromRelation(targetSlot, targetName)
+                || sourceSlot.getColumnName() == null) {
+            return;
+        }
+        // Cover this ON key only when both sides are type-equivalent. The AST keeps bare SlotRefs
+        // across an implicit cast (added later on the ScalarOperator), so a VARCHAR-vs-INT key still
+        // reads as SlotRef = SlotRef here; that coercion is non-injective (distinct '1','01' match one
+        // target row), so source uniqueness over the raw column does not imply an at-most-one match.
+        if (sourceSlot.getType() == null || targetSlot.getType() == null
+                || !sourceSlot.getType().matchesType(targetSlot.getType())) {
+            return;
+        }
+        sourceJoinKeyColumns.add(sourceSlot.getColumnName());
+    }
+
+    private static String resolveSourceName(Relation sourceRelation, String sourceAlias) {
+        if (sourceAlias != null) {
+            return sourceAlias;
+        }
+        if (sourceRelation.getResolveTableName() != null) {
+            return sourceRelation.getResolveTableName().getTbl();
+        }
+        if (sourceRelation instanceof TableRelation tableRelation) {
+            return tableRelation.getName().getTbl();
+        }
+        return null;
+    }
+
+    private static boolean isSlotFromRelation(SlotRef slotRef, String relationName) {
+        return slotRef.getTblName() != null
+                && slotRef.getTblName().getTbl() != null
+                && slotRef.getTblName().getTbl().equalsIgnoreCase(relationName);
+    }
+
+    private static Set<String> newCaseInsensitiveSet() {
+        return new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     }
 
     /**
