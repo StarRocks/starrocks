@@ -505,6 +505,7 @@ SET(DW_TEST_FILES
     ./storage/binlog_reader_test.cpp
     ./storage/binlog_test_base.cpp
     ./storage/chunk_aggregator_test.cpp
+    ./storage/choose_inverted_index_query_type_test.cpp
     ./storage/chunk_helper_test.cpp
     ./storage/column_aggregator_test.cpp
     ./storage/column_and_predicate_test.cpp
