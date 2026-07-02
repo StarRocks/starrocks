@@ -98,6 +98,19 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testEnableMvPercentileStrictMatchDefaultFalseAndSettable() {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertFalse(sessionVariable.isEnableMvPercentileStrictMatch(),
+                "the percentile strict-match flag must default to legacy (false)");
+
+        sessionVariable.setEnableMvPercentileStrictMatch(true);
+        Assertions.assertTrue(sessionVariable.isEnableMvPercentileStrictMatch());
+
+        sessionVariable.setEnableMvPercentileStrictMatch(false);
+        Assertions.assertFalse(sessionVariable.isEnableMvPercentileStrictMatch());
+    }
+
+    @Test
     public void testConnectorSinkShuffleModeBackwardCompatibility() {
         SessionVariable sessionVariable = new SessionVariable();
 
