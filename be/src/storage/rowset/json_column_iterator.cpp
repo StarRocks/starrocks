@@ -42,6 +42,56 @@
 
 namespace starrocks {
 
+namespace {
+
+struct JsonOutputColumns {
+    JsonColumn* json_column;
+    NullColumn* null_column; // nullptr when the output column is non-nullable
+};
+
+// Split the output column into its JSON data part and (optional) null part.
+JsonOutputColumns extract_json_output(Column* output) {
+    if (output->is_nullable()) {
+        auto* nullable = down_cast<NullableColumn*>(output);
+        return {down_cast<JsonColumn*>(nullable->data_column().get()),
+                down_cast<NullColumn*>(nullable->null_column().get())};
+    }
+    return {down_cast<JsonColumn*>(output), nullptr};
+}
+
+// Read the segment's null stream into the output null column via `read_nulls`.
+// The segment's stored nullability and the output column's nullability can
+// legitimately differ after fast schema evolution, so mismatches must not crash:
+// a segment with a null stream cannot be read into a non-nullable output, fail
+// with InternalError instead.
+template <typename ReadNullsFn>
+Status read_json_null_stream(Column* output, NullColumn* null_column, ColumnIterator* null_iter,
+                             ReadNullsFn read_nulls) {
+    if (null_iter != nullptr && null_column != nullptr) {
+        RETURN_IF_ERROR(read_nulls(null_column));
+        down_cast<NullableColumn*>(output)->update_has_null();
+    } else if (null_iter != nullptr && null_column == nullptr) {
+        return Status::InternalError("flat json: segment has a JSON null stream but the output column is non-nullable");
+    }
+    return Status::OK();
+}
+
+// Call after a successful data read. When the segment was written NOT NULL (no
+// null stream) but the output column is nullable -- a JSON column relaxed to
+// nullable by metadata-only fast schema evolution -- every row produced is
+// non-null, so append matching not-null flags to keep the null column in sync.
+void finish_json_read(Column* output, JsonColumn* json_column, NullColumn* null_column, ColumnIterator* null_iter,
+                      size_t rows_before_read) {
+    if (null_iter == nullptr && null_column != nullptr) {
+        DCHECK_GE(json_column->size(), rows_before_read);
+        constexpr uint8_t kNotNull = 0;
+        null_column->append_value_multiple_times(&kNotNull, json_column->size() - rows_before_read);
+    }
+    output->check_or_die();
+}
+
+} // namespace
+
 class JsonFlatColumnIterator final : public ColumnIterator {
 public:
     JsonFlatColumnIterator(ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
@@ -203,75 +253,54 @@ Status JsonFlatColumnIterator::_read(JsonColumn* json_column, FUNC read_fn) {
 }
 
 Status JsonFlatColumnIterator::next_batch(size_t* n, Column* dst) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
-    if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-    } else {
-        json_column = down_cast<JsonColumn*>(dst);
-    }
+    auto [json_column, null_column] = extract_json_output(dst);
 
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
-        down_cast<NullableColumn*>(dst)->update_has_null();
-    }
+    RETURN_IF_ERROR(read_json_null_stream(dst, null_column, _null_iter.get(),
+                                          [&](NullColumn* nulls) { return _null_iter->next_batch(n, nulls); }));
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
+    const size_t before = json_column->size();
     auto ret = _read(json_column, read);
-    dst->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(dst, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
 Status JsonFlatColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
-    if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-    } else {
-        json_column = down_cast<JsonColumn*>(dst);
-    }
-
-    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+    auto [json_column, null_column] = extract_json_output(dst);
 
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
-        down_cast<NullableColumn*>(dst)->update_has_null();
-    }
+    RETURN_IF_ERROR(read_json_null_stream(dst, null_column, _null_iter.get(),
+                                          [&](NullColumn* nulls) { return _null_iter->next_batch(range, nulls); }));
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
+    const size_t before = json_column->size();
     auto ret = _read(json_column, read);
-    dst->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(dst, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
 Status JsonFlatColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
+    auto [json_column, null_column] = extract_json_output(values);
+
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        auto* nullable_column = down_cast<NullableColumn*>(values);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-        RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
-        nullable_column->update_has_null();
-    } else {
-        json_column = down_cast<JsonColumn*>(values);
-    }
+    RETURN_IF_ERROR(read_json_null_stream(values, null_column, _null_iter.get(), [&](NullColumn* nulls) {
+        return _null_iter->fetch_values_by_rowid(rowids, size, nulls);
+    }));
 
     // 2. Read flat column
     auto read = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
-
+    const size_t before = json_column->size();
     auto ret = _read(json_column, read);
-    values->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(values, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
@@ -540,77 +569,51 @@ Status JsonMergeIterator::_merge(JsonColumn* dst, FUNC func) {
 }
 
 Status JsonMergeIterator::next_batch(size_t* n, Column* dst) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
-    if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-    } else {
-        json_column = down_cast<JsonColumn*>(dst);
-    }
-
-    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+    auto [json_column, null_column] = extract_json_output(dst);
 
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->next_batch(n, null_column));
-        down_cast<NullableColumn*>(dst)->update_has_null();
-    }
+    RETURN_IF_ERROR(read_json_null_stream(dst, null_column, _null_iter.get(),
+                                          [&](NullColumn* nulls) { return _null_iter->next_batch(n, nulls); }));
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(n, column); };
+    const size_t before = json_column->size();
     auto ret = _merge(json_column, func);
-    dst->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(dst, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
 Status JsonMergeIterator::next_batch(const SparseRange<>& range, Column* dst) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
-    if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-    } else {
-        json_column = down_cast<JsonColumn*>(dst);
-    }
-
-    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+    auto [json_column, null_column] = extract_json_output(dst);
 
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->next_batch(range, null_column));
-        down_cast<NullableColumn*>(dst)->update_has_null();
-    }
+    RETURN_IF_ERROR(read_json_null_stream(dst, null_column, _null_iter.get(),
+                                          [&](NullColumn* nulls) { return _null_iter->next_batch(range, nulls); }));
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->next_batch(range, column); };
+    const size_t before = json_column->size();
     auto ret = _merge(json_column, func);
-    dst->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(dst, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
 Status JsonMergeIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* dst) {
-    JsonColumn* json_column = nullptr;
-    NullColumn* null_column = nullptr;
-    if (dst->is_nullable()) {
-        auto* nullable_column = down_cast<NullableColumn*>(dst);
-        json_column = down_cast<JsonColumn*>(nullable_column->data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
-    } else {
-        json_column = down_cast<JsonColumn*>(dst);
-    }
-
-    CHECK((_null_iter == nullptr && null_column == nullptr) || (_null_iter != nullptr && null_column != nullptr));
+    auto [json_column, null_column] = extract_json_output(dst);
 
     // 1. Read null column
-    if (_null_iter != nullptr) {
-        RETURN_IF_ERROR(_null_iter->fetch_values_by_rowid(rowids, size, null_column));
-        down_cast<NullableColumn*>(dst)->update_has_null();
-    }
+    RETURN_IF_ERROR(read_json_null_stream(dst, null_column, _null_iter.get(), [&](NullColumn* nulls) {
+        return _null_iter->fetch_values_by_rowid(rowids, size, nulls);
+    }));
 
     auto func = [&](ColumnIterator* iter, Column* column) { return iter->fetch_values_by_rowid(rowids, size, column); };
+    const size_t before = json_column->size();
     auto ret = _merge(json_column, func);
-    dst->check_or_die();
+    if (ret.ok()) {
+        finish_json_read(dst, json_column, null_column, _null_iter.get(), before);
+    }
     return ret;
 }
 
