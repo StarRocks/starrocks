@@ -147,7 +147,7 @@ TEST_F(JavaUDFTest, local_date_helper_roundtrip) {
         ASSERT_NE(ld, nullptr);
         LOCAL_REF_GUARD(ld);
         EXPECT_EQ(v._julian, helper.valLocalDate(ld));
-        EXPECT_TRUE(_env->IsInstanceOf(ld, helper.local_date_class()));
+        EXPECT_TRUE(_env->IsInstanceOf(ld, JVMHelper::getInstance().local_date_class()));
     }
 }
 
@@ -167,7 +167,7 @@ TEST_F(JavaUDFTest, local_datetime_helper_roundtrip) {
         ASSERT_NE(ldt, nullptr);
         LOCAL_REF_GUARD(ldt);
         EXPECT_EQ(v.timestamp(), helper.valLocalDateTime(ldt));
-        EXPECT_TRUE(_env->IsInstanceOf(ldt, helper.local_datetime_class()));
+        EXPECT_TRUE(_env->IsInstanceOf(ldt, JVMHelper::getInstance().local_datetime_class()));
     }
 }
 
@@ -184,7 +184,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_date) {
     LOCAL_REF_GUARD(ld0);
     LOCAL_REF_GUARD(ld2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.local_date_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().local_date_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, ld0);
@@ -215,7 +215,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_datetime) {
     LOCAL_REF_GUARD(ldt0);
     LOCAL_REF_GUARD(ldt2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.local_datetime_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().local_datetime_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, ldt0);
@@ -240,12 +240,12 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_decimal_dispatch) {
     auto& helper = JVMFunctionHelper::getInstance();
 
     // BigDecimal[] { "12345.67", null, "0.00" } over DECIMAL64(9,2).
-    jobject bd0 = helper.newBigDecimal(static_cast<int64_t>(1234567), 2);
+    jobject bd0 = JVMHelper::getInstance().newBigDecimal(static_cast<int64_t>(1234567), 2);
     LOCAL_REF_GUARD(bd0);
-    jobject bd2 = helper.newBigDecimal(static_cast<int64_t>(0), 2);
+    jobject bd2 = JVMHelper::getInstance().newBigDecimal(static_cast<int64_t>(0), 2);
     LOCAL_REF_GUARD(bd2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.big_decimal_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().big_decimal_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, bd0);
@@ -275,7 +275,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
 
     // Integer[] { 1, 2, 3 } via valueOf.
-    jclass integer_cls = helper.int32_t_class();
+    jclass integer_cls = JVMHelper::getInstance().int32_t_class();
     jmethodID value_of = _env->GetStaticMethodID(integer_cls, "valueOf", "(I)Ljava/lang/Integer;");
     ASSERT_NE(value_of, nullptr);
     jobjectArray arr = _env->NewObjectArray(3, integer_cls, nullptr);
@@ -300,7 +300,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
 // jfieldIDs the BE input boxer relies on.
 TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
 
     ASSIGN_OR_ASSERT_FAIL(jobject desc,
                           helper.new_udf_type_desc(/*logicalType=*/TYPE_INT, /*children=*/nullptr,
@@ -323,7 +323,7 @@ TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
 // the cached field IDs.
 TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
 
     // DECIMAL64(18,4)
     {

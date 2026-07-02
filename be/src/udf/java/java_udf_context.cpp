@@ -46,7 +46,7 @@ void clear_java_udaf_states(FunctionContext* ctx) {
         return;
     }
 
-    auto env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     udaf_ctx->states->clear(ctx, env);
 }
 
@@ -73,7 +73,7 @@ UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGl
           _add_method(std::move(add)),
           _remove_method(std::move(remove)),
           _clear_method(std::move(clear)) {
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     _get_method_id = env->FromReflectedMethod(_get_method.handle());
     _batch_get_method_id = env->FromReflectedMethod(_batch_get_method.handle());
     _add_method_id = env->FromReflectedMethod(_add_method.handle());
@@ -114,7 +114,7 @@ JavaUDAFSharedContext::~JavaUDAFSharedContext() = default;
 JavaUDAFUniqueContext::~JavaUDAFUniqueContext() = default;
 
 int UDAFFunction::create() {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     jmethodID create = _ctx->ctx->create->get_method_id();
     auto obj = env->CallObjectMethod(_udaf_handle, create);
     LOCAL_REF_GUARD(obj);
@@ -123,7 +123,8 @@ int UDAFFunction::create() {
 }
 
 void UDAFFunction::destroy(int state) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID destory = _ctx->ctx->destory->get_method_id();
@@ -135,7 +136,7 @@ void UDAFFunction::destroy(int state) {
 
 jvalue UDAFFunction::finalize(int state) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID finalize = _ctx->ctx->finalize->get_method_id();
@@ -153,7 +154,7 @@ void AggBatchCallStub::batch_update_single(int num_rows, jobject state, jobject*
     for (int i = 0; i < cols; ++i) {
         jni_inputs[3 + i].l = input[i];
     }
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     env->CallStaticVoidMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()), jni_inputs);
     CHECK_UDF_CALL_EXCEPTION(env, _ctx);
 }
@@ -165,7 +166,7 @@ StatusOr<jobject> BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input
     for (int i = 0; i < cols; ++i) {
         jni_inputs[2 + i].l = input[i];
     }
-    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     auto res = env->CallStaticObjectMethodA(_stub_clazz.clazz(), env->FromReflectedMethod(_stub_method.handle()),
                                             jni_inputs);
     RETURN_ERROR_IF_JNI_EXCEPTION(env);
@@ -173,14 +174,15 @@ StatusOr<jobject> BatchEvaluateStub::batch_evaluate(int num_rows, jobject* input
 }
 
 void UDAFFunction::update(jvalue* val) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
     jmethodID update = _ctx->ctx->update->get_method_id();
     env->CallVoidMethodA(_udaf_handle, update, val);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
 
 void UDAFFunction::merge(int state, jobject buffer) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID merge = _ctx->ctx->merge->get_method_id();
@@ -189,7 +191,8 @@ void UDAFFunction::merge(int state, jobject buffer) {
 }
 
 void UDAFFunction::serialize(int state, jobject buffer) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID serialize = _ctx->ctx->serialize->get_method_id();
@@ -198,7 +201,8 @@ void UDAFFunction::serialize(int state, jobject buffer) {
 }
 
 int UDAFFunction::serialize_size(int state) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID serialize_size = _ctx->ctx->serialize_size->get_method_id();
@@ -208,7 +212,8 @@ int UDAFFunction::serialize_size(int state) {
 }
 
 void UDAFFunction::reset(int state) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID reset = _ctx->ctx->reset->get_method_id();
@@ -218,7 +223,8 @@ void UDAFFunction::reset(int state) {
 
 jobject UDAFFunction::window_update_batch(int state, int peer_group_start, int peer_group_end, int frame_start,
                                           int frame_end, int col_sz, jobject* cols) {
-    auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+    auto* env = JVMHelper::getInstance().getEnv();
+    auto& helper = JVMFunctionHelper::getInstance();
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
 

@@ -16,11 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+#include <string>
+
 #include "common/config_exec_fwd.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/java_env.h"
 #include "runtime/runtime_state.h"
+#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
@@ -427,6 +432,51 @@ TEST_F(JniScannerTest, test_close_without_jni_init) {
 
     // If we reach here, the test passed (no crash occurred)
     ASSERT_TRUE(true);
+}
+
+TEST_F(JniScannerTest, test_jvm_function_helper_registers_native_method_helper) {
+    if (std::getenv("JAVA_HOME") == nullptr) {
+        GTEST_SKIP() << "JAVA_HOME is not set";
+    }
+
+    JNIEnv* env = getJNIEnv();
+    if (env == nullptr) {
+        GTEST_SKIP() << "JVM is unavailable";
+    }
+
+    JVMFunctionHelper::getInstance();
+
+    auto take_exception_message = [&]() {
+        jthrowable thr = env->ExceptionOccurred();
+        if (thr == nullptr) {
+            return std::string();
+        }
+        std::string message = JVMHelper::getInstance().dumpExceptionString(thr);
+        env->ExceptionClear();
+        env->DeleteLocalRef(thr);
+        return message;
+    };
+
+    jclass native_method_helper = env->FindClass("com/starrocks/utils/NativeMethodHelper");
+    ASSERT_NE(nullptr, native_method_helper) << take_exception_message();
+
+    jmethodID malloc_method = env->GetStaticMethodID(native_method_helper, "memoryTrackerMalloc", "(J)J");
+    ASSERT_NE(nullptr, malloc_method) << take_exception_message();
+    jmethodID free_method = env->GetStaticMethodID(native_method_helper, "memoryTrackerFree", "(J)V");
+    ASSERT_NE(nullptr, free_method) << take_exception_message();
+
+    jlong address = env->CallStaticLongMethod(native_method_helper, malloc_method, static_cast<jlong>(8));
+    if (std::string message = take_exception_message(); !message.empty()) {
+        FAIL() << message;
+    }
+    ASSERT_NE(0, address);
+
+    env->CallStaticVoidMethod(native_method_helper, free_method, address);
+    if (std::string message = take_exception_message(); !message.empty()) {
+        FAIL() << message;
+    }
+
+    env->DeleteLocalRef(native_method_helper);
 }
 
 } // namespace starrocks
