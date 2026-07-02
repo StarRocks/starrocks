@@ -637,11 +637,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### jvm_call_thread_pool_size
 
-- 默认值：1
+- 默认值：4
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
-- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 清理任务与 Java UDF 执行竞争。
+- 描述：设置 JVM 调用 PriorityThreadPool 的大小，用于必须在 pthread 上执行的内部 JNI 工作，例如 HDFS/libhdfs close 和 stat 操作以及 JNI 全局引用清理。该线程池独立于 `udf_thread_pool_size`，避免通用 JVM 工作与 Java UDF 执行竞争。
 - 引入版本：-
 
 ### udf_thread_pool_size
