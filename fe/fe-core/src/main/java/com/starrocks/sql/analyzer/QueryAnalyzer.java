@@ -1603,7 +1603,7 @@ public class QueryAnalyzer {
                 // view created in previous use originField.getOriginExpression().type as column
                 // types in its schema, it is incorrect, so use originField.type instead.
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
-                        originField.getOriginExpression());
+                        originField.getOriginExpression(), true, originField.isNullable());
                 fields.add(field);
             }
 
