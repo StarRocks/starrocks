@@ -30,9 +30,10 @@ import com.starrocks.type.IntegerType;
 import java.util.List;
 import java.util.Map;
 
-public class IcebergV3LazyMaterializationSupport implements LazyMaterializationSupport {
+public class IcebergLazyMaterializationSupport implements LazyMaterializationSupport {
     private static final String ROW_SOURCE_ID = "_row_source_id";
     private static final String SCAN_RANGE_ID = "_scan_range_id";
+    private static final String ROW_POSITION = "_pos";
     private static final String ROW_ID = "_row_id";
     private static final String LAST_UPDATED_SEQUENCE_NUMBER = "_last_updated_sequence_number";
 
@@ -44,9 +45,11 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
             return false;
         }
 
-        // Iceberg V3 GLM uses _row_id as part of its internal row-position protocol for fetch/lookup.
-        // If the scan already exposes row lineage columns, they can conflict with these internal locator columns,
-        // so skip GLM for the whole scan.
+        // Row lineage columns (_row_id, _last_updated_sequence_number) cannot be read through the
+        // lookup node: IcebergConnectorScanRangeSource attaches their per-file metadata
+        // (first_row_id, the data-sequence-number extended-column value) to the scan tuple's slot
+        // ids only, so the same columns in the lookup tuple would silently resolve to NULL.
+        // Skip GLM for the whole scan instead.
         if (scanOperator.getColRefToColumnMetaMap().values().stream()
                 .anyMatch(column -> isRowLineageColumn(column.getName()))) {
             return false;
@@ -62,21 +65,21 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
 
     @Override
     public List<ColumnRefOperator> addRowIdColumns(PhysicalScanOperator scanOperator, ColumnRefFactory columnRefFactory) {
-        ColumnRefOperator rowIdColumnRef = null;
+        // The fetch key is (scan_range_id, file-local row position). _pos is the Iceberg
+        // row-position metadata column (MetadataColumns.ROW_POSITION), synthesized by the BE
+        // reader from the row's position in the data file, so it works for every Iceberg
+        // format version and does not depend on row lineage metadata.
+        ColumnRefOperator rowPosColumnRef = null;
         for (Map.Entry<ColumnRefOperator, Column> entry : scanOperator.getColRefToColumnMetaMap().entrySet()) {
-            ColumnRefOperator columnRefOperator = entry.getKey();
-            Column column = entry.getValue();
-            if (column.getName().equalsIgnoreCase(ROW_ID)) {
-                rowIdColumnRef = columnRefOperator;
+            if (entry.getValue().getName().equalsIgnoreCase(ROW_POSITION)) {
+                rowPosColumnRef = entry.getKey();
                 break;
             }
         }
-
-        if (rowIdColumnRef == null) {
-            Column rowIdColumn = new Column(ROW_ID, IntegerType.BIGINT, true);
-            ColumnRefOperator columnRefOperator = columnRefFactory.create(ROW_ID, IntegerType.BIGINT, true);
-            columnRefFactory.updateColumnRefToColumns(columnRefOperator, rowIdColumn, scanOperator.getTable());
-            rowIdColumnRef = columnRefOperator;
+        if (rowPosColumnRef == null) {
+            Column rowPosColumn = new Column(ROW_POSITION, IntegerType.BIGINT, true);
+            rowPosColumnRef = columnRefFactory.create(ROW_POSITION, IntegerType.BIGINT, true);
+            columnRefFactory.updateColumnRefToColumns(rowPosColumnRef, rowPosColumn, scanOperator.getTable());
         }
 
         // generate row source id to distinguish scan operator
@@ -88,7 +91,7 @@ public class IcebergV3LazyMaterializationSupport implements LazyMaterializationS
         ColumnRefOperator scanRangeIdColumnRef = columnRefFactory.create(SCAN_RANGE_ID, IntegerType.INT, true);
         columnRefFactory.updateColumnRefToColumns(scanRangeIdColumnRef, scanRangeIdColumn, scanOperator.getTable());
 
-        return List.of(rowSourceIdColumnRef, scanRangeIdColumnRef, rowIdColumnRef);
+        return List.of(rowSourceIdColumnRef, scanRangeIdColumnRef, rowPosColumnRef);
     }
 
     @Override

@@ -188,7 +188,7 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     if (!sparse_range.ok()) {
         LOG(WARNING) << "filter row group failed: " << sparse_range.status().message();
     } else if (sparse_range.value().has_value() && _group_reader_param.row_id_ranges == nullptr) {
-        // Iceberg v2 GLM positional fetch (row_id_ranges set): the native row-id range installed in
+        // Iceberg GLM positional fetch (row_id_ranges set): the native row-id range installed in
         // GroupReader::init is the exact set of rows to fetch and is authoritative. Skip predicate /
         // page-index pruning here so it cannot assign over (clobber) or drop that selection.
         if (sparse_range.value()->span_size() == 0) {
@@ -313,7 +313,7 @@ Status FileReader::_init_group_readers() {
             continue;
         }
 
-        // Iceberg v2 GLM lookup: skip row groups that hold none of the requested file-local positions.
+        // Iceberg GLM lookup: skip row groups that hold none of the requested file-local positions.
         if (_group_reader_param.row_id_ranges != nullptr) {
             SparseRange<uint64_t> rg_range(row_group_first_row,
                                            row_group_first_row + _file_metadata->t_metadata().row_groups[i].num_rows);

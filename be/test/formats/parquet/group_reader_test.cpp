@@ -2422,9 +2422,10 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     }
 }
 
-TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
-    // Legacy (non-lineage) GLM lookup: _row_id is the file-local row position. The read range is
-    // file-local, so a row group starting at row 7 must emit 7..10 for its first four rows.
+TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdStaysNullWithLocatorSlots) {
+    // The GLM locator is (scan_range_id, _pos); _row_id is never synthesized from the row
+    // position, so without real row lineage it stays NULL even when the GLM locator
+    // slots are present in the same scan.
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
@@ -2454,10 +2455,9 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ(7, column->get(0).get_int64());
-    ASSERT_EQ(8, column->get(1).get_int64());
-    ASSERT_EQ(9, column->get(2).get_int64());
-    ASSERT_EQ(10, column->get(3).get_int64());
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_TRUE(column->get(i).is_null());
+    }
 }
 
 TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {

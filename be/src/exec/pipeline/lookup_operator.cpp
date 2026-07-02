@@ -34,7 +34,6 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/scan/glm_manager.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
@@ -65,7 +64,7 @@ private:
     // collect input columns into one chunk
     Status _collect_input_columns(RuntimeState* state, const ChunkPtr& request_chunk);
 
-    StatusOr<LookUpTaskPtr> _create_task(RuntimeState* state, const LookUpTaskContextPtr& ctx);
+    StatusOr<LookUpTaskPtr> _create_task(const LookUpTaskContextPtr& ctx);
 
     LookUpTaskContextPtr _ctx;
     std::atomic_bool _is_running = false;
@@ -105,22 +104,13 @@ Status LookUpProcessor::_collect_input_columns(RuntimeState* state, const ChunkP
     return Status::OK();
 }
 
-StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(RuntimeState* state, const LookUpTaskContextPtr& ctx) {
+StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr& ctx) {
     auto tuple_id = ctx->request_tuple_id;
     auto row_pos_desc = _parent->_row_pos_descs.at(tuple_id);
     auto row_pos_type = row_pos_desc->type();
     switch (row_pos_type) {
-    case RowPositionDescriptor::Type::ICEBERG_V3: {
-        // Iceberg v1/v2 carry no row lineage: the fetch key is a plain (scan_range_id, file-local
-        // position), so route to the native-range v2 task. Real v3 row-lineage fetches keep the
-        // predicate-based path.
-        auto* glm = down_cast<IcebergGlobalLateMaterilizationContext*>(
-                state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(ctx->scan_id));
-        if (glm != nullptr && !glm->has_row_lineage()) {
-            return std::make_shared<IcebergV2LookUpTask>(ctx);
-        }
-        return std::make_shared<IcebergV3LookUpTask>(ctx);
-    }
+    case RowPositionDescriptor::Type::ICEBERG:
+        return std::make_shared<IcebergLookUpTask>(ctx);
     case RowPositionDescriptor::Type::LAKE_SCAN:
     case RowPositionDescriptor::Type::OLAP_SCAN: {
         ASSIGN_OR_RETURN(auto adaptor, create_look_up_tablet_adaptor(row_pos_type));
@@ -140,7 +130,7 @@ Status LookUpProcessor::process(RuntimeState* state) {
     });
     auto request_chunk = std::make_shared<Chunk>();
     RETURN_IF_ERROR(status = _collect_input_columns(state, request_chunk));
-    auto st = _create_task(state, _ctx);
+    auto st = _create_task(_ctx);
     if (!st.ok()) {
         status = st.status();
         return status;

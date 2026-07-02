@@ -4678,7 +4678,7 @@ public class PlanFragmentBuilder {
                                                                  List<SlotId> lookupRefSlots) {
             if (table instanceof IcebergTable) {
                 return new RowPositionDescriptor(
-                        RowPositionDescriptor.Type.ICEBERG_V3, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
+                        RowPositionDescriptor.Type.ICEBERG, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);
             } else if (table.isOlapTableOrMaterializedView()) {
                 return new RowPositionDescriptor(
                         RowPositionDescriptor.Type.OLAP_SCAN, scanNodeId, sourceNodeSlot, fetchRefSlots, lookupRefSlots);

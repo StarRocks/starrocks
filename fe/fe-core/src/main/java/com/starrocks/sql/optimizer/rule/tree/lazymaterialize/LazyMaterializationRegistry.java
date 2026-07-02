@@ -25,7 +25,7 @@ public class LazyMaterializationRegistry {
     private static final Map<Class<?>, LazyMaterializationSupport> HANDLERS = Maps.newHashMap();
 
     static {
-        HANDLERS.put(PhysicalIcebergScanOperator.class, new IcebergV3LazyMaterializationSupport());
+        HANDLERS.put(PhysicalIcebergScanOperator.class, new IcebergLazyMaterializationSupport());
         HANDLERS.put(PhysicalOlapScanOperator.class, new OlapScanLazyMaterializationSupport());
     }
 

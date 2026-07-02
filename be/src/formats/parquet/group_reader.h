@@ -117,8 +117,8 @@ struct GroupReaderParam {
     // _get_extended_bigint_value() to read extended_columns from the scan range.
     int32_t scan_range_id = -1;
     const THdfsScanRange* scan_range = nullptr;
-    // Iceberg v2 GLM lookup: file-local row positions to fetch; restricts which row groups and
-    // pages this reader touches (see HdfsScannerParams::row_id_ranges).
+    // Iceberg GLM lookup: file-local row positions to fetch; restricts which row groups and
+    // pages this reader touches (see HdfsScannerContext::row_id_ranges).
     const SparseRange<uint64_t>* row_id_ranges = nullptr;
 };
 

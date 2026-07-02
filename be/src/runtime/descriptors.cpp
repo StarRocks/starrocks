@@ -335,8 +335,8 @@ std::string RowPositionDescriptor::debug_string() const {
 RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool) {
     RowPositionDescriptor* desc = nullptr;
     switch (t_desc.row_position_type) {
-    case TRowPositionType::ICEBERG_V3_ROW_POSITION: {
-        desc = pool->add(new RowPositionDescriptor(RowPositionDescriptor::ICEBERG_V3, t_desc.scan_node_id,
+    case TRowPositionType::ICEBERG_ROW_POSITION: {
+        desc = pool->add(new RowPositionDescriptor(RowPositionDescriptor::ICEBERG, t_desc.scan_node_id,
                                                    t_desc.row_source_slot, t_desc.fetch_ref_slots,
                                                    t_desc.lookup_ref_slots));
         break;

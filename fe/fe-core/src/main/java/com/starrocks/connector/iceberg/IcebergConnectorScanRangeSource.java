@@ -393,7 +393,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             if (name.equalsIgnoreCase(ROW_ID)) {
                 continue;
             }
-            if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")) {
+            // GLM locator columns are reserved fields synthesized by BE.
+            if (name.equalsIgnoreCase("_row_source_id") || name.equalsIgnoreCase("_scan_range_id")
+                    || name.equalsIgnoreCase("_pos")) {
                 continue;
             }
             LiteralExpr value;
@@ -432,10 +434,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         // Only v3 files carry a real, globally-unique firstRowId; forward it so _row_id reads
         // resolve to the true row-lineage id. For v1/v2 there is no row lineage: leave first_row_id
-        // unset. GLM still works because BE synthesizes the file-local locator from the row position
-        // when the _scan_range_id/_row_source_id slots are present (its legacy-lookup path); a bare
-        // _row_id read without those slots then correctly stays NULL instead of fabricating per-file
-        // positions that repeat across files.
+        // unset, so a bare _row_id read correctly stays NULL instead of fabricating per-file
+        // positions that repeat across files. GLM does not depend on this field: its locator is
+        // the file-local row position (_pos).
         if (firstRowId != null) {
             hdfsScanRange.setFirst_row_id(firstRowId);
         }

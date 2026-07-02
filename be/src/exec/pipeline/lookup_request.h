@@ -99,7 +99,7 @@ public:
 protected:
     StatusOr<ChunkPtr> _sort_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& order_by_columns);
 
-    // Sorts the request positions by (scan_range_id, row_id) and folds them into one
+    // Sorts the request positions by (scan_range_id, row position) and folds them into one
     // SparseRange of row positions per scan range, recording duplicate-row replication
     // offsets so the fetched data can be expanded back to the request cardinality.
     StatusOr<ChunkPtr> _calculate_row_id_range(
@@ -110,33 +110,15 @@ protected:
     LookUpTaskContextPtr _ctx;
 };
 
-// Handles lookup batches against Iceberg v3 tables. The task expands the
-// incoming position metadata into row-id ranges, reads the matching rows from
-// storage, reorders them to the original request order, and forwards the data
-// back to every pending request context.
-class IcebergV3LookUpTask final : public LookUpTask {
+// Handles lookup batches against Iceberg tables. The fetch key is a
+// (scan_range_id, file-local row position): the task folds the requested positions
+// into a SparseRange per scan range and pushes it straight into the scan, so the
+// reader skips non-matching row groups and pages natively instead of evaluating
+// a row-id predicate.
+class IcebergLookUpTask final : public LookUpTask {
 public:
-    IcebergV3LookUpTask(LookUpTaskContextPtr ctx) : LookUpTask(std::move(ctx)) {}
-    ~IcebergV3LookUpTask() override = default;
-
-    Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
-
-private:
-    StatusOr<ChunkPtr> _get_data_from_storage(
-            RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
-            const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
-
-    TExpr create_row_id_filter_expr(SlotId slot_id, const SparseRange<int64_t>& row_id_range);
-};
-
-// Handles lookup batches against Iceberg v2 tables, where the fetch key is a
-// (scan_range_id, file-local row position). Unlike the v3 task, it does not encode
-// positions as a predicate: it pushes the row-id SparseRange straight into the scan
-// so the reader skips non-matching row groups and pages natively.
-class IcebergV2LookUpTask final : public LookUpTask {
-public:
-    IcebergV2LookUpTask(LookUpTaskContextPtr ctx) : LookUpTask(std::move(ctx)) {}
-    ~IcebergV2LookUpTask() override = default;
+    IcebergLookUpTask(LookUpTaskContextPtr ctx) : LookUpTask(std::move(ctx)) {}
+    ~IcebergLookUpTask() override = default;
 
     Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
 
