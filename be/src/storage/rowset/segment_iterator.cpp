@@ -1047,12 +1047,15 @@ Status SegmentIterator::_init_scan_range_and_context() {
     // index consumes predicates from the tree) and before _init_column_predicates (which splits
     // the tree into the read-loop copies the vector stage's pruning must precede).
     RETURN_IF_ERROR(_rewrite_predicates());
-    // Vector-index and data-sampling narrowing are already folded into the prepared pruned scan range at
-    // seed time (_get_prepared_pruned_row_ranges runs both), so re-applying them when a precomputed scan
-    // range is in use is redundant (and re-sampling an already-sampled range would be wrong); only run them
-    // when the scan range is computed from scratch.
+    // Data sampling must NOT re-run on a reused (precomputed) scan range: it is non-idempotent --
+    // re-sampling an already-sampled range shrinks it again -- so it is only run when the range is
+    // computed from scratch. Vector-index narrowing, in contrast, is always run: it is idempotent on a
+    // reused range (the ANN search is filtered by the current scan_range via DelIdFilter and the result
+    // is intersected, not overwritten), and it MUST run so each split child repopulates its per-iterator
+    // id2distance_map -- otherwise the distance lookup during read fails ("not found row id in distance
+    // map"). For non-vector scans it is a cheap no-op early-return.
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     if (_opts.read_state_cache.scan_range == nullptr) {
-        RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
         RETURN_IF_ERROR(_apply_data_sampling());
     }
     _init_column_predicates();
