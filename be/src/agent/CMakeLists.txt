@@ -50,7 +50,7 @@ target_link_libraries(AgentServer
             StoragePrimitive
             Runtime
             Platform
-            FSCore
+            FileSystem
             IO
             Common
             Base

@@ -621,6 +621,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列のZoneMapの最小/最大に使用されるプレフィックス長。
 - 導入バージョン: -
 
+### jvm_call_thread_pool_size
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: いいえ
+- 説明: pthread上で実行する必要がある内部JNI処理（HDFS/libhdfsのcloseおよびstat操作、JNIグローバル参照の解放など）に使用されるJVM呼び出しPriorityThreadPoolのサイズを設定します。このプールは`udf_thread_pool_size`とは独立しており、一般的なJVM処理がJava UDFの実行と競合しないようにします。
+- 導入バージョン: -
+
 ### udf_thread_pool_size
 
 - デフォルト: 1

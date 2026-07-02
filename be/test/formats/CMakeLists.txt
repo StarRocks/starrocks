@@ -72,7 +72,7 @@ set(FORMAT_TEST_LINK_LIBS
     FormatCore
     ExprCore
     Runtime
-    FSCore
+    FileSystem
     ChunkCore
     ColumnCore
     Types

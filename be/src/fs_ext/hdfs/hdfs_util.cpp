@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/hdfs/hdfs_util.h"
+#include "fs_ext/hdfs/hdfs_util.h"
 
 #include <hdfs/hdfs.h>
 

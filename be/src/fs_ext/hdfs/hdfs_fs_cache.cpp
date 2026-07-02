@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/hdfs/hdfs_fs_cache.h"
+#include "fs_ext/hdfs/hdfs_fs_cache.h"
 
 #include <memory>
 
 #include "common/config_hdfs_fwd.h"
 #include "fs/fs_options_helper.h"
-#include "fs/hdfs/hdfs_util.h"
+#include "fs_ext/hdfs/hdfs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/java/java_runtime.h"
 

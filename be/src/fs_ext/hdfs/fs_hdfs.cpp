@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/fs_hdfs.h"
 
 #include <fmt/format.h>
 #include <hdfs/hdfs.h>
@@ -23,17 +23,18 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_hdfs_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
-#include "exec/data_sinks/file_result_writer.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_registry.h"
 #include "fs/fs_scheme.h"
 #include "fs/fs_util.h"
-#include "fs/hdfs/hdfs_fs_cache.h"
-#include "fs/hdfs/hdfs_util.h"
+#include "fs_ext/hdfs/hdfs_fs_cache.h"
+#include "fs_ext/hdfs/hdfs_util.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/DataSinks_types.h"
 #include "gutil/strings/substitute.h"
-#include "udf/java/utils.h"
+#include "runtime/java/java_env.h"
 
 using namespace fmt::literals;
 
@@ -197,8 +198,13 @@ private:
     int64_t _file_size{0};
 };
 
+// TODO(HDFS/JNI): HDFS close/stat calls are still routed through a pthread boundary because
+// libhdfs JNI calls historically crashed when run from brpc bthreads (#6621/#6666/#6710).
+// Common cancel paths are mostly pthread-based now, but WritableFile::close() and destructors
+// still do not guarantee caller context. Revisit the JavaEnv JVM-call pool routing once all
+// HDFS close/stat callers enforce a pthread-only contract.
 HdfsInputStream::~HdfsInputStream() {
-    auto ret = call_hdfs_scan_function_in_pthread([this]() {
+    Status st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
         int r = _handle->close();
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _handle->getPath(), get_hdfs_err_msg());
@@ -207,7 +213,6 @@ HdfsInputStream::~HdfsInputStream() {
         }
         return Status::OK();
     });
-    Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _handle->getPath() << " failed";
 }
 
@@ -227,13 +232,12 @@ Status HdfsInputStream::seek(int64_t offset) {
 
 StatusOr<int64_t> HdfsInputStream::get_size() {
     if (_file_size == 0) {
-        auto ret = call_hdfs_scan_function_in_pthread([this] {
+        RETURN_IF_ERROR(JavaEnv::GetInstance()->call_function_in_pthread([this] {
             auto st = _handle->getSize();
             if (!st.ok()) return st.status();
             this->_file_size = st.value();
             return Status::OK();
-        });
-        RETURN_IF_ERROR(ret->get_future().get());
+        }));
     }
     return _file_size;
 }
@@ -250,7 +254,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
     auto statistics = std::make_unique<io::NumericStatistics>();
     io::NumericStatistics* stats = statistics.get();
-    auto ret = call_hdfs_scan_function_in_pthread([this, stats] {
+    Status st = JavaEnv::GetInstance()->call_function_in_pthread([this, stats] {
         hdfsFile file = _handle->getFile();
         if (file == nullptr) {
             return Status::OK();
@@ -283,7 +287,6 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
         }
         return Status::OK();
     });
-    Status st = ret->get_future().get();
     if (!st.ok()) return st;
     return std::move(statistics);
 }
@@ -360,7 +363,7 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     FileSystem::on_file_write_close(this);
-    auto ret = call_hdfs_scan_function_in_pthread([this]() {
+    Status st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
         FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
         int r = hdfsHSync(_fs, _file);
         TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
@@ -380,7 +383,6 @@ Status HDFSWritableFile::close() {
         }
         return st;
     });
-    Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
     _closed = true;
     return st;

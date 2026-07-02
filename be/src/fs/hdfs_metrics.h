@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include "fs/fs.h"
-
 namespace starrocks {
 
 struct HdfsReadMetricsKey {
@@ -27,21 +25,9 @@ struct HdfsReadMetricsKey {
     static constexpr const char* kTotalShortCircuitBytesRead = "TotalShortCircuitBytesRead";
     static constexpr const char* kTotalZeroCopyBytesRead = "TotalZeroCopyBytesRead";
 
-    // metrics for hedged read
     static constexpr const char* kTotalHedgedReadOps = "TotalHedgedReadOps";
     static constexpr const char* kTotalHedgedReadOpsInCurThread = "TotalHedgedReadOpsInCurThread";
     static constexpr const char* kTotalHedgedReadOpsWin = "TotalHedgedReadOpsWin";
 };
-
-std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options);
-
-namespace fs {
-
-struct FileSystemProvider;
-
-FileSystemProvider new_hdfs_fallback_file_system_provider(int priority = -100);
-FileSystemProvider new_hdfs_file_system_provider(int priority = 1000);
-
-} // namespace fs
 
 } // namespace starrocks

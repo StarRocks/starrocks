@@ -31,7 +31,7 @@ target_link_libraries(FormatCore PUBLIC
         ExecPrimitive
         ExprCore
         Runtime
-        FSCore
+        FileSystem
         ChunkCore
         ColumnCore
         Types

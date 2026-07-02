@@ -28,7 +28,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/reserved_columns.h"
-#include "fs/hdfs/fs_hdfs.h"
+#include "fs/hdfs_metrics.h"
 #include "io/compressed_input_stream.h"
 #include "storage/primitive/predicate_parser.h"
 

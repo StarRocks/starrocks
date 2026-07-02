@@ -37,6 +37,7 @@ public:
 protected:
     void _set_timezone(const std::string& timezone);
     jstring _get_timezone();
+    double _expected_time_seconds(jobject time_obj);
 
     JNIEnv* _env = nullptr;
     jstring _timezone;
@@ -96,6 +97,38 @@ void JavaUDFTest::_set_timezone(const std::string& timezone) {
     _env->DeleteLocalRef(tz_class);
 }
 
+double JavaUDFTest::_expected_time_seconds(jobject time_obj) {
+    jclass time_class = _env->FindClass("java/sql/Time");
+    EXPECT_TRUE(time_class != nullptr);
+    jmethodID get_time_mid = _env->GetMethodID(time_class, "getTime", "()J");
+    EXPECT_TRUE(get_time_mid != nullptr);
+    jlong millis = _env->CallLongMethod(time_obj, get_time_mid);
+
+    jclass helper_class = _env->FindClass("com/starrocks/udf/UDFHelper");
+    EXPECT_TRUE(helper_class != nullptr);
+    jfieldID time_zone_field = _env->GetStaticFieldID(helper_class, "timeZone", "Ljava/util/TimeZone;");
+    EXPECT_TRUE(time_zone_field != nullptr);
+    jobject time_zone = _env->GetStaticObjectField(helper_class, time_zone_field);
+    EXPECT_TRUE(time_zone != nullptr);
+    jclass time_zone_class = _env->FindClass("java/util/TimeZone");
+    EXPECT_TRUE(time_zone_class != nullptr);
+    jmethodID get_offset_mid = _env->GetMethodID(time_zone_class, "getOffset", "(J)I");
+    EXPECT_TRUE(get_offset_mid != nullptr);
+    jint offset = _env->CallIntMethod(time_zone, get_offset_mid, millis);
+
+    _env->DeleteLocalRef(time_zone_class);
+    _env->DeleteLocalRef(time_zone);
+    _env->DeleteLocalRef(helper_class);
+    _env->DeleteLocalRef(time_class);
+
+    int64_t seconds = (millis + offset) / 1000;
+    seconds %= 24 * 3600;
+    if (seconds < 0) {
+        seconds += 24 * 3600;
+    }
+    return static_cast<double>(seconds);
+}
+
 TEST_F(JavaUDFTest, test_time_convert) {
     jclass time_class = _env->FindClass("java/sql/Time");
     ASSERT_TRUE(time_class != NULL);
@@ -117,8 +150,9 @@ TEST_F(JavaUDFTest, test_time_convert) {
 
     auto& helper = JVMFunctionHelper::getInstance();
     ASSERT_OK(helper.get_result_from_boxed_array(TYPE_TIME, result_column.get(), time_array, 1));
-    // 1 * 3600 + 10 * 60 + 20 = 4220
-    ASSERT_EQ(result_column->debug_string(), "[4220]");
+    auto* nullable_column = down_cast<NullableColumn*>(result_column.get());
+    const auto* data_column = ColumnHelper::cast_to_raw<TYPE_TIME>(nullable_column->data_column_raw_ptr());
+    ASSERT_DOUBLE_EQ(_expected_time_seconds(time_obj), data_column->get_data()[0]);
 
     _env->DeleteLocalRef(time_obj);
     _env->DeleteLocalRef(time_array);

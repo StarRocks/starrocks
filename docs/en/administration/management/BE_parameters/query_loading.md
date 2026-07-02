@@ -640,11 +640,11 @@ This topic introduces the following types of BE configurations:
 
 ### jvm_call_thread_pool_size
 
-- Default: 1
+- Default: 4
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM cleanup does not compete with Java UDF execution.
+- Description: Sets the size of the JVM call PriorityThreadPool used for internal JNI work that must run on pthreads, such as HDFS/libhdfs close and stat operations and JNI global reference cleanup. This pool is separate from `udf_thread_pool_size` so generic JVM work does not compete with Java UDF execution.
 - Introduced in: -
 
 ### udf_thread_pool_size

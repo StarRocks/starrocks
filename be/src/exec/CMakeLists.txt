@@ -544,7 +544,7 @@ target_link_libraries(ExecRuntime PUBLIC
     ExprCore
     Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ColumnSortCore
     ChunkCore

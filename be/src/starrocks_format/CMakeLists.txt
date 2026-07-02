@@ -31,7 +31,6 @@ set(STARROCKS_LIBS
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     FileSystem
-    FSCore
     Formats
     Gutil
     IO

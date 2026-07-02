@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/hdfs/fs_hdfs.h"
-
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <filesystem>
 
+#include "base/bthreads/util.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "fs/fs_registry.h"
 #include "fs/fs_util.h"
-#include "fs/hdfs/hdfs_util.h"
+#include "fs_ext/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/hdfs_util.h"
+#include "runtime/java/java_env.h"
 
 namespace starrocks {
 
@@ -95,10 +99,57 @@ TEST_F(HdfsFileSystemTest, get_namenode_from_path) {
     EXPECT_TRUE(st.is_invalid_argument()) << st;
 }
 
+TEST_F(HdfsFileSystemTest, provider_construction) {
+    fs::FileSystemProviderRegistry registry;
+    auto status = registry.register_provider(fs::new_hdfs_fallback_file_system_provider());
+    ASSERT_TRUE(status.ok()) << status;
+    status = registry.register_provider(fs::new_hdfs_file_system_provider());
+    ASSERT_TRUE(status.ok()) << status;
+
+    const auto& frozen = registry.freeze();
+
+    auto hdfs = frozen.create_unique("hdfs://namenode:8020/path/to/file", FSOptions());
+    ASSERT_TRUE(hdfs.ok()) << hdfs.status();
+    ASSERT_EQ(FileSystem::HDFS, (*hdfs)->type());
+
+    auto fallback = frozen.create_unique("unknown1://path/to/file", FSOptions());
+    ASSERT_TRUE(fallback.ok()) << fallback.status();
+    ASSERT_EQ(FileSystem::HDFS, (*fallback)->type());
+}
+
 TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
     // NOTE: use separate thread to run the test case to avoid some weird tls memory issue introduced by JVM
     auto thread = std::thread([this] { create_file_and_destroy(); });
     thread.join();
+}
+
+TEST_F(HdfsFileSystemTest, close_writable_file_from_bthread) {
+    auto* java_env = JavaEnv::GetInstance();
+    if (java_env->jvm_call_pool() == nullptr) {
+        auto st = java_env->init();
+        ASSERT_TRUE(st.ok()) << st;
+    }
+
+    auto fs = new_fs_hdfs(FSOptions());
+    const std::string filepath = "file://" + _root_path + "/close_writable_file_from_bthread";
+    std::atomic<bool> ran_on_bthread = false;
+    Status close_status = Status::OK();
+
+    auto wfile = fs->new_writable_file(filepath);
+    ASSERT_TRUE(wfile.ok()) << wfile.status();
+    std::string payload = "hdfs writable close from bthread";
+    auto append_status = (*wfile)->append(Slice(payload));
+    ASSERT_TRUE(append_status.ok()) << append_status;
+
+    auto bthread_status = bthreads::start_bthread_and_join([&]() {
+        ran_on_bthread.store(bthread_self() != 0, std::memory_order_relaxed);
+        close_status = (*wfile)->close();
+    });
+    ASSERT_TRUE(bthread_status.ok()) << bthread_status;
+
+    ASSERT_TRUE(ran_on_bthread.load(std::memory_order_relaxed));
+    ASSERT_TRUE(close_status.ok()) << close_status;
+    ASSERT_TRUE(fs->new_sequential_file(filepath).ok());
 }
 
 TEST_F(HdfsFileSystemTest, create_file_with_open_truncate) {

@@ -18,4 +18,4 @@ ADD_BE_LIB(ModuleBootstrap
     fs_provider_bootstrap.cpp
 )
 
-target_link_libraries(ModuleBootstrap PUBLIC Common PRIVATE FileSystem FSCore ComputeEnv)
+target_link_libraries(ModuleBootstrap PUBLIC Common PRIVATE FileSystem HdfsFileSystem ComputeEnv)

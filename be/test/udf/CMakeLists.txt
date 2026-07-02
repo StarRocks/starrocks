@@ -12,25 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(BE_TEST_MACOS_LINK_STUBS)
-if (APPLE)
-    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
-endif()
-
-set(STORAGE_BASE_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    merge_iterator_test.cpp
-    row_source_mask_test.cpp
-    short_key_index_test.cpp
+set(UDF_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    python/env_test.cpp
+    java/java_data_converter_test.cpp
+    java/java_udf_test.cpp
 )
 
-set(STORAGE_BASE_TEST_LINK_LIBS
-    StorageBase
-    ComputeEnv
-    StoragePrimitive
+set(UDF_TEST_LINK_LIBS
+    Udf
+    ExprCore
+    Runtime
+    Platform
     FileSystem
     IO
-    Runtime
+    ColumnSortCore
     ChunkCore
     ColumnCore
     Types
@@ -38,6 +34,8 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
+    hdfs
+    jvm
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -47,8 +45,8 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_storage_base_test_objs OBJECT ${STORAGE_BASE_TEST_FILES})
-target_link_libraries(starrocks_storage_base_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_storage_base_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(storage_base_test $<TARGET_OBJECTS:starrocks_storage_base_test_objs>)
-target_link_libraries(storage_base_test ${STORAGE_BASE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_udf_test_objs OBJECT ${UDF_TEST_FILES})
+target_link_libraries(starrocks_udf_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_udf_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(udf_test udf_test_main.cpp $<TARGET_OBJECTS:starrocks_udf_test_objs>)
+target_link_libraries(udf_test ${UDF_TEST_LINK_LIBS})
