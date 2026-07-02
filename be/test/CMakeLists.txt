@@ -35,19 +35,7 @@ set(EXEC_FILES
         ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/iceberg_row_delta_sink_test.cpp
         ./connector_sink/sink_memory_manager_test.cpp
-        ./fs/azure/azblob_uri_test.cpp
-        ./fs/azure/fs_azblob_test.cpp
-        ./fs/azure/utils_test.cpp
-        ./fs/credential/cloud_configuration_factory_test.cpp
         ./platform/fs_broker_test.cpp
-        ./fs/fs_hdfs_test.cpp
-        ./fs/fs_posix_test.cpp
-        ./fs/fs_memory_test.cpp
-        ./fs/fs_s3_test.cpp
-        ./fs/fs_test.cpp
-        ./fs/output_stream_wrapper_test.cpp
-        ./fs/poco_http_client_test.cpp
-        ./fs/bundle_file_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
@@ -336,6 +324,7 @@ add_subdirectory(exprs)
 add_subdirectory(udf)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(fs_ext)
 add_subdirectory(platform)
 add_subdirectory(geo)
 add_subdirectory(cache)

@@ -39,6 +39,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "exprs",
     "formats",
     "fs",
+    "fs_ext",
     "gen_cpp",
     "geo",
     "gutil",

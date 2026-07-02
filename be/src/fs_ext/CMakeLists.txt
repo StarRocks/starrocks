@@ -12,33 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/fs_ext")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/fs_ext")
 
-set(FILESYSTEM_FILES
-    fs.cpp
-    encrypt_file.cpp
-    bundle_file.cpp
-    fd_cache.cpp
-    fs_options.cpp
-    fs_memory.cpp
-    fs_factory.cpp
-    fs_posix.cpp
-    fs_registry.cpp
-    fs_scheme.cpp
-    fs_util.cpp
-    fs_options_helper.cpp
-    fs_s3.cpp
-    azure/azblob_uri.cpp
-    azure/fs_azblob.cpp
-    azure/utils.cpp
-    credential/cloud_configuration_factory.cpp
-    )
-
-ADD_BE_LIB(FileSystem
-    ${FILESYSTEM_FILES}
+ADD_BE_LIB(HdfsFileSystem
+    hdfs/fs_hdfs.cpp
+    hdfs/hdfs_fs_cache.cpp
+    hdfs/hdfs_util.cpp
 )
 
-target_link_libraries(FileSystem PUBLIC IO)
+target_link_libraries(HdfsFileSystem PUBLIC FileSystem Runtime IO Common Base Gutil StarRocksGen hdfs jvm)

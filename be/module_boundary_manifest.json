@@ -67,12 +67,12 @@
       "forbidden_includes": [
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["Runtime", "FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Runtime", "FileSystem", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["cache_test"],
       "allowed_test_link_deps": [
         "Cache",
         "Runtime",
-        "FSCore",
+        "FileSystem",
         "IO",
         "Common",
         "Base",
@@ -107,7 +107,7 @@
       ],
       "forbidden_include_prefixes": ["service/", "service_be/", "agent/", "connector/"],
       "forbidden_includes": [],
-      "allowed_target_deps": ["Storage", "DataWorkflows", "Orchestration", "Runtime", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FSCore", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Storage", "DataWorkflows", "Orchestration", "Runtime", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FileSystem", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep BE HTTP pages, actions, download helpers, and web handlers in HttpService; keep reusable lower-level helpers in their owning modules such as Platform and Runtime."
@@ -126,35 +126,33 @@
       "remediation": "Keep IO free of higher FS/runtime/storage/exec/service code; move the dependency upward or add a lower-level interface."
     },
     {
-      "id": "fscore",
-      "doc_label": "FSCore",
-      "summary": "Minimal filesystem core on top of IO.",
-      "owned_targets": ["FSCore"],
+      "id": "filesystem",
+      "doc_label": "FileSystem",
+      "summary": "Filesystem module on top of IO, including core abstractions and non-JNI filesystem providers.",
+      "owned_targets": ["FileSystem"],
       "owned_globs": [
-        "be/src/fs/fs.*",
-        "be/src/fs/fd_cache.*",
-        "be/src/fs/encrypt_file.*",
-        "be/src/fs/bundle_file.*",
-        "be/src/fs/fs_options.*",
-        "be/src/fs/fs_memory.*",
-        "be/src/fs/fs_factory.*",
-        "be/src/fs/fs_posix.*",
-        "be/src/fs/fs_registry.*",
-        "be/src/fs/fs_scheme.*",
-        "be/src/fs/fs_util.*"
+        "be/src/fs/**"
       ],
       "allowed_include_prefixes": ["fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
-      "forbidden_includes": [
-        "fs/fs_options_helper.h",
-        "fs/fs_s3.h",
-        "fs/key_cache.h",
-        "fs/output_stream_adapter.h"
-      ],
+      "forbidden_include_prefixes": ["fs_ext/"],
+      "forbidden_includes": ["fs/key_cache.h"],
       "allowed_target_deps": ["IO", "Common", "Base", "Gutil"],
-      "allowed_test_targets": ["fs_core_test"],
-      "allowed_test_link_deps": ["FSCore", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep FSCore limited to IO plus core FS abstractions; move backend-specific behavior into FileSystem."
+      "allowed_test_targets": ["fs_test"],
+      "allowed_test_link_deps": ["FileSystem", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep FileSystem limited to IO plus filesystem code that does not require runtime/JNI integration; move runtime-backed filesystem providers to fs_ext."
+    },
+    {
+      "id": "hdfsfilesystem",
+      "doc_label": "HdfsFileSystem",
+      "summary": "HDFS filesystem extension above FileSystem for libhdfs/JNI runtime integration.",
+      "owned_targets": ["HdfsFileSystem"],
+      "owned_roots": ["be/src/fs_ext/hdfs"],
+      "allowed_include_prefixes": ["fs_ext/hdfs/", "fs/", "io/", "runtime/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "formats/", "http/", "module/", "platform/", "service/", "storage/", "tools/", "types/", "udf/"],
+      "allowed_target_deps": ["FileSystem", "Runtime", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["hdfs_filesystem_test"],
+      "allowed_test_link_deps": ["HdfsFileSystem", "FileSystem", "Runtime", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep HDFS-specific libhdfs/JNI integration in fs_ext; shared filesystem contracts belong in FileSystem."
     },
     {
       "id": "platform",
@@ -163,7 +161,7 @@
       "owned_targets": ["Platform"],
       "owned_roots": ["be/src/platform"],
       "allowed_include_prefixes": ["platform/", "fs/", "io/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["FSCore", "IO", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["FileSystem", "IO", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["platform_test"],
       "allowed_test_link_deps": ["Platform"],
       "remediation": "Keep Platform limited to reusable host, filesystem-adjacent, download, temp-file, environment, retry, HTTP primitive, and platform-level helpers; move runtime, exec, storage, and service integration upward."
@@ -318,7 +316,7 @@
     {
       "id": "formatcore",
       "doc_label": "FormatCore",
-      "summary": "Format-oriented core primitives above ComputeEnv, ExecPrimitive, ExprCore, Runtime, FSCore, ChunkCore, ColumnCore, and Types.",
+      "summary": "Format-oriented core primitives above ComputeEnv, ExecPrimitive, ExprCore, Runtime, FileSystem, ChunkCore, ColumnCore, and Types.",
       "owned_targets": ["FormatCore"],
       "owned_globs": [
         "be/src/formats/column_evaluator.*",
@@ -354,7 +352,7 @@
         "ExecPrimitive",
         "ExprCore",
         "Runtime",
-        "FSCore",
+        "FileSystem",
         "ChunkCore",
         "ColumnCore",
         "Types",
@@ -372,7 +370,7 @@
         "FormatCore",
         "ExprCore",
         "Runtime",
-        "FSCore",
+        "FileSystem",
         "ChunkCore",
         "ColumnCore",
         "Types",
@@ -427,7 +425,7 @@
       "forbidden_includes": ["exec/exec_env.h"],
       "allowed_target_deps": ["ComputeEnv", "StoragePrimitive", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["storage_base_test"],
-      "allowed_test_link_deps": ["StorageBase", "ComputeEnv", "StoragePrimitive", "FSCore", "IO", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["StorageBase", "ComputeEnv", "StoragePrimitive", "FileSystem", "IO", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep StorageBase limited to reusable storage algorithms and helpers that may depend on ComputeEnv; move concrete storage engine, tablet, rowset, lake, service, connector, cache, and full Exec integration upward."
     },
     {
@@ -469,7 +467,7 @@
       ],
       "forbidden_include_prefixes": ["service/", "connector/", "agent/"],
       "forbidden_includes": ["exec/exec_env.h"],
-      "allowed_target_deps": ["StorageBase", "StoragePrimitive", "ExecPrimitive", "ComputeEnv", "Cache", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["StorageBase", "StoragePrimitive", "ExecPrimitive", "ComputeEnv", "Cache", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep Storage limited to the concrete storage engine over ComputeEnv's dependency closure plus StorageBase/StoragePrimitive and Platform HTTP helpers; move Exec, Service, Connector, Agent, and DataWorkflows orchestration upward and route ExecEnv access through injected dependencies."
@@ -511,9 +509,9 @@
       ],
       "forbidden_include_prefixes": ["exec/", "storage/", "service/", "connector/", "agent/"],
       "forbidden_includes": ["exec/exec_env.h"],
-      "allowed_target_deps": ["Cache", "StoragePrimitive", "ExecPrimitive", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Cache", "StoragePrimitive", "ExecPrimitive", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["compute_env_test", "compute_env_sorting_test"],
-      "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "Runtime", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ComputeEnv", "ExprCore", "Runtime", "FileSystem", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ComputeEnv limited to process-scoped compute resources, StarOS/Starlet worker runtime, load-path management without ExecEnv or concrete storage engine coupling, query-scoped scan coordination helpers without concrete scan/storage policy, query-cache primitives without concrete storage policy, WorkGroup scheduling/executor resources, shared compute-side service contracts, stable execution primitives, reusable compute-side sorting algorithms, StarCache coordination, and spill infrastructure; move concrete Exec, Storage, Service, Connector, and Agent integration upward."
     },
     {
@@ -558,7 +556,7 @@
         "ExecRuntime",
         "StoragePrimitive",
         "Platform",
-        "FSCore",
+        "FileSystem",
         "IO",
         "Common",
         "Base",
@@ -610,7 +608,7 @@
         "Runtime",
         "Runtime",
         "Platform",
-        "FSCore",
+        "FileSystem",
         "IO",
         "ChunkCore",
         "ColumnCore",
@@ -634,7 +632,7 @@
         "Runtime",
         "Runtime",
         "Platform",
-        "FSCore",
+        "FileSystem",
         "IO",
         "ChunkCore",
         "ColumnCore",
@@ -697,9 +695,9 @@
       "owned_targets": ["Udf"],
       "owned_roots": ["be/src/udf"],
       "allowed_include_prefixes": ["udf/", "exprs/", "runtime/", "platform/", "fs/", "io/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["udf_test"],
-      "allowed_test_link_deps": ["Udf", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["Udf", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep UDF runtime helpers limited to expression-facing UDF execution, Java/Python conversion, worker management, and the ExprCore/Runtime/Platform dependency closure; move broader execution, storage, service, or connector orchestration upward."
     },
     {
@@ -809,9 +807,9 @@
         "exec/pipeline/scan/morsel.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["exec_runtime_test"],
-      "allowed_test_link_deps": ["ExecRuntime", "ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ExecRuntime", "ComputeEnv", "ExecPrimitive", "StoragePrimitive", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward."
     },
     {
@@ -989,6 +987,7 @@
       "allowed_include_prefixes": [
         "module/",
         "fs/",
+        "fs_ext/hdfs/",
         "compute_env/staros/starlet_filesystem.h",
         "common/",
         "base/",
@@ -996,7 +995,7 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
-      "allowed_target_deps": ["FileSystem", "FSCore", "ComputeEnv", "Common"],
+      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Common"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."
     },
     {
@@ -1130,7 +1129,6 @@
         "Common",
         "Cache",
         "IO",
-        "FSCore",
         "FileSystem",
         "Platform",
         "Types",
@@ -1221,7 +1219,6 @@
         "Storage",
         "StoragePrimitive",
         "StorageBase",
-        "FSCore",
         "FileSystem",
         "IO",
         "HttpService",

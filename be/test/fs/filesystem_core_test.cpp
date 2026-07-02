@@ -53,7 +53,7 @@ private:
     uint64_t _size = 0;
 };
 
-TEST(FSCoreTest, random_access_file_from_sets_encryption_flag) {
+TEST(FileSystemCoreTest, random_access_file_from_sets_encryption_flag) {
     std::string content = "0123456789";
     auto stream = std::make_unique<io::ArrayInputStream>(content.data(), static_cast<int64_t>(content.size()));
 
@@ -65,11 +65,11 @@ TEST(FSCoreTest, random_access_file_from_sets_encryption_flag) {
     ASSERT_TRUE(file->is_encrypted());
 }
 
-TEST(FSCoreTest, file_write_history_tracks_open_and_close) {
+TEST(FileSystemCoreTest, file_write_history_tracks_open_and_close) {
     const int64_t old_history_size = config::file_write_history_size;
     config::file_write_history_size = 16;
 
-    MockWritableFile file("fs_core_test_file");
+    MockWritableFile file("filesystem_core_test_file");
     ASSERT_OK(file.append(Slice("abc")));
 
     FileSystem::on_file_write_open(&file);
@@ -79,14 +79,14 @@ TEST(FSCoreTest, file_write_history_tracks_open_and_close) {
     FileSystem::get_file_write_history(&stats);
 
     auto it = std::find_if(stats.begin(), stats.end(), [](const FileWriteStat& stat) {
-        return stat.path == "fs_core_test_file" && stat.size == 3 && stat.close_time >= stat.open_time;
+        return stat.path == "filesystem_core_test_file" && stat.size == 3 && stat.close_time >= stat.open_time;
     });
     ASSERT_TRUE(it != stats.end());
 
     config::file_write_history_size = old_history_size;
 }
 
-TEST(FSCoreTest, factory_uses_default_posix_registry) {
+TEST(FileSystemCoreTest, factory_uses_default_posix_registry) {
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSERT_EQ(FileSystem::POSIX, fs->type());
 }

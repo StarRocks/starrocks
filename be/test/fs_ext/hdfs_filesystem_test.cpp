@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "fs/hdfs/fs_hdfs.h"
-
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
@@ -23,8 +21,10 @@
 #include "base/bthreads/util.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "fs/fs_registry.h"
 #include "fs/fs_util.h"
-#include "fs/hdfs/hdfs_util.h"
+#include "fs_ext/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/hdfs_util.h"
 #include "runtime/java/java_env.h"
 
 namespace starrocks {
@@ -97,6 +97,24 @@ TEST_F(HdfsFileSystemTest, get_namenode_from_path) {
 
     st = get_namenode_from_path("hdfs://namenode:8020", &namenode);
     EXPECT_TRUE(st.is_invalid_argument()) << st;
+}
+
+TEST_F(HdfsFileSystemTest, provider_construction) {
+    fs::FileSystemProviderRegistry registry;
+    auto status = registry.register_provider(fs::new_hdfs_fallback_file_system_provider());
+    ASSERT_TRUE(status.ok()) << status;
+    status = registry.register_provider(fs::new_hdfs_file_system_provider());
+    ASSERT_TRUE(status.ok()) << status;
+
+    const auto& frozen = registry.freeze();
+
+    auto hdfs = frozen.create_unique("hdfs://namenode:8020/path/to/file", FSOptions());
+    ASSERT_TRUE(hdfs.ok()) << hdfs.status();
+    ASSERT_EQ(FileSystem::HDFS, (*hdfs)->type());
+
+    auto fallback = frozen.create_unique("unknown1://path/to/file", FSOptions());
+    ASSERT_TRUE(fallback.ok()) << fallback.status();
+    ASSERT_EQ(FileSystem::HDFS, (*fallback)->type());
 }
 
 TEST_F(HdfsFileSystemTest, create_file_and_destroy) {

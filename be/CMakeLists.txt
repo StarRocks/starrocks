@@ -551,7 +551,6 @@ set(STARROCKS_LINK_LIBS
     ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
-    FileSystem
     Formats
     Orchestration
     DataWorkflows
@@ -569,12 +568,13 @@ set(STARROCKS_LINK_LIBS
     Udf
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
+    $<TARGET_FILE:HdfsFileSystem>
     Runtime
     Platform
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:Types>
-    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:FileSystem>
     $<TARGET_FILE:IO>
     Geo
     $<TARGET_FILE:Common>
@@ -971,6 +971,7 @@ add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
 add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/fs_ext)
 add_subdirectory(${SRC_DIR}/module)
 add_subdirectory(${SRC_DIR}/exec)
 add_subdirectory(${SRC_DIR}/exprs)

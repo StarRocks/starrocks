@@ -24,7 +24,7 @@ set(UDF_TEST_LINK_LIBS
     ExprCore
     Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ColumnSortCore
     ChunkCore
