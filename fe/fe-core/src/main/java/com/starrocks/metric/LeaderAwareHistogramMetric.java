@@ -27,11 +27,7 @@ public class LeaderAwareHistogramMetric extends HistogramMetric {
     private volatile boolean isLeader;
 
     public LeaderAwareHistogramMetric(String name) {
-        this(name, Metric.MetricUnit.MILLISECONDS);
-    }
-
-    public LeaderAwareHistogramMetric(String name, Metric.MetricUnit unit) {
-        super(name, unit);
+        super(name);
         this.isLeader = GlobalStateMgr.getCurrentState().isLeader();
         addLabel(getLeaderLabel(isLeader));
     }
