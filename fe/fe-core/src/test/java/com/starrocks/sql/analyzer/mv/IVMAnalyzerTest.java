@@ -158,6 +158,70 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     }
 
     /**
+     * A bare union-aggregate select item collapses to a single column: the state IS the visible
+     * output, so no hidden __AGG_STATE_ copy is stored. Creating the MV runs the CREATE-time
+     * trial, so this also exercises IvmRewriter.bindStateColumnsForAggregate end to end.
+     */
+    @Test
+    public void testUnionAggregateCollapsesStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_union(bitmap_hash(c1)) AS b "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse");
+            Column collapsed = mv.getColumn("b");
+            assertTrue(collapsed != null && !collapsed.isHidden(), "collapsed union column must be visible");
+            for (Column c : mv.getFullSchema()) {
+                assertFalse(c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX),
+                        "collapsed union MV must have no hidden state copy, got: " + c.getName());
+            }
+        });
+    }
+
+    /** Mixed aggregates: only the finalizable one keeps a hidden state column; unions collapse. */
+    @Test
+    public void testMixedAggregatesKeepOnlyFinalizableStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse_mixed "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, hll_union(hll_hash(c1)) AS h, sum(c1) AS ss, bitmap_union(bitmap_hash(c1)) AS b "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse_mixed");
+            long hiddenStates = mv.getFullSchema().stream()
+                    .filter(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX))
+                    .count();
+            assertEquals(1, hiddenStates, "only sum must keep a hidden state column");
+            assertTrue(mv.getFullSchema().stream()
+                            .anyMatch(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX + "_sum")),
+                    "the hidden state column must belong to sum");
+            assertFalse(mv.getColumn("h").isHidden(), "collapsed hll_union column must be visible");
+            assertFalse(mv.getColumn("b").isHidden(), "collapsed bitmap_union column must be visible");
+        });
+    }
+
+    /** A wrapped union (bitmap_count(bitmap_union(...))) cannot collapse: the visible output is the
+     *  finalized count, so the hidden state column must stay. */
+    @Test
+    public void testWrappedUnionAggregateKeepsStateColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_collapse_wrapped "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, bitmap_count(bitmap_union(bitmap_hash(c1))) AS cnt "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_collapse_wrapped");
+            assertFalse(mv.getColumn("cnt").isHidden(), "finalized count column must be visible");
+            assertTrue(mv.getFullSchema().stream()
+                            .anyMatch(c -> c.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX + "_bitmap_union")
+                                    && c.isHidden()),
+                    "wrapped union must keep its hidden state column");
+        });
+    }
+
+    /**
      * GROUP BY without aggregates (a DISTINCT-on-keys MV) must yield QUERY_COMPUTED, not
      * AUTO_INCREMENT — otherwise the MV row-id type disagrees with the refresh plan.
      */
