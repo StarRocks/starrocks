@@ -684,7 +684,7 @@ partition_name:
   - 現在、Leader FE ノードのみが ANALYZE タスクをトリガーできます。
   - システムは Hive および Iceberg テーブルのパーティション変更のみをチェックし、データが変更されたパーティションの統計情報のみを収集します。Delta Lake/Hudi テーブルの場合、システムはテーブル全体の統計情報を収集します。
   - Iceberg テーブルに Partition Transforms が適用されている場合、`identity`、`year`、`month`、`day`、`hour` タイプの Transforms のみ統計情報の収集がサポートされています。
-  - Iceberg テーブルの Partition Evolution の統計情報の収集はサポートされていません。
+  - Iceberg テーブルの Partition Evolution に関する統計情報の収集は、バージョン 4.0 以降でサポートされています。
 
 以下の例は、Hive 外部カタログのデータベースで発生します。`default_catalog` から Hive テーブルの統計情報を収集したい場合は、テーブルを `[catalog_name.][database_name.]<table_name>` 形式で参照してください。
 
