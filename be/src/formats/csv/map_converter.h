@@ -33,6 +33,10 @@ public:
 private:
     bool validate(const Slice& s) const;
     bool split_map_key_value(Slice s, std::vector<Slice>& keys, std::vector<Slice>& values) const;
+    // Hive text map (LazyMap): no braces or quotes; entries split on this nesting
+    // level's separator and each entry splits at the first occurrence of the next
+    // level's separator (top level: collection delimiter / mapkey delimiter).
+    bool read_hive_map(Column* column, const Slice& s, const Options& options) const;
     std::unique_ptr<Converter> _key_converter;
     std::unique_ptr<Converter> _value_converter;
     char _map_delimiter{','};

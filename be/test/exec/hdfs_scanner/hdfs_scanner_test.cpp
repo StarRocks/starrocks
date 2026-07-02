@@ -2580,8 +2580,12 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         EXPECT_TRUE(status.ok());
         EXPECT_EQ(2, chunk->num_rows());
 
-        EXPECT_EQ("[1, [NULL,NULL], [NULL,NULL,NULL]]", chunk->debug_row(0));
-        EXPECT_EQ("[2, [NULL], [NULL,NULL]]", chunk->debug_row(1));
+        // Struct is still unsupported (DefaultValueConverter -> NULL). Maps now parse
+        // as Hive text maps: each "map" element has no kv separator, so it becomes a
+        // single entry whose key ("map") fails the int conversion (-> NULL) and whose
+        // value is missing (-> NULL).
+        EXPECT_EQ("[1, [NULL,NULL], [{NULL:NULL},{NULL:NULL},{NULL:NULL}]]", chunk->debug_row(0));
+        EXPECT_EQ("[2, [NULL], [{NULL:NULL},{NULL:NULL}]]", chunk->debug_row(1));
 
         scanner->close();
     }

@@ -14,8 +14,12 @@
 
 #include "formats/csv/map_converter.h"
 
+#include <string_view>
+#include <unordered_map>
+
 #include "column/map_column.h"
 #include "common/logging.h"
+#include "formats/csv/array_reader.h"
 
 namespace starrocks::csv {
 
@@ -104,7 +108,101 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
     return true;
 }
 
+bool MapConverter::read_hive_map(Column* column, const Slice& s, const Options& options) const {
+    // Separator layout follows Hive's LazySerDeParameters: a map at nesting level L
+    // splits entries on separator L and each entry splits at the FIRST occurrence of
+    // separator L+1. At the top level these are the collection delimiter and the
+    // mapkey delimiter.
+    char entry_delim = HiveTextArrayReader::get_collection_delimiter(options.array_hive_collection_delimiter,
+                                                                     options.array_hive_mapkey_delimiter,
+                                                                     options.array_hive_nested_level);
+    char kv_delim = HiveTextArrayReader::get_collection_delimiter(options.array_hive_collection_delimiter,
+                                                                  options.array_hive_mapkey_delimiter,
+                                                                  options.array_hive_nested_level + 1);
+
+    auto* map = down_cast<MapColumn*>(column);
+    auto* offsets = map->offsets_column_raw_ptr();
+    auto* keys = map->keys_column_raw_ptr();
+    auto* values = map->values_column_raw_ptr();
+    size_t old_size = keys->size();
+    DCHECK_EQ(old_size, offsets->get_data().back());
+    DCHECK_EQ(old_size, values->size());
+
+    // An empty field is an EMPTY map (matches Hive), not null: field-level null was
+    // already decided upstream against the "\N" literal.
+    std::vector<Slice> key_fields;
+    std::vector<Slice> value_fields;
+    std::vector<bool> has_value; // an entry without a kv separator has a null value
+    if (!s.empty()) {
+        size_t start = 0;
+        for (size_t i = 0; i <= s.size; i++) {
+            if (i < s.size && s[i] != entry_delim) {
+                continue;
+            }
+            Slice entry(s.data + start, i - start);
+            const char* sep = static_cast<const char*>(memchr(entry.data, kv_delim, entry.size));
+            if (sep == nullptr) {
+                key_fields.emplace_back(entry);
+                value_fields.emplace_back();
+                has_value.push_back(false);
+            } else {
+                key_fields.emplace_back(entry.data, sep - entry.data);
+                value_fields.emplace_back(sep + 1, entry.data + entry.size - (sep + 1));
+                has_value.push_back(true);
+            }
+            start = i + 1;
+        }
+    }
+
+    // Deduplicate keys the same way the default (brace) format below does -- the
+    // last occurrence wins -- which also matches Hive's map overwrite semantics.
+    // A key is unique iff its own index is the LAST index at which its content
+    // appears: one pass records each key's last-seen index (later duplicates
+    // overwrite earlier ones), a second pass checks each index against it -- O(n)
+    // instead of the O(n^2) pairwise comparison this replaces.
+    std::unordered_map<std::string_view, size_t> last_index_of_key;
+    last_index_of_key.reserve(key_fields.size());
+    for (size_t i = 0; i < key_fields.size(); ++i) {
+        last_index_of_key[std::string_view(key_fields[i].data, key_fields[i].size)] = i;
+    }
+    std::vector<bool> unique_keys(key_fields.size());
+    int unique_num = 0;
+    for (size_t i = 0; i < key_fields.size(); ++i) {
+        bool unique = last_index_of_key[std::string_view(key_fields[i].data, key_fields[i].size)] == i;
+        unique_num += unique;
+        unique_keys[i] = unique;
+    }
+
+    // A map at level L consumes separators L and L+1, so its keys/values parse at
+    // level L+2 (mirrors LazyFactory). Hive text has no quotes: use read_string.
+    Options sub_options = options;
+    sub_options.array_hive_nested_level += 2;
+    for (auto i = 0; i < key_fields.size(); ++i) {
+        if (unique_keys[i] && !_key_converter->read_string(keys, key_fields[i], sub_options)) {
+            keys->resize(old_size);
+            return false;
+        }
+    }
+    for (auto i = 0; i < value_fields.size(); ++i) {
+        if (!unique_keys[i]) {
+            continue;
+        }
+        bool ok = has_value[i] ? _value_converter->read_string(values, value_fields[i], sub_options)
+                               : values->append_nulls(1);
+        if (!ok) {
+            keys->resize(old_size);
+            values->resize(old_size);
+            return false;
+        }
+    }
+    offsets->append(old_size + unique_num);
+    return true;
+}
+
 bool MapConverter::read_string(Column* column, const Slice& s, const Options& options) const {
+    if (options.array_format_type == ArrayFormatType::kHive) {
+        return read_hive_map(column, s, options);
+    }
     if (!validate(s)) {
         return false;
     }
