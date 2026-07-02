@@ -55,7 +55,7 @@ Status NullableConverter::write_quoted_string(formats::FormattedOutputStream* os
 bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const {
     auto* nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
-    if (s == "\\N") {
+    if (!options.ignore_null_literal && s == "\\N") {
         return nullable_column->append_nulls(1);
     }
     auto* data = nullable_column->begin_append_not_default_value();
@@ -73,7 +73,7 @@ bool NullableConverter::read_string(Column* column, const Slice& s, const Option
     auto* nullable = down_cast<NullableColumn*>(column);
     auto* data = nullable->data_column_raw_ptr();
 
-    if (s == "\\N") {
+    if (!options.ignore_null_literal && s == "\\N") {
         return nullable->append_nulls(1);
     } else if (_base_converter->read_string(data, s, options)) {
         nullable->null_column_raw_ptr()->append(0);

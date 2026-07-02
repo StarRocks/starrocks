@@ -20,6 +20,40 @@
 
 namespace starrocks {
 
+// Per-line field-splitting result for the Hive text serdes. Field slices point
+// either into the source line or into |materialized|, which is reserved to the
+// line length up front so growth never reallocates (unescaping/unquoting only
+// ever shrinks data).
+struct HiveTextFields {
+    std::vector<Slice> fields;
+    std::vector<uint8_t> is_null; // LazySimpleSerDe: raw (pre-unescape) bytes matched "\N"
+    std::string materialized;     // storage for fields that needed unescape/unquote
+    bool all_null_row = false;    // OpenCSVSerde: opencsv's readNext() returned null
+
+    void reset(size_t line_len) {
+        fields.clear();
+        is_null.clear();
+        materialized.clear();
+        materialized.reserve(line_len);
+        all_null_row = false;
+    }
+};
+
+// Field splitting for ONE physical line of a LazySimpleSerDe (ESCAPED BY) table:
+// the escape character makes any following character literal (so an escaped
+// separator stays inside the field), and the null sequence "\N" is decided on the
+// RAW bytes BEFORE unescaping, exactly like Hive's LazyStruct/LazyPrimitive.
+void split_hive_lazy_simple_line(const Slice& line, char field_delim, char escape, HiveTextFields* out);
+
+// Field splitting for ONE physical line of an OpenCSVSerde table, byte-compatible
+// with the opencsv 2.3 parser bundled in Hive (validated against the exhaustive
+// fixture opencsv23_golden.tsv). Notable semantics: quotes toggle quote-mode even
+// mid-field; the escape character only escapes a following quote/escape and is
+// silently dropped otherwise (an escaped separator still splits!); a line ending
+// inside quotes keeps only the completed fields, or becomes an all-null row when
+// none completed; there is NO null literal ("\N" is data).
+void split_hive_open_csv_line(const Slice& line, char field_delim, char quote, char escape, HiveTextFields* out);
+
 // This class used by data lake(Hive, Iceberg,... etc), not for broker load.
 // Broker load plz refer to csv_scanner.cpp
 class HdfsTextScanner final : public HdfsScanner {
@@ -41,7 +75,10 @@ private:
     StatusOr<bool> _has_utf8_bom() const;
     Status _build_hive_column_name_2_index();
     Status _parse_csv(int chunk_size, ChunkPtr* chunk);
-    // Quote/escape-aware parsing path for OpenCSVSerde, backed by CSVReader::more_rows.
+    // Quote/escape-aware parsing path for OpenCSVSerde and for LazySimpleSerDe tables
+    // created with ESCAPED BY. Mirrors Hive's own layering: rows are split at physical
+    // line boundaries first (next_record), then the matching serde profile splits each
+    // line into fields (split_hive_open_csv_line / split_hive_lazy_simple_line).
     Status _parse_csv_v2(int chunk_size, ChunkPtr* chunk);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
@@ -49,8 +86,9 @@ private:
     std::string _field_delimiter;
     char _collection_delimiter;
     char _mapkey_delimiter;
-    // OpenCSVSerde quote/escape characters (0 means unset). When either is set,
-    // _use_v2 is true and parsing goes through _parse_csv_v2.
+    // Quote/escape characters (0 means unset): quote/escape from OpenCSVSerde, or
+    // escape.delim from LazySimpleSerDe (ESCAPED BY). When either is set, _use_v2 is
+    // true and parsing goes through _parse_csv_v2.
     char _enclose = 0;
     char _escape = 0;
     bool _use_v2 = false;

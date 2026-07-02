@@ -14,6 +14,7 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 
+#include <cstring>
 #include <unordered_map>
 
 #include "base/compression/compression_utils.h"
@@ -39,20 +40,11 @@ public:
         _row_delimiter_length = row_delimiter.size();
         _column_delimiter_length = column_separator.size();
         _need_probe_line_delimiter = need_probe_line_delimiter;
-        // Match Hive: a blank line is an all-null row, not a dropped row. Only affects the
-        // quote-aware more_rows (v2) path; the Record* (v1) path keeps empty rows already.
-        _parse_options.keep_empty_row = true;
     }
 
     Status reset(size_t offset, size_t remain_length);
 
     Status next_record(Record* record);
-
-    // Probe the row delimiter once before the more_rows state machine runs.
-    // more_rows reads _parse_options.row_delimiter directly and does NOT use the
-    // probing _find_line_delimiter, so when HMS did not provide an explicit
-    // line.delim we must detect it here ('\n', '\r\n', or a lone '\r') and fix it.
-    Status probe_row_delimiter();
 
 protected:
     Status _fill_buffer() override;
@@ -79,44 +71,6 @@ Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     _should_stop_scan = false;
     _should_stop_next = false;
     _buff.skip(_buff.limit() - _buff.position());
-    // Starting a fresh scan range: reset the consumed-byte counter so the
-    // _limit/_parsed_bytes boundary used by more_rows (v2 path) starts from zero,
-    // even if a probe read (e.g. UTF-8 BOM detection) advanced it earlier.
-    reset_parsed_bytes();
-    return Status::OK();
-}
-
-Status HdfsScannerCSVReader::probe_row_delimiter() {
-    // more_rows reads _parse_options.row_delimiter directly, so detect it here first.
-    // Read ahead (without consuming) across fills until a delimiter appears, and only
-    // disable probing once one is found: giving up after a single (possibly partial)
-    // fill would lock in the default '\n' and mis-parse CR-only/CRLF data. Bounded to the
-    // initial buffer -- if no delimiter is found within it (a row larger than the buffer,
-    // or a single-line input) the default '\n' is harmless and we stop.
-    while (true) {
-        if (_buff.available() == 0 && !_fill_buffer().ok()) {
-            break; // EOF, no data
-        }
-        // '\r\n' if the byte before '\n' is '\r' (avoids a stray '\r' on a column).
-        if (char* lf = _buff.find(csv::LINE_DELIM_LF, 0); lf != nullptr) {
-            _parse_options.row_delimiter =
-                    (lf > _buff.position() && *(lf - 1) == '\r') ? csv::LINE_DELIM_CR_LF : csv::LINE_DELIM_LF;
-            break;
-        }
-        // Commit to a lone '\r' only when it is not the last byte (or we are at EOF);
-        // otherwise its '\n' (for CRLF) may be unread, so fall through and read more.
-        if (char* cr = _buff.find(csv::LINE_DELIM_CR, 0);
-            cr != nullptr && (_should_stop_scan || cr != _buff.position() + _buff.available() - 1)) {
-            _parse_options.row_delimiter = csv::LINE_DELIM_CR;
-            break;
-        }
-        // No delimiter yet. Stop at EOF or when the buffer is full (keep the default).
-        if (_should_stop_scan || _buff.free_space() == 0 || !_fill_buffer().ok()) {
-            break;
-        }
-    }
-    _row_delimiter_length = _parse_options.row_delimiter.size();
-    _need_probe_line_delimiter = false;
     return Status::OK();
 }
 
@@ -216,6 +170,156 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
     }
 }
 
+void split_hive_lazy_simple_line(const Slice& line, char field_delim, char escape, HiveTextFields* out) {
+    out->reset(line.size);
+    const char* p = line.data;
+    const size_t n = line.size;
+    size_t start = 0;
+    bool escaped_field = false;
+    for (size_t i = 0; i <= n; i++) {
+        // Mirrors LazyStruct's separator scan: the escape makes the next byte
+        // literal; an escape that is the very last byte of the line escapes nothing.
+        if (i < n && p[i] == escape && i + 1 < n) {
+            escaped_field = true;
+            i++;
+            continue;
+        }
+        if (i < n && p[i] != field_delim) {
+            continue;
+        }
+        const char* f = p + start;
+        const size_t len = i - start;
+        // Null is decided on the RAW bytes BEFORE unescaping (LazyPrimitive checks
+        // its null sequence first): "\N" is null even though it unescapes to "N",
+        // while "\\N" unescapes to a literal "\N" string (audit case L9).
+        if (len == 2 && f[0] == '\\' && f[1] == 'N') {
+            out->fields.emplace_back();
+            out->is_null.push_back(1);
+        } else if (!escaped_field) {
+            out->fields.emplace_back(f, len);
+            out->is_null.push_back(0);
+        } else {
+            // Unescape into |materialized| (LazyUtils: a trailing escape inside the
+            // field stays literal).
+            const size_t mat_start = out->materialized.size();
+            for (size_t j = 0; j < len; j++) {
+                if (f[j] == escape && j + 1 < len) {
+                    j++;
+                }
+                out->materialized.push_back(f[j]);
+            }
+            out->fields.emplace_back(out->materialized.data() + mat_start, out->materialized.size() - mat_start);
+            out->is_null.push_back(0);
+        }
+        start = i + 1;
+        escaped_field = false;
+    }
+}
+
+// Returns the offset in [i, n) of the next `quote` or `escape` byte, or (only when
+// |stop_at_delim| is set, i.e. not currently inside quotes) the next `field_delim`
+// byte; returns n when none of them occur again. Lets split_hive_open_csv_line copy a
+// whole run of ordinary bytes in one std::string::append instead of one push_back per
+// byte -- the common case, since a quoted OpenCSVSerde field rarely embeds a quote or
+// escape.
+static size_t find_next_special(const char* p, size_t i, size_t n, char quote, char escape, char field_delim,
+                                bool stop_at_delim) {
+    size_t stop = n;
+    if (const void* f = memchr(p + i, quote, n - i)) {
+        stop = static_cast<size_t>(static_cast<const char*>(f) - p);
+    }
+    if (const void* f = memchr(p + i, escape, n - i)) {
+        stop = std::min(stop, static_cast<size_t>(static_cast<const char*>(f) - p));
+    }
+    if (stop_at_delim) {
+        if (const void* f = memchr(p + i, field_delim, n - i)) {
+            stop = std::min(stop, static_cast<size_t>(static_cast<const char*>(f) - p));
+        }
+    }
+    return stop;
+}
+
+void split_hive_open_csv_line(const Slice& line, char field_delim, char quote, char escape, HiveTextFields* out) {
+    out->reset(line.size);
+    if (line.size == 0) {
+        // opencsv's CSVReader sees no line at all for an empty row (readLine()
+        // returns null), so OpenCSVSerde gets readNext() == null: an all-null row.
+        out->all_null_row = true;
+        return;
+    }
+    const char* p = line.data;
+    const size_t n = line.size;
+    std::string& buf = out->materialized; // reserved to |n|: growth never reallocates
+    size_t tok_start = 0;                 // current token start inside |buf|
+    bool in_quotes = false;
+    bool in_field = false;
+    size_t i = 0;
+    while (i < n) {
+        const char c = p[i];
+        if (c == escape) {
+            // The escape only escapes a following quote/escape while inside a token
+            // or quotes; in every other position it is silently dropped, so an
+            // "escaped" separator still splits.
+            if ((in_quotes || in_field) && i + 1 < n && (p[i + 1] == quote || p[i + 1] == escape)) {
+                buf.push_back(p[i + 1]);
+                i++;
+            }
+            i++;
+        } else if (c == quote) {
+            if ((in_quotes || in_field) && i + 1 < n && p[i + 1] == quote) {
+                // Doubled quote -> one literal quote.
+                buf.push_back(quote);
+                i++;
+            } else {
+                // opencsv 2.3 quirk, kept bit-for-bit: a quote past index 2 that is
+                // not adjacent to a separator stays in the data -- unless the token
+                // so far is all whitespace (ignoreLeadingWhiteSpace default), which
+                // is discarded.
+                if (i > 2 && p[i - 1] != field_delim && i + 1 < n && p[i + 1] != field_delim) {
+                    bool all_ws = buf.size() > tok_start;
+                    for (size_t j = tok_start; all_ws && j < buf.size(); j++) {
+                        all_ws = (buf[j] == ' ' || buf[j] == '\t');
+                    }
+                    if (all_ws) {
+                        buf.resize(tok_start);
+                    } else {
+                        buf.push_back(c);
+                    }
+                }
+                in_quotes = !in_quotes;
+            }
+            in_field = !in_field;
+            i++;
+        } else if (c == field_delim && !in_quotes) {
+            out->fields.emplace_back(buf.data() + tok_start, buf.size() - tok_start);
+            out->is_null.push_back(0);
+            tok_start = buf.size();
+            in_field = false;
+            i++;
+        } else {
+            // Ordinary run: bulk-copy up to the next quote/escape (and up to the next
+            // delimiter, if one would end the field) in a single append rather than
+            // pushing byte by byte.
+            size_t stop = find_next_special(p, i, n, quote, escape, field_delim, /*stop_at_delim=*/!in_quotes);
+            buf.append(p + i, stop - i);
+            in_field = true;
+            i = stop;
+        }
+    }
+    if (in_quotes) {
+        // Unterminated quote: opencsv parks the in-progress token as "pending" and,
+        // with no further line to feed it, readNext() returns only the fields
+        // completed before the quote opened -- or null (all-null row) when none.
+        buf.resize(tok_start);
+        if (out->fields.empty()) {
+            out->all_null_row = true;
+        }
+        return;
+    }
+    out->fields.emplace_back(buf.data() + tok_start, buf.size() - tok_start);
+    out->is_null.push_back(0);
+}
+
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     const TTextFileDesc& text_file_desc = _scanner_ctx->scan_range->text_file_desc;
     RETURN_IF_ERROR(_setup_delimiter(text_file_desc));
@@ -276,10 +380,11 @@ Status HdfsTextScanner::_setup_delimiter(const TTextFileDesc& text_file_desc) {
         _mapkey_delimiter = csv::DEFAULT_MAPKEY_DELIM.front();
     }
 
-    // OpenCSVSerde carries a quote (enclose) and escape character. When either is
-    // present we must parse with the quote/escape-aware state machine instead of
-    // the naive split_record path, otherwise separators inside quoted fields are
-    // wrongly treated as column delimiters.
+    // OpenCSVSerde carries a quote (enclose) and escape character, and LazySimpleSerDe
+    // carries an escape character when the table was created with ESCAPED BY. When
+    // either is present we must parse with the quote/escape-aware state machine instead
+    // of the naive split_record path, otherwise separators inside quoted fields (or
+    // escaped separators like "a\,b") are wrongly treated as column delimiters.
     if (text_file_desc.__isset.enclose && text_file_desc.enclose != 0) {
         _enclose = static_cast<char>(text_file_desc.enclose);
     }
@@ -480,18 +585,19 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
     options.invalid_field_as_null = _invalid_field_as_null;
 
-    const size_t num_materialize_columns = _scanner_ctx->materialized_columns.size();
+    // The splitters below decide the null literal themselves (LazySimpleSerDe: raw
+    // pre-unescape "\N"; OpenCSVSerde: no null literal at all), so the converter's
+    // own "\N" check must never re-fire on field data.
+    options.ignore_null_literal = true;
+
+    const size_t num_materialize_columns = _scanner_ctx->format_scan_context.materialized_columns.size();
+    const char field_delim = _field_delimiter.front();
 
     size_t rows_read = 0;
-    CSVRow row;
+    HiveTextFields row;
     for (; rows_read < chunk_size; rows_read++) {
-        // next_record(CSVRow&) drives CSVReader::more_rows, which is quote/escape
-        // aware: separators inside enclosed fields are kept as data. We call it
-        // through the base CSVReader pointer because HdfsScannerCSVReader declares
-        // its own next_record(Record*), which would otherwise hide this overload.
-        // EOF is returned on its own call (with empty columns), exactly like the
-        // Record* path used by _parse_csv.
-        Status status = _reader->next_record(row);
+        CSVReader::Record record{};
+        Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
             break;
         } else if (!status.ok()) {
@@ -499,11 +605,7 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
             return status;
         }
 
-        // The parsed_start/parsed_end span (raw bytes including quotes and the row
-        // delimiter) is used only for whole-row UTF-8 validation.
-        const char* record_data = _reader->buffBasePtr() + row.parsed_start;
-        const size_t record_size = row.parsed_end - row.parsed_start;
-        bool validate_res = validate_utf8(record_data, record_size);
+        bool validate_res = validate_utf8(record.data, record.size);
         if (!validate_res && options.invalid_field_as_null) {
             VLOG_ROW << "Face csv invalidate UTF-8 character line, append default value for this line";
             chunk->get()->append_default();
@@ -512,18 +614,36 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
             return Status::InternalError("Face csv invalidate UTF-8 character line.");
         }
 
+        // Hive layering, reproduced exactly: rows were split at PHYSICAL line
+        // boundaries above (LineRecordReader runs before the serde, so quotes and
+        // escapes never span lines), and only now does the serde profile split this
+        // one line into fields.
+        if (_enclose != 0) {
+            split_hive_open_csv_line(record, field_delim, _enclose, _escape, &row);
+        } else {
+            split_hive_lazy_simple_line(record, field_delim, _escape, &row);
+        }
+        if (row.all_null_row) {
+            chunk->get()->append_default();
+            continue;
+        }
+
         // Fill materialize columns first, then fill partition column
         for (size_t j = 0; j < num_materialize_columns; j++) {
-            const auto& column_info = _scanner_ctx->materialized_columns[j];
+            const auto& column_info = _scanner_ctx->format_scan_context.materialized_columns[j];
 
             size_t chunk_index = column_info.idx_in_chunk;
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
             Column* column = _column_raw_ptrs[chunk_index];
-            if (csv_index < row.columns.size()) {
-                const CSVColumn& csv_column = row.columns[csv_index];
-                // Escaped/de-quoted column data lives in a separate buffer.
-                const char* base_ptr = csv_column.is_escaped_column ? _reader->escapeDataPtr() : _reader->buffBasePtr();
-                Slice field(base_ptr + csv_column.start_pos, csv_column.length);
+            if (csv_index < row.fields.size()) {
+                if (UNLIKELY(row.is_null[csv_index])) {
+                    if (!column->append_nulls(1)) {
+                        return Status::InternalError(strings::Substitute(
+                                "CSV parser failed to append null, column name is: $0", column_info.name()));
+                    }
+                    continue;
+                }
+                const Slice& field = row.fields[csv_index];
                 options.type_desc = &(column_info.slot_type());
                 if (!_converters[j]->read_string(column, field, options)) {
                     return Status::InternalError(
@@ -537,8 +657,8 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
         }
     }
 
-    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, rows_read));
-    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, rows_read));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
 
     // Check chunk's row number for each column
     chunk->get()->check_or_die();
@@ -571,24 +691,6 @@ Status HdfsTextScanner::_create_csv_reader() {
         } else {
             // reset offset
             RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
-        }
-    }
-
-    // The quote/escape-aware path parses rows via CSVReader::more_rows, which
-    // (1) enforces the scan-range boundary through _limit/_parsed_bytes rather
-    //     than the _remain_length bookkeeping that next_record(Record*) uses, and
-    // (2) reads _parse_options.row_delimiter directly instead of probing it via
-    //     _find_line_delimiter.
-    // Set up both here, before any record is parsed. The skip-first-record and
-    // skip-header steps below still go through next_record(Record*), which keeps
-    // _parsed_bytes consistent with set_limit (the skipped bytes belong to this
-    // range), mirroring the proven CSVScanner load path.
-    if (_use_v2) {
-        if (_compression_type == NO_COMPRESSION) {
-            reader->set_limit(scan_range->length - (has_utf8_bom ? 3 : 0));
-        }
-        if (_need_probe_line_delimiter) {
-            RETURN_IF_ERROR(reader->probe_row_delimiter());
         }
     }
 

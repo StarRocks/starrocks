@@ -82,6 +82,13 @@ public:
         // Control array nested level, used to generate collection delimiter in Hive.
         size_t array_hive_nested_level = 1;
 
+        // [Only used in Hive now!]
+        // True when the CSV reader already decided the null literal on the RAW
+        // (pre-unescape) bytes of this field, so NullableConverter must skip its own
+        // "\N" check: an escaped field like "\\N" unescapes to a literal "\N" string
+        // that would otherwise be mistaken for null.
+        bool ignore_null_literal = false;
+
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;
     };
