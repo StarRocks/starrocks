@@ -77,7 +77,7 @@ public class AgentTaskQueue {
 
     public static synchronized boolean addTask(AgentTask task) {
         // Source guard for leader demotion: once demoting, refuse to enqueue new agent tasks.
-        // Together with failAllPendingWaiters() (which drains what is already queued) this closes the
+        // Together with abandonInFlightTasks() (which drains what is already queued) this closes the
         // TOCTOU where a create-tablet started just after the drain would otherwise wait out its
         // timeout. The throw fails the doomed operation fast (its journal write would be fenced anyway).
         if (GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
@@ -272,15 +272,17 @@ public class AgentTaskQueue {
     }
 
     /**
-     * Leader-demotion drain: fail the completion latch of every in-flight agent task so any waiter
-     * (e.g. TabletTaskExecutor.waitForFinished waiting on a create-tablet latch) unblocks at once
-     * with {@code status} instead of waiting out its timeout. Snapshots under the queue lock, then
-     * cancels outside it, so we do not hold the global queue monitor across N latch operations
-     * (which would stall concurrent BE-response processing). Tasks without a latch are no-ops.
-     * Pairs with the addTask() demoting guard, which prevents new tasks from being enqueued after
-     * this runs.
+     * Leader-demotion drain: abandon every in-flight agent task. First fail each task's completion
+     * latch (if any) so waiters (e.g. TabletTaskExecutor.waitForFinished on a create-tablet latch)
+     * unblock at once with {@code status} and release their locks instead of waiting out a timeout;
+     * then drop all tasks from the queue so they do not leak across a demote/re-elect cycle - a
+     * demoting/follower leader no longer processes the BE reports that would normally remove them.
+     * Snapshots under the queue lock and cancels outside it, so the global queue monitor is not held
+     * across N latch operations (which would stall concurrent BE-response processing). Clearing the
+     * whole queue is safe because addTask() rejects new tasks while demoting, so nothing live is
+     * discarded here.
      */
-    public static void failAllPendingWaiters(Status status) {
+    public static void abandonInFlightTasks(Status status) {
         List<AgentTask> snapshot = Lists.newArrayList();
         synchronized (AgentTaskQueue.class) {
             for (Map<Long, AgentTask> signatureMap : tasks.values()) {
@@ -293,6 +295,10 @@ public class AgentTaskQueue {
             } catch (Throwable t) {
                 LOG.warn("failed to cancel pending waiter for agent task {}", task, t);
             }
+        }
+        synchronized (AgentTaskQueue.class) {
+            tasks.clear();
+            taskNum = 0;
         }
     }
 

@@ -495,21 +495,21 @@ public class AgentTaskTest {
     }
 
     @Test
-    public void testFailAllPendingWaitersReleasesLatch() {
+    public void testAbandonInFlightTasksReleasesLatchAndClearsQueue() {
         AgentTaskQueue.clearAllTasks();
         MarkedCountDownLatch<Long, Long> l = new MarkedCountDownLatch<>(1);
         l.addMark(backendId1, tabletId1);
         ((CreateReplicaTask) createReplicaTask).setLatch(l);
         AgentTaskQueue.addTask(createReplicaTask);
 
-        // Leader-demotion drain: fail every in-flight agent task latch so a waiter
-        // (e.g. TabletTaskExecutor.waitForFinished) unblocks at once with the demotion reason
-        // instead of waiting out its timeout.
-        AgentTaskQueue.failAllPendingWaiters(new Status(TStatusCode.CANCELLED, "leader is demoting"));
+        // Leader-demotion drain: fail every in-flight agent task latch (so a waiter such as
+        // TabletTaskExecutor.waitForFinished unblocks with the demotion reason instead of waiting out
+        // its timeout) AND drop the tasks from the queue so they do not leak across a demote/re-elect.
+        AgentTaskQueue.abandonInFlightTasks(new Status(TStatusCode.CANCELLED, "leader is demoting"));
 
         Assertions.assertEquals(0, l.getCount());
         Assertions.assertFalse(l.getStatus().ok());
-        AgentTaskQueue.clearAllTasks();
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 
     @Test

@@ -172,7 +172,7 @@ public abstract class AgentTask {
      * Release any waiter blocked on this task's completion latch, failing it with {@code status}.
      * Default no-op: most agent tasks have no waiter. Latch-holding subclasses (create-replica,
      * push, tablet-metadata-update, drop-auto-increment-map) override this so a leader demotion can
-     * abandon all in-flight agent tasks at once (see {@link AgentTaskQueue#failAllPendingWaiters})
+     * abandon all in-flight agent tasks at once (see {@link AgentTaskQueue#abandonInFlightTasks})
      * and unblock their waiters immediately, instead of each wait site polling for demotion.
      * Distinct from {@link #setFailed(boolean)} (per-task status flag consumed by ALTER jobs) and
      * from the per-mark countdown (per-replica success) - overriding those would break retry/quorum.
