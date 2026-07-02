@@ -41,6 +41,7 @@
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/java_udf_context.h"
 #include "udf/java/java_udf_reflection.h"
 #include "udf/java/utils.h"
 

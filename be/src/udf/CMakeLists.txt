@@ -23,6 +23,7 @@ set(UDF_FILES
   java/utils.cpp
   java/jvm_metrics.cpp
   java/java_udf.cpp
+  java/java_udf_context.cpp
   java/java_udf_reflection.cpp
   java/java_data_converter.cpp
   java/java_native_method.cpp

@@ -40,6 +40,7 @@
 #include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
+#include "udf/java/java_udf_context.h"
 #include "udf/java/type_traits.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \

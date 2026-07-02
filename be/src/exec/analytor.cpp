@@ -39,7 +39,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "udf/java/java_udf_context.h"
 #endif
 #include "udf/java/utils.h"
 
