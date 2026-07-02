@@ -55,6 +55,7 @@ set(RUNTIME_SRCS
     java/java_env.cpp
     java/java_global_ref.cpp
     java/java_runtime.cpp
+    java/native_method_helper.cpp
     java/jvm_metrics.cpp
     java/jvm_helper.cpp
     java/jvm_class.cpp

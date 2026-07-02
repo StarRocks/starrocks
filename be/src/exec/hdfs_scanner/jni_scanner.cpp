@@ -26,8 +26,9 @@
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/java/java_runtime.h"
+#include "runtime/java/jvm_helper.h"
+#include "runtime/java/native_method_helper.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
@@ -49,10 +50,8 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext
 
 Status JniScanner::do_open(RuntimeState* state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    // NativeMethodHelper registration still lives in JVMFunctionHelper. Initialize it
-    // before Java off-heap scanners call Platform.allocateMemory/freeMemory.
-    JVMFunctionHelper::getInstance();
     JNIEnv* env = JVMHelper::getInstance().getEnv();
+    RETURN_IF_ERROR(NativeMethodHelper::ensure_registered(env));
     RETURN_IF_ERROR(update_jni_scanner_params());
     if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));

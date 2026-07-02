@@ -34,6 +34,7 @@ set(RUNTIME_TEST_FILES
     java_env_test.cpp
     jvm_metrics_test.cpp
     jvm_helper_test.cpp
+    native_method_helper_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
     serde_core_test.cpp
