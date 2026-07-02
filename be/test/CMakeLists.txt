@@ -373,6 +373,7 @@ set(EXEC_FILES
         ./storage/size_tiered_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
+        ./storage/choose_inverted_index_query_type_test.cpp
         ./storage/chunk_helper_test.cpp
         ./storage/column_aggregator_test.cpp
         ./storage/column_predicate_test.cpp
