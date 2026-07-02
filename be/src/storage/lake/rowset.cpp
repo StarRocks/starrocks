@@ -382,6 +382,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         }
         // Owner tablet id for .vi naming: a segment shared across tablets after a split must
         // resolve the same .vi from every reader (see resolve_vector_index_owner_tablet_id).
+        // Filled only here: read() is the sole entry point that sets belonged_to_cloud_native,
+        // so only its iterators can reach the ANN-reader path that consumes this.
         seg_options.vector_index_tablet_id =
                 meta_pos < _metadata->segment_metas_size()
                         ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
@@ -481,10 +483,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
-        seg_options.vector_index_tablet_id =
-                meta_pos < _metadata->segment_metas_size()
-                        ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
-                        : tablet_id();
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -543,10 +541,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
-        seg_options.vector_index_tablet_id =
-                meta_pos < _metadata->segment_metas_size()
-                        ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
-                        : tablet_id();
         // Apply per-segment rowid range if provided
         if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
             seg_options.rowid_range_option = (*rowid_range_per_segment)[i];

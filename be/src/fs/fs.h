@@ -81,6 +81,11 @@ struct FileInfo {
     // rewrite), so the apply path can persist them into SegmentMetadataPB::vector_index_ids and
     // keep async builds / vacuum / reads in sync. Empty for files with no vector index.
     std::vector<int64_t> vector_index_ids;
+    // Tablet id under which this segment's .vi files were written; embedded in the .vi filename so
+    // it stays stable and reader-agnostic across tablet split (see the field comment on
+    // SegmentMetadataPB::vector_index_tablet_id). -1 when no vector index; otherwise set together
+    // with vector_index_ids and persisted into SegmentMetadataPB::vector_index_tablet_id.
+    int64_t vector_index_tablet_id = -1;
 
     // Cache key uniquely identifying this FileInfo as a *slice* of a physical file. Caches keyed
     // on file identity (e.g. lake metacache for Segments) must use this rather than `path` so two

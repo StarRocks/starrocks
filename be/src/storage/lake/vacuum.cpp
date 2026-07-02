@@ -1475,9 +1475,8 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
-            // Protect associated .vi files using per-segment vector index metadata. Named by the
-            // segment's recorded owner tablet id (not check_meta->id()) so a segment shared across
-            // tablets after a split is protected under the same .vi name every referencing tablet uses.
+            // Protect associated .vi files, named by the segment's recorded owner (not
+            // check_meta->id(): split-shared segments must be protected under the writer's name).
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
                     auto vi_name = gen_vector_index_filename_for_segment(segment_meta, check_meta->id(), vi_id);

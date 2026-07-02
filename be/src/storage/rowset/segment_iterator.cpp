@@ -1110,9 +1110,9 @@ Status SegmentIterator::_init_ann_reader() {
 #ifdef WITH_TENANN
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
-            // Use the segment's recorded owner tablet id (set from SegmentMetadataPB by Rowset) so a
-            // segment shared across tablets after a split resolves the same .vi; fall back to the
-            // reading tablet for segments written before vector_index_tablet_id existed.
+            // Owner tablet id for the .vi name, resolved from SegmentMetadataPB by lake
+            // Rowset::read() (today the only producer of belonged_to_cloud_native); the tablet_id
+            // arm only guards callers that never fill the option.
             const int64_t vi_tablet_id = _opts.vector_index_tablet_id >= 0 ? _opts.vector_index_tablet_id
                                                                            : static_cast<int64_t>(_opts.tablet_id);
             index_path = lake::gen_vector_index_path_from_segment_path(_segment->file_name(), vi_tablet_id,

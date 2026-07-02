@@ -192,9 +192,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
         }
-        // The dest segment is a brand-new file written by this tablet: drop any stale owner copied
-        // from the partial segment; fill_missing_vector_index_owner below stamps the publisher.
+        // Refresh the owning tablet id wholesale like vector_index_ids: the replace FileInfo
+        // carries the authoritative owner for the rewritten segment.
         segment_meta->clear_vector_index_tablet_id();
+        if (replace_seg.second.vector_index_tablet_id >= 0) {
+            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
+        }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
         // cross-publish, clear the flag so GC routes the rewrite file through the normal
@@ -215,9 +218,6 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         // children.
         tablet_reshard_helper::set_rowset_uid(rowset);
     }
-    // Sole producer of the owner id; must run after the replace block above, which rebuilds
-    // vector_index_ids and clears stale owners.
-    fill_missing_vector_index_owner(rowset, _tablet_meta->id());
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
@@ -746,8 +746,6 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         // 2. We need del files to rebuild cloud native PK index.
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
-        // Compaction outputs are written by this tablet; stamp the .vi owner id.
-        fill_missing_vector_index_owner(rowset, _tablet_meta->id());
         rowset->set_id(_tablet_meta->next_rowset_id());
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         rowset->set_version(_tablet_meta->version());
@@ -1211,18 +1209,6 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void fill_missing_vector_index_owner(RowsetMetadataPB* rowset, int64_t tablet_id) {
-    for (auto& segment_meta : *rowset->mutable_segment_metas()) {
-        // shared() means the segment reached this tablet via a tablet-split cross-publish and was
-        // written by another tablet; the local id is never a correct owner there (see the
-        // declaration comment in meta_file.h).
-        if (segment_meta.vector_index_ids_size() > 0 && !segment_meta.has_vector_index_tablet_id() &&
-            !segment_meta.shared()) {
-            segment_meta.set_vector_index_tablet_id(tablet_id);
-        }
-    }
-}
-
 void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
     // If this is the first call, copy rowset_pb directly
@@ -1293,9 +1279,11 @@ Status MetaFileBuilder::set_final_rowset() {
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
         }
-        // See apply_opwrite: drop any stale owner from the replaced segment;
-        // fill_missing_vector_index_owner below stamps the publisher.
+        // See apply_opwrite: refresh the owner from the replace FileInfo.
         segment_meta->clear_vector_index_tablet_id();
+        if (replace_seg.second.vector_index_tablet_id >= 0) {
+            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
+        }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.
         if (segment_meta->has_shared()) {
@@ -1313,9 +1301,6 @@ Status MetaFileBuilder::set_final_rowset() {
         // tablet and must not alias a sibling: mint a fresh uid.
         tablet_reshard_helper::set_rowset_uid(rowset);
     }
-    // Sole producer of the owner id; must run after the replace block above, which rebuilds
-    // vector_index_ids and clears stale owners.
-    fill_missing_vector_index_owner(rowset, _tablet_meta->id());
 
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());

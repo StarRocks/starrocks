@@ -45,9 +45,9 @@ struct SegmentFileInfo : public FileInfo {
 
     // Serialize this segment's full per-segment metadata into |segment_meta|: the file attributes
     // (filename, size, encryption_meta, bundle_file_offset), the sort-key fields, num_rows,
-    // vector_index_ids, and segment_idx. |segment_idx| is a required input (placed first so callers
-    // cannot forget it): a contiguous positional index at write time, or a sparse one after
-    // compaction/merge.
+    // vector_index_ids, vector_index_tablet_id, and segment_idx. |segment_idx| is a required input
+    // (placed first so callers cannot forget it): a contiguous positional index at write time, or a
+    // sparse one after compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 };
 

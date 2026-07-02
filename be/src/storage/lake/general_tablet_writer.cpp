@@ -321,6 +321,12 @@ void HorizontalGeneralTabletWriter::record_segment_vector_index_ids(SegmentFileI
     for (const auto& [index_id, _] : seg_writer->vector_index_file_paths()) {
         segment_file_info.vector_index_ids.push_back(index_id);
     }
+    // Record the tablet id that produced these .vi files (fill_vector_index_file_paths embeds it
+    // in the filename); readers must use this recorded id, not their own, so a segment shared
+    // across tablets after a split resolves the same .vi.
+    if (!segment_file_info.vector_index_ids.empty()) {
+        segment_file_info.vector_index_tablet_id = _tablet_id;
+    }
 }
 
 Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
@@ -496,6 +502,10 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
                     segment_file_info.vector_index_ids.push_back(index_id);
                 }
             }
+        }
+        // Record the owning tablet id for .vi naming, mirroring record_segment_vector_index_ids.
+        if (!segment_file_info.vector_index_ids.empty()) {
+            segment_file_info.vector_index_tablet_id = _tablet_id;
         }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());

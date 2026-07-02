@@ -868,11 +868,10 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(118, metadata->next_rowset_id());
 }
 
-// The publish funnel is the SOLE producer of SegmentMetadataPB::vector_index_tablet_id: writers
-// never set it; apply stamps the publishing tablet (= the tablet that wrote the segment) on every
-// segment recording vector_index_ids. Segments arriving from a tablet-split cross-publish
-// (shared=true) were written by ANOTHER tablet and must be carried verbatim.
-TEST_F(MetaFileTest, test_apply_opwrite_stamps_vector_index_owner) {
+// The partial-update replace path refreshes vector_index_tablet_id wholesale from the replace
+// FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
+// carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
+TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
     const int64_t tablet_id = 31003;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -884,37 +883,43 @@ TEST_F(MetaFileTest, test_apply_opwrite_stamps_vector_index_owner) {
     TxnLogPB_OpWrite op_write;
     auto* rowset = op_write.mutable_rowset();
     {
-        // ids recorded, no owner (the normal writer output): apply stamps the publishing tablet.
-        auto* plain = rowset->add_segment_metas();
-        plain->set_filename("plain.dat");
-        plain->add_vector_index_ids(100);
-        // pre-set owner (e.g. carried metadata): preserved, never overwritten.
-        auto* has_owner = rowset->add_segment_metas();
-        has_owner->set_filename("has_owner.dat");
-        has_owner->add_vector_index_ids(100);
-        has_owner->set_vector_index_tablet_id(9999);
-        // ids without owner but shared (split cross-publish): written by another tablet,
-        // stamping the local id would be wrong — must stay absent.
-        auto* shared_seg = rowset->add_segment_metas();
-        shared_seg->set_filename("shared.dat");
-        shared_seg->add_vector_index_ids(100);
-        shared_seg->set_shared(true);
-        // no vector indexes: no owner field at all.
-        auto* no_vi = rowset->add_segment_metas();
-        no_vi->set_filename("no_vi.dat");
+        // Replaced by a rewrite that recorded an owner: refreshed to the FileInfo's value.
+        auto* replaced = rowset->add_segment_metas();
+        replaced->set_filename("partial0.dat");
+        replaced->add_vector_index_ids(100);
+        // Replaced by a rewrite without vector indexes: the stale pre-set owner must be cleared.
+        auto* stale_owner = rowset->add_segment_metas();
+        stale_owner->set_filename("partial1.dat");
+        stale_owner->add_vector_index_ids(100);
+        stale_owner->set_vector_index_tablet_id(7777);
+        // Not replaced: carried verbatim.
+        auto* untouched = rowset->add_segment_metas();
+        untouched->set_filename("untouched.dat");
+        untouched->add_vector_index_ids(100);
+        untouched->set_vector_index_tablet_id(9999);
     }
 
-    builder.apply_opwrite(op_write, {}, {});
+    std::map<int, FileInfo> replace_segments;
+    FileInfo rewrite0{.path = "rewrite0.dat", .size = 1024};
+    rewrite0.vector_index_ids.push_back(100);
+    rewrite0.vector_index_tablet_id = tablet_id;
+    replace_segments[0] = rewrite0;
+    FileInfo rewrite1{.path = "rewrite1.dat", .size = 2048}; // no ids, no owner
+    replace_segments[1] = rewrite1;
+
+    builder.apply_opwrite(op_write, replace_segments, {});
 
     ASSERT_EQ(1, metadata->rowsets_size());
     const auto& written = metadata->rowsets(0);
-    ASSERT_EQ(4, written.segment_metas_size());
+    ASSERT_EQ(3, written.segment_metas_size());
+    EXPECT_EQ("rewrite0.dat", written.segment_metas(0).filename());
     ASSERT_TRUE(written.segment_metas(0).has_vector_index_tablet_id());
     EXPECT_EQ(tablet_id, written.segment_metas(0).vector_index_tablet_id());
-    ASSERT_TRUE(written.segment_metas(1).has_vector_index_tablet_id());
-    EXPECT_EQ(9999, written.segment_metas(1).vector_index_tablet_id());
-    EXPECT_FALSE(written.segment_metas(2).has_vector_index_tablet_id());
-    EXPECT_FALSE(written.segment_metas(3).has_vector_index_tablet_id());
+    EXPECT_EQ("rewrite1.dat", written.segment_metas(1).filename());
+    EXPECT_EQ(0, written.segment_metas(1).vector_index_ids_size());
+    EXPECT_FALSE(written.segment_metas(1).has_vector_index_tablet_id());
+    ASSERT_TRUE(written.segment_metas(2).has_vector_index_tablet_id());
+    EXPECT_EQ(9999, written.segment_metas(2).vector_index_tablet_id());
 }
 
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {

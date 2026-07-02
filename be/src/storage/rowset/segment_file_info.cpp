@@ -55,6 +55,11 @@ void SegmentFileInfo::to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_
     for (int64_t vi_id : vector_index_ids) {
         segment_meta->add_vector_index_ids(vi_id);
     }
+    // Record the owning tablet id for .vi naming (see SegmentMetadataPB.vector_index_tablet_id).
+    // Paired with vector_index_ids: only meaningful when this segment has vector indexes.
+    if (vector_index_tablet_id >= 0) {
+        segment_meta->set_vector_index_tablet_id(vector_index_tablet_id);
+    }
 }
 
 } // namespace starrocks
