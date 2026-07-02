@@ -140,6 +140,46 @@ public class HistogramStatisticsTest {
         between(columnRefOperator, "GE", 1, "LE", 1000, statistics, 1000);
     }
 
+    @Test
+    public void testColumnToConstantExcludesNullFraction() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
+
+        List<Bucket> bucketList = new ArrayList<>();
+        bucketList.add(new Bucket(1D, 10D, 100L, 20L));
+        bucketList.add(new Bucket(15D, 20D, 200L, 20L));
+        bucketList.add(new Bucket(21D, 36D, 300L, 20L));
+        bucketList.add(new Bucket(40D, 45D, 400L, 20L));
+        bucketList.add(new Bucket(46D, 46D, 500L, 100L));
+        bucketList.add(new Bucket(47D, 47D, 600L, 100L));
+        bucketList.add(new Bucket(48D, 60D, 700L, 20L));
+        bucketList.add(new Bucket(61D, 65D, 800L, 20L));
+        bucketList.add(new Bucket(66D, 99D, 900L, 20L));
+        bucketList.add(new Bucket(100D, 100D, 1000L, 100L));
+        Histogram histogram = new Histogram(bucketList, Maps.newHashMap());
+
+        double nullsFraction = 0.2;
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(1000);
+        builder.addColumnStatistic(columnRefOperator, ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(100)
+                .setNullsFraction(nullsFraction)
+                .setAverageRowSize(20)
+                .setDistinctValuesCount(20)
+                .setHistogram(histogram)
+                .build());
+        Statistics statistics = builder.build();
+
+        check(columnRefOperator, "GT", 10, statistics, 720);
+        check(columnRefOperator, "GT", 20, statistics, 640);
+        check(columnRefOperator, "GT", 99, statistics, 80);
+        check(columnRefOperator, "GE", 10, statistics, 736);
+        check(columnRefOperator, "LT", 10, statistics, 64);
+        check(columnRefOperator, "LT", 20, statistics, 144);
+        check(columnRefOperator, "LE", 10, statistics, 80);
+        check(columnRefOperator, "LE", 20, statistics, 160);
+    }
+
     void check(ColumnRefOperator columnRefOperator, String type, int constant, Statistics statistics, int rowCount) {
         BinaryPredicateOperator binaryPredicateOperator
                 = new BinaryPredicateOperator(BinaryType.valueOf(type),
@@ -421,6 +461,30 @@ public class HistogramStatisticsTest {
 
         Assertions.assertFalse(Double.isNaN(estimated.getOutputRowCount()));
         Assertions.assertEquals(3L, estimated.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testColumnNotEqualToConstantExcludesNullRows() {
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("10", 236L);
+        Histogram histogram = new Histogram(new ArrayList<>(), mcv);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
+        ColumnStatistic columnStatistic = new ColumnStatistic(1, 1000, 0.2, 8, 62,
+                histogram, ColumnStatistic.StatisticType.ESTIMATE);
+
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(columnRefOperator, columnStatistic)
+                .build();
+
+        BinaryPredicateOperator ne = new BinaryPredicateOperator(
+                BinaryType.NE, columnRefOperator, ConstantOperator.createBigint(10));
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator), columnStatistic, ne,
+                Optional.of(ConstantOperator.createBigint(10)), statistics);
+
+        Assertions.assertEquals(564L, estimated.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(0.0, estimated.getColumnStatistic(columnRefOperator).getNullsFraction(), 0.001);
     }
 
 

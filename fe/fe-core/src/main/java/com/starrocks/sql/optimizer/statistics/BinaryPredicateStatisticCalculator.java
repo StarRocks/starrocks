@@ -225,9 +225,9 @@ public class BinaryPredicateStatisticCalculator {
                     orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
         } else {
             ColumnStatistic estimatedColumnStatistic = ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(0).build();
-            double rowCount = statistics.getOutputRowCount() -
-                    estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
-                            .getOutputRowCount();
+            double rowCount = Math.max(0.0, statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
+                    - estimateColumnEqualToConstant(columnRefOperator, columnStatistic, constant, statistics)
+                            .getOutputRowCount());
 
             return columnRefOperator.map(operator -> Statistics.buildFrom(statistics)
                             .setOutputRowCount(rowCount).addColumnStatistic(operator, estimatedColumnStatistic).build())
@@ -260,7 +260,7 @@ public class BinaryPredicateStatisticCalculator {
             Histogram estimatedHistogram = hist.get();
 
             long rowCountInHistogram = estimatedHistogram.getTotalRows();
-            double rowCount = statistics.getOutputRowCount()
+            double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
                     * ((double) rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows());
 
             ColumnStatistic newEstimateColumnStatistics =
@@ -300,7 +300,7 @@ public class BinaryPredicateStatisticCalculator {
         } else {
             Histogram estimatedHistogram = hist.get();
             long rowCountInHistogram = estimatedHistogram.getTotalRows();
-            double rowCount = statistics.getOutputRowCount()
+            double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
                     * ((double) rowCountInHistogram / (double) columnStatistic.getHistogram().getTotalRows());
 
             ColumnStatistic newEstimateColumnStatistics =
