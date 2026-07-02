@@ -58,6 +58,7 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
@@ -3191,6 +3192,86 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
         Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
                 "row-delta commit must advance the snapshot id past the plan-time base");
+    }
+
+    private long mergeCounterValue(String name, String labelKey, String labelValue) {
+        for (Metric<?> metric : MetricRepo.getMetricsByName(name)) {
+            if (!(metric instanceof LongCounterMetric)) {
+                continue;
+            }
+            boolean matched = labelKey == null;
+            for (MetricLabel label : metric.getLabels()) {
+                if (labelKey != null && labelKey.equals(label.getKey()) && labelValue.equals(label.getValue())) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) {
+                return ((LongCounterMetric) metric).getValue();
+            }
+        }
+        return 0L;
+    }
+
+    @Test
+    public void testCommitRowDeltaOperationMergeMetrics() throws Exception {
+        // A MERGE row-delta commit takes the isMerge branch of finishSink, which reports the
+        // iceberg_merge_* metrics from the resulting snapshot summary. Confirm the merge_rows
+        // counter is split by file_type: added-position-deletes -> position_delete (the delete
+        // file's 3 records) and added-records -> data (the data file's 3 records).
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        long posDeleteRowsBefore = mergeCounterValue("iceberg_merge_rows", "file_type", "position_delete");
+        long dataRowsBefore = mergeCounterValue("iceberg_merge_rows", "file_type", "data");
+        long totalBefore = mergeCounterValue("iceberg_merge_total", "status", "success");
+
+        TSinkCommitInfo deleteCommit = new TSinkCommitInfo();
+        deleteCommit.setIceberg_data_file(buildRowDeltaPositionDeleteFile());
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(deleteCommit, dataCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "MERGE row-delta commit must produce a snapshot");
+        Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
+                "MERGE row-delta commit must advance the snapshot id");
+
+        // position_delete rows come from added-position-deletes (3), data rows from added-records (3).
+        Assertions.assertEquals(posDeleteRowsBefore + 3,
+                mergeCounterValue("iceberg_merge_rows", "file_type", "position_delete"),
+                "iceberg_merge_rows{file_type=position_delete} must count the added position deletes");
+        Assertions.assertEquals(dataRowsBefore + 3,
+                mergeCounterValue("iceberg_merge_rows", "file_type", "data"),
+                "iceberg_merge_rows{file_type=data} must count the added data records");
+        Assertions.assertEquals(totalBefore + 1,
+                mergeCounterValue("iceberg_merge_total", "status", "success"),
+                "iceberg_merge_total{status=success} must increment after a successful MERGE commit");
+        Assertions.assertTrue(mergeCounterValue("iceberg_merge_files", "file_type", "position_delete") >= 1,
+                "iceberg_merge_files{file_type=position_delete} must count the committed delete file");
+        Assertions.assertTrue(mergeCounterValue("iceberg_merge_files", "file_type", "data") >= 1,
+                "iceberg_merge_files{file_type=data} must count the committed data file");
     }
 
     @Test

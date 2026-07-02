@@ -2354,16 +2354,16 @@ public class IcebergMetadata implements ConnectorMetadata {
 
                 Snapshot newSnapshot = nativeTbl.currentSnapshot();
                 if (newSnapshot != null && newSnapshot.summary() != null) {
-                    // matched = target rows hit by UPDATE/DELETE (position deletes);
-                    // written = data rows written (UPDATE rewrites + INSERTs).
-                    long matchedRows = Long.parseLong(newSnapshot.summary()
+                    // position_delete = target rows hit by UPDATE/DELETE (added position deletes);
+                    // data = data rows written (UPDATE rewrites + INSERTs).
+                    long positionDeleteRows = Long.parseLong(newSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                    long writtenRows = Long.parseLong(newSnapshot.summary()
+                    long dataRows = Long.parseLong(newSnapshot.summary()
                             .getOrDefault(SnapshotSummary.ADDED_RECORDS_PROP, "0"));
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(matchedRows,
-                            ConnectorMetricsMgr.MERGE_ROW_TYPE_MATCHED);
-                    ConnectorMetricsMgr.increaseIcebergMergeRows(writtenRows,
-                            ConnectorMetricsMgr.MERGE_ROW_TYPE_WRITTEN);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(positionDeleteRows,
+                            ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                    ConnectorMetricsMgr.increaseIcebergMergeRows(dataRows,
+                            ConnectorMetricsMgr.FILE_TYPE_DATA);
                 }
 
                 ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,
