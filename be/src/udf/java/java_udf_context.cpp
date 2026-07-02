@@ -14,6 +14,8 @@
 
 #include "udf/java/java_udf_context.h"
 
+#include <fmt/core.h>
+
 #include "base/utility/defer_op.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/java_udf_reflection.h"
