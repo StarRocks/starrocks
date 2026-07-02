@@ -20,6 +20,7 @@
 #include "base/string/parse_util.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_metrics_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/statusor.h"
@@ -161,7 +162,7 @@ void RuntimeEnv::stop() {
 
 Status RuntimeEnv::init_execution_thread_pools(MetricRegistry* metrics) {
     RETURN_IF_ERROR(_thread_pools.init_execution_thread_pools(metrics));
-    return _java_env.init();
+    return _java_env.init(metrics, config::enable_jvm_metrics);
 }
 
 Status RuntimeEnv::init_lake_thread_pools(MetricRegistry* metrics) {

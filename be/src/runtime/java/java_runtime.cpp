@@ -12,27 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "runtime/java/java_runtime.h"
 
-#include <string>
-#include <vector>
+#include <cstdlib>
+
+#include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
 
 namespace starrocks {
 
-class ProcessMetricsRegistry;
+Status detect_java_runtime_on_current_thread() {
+    const char* p = std::getenv("JAVA_HOME");
+    if (p == nullptr) {
+        return Status::RuntimeError("env 'JAVA_HOME' is not set");
+    }
+    if (getJNIEnv() == nullptr) {
+        return Status::RuntimeError("couldn't get JNIEnv, please check your java runtime");
+    }
+    return Status::OK();
+}
 
-struct BackendMetricsInitOptions {
-    std::vector<std::string> storage_paths;
-    bool collect_hook_enabled = true;
-    bool init_system_metrics = false;
-    bool bind_ipv6 = false;
-};
-
-class BackendMetricsInitializer {
-public:
-    static BackendMetricsInitOptions from_config(std::vector<std::string> storage_paths);
-
-    static void initialize(ProcessMetricsRegistry* process_metrics_registry, const BackendMetricsInitOptions& options);
-};
+Status detect_java_runtime() {
+    return JavaEnv::GetInstance()->call_function_in_pthread(detect_java_runtime_on_current_thread);
+}
 
 } // namespace starrocks

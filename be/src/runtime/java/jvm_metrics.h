@@ -16,10 +16,12 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/metrics.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "jni.h"
 #include "runtime/java/java_global_ref.h"
 #include "runtime/java/jvm_class.h"

@@ -19,7 +19,6 @@
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "fmt/core.h"
-#include "runtime/java/java_env.h"
 #include "udf/java/java_udf.h"
 
 namespace starrocks {

@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "platform/user_function_cache.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 
 namespace starrocks {
 

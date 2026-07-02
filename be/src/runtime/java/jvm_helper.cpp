@@ -23,6 +23,7 @@
 #include "base/status.h"
 #include "fmt/core.h"
 #include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
 
 #define JNI_FIND_CLASS(clazz_name)                                                                 \
     [](JNIEnv* env, const char* name) {                                                            \

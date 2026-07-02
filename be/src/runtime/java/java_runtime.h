@@ -14,25 +14,11 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include "base/status.h"
 
 namespace starrocks {
 
-class ProcessMetricsRegistry;
-
-struct BackendMetricsInitOptions {
-    std::vector<std::string> storage_paths;
-    bool collect_hook_enabled = true;
-    bool init_system_metrics = false;
-    bool bind_ipv6 = false;
-};
-
-class BackendMetricsInitializer {
-public:
-    static BackendMetricsInitOptions from_config(std::vector<std::string> storage_paths);
-
-    static void initialize(ProcessMetricsRegistry* process_metrics_registry, const BackendMetricsInitOptions& options);
-};
+Status detect_java_runtime_on_current_thread();
+Status detect_java_runtime();
 
 } // namespace starrocks

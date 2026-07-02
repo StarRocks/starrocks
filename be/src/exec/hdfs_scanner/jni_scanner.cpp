@@ -25,7 +25,7 @@
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
 

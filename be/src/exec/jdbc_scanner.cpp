@@ -29,7 +29,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"

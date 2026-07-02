@@ -80,7 +80,6 @@ void init_backend_metrics_for_test() {
         options.storage_paths.emplace_back(kTestDiskPath);
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
-        options.init_jvm_metrics = false;
         BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
     });
 }

@@ -28,7 +28,7 @@
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
