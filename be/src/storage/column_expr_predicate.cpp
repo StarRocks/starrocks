@@ -20,6 +20,25 @@
 
 namespace starrocks {
 
+std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, bool valid_match,
+                                                                       TExprOpcode::type op, std::string_view pattern) {
+    if (valid_match && op == TExprOpcode::MATCH_ANY) {
+        return InvertedIndexQueryType::MATCH_ANY_QUERY;
+    }
+    if (valid_match && op == TExprOpcode::MATCH_ALL) {
+        return InvertedIndexQueryType::MATCH_ALL_QUERY;
+    }
+    // TODO: push LIKE patterns containing '_' down to the inverted index. For now we
+    // fall back to the canonical LIKE engine (correct, just not accelerated): the
+    // builtin index could match '_' with a custom matcher, but CLucene WildcardQuery
+    // has no escape and can't faithfully handle a literal '?'/'*'.
+    if (valid_like && pattern.find('_') != std::string_view::npos) {
+        return std::nullopt;
+    }
+    bool has_wildcard = pattern.find('%') != std::string_view::npos;
+    return has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
+}
+
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          const SlotDescriptor* slot_desc)
         : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
@@ -336,17 +355,14 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         return Status::OK();
     }
     std::string str_v = padded_value.to_string();
-    InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    bool has_wildcard = str_v.find('%') != std::string::npos;
 
-    // TODO: The logic for determining query_type will be abstracted into a separate method in the future.
-    if (valid_match && expr->op() == TExprOpcode::MATCH_ANY) {
-        query_type = InvertedIndexQueryType::MATCH_ANY_QUERY;
-    } else if (valid_match && expr->op() == TExprOpcode::MATCH_ALL) {
-        query_type = InvertedIndexQueryType::MATCH_ALL_QUERY;
-    } else {
-        query_type = has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
+    auto query_type_opt = choose_inverted_index_query_type(valid_like, valid_match, expr->op(), str_v);
+    if (!query_type_opt) {
+        // A LIKE pattern containing '_' is not pushed down (see
+        // choose_inverted_index_query_type); fall back to the canonical LIKE engine.
+        return Status::NotSupported("LIKE pattern is not pushed down to the inverted index");
     }
+    InvertedIndexQueryType query_type = *query_type_opt;
 
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
