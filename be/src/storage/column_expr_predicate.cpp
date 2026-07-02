@@ -20,6 +20,18 @@
 
 namespace starrocks {
 
+std::optional<InvertedIndexQueryType> choose_inverted_index_query_type(bool valid_like, std::string_view pattern) {
+    // TODO: push LIKE patterns containing '_' down to the inverted index. For now we
+    // fall back to the canonical LIKE engine (correct, just not accelerated): the
+    // builtin index could match '_' with a custom matcher, but CLucene WildcardQuery
+    // has no escape and can't faithfully handle a literal '?'/'*'.
+    if (valid_like && pattern.find('_') != std::string_view::npos) {
+        return std::nullopt;
+    }
+    bool has_wildcard = pattern.find('*') != std::string_view::npos || pattern.find('%') != std::string_view::npos;
+    return has_wildcard ? InvertedIndexQueryType::MATCH_WILDCARD_QUERY : InvertedIndexQueryType::EQUAL_QUERY;
+}
+
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          const SlotDescriptor* slot_desc)
         : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
@@ -335,12 +347,15 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
         return Status::OK();
     }
     std::string str_v = padded_value.to_string();
-    InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
-    if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {
-        query_type = InvertedIndexQueryType::EQUAL_QUERY;
-    } else {
-        query_type = InvertedIndexQueryType::MATCH_WILDCARD_QUERY;
+
+    auto query_type_opt = choose_inverted_index_query_type(vaild_like, str_v);
+    if (!query_type_opt) {
+        // A LIKE pattern containing '_' is not pushed down (see
+        // choose_inverted_index_query_type); fall back to the canonical LIKE engine.
+        return Status::NotSupported("LIKE pattern is not pushed down to the inverted index");
     }
+    InvertedIndexQueryType query_type = *query_type_opt;
+
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {
