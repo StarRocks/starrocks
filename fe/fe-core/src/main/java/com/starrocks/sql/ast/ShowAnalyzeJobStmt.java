@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatisticUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -60,6 +61,11 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
+                row.set(3, tableName);
+
+                // getTable() also verifies the table still exists (throws below otherwise), so it
+                // must run unconditionally even for root - only the privilege check that follows can
+                // be skipped, since root is guaranteed to hold every privilege already.
                 Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
 
@@ -67,15 +73,15 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                     throw new MetaNotFoundException("No found table: " + tableName);
                 }
 
-                row.set(3, table.getName());
-
                 // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-                } catch (AccessDeniedException e) {
-                    return null;
+                if (!StatisticUtils.isRootUser(context)) {
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                    } catch (AccessDeniedException e) {
+                        return null;
+                    }
                 }
 
                 if (null != columns && !columns.isEmpty()

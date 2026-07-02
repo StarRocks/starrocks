@@ -55,14 +55,18 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(2, analyzeStatus.getTableName());
 
         Table table;
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        // getTable() also verifies the table still exists (returns null / throws below otherwise),
+        // so it must run unconditionally even for root - only the privilege check that follows can
+        // be skipped, since root is guaranteed to hold every privilege already.
         try {
             table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
                     context, analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }
-            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
+            if (!StatisticUtils.isRootUser(context)) {
+                Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
+            }
         } catch (Exception e) {
             LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;

@@ -3505,10 +3505,13 @@ public class ShowExecutor {
         row.set(1, table.getName());
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
+        // root always has every privilege, so skip the check for it.
+        if (!StatisticUtils.isRootUser(context)) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+            } catch (AccessDeniedException e) {
+                return null;
+            }
         }
 
         long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
@@ -3550,10 +3553,13 @@ public class ShowExecutor {
         row.set(1, tableName);
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
+        // root always has every privilege, so skip the check for it.
+        if (!StatisticUtils.isRootUser(context)) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+            } catch (AccessDeniedException e) {
+                return null;
+            }
         }
 
         long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
@@ -3585,10 +3591,13 @@ public class ShowExecutor {
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
+        // root always has every privilege, so skip the check for it.
+        if (!StatisticUtils.isRootUser(context)) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+            } catch (AccessDeniedException e) {
+                return null;
+            }
         }
 
         row.set(1, table.getName());
@@ -3613,17 +3622,23 @@ public class ShowExecutor {
             throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
         }
         row.set(0, catalogName + "." + dbName);
+
+        // getTable() also verifies the table still exists (throws below otherwise), so it must run
+        // unconditionally even for root - only the privilege check that follows can be skipped,
+        // since root is guaranteed to hold every privilege already.
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
         }
-        try {
-            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
-        } catch (AccessDeniedException e) {
-            return null;
+        if (!StatisticUtils.isRootUser(context)) {
+            try {
+                Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
+            } catch (AccessDeniedException e) {
+                return null;
+            }
         }
 
-        row.set(1, table.getName());
+        row.set(1, tableName);
         row.set(2, histogramStatsMeta.getColumn());
         row.set(3, histogramStatsMeta.getType().name());
         row.set(4, histogramStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -3647,10 +3662,13 @@ public class ShowExecutor {
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
+        // root always has every privilege, so skip the check for it.
+        if (!StatisticUtils.isRootUser(context)) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+            } catch (AccessDeniedException e) {
+                return null;
+            }
         }
 
         row.set(1, table.getName());
