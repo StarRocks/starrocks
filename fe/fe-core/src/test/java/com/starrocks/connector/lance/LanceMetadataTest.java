@@ -14,149 +14,38 @@
 
 package com.starrocks.connector.lance;
 
-import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LanceTable;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Table;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.Type;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.qe.ConnectContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
-
-import static com.starrocks.type.BooleanType.BOOLEAN;
-import static com.starrocks.type.DateType.DATETIME;
-import static com.starrocks.type.FloatType.DOUBLE;
-import static com.starrocks.type.FloatType.FLOAT;
-import static com.starrocks.type.IntegerType.BIGINT;
-import static com.starrocks.type.IntegerType.INT;
-import static com.starrocks.type.VarcharType.VARCHAR;
+import java.util.Map;
 
 public class LanceMetadataTest {
-
     @Test
-    public void testTypeParsing() {
-        // Scalar types
-        Assertions.assertEquals(BOOLEAN, LanceApiConverter.parseType("boolean"));
-        Assertions.assertEquals(INT, LanceApiConverter.parseType("int32"));
-        Assertions.assertEquals(BIGINT, LanceApiConverter.parseType("int64"));
-        Assertions.assertEquals(FLOAT, LanceApiConverter.parseType("float32"));
-        Assertions.assertEquals(DOUBLE, LanceApiConverter.parseType("float64"));
-        Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("string"));
-        Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us]"));
-        Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us, tz=UTC]"));
+    public void testDirectoryCatalogListing() throws Exception {
+        Path warehouse = Files.createTempDirectory("lance_warehouse");
+        Files.createDirectories(warehouse.resolve("root_table.lance"));
+        Files.createDirectories(warehouse.resolve("default").resolve("default_table.lance"));
+        Files.createDirectories(warehouse.resolve("db1").resolve("tbl1.lance"));
+        Files.createDirectories(warehouse.resolve("db1").resolve("not_lance"));
 
-        // Nested types
-        Type arrayType = LanceApiConverter.parseType("list<float32>");
-        Assertions.assertTrue(arrayType.isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) arrayType).getItemType());
+        Map<String, String> properties = ImmutableMap.of(
+                LanceConnector.LANCE_CATALOG_WAREHOUSE, warehouse.toUri().toString());
+        LanceMetadata metadata = new LanceMetadata("lance_catalog", properties, new HdfsEnvironment());
+        ConnectContext context = new ConnectContext();
 
-        Type arrowArrayType = LanceApiConverter.parseType("list<item: int32>");
-        Assertions.assertTrue(arrowArrayType.isArrayType());
-        Assertions.assertEquals(INT, ((ArrayType) arrowArrayType).getItemType());
-
-        // Vector embeddings as fixed_size_list
-        Type vectorType = LanceApiConverter.parseType("fixed_size_list<float32, 128>");
-        Assertions.assertTrue(vectorType.isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) vectorType).getItemType());
-
-        Type arrowVectorType = LanceApiConverter.parseType("fixed_size_list<item: float>[128]");
-        Assertions.assertTrue(arrowVectorType.isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) arrowVectorType).getItemType());
-
-        Type lanceVectorType = LanceApiConverter.parseType("fixed_size_list:float:128");
-        Assertions.assertTrue(lanceVectorType.isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) lanceVectorType).getItemType());
-
-        // Struct types with case preservation
-        Type structType = LanceApiConverter.parseType("struct<UserID:int64,embedding:fixed_size_list<float32,512>>");
-        Assertions.assertTrue(structType.isStructType());
-        com.starrocks.type.StructType sType = (com.starrocks.type.StructType) structType;
-        Assertions.assertEquals(2, sType.getFields().size());
-        Assertions.assertEquals("UserID", sType.getFields().get(0).getName());
-        Assertions.assertEquals("embedding", sType.getFields().get(1).getName());
-    }
-
-    @Test
-    public void testMetadataDiscoveryBootstrap() {
-        java.util.Map<String, String> properties = new java.util.HashMap<>();
-        properties.put("database", "vectors_db");
-        properties.put("table.users.uri", "s3://bucket/users");
-        properties.put("table.users.schema",
-                "UserID:int64,event_time:timestamp[us, tz=UTC],embedding:fixed_size_list<float32, 128>,"
-                        + "lance_embedding:fixed_size_list:float:128");
-        properties.put("table.events.uri", "s3://bucket/events");
-        properties.put("table.events.schema", "event_time:timestamp[us]");
-
-        LanceMetadata metadata = new LanceMetadata("lance_catalog", properties);
-        Assertions.assertTrue(metadata.listDbNames(null).contains("vectors_db"));
-        Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("users"));
-        Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("events"));
-
-        Table discovered = metadata.getTable(null, "vectors_db", "users");
-        Assertions.assertNotNull(discovered);
-        Assertions.assertTrue(discovered.isLanceTable());
-        LanceTable lanceDiscovered = (LanceTable) discovered;
-        Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
-        Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
-        Assertions.assertFalse(lanceDiscovered.isSupported()); // verified unsupported in planning
-
-        Table events = metadata.getTable(null, "vectors_db", "events");
-        Assertions.assertNotNull(events);
-        Assertions.assertNotEquals(lanceDiscovered.getId(), events.getId());
-        Assertions.assertEquals("s3://bucket/events", events.getTableLocation());
-
-        com.starrocks.catalog.Column userIdCol = lanceDiscovered.getColumn("UserID");
-        Assertions.assertNotNull(userIdCol);
-        Assertions.assertEquals(BIGINT, userIdCol.getType());
-
-        Column eventTimeCol = lanceDiscovered.getColumn("event_time");
-        Assertions.assertNotNull(eventTimeCol);
-        Assertions.assertEquals(DATETIME, eventTimeCol.getType());
-
-        Assertions.assertEquals(4, lanceDiscovered.getColumns().size());
-        Column embeddingCol = lanceDiscovered.getColumn("embedding");
-        Assertions.assertNotNull(embeddingCol);
-        Assertions.assertTrue(embeddingCol.getType().isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) embeddingCol.getType()).getItemType());
-
-        Column lanceEmbeddingCol = lanceDiscovered.getColumn("lance_embedding");
-        Assertions.assertNotNull(lanceEmbeddingCol);
-        Assertions.assertTrue(lanceEmbeddingCol.getType().isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) lanceEmbeddingCol.getType()).getItemType());
-    }
-
-    @Test
-    public void testMetadataDiscovery() {
-        LanceMetadata metadata = new LanceMetadata("lance_catalog", new HashMap<>());
         Assertions.assertEquals(Table.TableType.LANCE, metadata.getTableType());
-
-        Database db = new Database(10001, "db1");
-        metadata.addDatabase(db);
-
-        List<Column> columns = ImmutableList.of(
-                new Column("id", INT),
-                new Column("embedding", LanceApiConverter.parseType("fixed_size_list<float32, 128>"))
-        );
-        LanceTable table = new LanceTable(20001, "vectors_table", columns, "s3://bucket/vectors");
-        metadata.addTable("db1", table);
-
-        // Assert discovery API
-        Assertions.assertTrue(metadata.listDbNames(null).contains("db1"));
-        Assertions.assertTrue(metadata.listTableNames(null, "db1").contains("vectors_table"));
-        Assertions.assertEquals(db, metadata.getDb(null, "db1"));
-
-        Table discovered = metadata.getTable(null, "db1", "vectors_table");
-        Assertions.assertNotNull(discovered);
-        Assertions.assertTrue(discovered.isLanceTable());
-        LanceTable lanceDiscovered = (LanceTable) discovered;
-        Assertions.assertEquals("s3://bucket/vectors", lanceDiscovered.getUri());
-        Assertions.assertEquals(2, lanceDiscovered.getColumns().size());
-        Column embeddingCol = lanceDiscovered.getColumn("embedding");
-        Assertions.assertNotNull(embeddingCol);
-        Assertions.assertTrue(embeddingCol.getType().isArrayType());
+        Assertions.assertTrue(metadata.dbExists(context, "db1"));
+        Assertions.assertFalse(metadata.dbExists(context, ""));
+        Assertions.assertIterableEquals(List.of("default", "db1"), metadata.listDbNames(context));
+        Assertions.assertIterableEquals(List.of("root_table", "default_table"),
+                metadata.listTableNames(context, LanceConnector.DEFAULT_DB));
+        Assertions.assertIterableEquals(List.of("tbl1"), metadata.listTableNames(context, "db1"));
     }
 }

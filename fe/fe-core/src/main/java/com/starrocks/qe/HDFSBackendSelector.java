@@ -39,6 +39,7 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.lance.LanceScanNode;
 import com.starrocks.qe.scheduler.CandidateWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -127,6 +128,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof LanceScanNode) {
+                LanceScanNode node = (LanceScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getLanceTable().getTableLocation();
             } else if (scanNode instanceof OdpsScanNode) {
                 OdpsScanNode node = (OdpsScanNode) scanNode;
                 predicates = node.getScanNodePredicates();

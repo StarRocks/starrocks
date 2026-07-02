@@ -14,6 +14,8 @@
 
 #include "exec/hdfs_scanner/jni_scanner.h"
 
+#include <algorithm>
+#include <cctype>
 #include <utility>
 
 #include "base/utility/defer_op.h"
@@ -121,7 +123,14 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
         jstring key = env->NewStringUTF(it.first.c_str());
         jstring value = env->NewStringUTF(it.second.c_str());
         // skip encoded object
-        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+        std::string lower_key = it.first;
+        std::transform(lower_key.begin(), lower_key.end(), lower_key.begin(),
+                       [](unsigned char c) { return std::tolower(c); });
+        bool skip_log = _skipped_log_jni_scanner_params.find(it.first) != _skipped_log_jni_scanner_params.end() ||
+                        lower_key.find("secret") != std::string::npos ||
+                        lower_key.find("access_key") != std::string::npos ||
+                        lower_key.find("token") != std::string::npos;
+        if (!skip_log) {
             message.append(it.first);
             message.append("->");
             message.append(it.second);
@@ -574,6 +583,23 @@ std::unique_ptr<JniScanner> create_paimon_jni_scanner(const JniScanner::CreateOp
     jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------lance jni scanner------------------
+std::unique_ptr<JniScanner> create_lance_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["dataset_uri"] = scan_range.dataset_uri;
+    jni_scanner_params["fragment_id"] = std::to_string(scan_range.fragment_id);
+    if (scan_range.__isset.lance_storage_options) {
+        for (const auto& [key, value] : scan_range.lance_storage_options) {
+            jni_scanner_params["storage_option." + key] = value;
+        }
+    }
+
+    std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 

@@ -89,6 +89,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLanceScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
@@ -128,6 +129,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLanceScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -677,6 +679,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(),
                 node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
+    }
+
+    @Override
+    public Void visitLogicalLanceScan(LogicalLanceScanOperator node, ExpressionContext context) {
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalLanceScan(PhysicalLanceScanOperator node, ExpressionContext context) {
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
