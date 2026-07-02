@@ -15,6 +15,7 @@
 #pragma once
 
 #include <functional>
+#include <future>
 #include <memory>
 
 #include "base/status.h"
@@ -23,6 +24,10 @@ namespace starrocks {
 
 class MetricRegistry;
 class PriorityThreadPool;
+class RuntimeState;
+
+using JavaUdfPromiseStatus = std::promise<Status>;
+using JavaUdfPromiseStatusPtr = std::unique_ptr<JavaUdfPromiseStatus>;
 
 class JavaEnv {
 public:
@@ -39,12 +44,16 @@ public:
     void destroy();
 
     PriorityThreadPool* jvm_call_pool() const { return _jvm_call_pool.get(); }
+    PriorityThreadPool* udf_call_pool() const { return _udf_call_pool.get(); }
+
     Status call_function_in_pthread(const std::function<Status()>& func);
+    JavaUdfPromiseStatusPtr submit_java_udf_call(RuntimeState* state, const std::function<Status()>& func);
 
 private:
     Status _init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics);
 
     std::unique_ptr<PriorityThreadPool> _jvm_call_pool;
+    std::unique_ptr<PriorityThreadPool> _udf_call_pool;
     MetricRegistry* _jvm_metrics_registry = nullptr;
 };
 

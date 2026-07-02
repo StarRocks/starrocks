@@ -650,7 +650,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：Threads
 - 是否动态：否
-- 描述：设置在 ExecEnv 中创建的 UDF 调用 PriorityThreadPool 的大小（用于执行用户自定义函数/UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 UDF 执行；保持较小可避免过度的 CPU 和内存争用。
+- 描述：设置 JavaEnv 持有的 Java UDF 调用 PriorityThreadPool 的大小（用于执行 Java UDF 相关任务）。该值既作为线程池的线程数，也在构造线程池时作为队列容量（PriorityThreadPool("udf", thread_num, queue_size)）。增大该值可以允许更多并发的 Java UDF 执行；保持较小可避免过度的 CPU 和内存争用。
 - 引入版本：v3.2.0
 
 ### update_memory_limit_percent

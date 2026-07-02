@@ -108,6 +108,7 @@ TEST(RuntimeEnvTest, OwnsExecutionThreadPools) {
     ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
     ASSERT_NE(env->java_env(), nullptr);
     ASSERT_NE(env->java_env()->jvm_call_pool(), nullptr);
+    ASSERT_NE(env->java_env()->udf_call_pool(), nullptr);
     ASSERT_NE(env->pipeline_prepare_pool(), nullptr);
     ASSERT_NE(env->pipeline_sink_io_pool(), nullptr);
     ASSERT_NE(env->query_rpc_pool(), nullptr);
@@ -122,6 +123,7 @@ TEST(RuntimeEnvTest, OwnsExecutionThreadPools) {
     env->destroy_thread_pools();
     ASSERT_EQ(env->thread_pool(), nullptr);
     ASSERT_EQ(env->java_env()->jvm_call_pool(), nullptr);
+    ASSERT_EQ(env->java_env()->udf_call_pool(), nullptr);
     ASSERT_EQ(env->load_rpc_pool(), nullptr);
 }
 

@@ -653,7 +653,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Threads
 - Is mutable: No
-- Description: Sets the size of the UDF call PriorityThreadPool created in ExecEnv (used for executing user-defined functions / UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent UDF executions; keep small to avoid excessive CPU and memory contention.
+- Description: Sets the size of the Java UDF call PriorityThreadPool owned by JavaEnv (used for executing Java UDF-related tasks). The value is used as the pool thread count and also as the pool queue capacity when constructing the thread pool (PriorityThreadPool("udf", thread_num, queue_size)). Increase to allow more concurrent Java UDF executions; keep small to avoid excessive CPU and memory contention.
 - Introduced in: v3.2.0
 
 ### update_memory_limit_percent

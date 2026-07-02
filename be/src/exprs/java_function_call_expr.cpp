@@ -37,13 +37,13 @@
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
+#include "runtime/java/java_env.h"
 #include "runtime/java/java_runtime.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/java_udf_context.h"
 #include "udf/java/java_udf_reflection.h"
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -130,14 +130,14 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
-    (void)call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+    (void)JavaEnv::GetInstance()->submit_java_udf_call(_runtime_state, call_udf)->get_future().get();
     return res;
 }
 
 JavaFunctionCallExpr::~JavaFunctionCallExpr() {
     // nothing to do if JavaFunctionCallExpr has not been prepared
     if (_runtime_state == nullptr) return;
-    auto promise = call_function_in_pthread(_runtime_state, [this]() {
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(_runtime_state, [this]() {
         this->_func_desc.reset();
         this->_call_helper.reset();
         return Status::OK();
@@ -290,7 +290,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                 ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(scope, lib));
                 return Status::OK();
             };
-            RETURN_IF_ERROR(call_function_in_pthread(state, call)->get_future().get());
+            RETURN_IF_ERROR(JavaEnv::GetInstance()->submit_java_udf_call(state, call)->get_future().get());
             return func_desc;
         };
 
@@ -323,7 +323,7 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
-    (void)call_function_in_pthread(state, function_close)->get_future().get();
+    (void)JavaEnv::GetInstance()->submit_java_udf_call(state, function_close)->get_future().get();
     Expr::close(state, context, scope);
 }
 

@@ -99,7 +99,6 @@ void ExecEnv::_refresh_service_contexts() {
     _execution_services.load_rowset_thread_pool = runtime_env->load_rowset_thread_pool();
     _execution_services.load_segment_thread_pool = runtime_env->load_segment_thread_pool();
     _execution_services.put_combined_txn_log_thread_pool = runtime_env->put_combined_txn_log_thread_pool();
-    _execution_services.udf_call_pool = runtime_env->udf_call_pool();
     _execution_services.pipeline_prepare_pool = runtime_env->pipeline_prepare_pool();
     _execution_services.pipeline_sink_io_pool = runtime_env->pipeline_sink_io_pool();
     _execution_services.query_rpc_pool = runtime_env->query_rpc_pool();

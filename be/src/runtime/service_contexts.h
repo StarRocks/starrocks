@@ -79,7 +79,6 @@ struct ExecutionEnv {
     ThreadPool* load_rowset_thread_pool = nullptr;
     ThreadPool* load_segment_thread_pool = nullptr;
     ThreadPool* put_combined_txn_log_thread_pool = nullptr;
-    PriorityThreadPool* udf_call_pool = nullptr;
     PriorityThreadPool* pipeline_prepare_pool = nullptr;
     PriorityThreadPool* pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* query_rpc_pool = nullptr;

@@ -42,12 +42,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/java/java_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
 #include "udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -300,7 +300,7 @@ Status Aggregator::open(RuntimeState* state) {
     if (_has_udaf) {
         auto& opts = state->query_options();
         bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
-        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -409,7 +409,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(call_agg_create());
 #else
         if (_has_udaf) {
-            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
@@ -811,7 +811,7 @@ void Aggregator::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();

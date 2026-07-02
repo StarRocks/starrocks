@@ -35,13 +35,13 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/java/java_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
 #include "udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
 // 1. When set_finishing(), the has_output() may be false, so add the check here.
@@ -523,7 +523,7 @@ Status Analytor::open(RuntimeState* state) {
     RETURN_IF_ERROR(create_fn_states());
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, create_fn_states);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, create_fn_states);
         RETURN_IF_ERROR(promise_st->get_future().get());
     } else {
         RETURN_IF_ERROR(create_fn_states());
@@ -579,7 +579,7 @@ void Analytor::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
