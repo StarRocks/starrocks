@@ -253,9 +253,10 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     for (const auto& segment_meta : op_write.rowset().segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled segment (bundle_file_offset set) is shared with
+        // sibling tablets. The orphan FileMetaPB only carries `shared`, so encode bundling into it
+        // too, otherwise vacuum deletes the shared bundle file while a sibling still references it.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -817,9 +818,10 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
     for (const auto& segment_meta : rowset_metadata.segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled compaction-output segment is shared with sibling
+        // tablets. Encode bundling into the orphan's `shared` flag so vacuum's alive-check protects
+        // it instead of deleting a bundle file a sibling still references.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
