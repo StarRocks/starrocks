@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
+import com.starrocks.catalog.system.information.IcebergMaintenanceTasksSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
@@ -79,6 +80,7 @@ public class SystemTable extends Table {
     private static final ImmutableSortedSet<String> QUERY_FROM_LEADER_TABLES =
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .add(FeTabletSchedulesSystemTable.NAME)
+                    .add(IcebergMaintenanceTasksSystemTable.NAME)
                     .add(LoadTrackingLogsSystemTable.NAME)
                     .add(LoadsSystemTable.NAME)
                     .add(MaterializedViewRefreshJobsSystemTable.NAME)

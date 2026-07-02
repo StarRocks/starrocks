@@ -39,6 +39,7 @@
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
 #include "exec/schema_scanner/schema_fe_threads_scanner.h"
+#include "exec/schema_scanner/schema_iceberg_maintenance_tasks_scanner.h"
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
@@ -108,6 +109,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTasksScanner>();
     case TSchemaTableType::SCH_TASK_RUNS:
         return std::make_unique<SchemaTaskRunsScanner>();
+    case TSchemaTableType::SCH_ICEBERG_MAINTENANCE_TASKS:
+        return std::make_unique<SchemaIcebergMaintenanceTasksScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
         return std::make_unique<SchemaMaterializedViewsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEW_REFRESH_JOBS:

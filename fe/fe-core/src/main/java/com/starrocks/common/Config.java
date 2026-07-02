@@ -3162,6 +3162,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int iceberg_background_check_maintenance_interval_seconds = 1800;
 
+    @ConfField(mutable = true, comment = "TTL in seconds of in-memory iceberg metadata maintenance task history, "
+            + "served by information_schema.iceberg_maintenance_tasks")
+    public static int iceberg_maintenance_task_history_ttl_second = 7 * 24 * 3600;
+
+    @ConfField(mutable = true, comment = "max number of in-memory iceberg metadata maintenance task history records, "
+            + "served by information_schema.iceberg_maintenance_tasks")
+    public static int iceberg_maintenance_task_history_max_number = 10000;
+
     /**
      * paimon metadata cache preheat, default false
      */

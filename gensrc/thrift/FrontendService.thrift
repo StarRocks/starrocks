@@ -600,6 +600,37 @@ struct TGetTaskRunInfoResult {
     1: optional list<TTaskRunInfo> task_runs
 }
 
+// Arguments to getIcebergMaintenanceTasks
+struct TGetIcebergMaintenanceTasksParams {
+    1: optional Types.TUserIdentity current_user_ident
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional TRequestPagination pagination
+}
+
+struct TIcebergMaintenanceTaskInfo {
+    1: optional string task_id
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional string action
+    6: optional string trigger_reason
+    7: optional string stmt
+    // unix timestamps in seconds
+    8: optional i64 start_time
+    9: optional i64 end_time
+    10: optional i64 duration_ms
+    11: optional string status
+    12: optional string failure_reason
+    // JSON text with per-action execution details
+    13: optional string details
+}
+
+struct TGetIcebergMaintenanceTasksResult {
+    1: optional list<TIcebergMaintenanceTaskInfo> tasks
+}
+
 struct TGetLoadsParams {
     1: optional string db
     2: optional i64 job_id
@@ -2636,6 +2667,8 @@ service FrontendService {
 
     TGetTaskInfoResult getTasks(1:TGetTasksParams params)
     TGetTaskRunInfoResult getTaskRuns(1:TGetTasksParams params)
+
+    TGetIcebergMaintenanceTasksResult getIcebergMaintenanceTasks(1:optional TGetIcebergMaintenanceTasksParams params)
 
     TFeResult updateExportTaskStatus(1:TUpdateExportTaskStatusRequest request)
 

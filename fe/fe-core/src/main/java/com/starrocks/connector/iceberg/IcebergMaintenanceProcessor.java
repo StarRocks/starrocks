@@ -337,7 +337,9 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
 
     /**
      * Run one maintenance action on one table, threading a fresh {@link IcebergMaintenanceTaskStats}
-     * into the procedure. Exceptions are swallowed (logged) so the remaining actions of the same
+     * into the procedure and recording the outcome into the task history. The run gets one of four
+     * statuses: success (changed table state), skipped (ran fine but had nothing to do), failed, or
+     * partial. Exceptions are swallowed (logged + recorded) so the remaining actions of the same
      * table can proceed. If the failure was caused by cancellation (Future.cancel(true) interrupts
      * the worker thread), catching the interrupt-derived exception clears the interrupt flag, so we
      * re-assert it and let the caller decide whether to skip the remaining actions.
@@ -345,14 +347,29 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
     private void runMaintenanceTask(String catalog, String db, String tbl, String action,
                                     Consumer<IcebergMaintenanceTaskStats> body) {
         IcebergMaintenanceTaskStats stats = new IcebergMaintenanceTaskStats();
+        IcebergMaintenanceTaskRecord record = IcebergMaintenanceTaskRecord.start(
+                catalog, db, tbl, IcebergMaintenanceTaskRecord.TRIGGER_REASON_SCHEDULE, null);
+        String status;
         try {
             body.accept(stats);
+            status = stats.hasMaterialChange()
+                    ? IcebergMaintenanceTaskRecord.STATUS_SUCCESS : IcebergMaintenanceTaskRecord.STATUS_SKIPPED;
         } catch (Exception e) {
             if (isInterruption(e)) {
                 Thread.currentThread().interrupt();
             }
+            status = stats.isPartiallyApplied()
+                    ? IcebergMaintenanceTaskRecord.STATUS_PARTIAL : IcebergMaintenanceTaskRecord.STATUS_FAILED;
+            record.setFailureReason(e.getMessage() != null ? e.getMessage() : e.getClass().getName());
             LOG.warn("Auto maintenance {} failed on {}.{}.{}: {}",
                     action, catalog, db, tbl, e.getMessage(), e);
+        }
+        record.setStatus(status);
+        try {
+            record.finish(stats);
+            GlobalStateMgr.getCurrentState().getIcebergMaintenanceTaskHistory().addRecord(record);
+        } catch (Exception e) {
+            LOG.warn("Record iceberg maintenance task failed on {}.{}.{}", catalog, db, tbl, e);
         }
     }
 

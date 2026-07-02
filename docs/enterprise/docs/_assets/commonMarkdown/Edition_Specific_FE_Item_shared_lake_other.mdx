@@ -1,0 +1,17 @@
+### `iceberg_maintenance_task_history_ttl_second`
+
+- Default: 604800
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: TTL of the in-memory Iceberg metadata maintenance task history served by the system view `information_schema.iceberg_maintenance_tasks`. Records older than this value are evicted. The history is kept in the memory of the leader FE only and is lost on restart or leader change.
+- Introduced in: v4.2.0
+
+### `iceberg_maintenance_task_history_max_number`
+
+- Default: 10000
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The maximum number of in-memory Iceberg metadata maintenance task history records served by the system view `information_schema.iceberg_maintenance_tasks`. The oldest records are evicted when the limit is exceeded.
+- Introduced in: v4.2.0

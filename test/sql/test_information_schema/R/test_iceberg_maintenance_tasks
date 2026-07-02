@@ -1,0 +1,24 @@
+-- name: test_iceberg_maintenance_tasks
+DESC information_schema.iceberg_maintenance_tasks;
+-- result:
+TASK_ID	varchar(64)	NO	false	None	
+CATALOG_NAME	varchar(2048)	NO	false	None	
+DATABASE_NAME	varchar(2048)	NO	false	None	
+TABLE_NAME	varchar(2048)	NO	false	None	
+ACTION	varchar(32)	YES	false	None	
+TRIGGER_REASON	varchar(16)	YES	false	None	
+STMT	varchar(65535)	YES	false	None	
+START_TIME	datetime	YES	false	None	
+END_TIME	datetime	YES	false	None	
+DURATION_MS	bigint	YES	false	None	
+STATUS	varchar(16)	YES	false	None	
+FAILURE_REASON	varchar(4096)	YES	false	None	
+DETAILS	json	YES	false	None	
+-- !result
+SELECT * FROM information_schema.iceberg_maintenance_tasks WHERE CATALOG_NAME = 'non_existent_catalog';
+-- result:
+-- !result
+SELECT COUNT(*) >= 0 FROM information_schema.iceberg_maintenance_tasks;
+-- result:
+1
+-- !result

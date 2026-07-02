@@ -111,6 +111,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergMaintenanceProcessor;
+import com.starrocks.connector.iceberg.IcebergMaintenanceTaskHistory;
 import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
@@ -377,6 +378,7 @@ public class GlobalStateMgr {
     private final MetastoreEventsProcessor metastoreEventsProcessor;
     private final ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
     private final IcebergMaintenanceProcessor icebergMaintenanceProcessor;
+    private final IcebergMaintenanceTaskHistory icebergMaintenanceTaskHistory;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -816,6 +818,7 @@ public class GlobalStateMgr {
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
         this.icebergMaintenanceProcessor = new IcebergMaintenanceProcessor();
+        this.icebergMaintenanceTaskHistory = new IcebergMaintenanceTaskHistory();
 
         this.stat = new TabletSchedulerStat();
 
@@ -1301,6 +1304,10 @@ public class GlobalStateMgr {
 
     public IcebergMaintenanceProcessor getIcebergMaintenanceProcessor() {
         return icebergMaintenanceProcessor;
+    }
+
+    public IcebergMaintenanceTaskHistory getIcebergMaintenanceTaskHistory() {
+        return icebergMaintenanceTaskHistory;
     }
 
     public ReplicationMgr getReplicationMgr() {

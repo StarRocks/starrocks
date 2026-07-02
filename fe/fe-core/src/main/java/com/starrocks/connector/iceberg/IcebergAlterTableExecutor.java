@@ -17,12 +17,15 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.procedure.IcebergMaintenanceTaskStats;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
@@ -67,6 +70,7 @@ import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -89,6 +93,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private Transaction transaction;
     private HdfsEnvironment hdfsEnvironment;
     private ConnectContext context;
+    // maintenance procedures executed by this ALTER, recorded for metrics and
+    // the iceberg_maintenance_tasks system table after the transaction commits
+    private final List<Pair<IcebergMaintenanceTaskRecord, IcebergTableProcedureContext>> maintenanceTasks =
+            new ArrayList<>();
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
                                      Table table,
@@ -105,8 +113,61 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public void applyClauses() throws DdlException {
         transaction = table.newTransaction();
-        super.applyClauses();
-        transaction.commitTransaction();
+        try {
+            super.applyClauses();
+            transaction.commitTransaction();
+            finalizeMaintenanceTasks(null);
+        } catch (DdlException | RuntimeException e) {
+            finalizeMaintenanceTasks(e);
+            throw e;
+        }
+    }
+
+    /**
+     * Record history for the maintenance procedures of this ALTER. Must run after
+     * commitTransaction() because output-side stats (snapshot / manifest counts) only
+     * exist once the new metadata is published. Manual executions are intentionally
+     * NOT counted in the iceberg_amm_* metrics (those track auto maintenance only);
+     * they are only recorded in the iceberg_maintenance_tasks system table. Never
+     * throws: observability must not fail the ALTER itself.
+     */
+    private void finalizeMaintenanceTasks(Exception failure) {
+        if (maintenanceTasks.isEmpty()) {
+            return;
+        }
+        try {
+            boolean refreshed = false;
+            for (Pair<IcebergMaintenanceTaskRecord, IcebergTableProcedureContext> task : maintenanceTasks) {
+                IcebergMaintenanceTaskRecord record = task.first;
+                IcebergMaintenanceTaskStats stats = task.second.stats();
+                if (failure == null) {
+                    if (stats.isExecuted()) {
+                        stats.setCommitted(true);
+                        if (!refreshed) {
+                            table.refresh();
+                            refreshed = true;
+                        }
+                        stats.collectOutputs(table);
+                    }
+                    // a procedure that ran but had nothing to do is recorded as skipped
+                    record.setStatus(stats.hasMaterialChange()
+                            ? IcebergMaintenanceTaskRecord.STATUS_SUCCESS
+                            : IcebergMaintenanceTaskRecord.STATUS_SKIPPED);
+                } else {
+                    record.setStatus(stats.isPartiallyApplied()
+                            ? IcebergMaintenanceTaskRecord.STATUS_PARTIAL
+                            : IcebergMaintenanceTaskRecord.STATUS_FAILED);
+                    record.setFailureReason(
+                            failure.getMessage() != null ? failure.getMessage() : failure.getClass().getName());
+                }
+                record.finish(stats);
+                GlobalStateMgr.getCurrentState().getIcebergMaintenanceTaskHistory().addRecord(record);
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to record iceberg maintenance tasks for {}", tableName, e);
+        } finally {
+            maintenanceTasks.clear();
+        }
     }
 
     @Override
@@ -458,9 +519,25 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 new IcebergTableProcedureContext(icebergCatalog, table, context != null ? context : ConnectContext.get(),
                         transaction, hdfsEnvironment, stmt, clause);
         actions.add(() -> {
+            if (isMaintenanceOperation(tableProcedure.getOperation())) {
+                IcebergMaintenanceTaskRecord record = IcebergMaintenanceTaskRecord.start(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                        IcebergMaintenanceTaskRecord.TRIGGER_REASON_MANUAL, getOriginSql());
+                maintenanceTasks.add(Pair.create(record, tableProcedureContext));
+            }
             super.resultSet = tableProcedure.execute(tableProcedureContext, args);
         });
         return null;
+    }
+
+    private static boolean isMaintenanceOperation(IcebergTableOperation operation) {
+        return operation == IcebergTableOperation.EXPIRE_SNAPSHOTS
+                || operation == IcebergTableOperation.REMOVE_ORPHAN_FILES
+                || operation == IcebergTableOperation.REWRITE_MANIFESTS;
+    }
+
+    private String getOriginSql() {
+        return stmt != null && stmt.getOrigStmt() != null ? stmt.getOrigStmt().originStmt : null;
     }
 
     private Literal<?> buildIcebergDefaultLiteral(ColumnDef columnDef, org.apache.iceberg.types.Type icebergType) {

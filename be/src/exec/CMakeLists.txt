@@ -393,6 +393,7 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_iceberg_maintenance_tasks_scanner.cpp
     schema_scanner/schema_loads_scanner.cpp
     schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_partitions_meta_scanner.cpp

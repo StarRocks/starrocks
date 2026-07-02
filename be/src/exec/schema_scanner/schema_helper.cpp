@@ -164,6 +164,14 @@ Status SchemaHelper::get_task_runs(const SchemaScannerState& state, const TGetTa
     });
 }
 
+Status SchemaHelper::get_iceberg_maintenance_tasks(const SchemaScannerState& state,
+                                                   const TGetIcebergMaintenanceTasksParams& var_params,
+                                                   TGetIcebergMaintenanceTasksResult* var_result) {
+    return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
+        client->getIcebergMaintenanceTasks(*var_result, var_params);
+    });
+}
+
 Status SchemaHelper::get_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
                                TGetLoadsResult* var_result) {
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {

@@ -95,6 +95,10 @@ public:
     static Status get_task_runs(const SchemaScannerState& state, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
 
+    static Status get_iceberg_maintenance_tasks(const SchemaScannerState& state,
+                                                const TGetIcebergMaintenanceTasksParams& var_params,
+                                                TGetIcebergMaintenanceTasksResult* var_result);
+
     static Status get_tables_config(const SchemaScannerState& state, const TGetTablesConfigRequest& var_params,
                                     TGetTablesConfigResponse* var_result);
 

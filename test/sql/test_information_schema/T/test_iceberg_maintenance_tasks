@@ -1,0 +1,6 @@
+-- name: test_iceberg_maintenance_tasks
+DESC information_schema.iceberg_maintenance_tasks;
+
+SELECT * FROM information_schema.iceberg_maintenance_tasks WHERE CATALOG_NAME = 'non_existent_catalog';
+
+SELECT COUNT(*) >= 0 FROM information_schema.iceberg_maintenance_tasks;

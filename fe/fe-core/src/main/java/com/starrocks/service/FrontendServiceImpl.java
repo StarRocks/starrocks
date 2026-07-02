@@ -79,6 +79,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
+import com.starrocks.catalog.system.information.IcebergMaintenanceTasksSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
@@ -269,6 +270,8 @@ import com.starrocks.thrift.TGetFeThreadsRequest;
 import com.starrocks.thrift.TGetFeThreadsResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetIcebergMaintenanceTasksParams;
+import com.starrocks.thrift.TGetIcebergMaintenanceTasksResult;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
 import com.starrocks.thrift.TGetKeywordsRequest;
@@ -816,6 +819,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTaskRunInfoResult getTaskRuns(TGetTasksParams params) throws TException {
         LOG.debug("get show task run request: {}", params);
         return TaskRunsSystemTable.query(params);
+    }
+
+    @Override
+    public TGetIcebergMaintenanceTasksResult getIcebergMaintenanceTasks(TGetIcebergMaintenanceTasksParams params)
+            throws TException {
+        LOG.debug("get iceberg maintenance tasks request: {}", params);
+        return IcebergMaintenanceTasksSystemTable.query(params);
     }
 
     @Override

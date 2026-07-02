@@ -150,4 +150,7 @@ public class SystemId {
 
     // ==================  Materialized View  ===================== //
     public static final long MATERIALIZED_VIEW_REFRESH_JOBS_ID = 180L;
+
+    // ==================  Iceberg Maintenance  =================== //
+    public static final long ICEBERG_MAINTENANCE_TASKS_ID = 181L;
 }
