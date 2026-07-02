@@ -198,6 +198,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total count of all types of requests between BE and FE, including CREATE TABLE, Publish Version, and tablet clone.
 
+## `external_stats_analyze_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of external table statistics requests served from background ANALYZE results.
+
+## `external_stats_table_metadata_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of external table statistics requests served from table metadata estimation (foreground path).
+
 ## `fd_num_limit`
 
 - Unit: Count
