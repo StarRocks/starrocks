@@ -469,6 +469,13 @@ TEST_F(NativeMethodHelperTest, get_struct_field_addrs) {
     env->DeleteLocalRef(jarr);
 }
 
+// StarRocks StructColumn requires at least one field, so an empty STRUCT
+// descriptor is rejected before native UDF helpers can receive a column.
+TEST_F(JavaNativeMethodTest, empty_struct_column_is_not_constructible) {
+    TypeDescriptor td(TYPE_STRUCT);
+    ASSERT_DEATH_IF_SUPPORTED((void)ColumnHelper::create_column(td, /*nullable=*/true), ".*");
+}
+
 // Non-nullable STRUCT column rejects with IllegalArgumentException — STRUCT
 // result columns in StarRocks are always wrapped in NullableColumn, so the
 // helper enforces that invariant rather than silently dereferencing the

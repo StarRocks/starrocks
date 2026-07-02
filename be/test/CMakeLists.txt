@@ -292,9 +292,6 @@ set(EXEC_FILES
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
-        ./udf/python/env_test.cpp
-        ./udf/java/java_data_converter_test.cpp
-        ./udf/java/java_udf_test.cpp
         ./util/network_util_test.cpp
         )
 
@@ -336,6 +333,7 @@ add_subdirectory(compute_env)
 add_subdirectory(orchestration)
 add_subdirectory(data_workflows)
 add_subdirectory(exprs)
+add_subdirectory(udf)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(platform)

@@ -691,6 +691,18 @@
       "remediation": "Keep ExprCore limited to core expression infrastructure and builtin aggregate registry code; keep Java aggregate extensions and agg-state combinator integration in Exprs."
     },
     {
+      "id": "udf",
+      "doc_label": "Udf",
+      "summary": "Java and Python UDF runtime helpers, call stubs, type conversion, and worker management above ExprCore, Runtime, and Platform.",
+      "owned_targets": ["Udf"],
+      "owned_roots": ["be/src/udf"],
+      "allowed_include_prefixes": ["udf/", "exprs/", "runtime/", "platform/", "fs/", "io/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "allowed_target_deps": ["ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["udf_test"],
+      "allowed_test_link_deps": ["Udf", "ExprCore", "Runtime", "Platform", "FSCore", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep UDF runtime helpers limited to expression-facing UDF execution, Java/Python conversion, worker management, and the ExprCore/Runtime/Platform dependency closure; move broader execution, storage, service, or connector orchestration upward."
+    },
+    {
       "id": "execprimitive",
       "doc_label": "ExecPrimitive",
       "summary": "Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.",

@@ -555,7 +555,6 @@ set(STARROCKS_LINK_LIBS
     Formats
     Orchestration
     DataWorkflows
-    Udf
     ${WL_END_GROUP}
     Storage
     FormatAvro
@@ -567,6 +566,7 @@ set(STARROCKS_LINK_LIBS
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
+    Udf
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
     Runtime

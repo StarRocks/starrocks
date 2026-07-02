@@ -243,6 +243,14 @@ Core expression infrastructure and builtin aggregate registry that depend only o
 - Core tests: `expr_core_test`
 - Remediation: Keep ExprCore limited to core expression infrastructure and builtin aggregate registry code; keep Java aggregate extensions and agg-state combinator integration in Exprs.
 
+### Udf (`udf`)
+Java and Python UDF runtime helpers, call stubs, type conversion, and worker management above ExprCore, Runtime, and Platform.
+- Targets: `Udf`
+- Allowed internal include prefixes: `udf/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExprCore`, `Runtime`, `Platform`, `FSCore`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `udf_test`
+- Remediation: Keep UDF runtime helpers limited to expression-facing UDF execution, Java/Python conversion, worker management, and the ExprCore/Runtime/Platform dependency closure; move broader execution, storage, service, or connector orchestration upward.
+
 ### ExecPrimitive (`execprimitive`)
 Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
 - Targets: `ExecPrimitive`

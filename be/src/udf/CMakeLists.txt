@@ -31,4 +31,4 @@ set(UDF_FILES
 
 ADD_BE_LIB(Udf ${UDF_FILES})
 
-target_link_libraries(Udf PUBLIC Runtime Platform ColumnCore)
+target_link_libraries(Udf PUBLIC ExprCore Runtime Platform ColumnCore)
