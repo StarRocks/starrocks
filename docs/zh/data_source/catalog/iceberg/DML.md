@@ -315,6 +315,131 @@ WHERE email_verified = false;
 | `iceberg_update_bytes` | 字节 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE 写入的总字节数，按新数据文件和位置删除文件分别统计。 |
 | `iceberg_update_files` | 计数 | `file_type`（`data`、`position_delete`） | Iceberg UPDATE 写入的文件总数，按新数据文件和位置删除文件分别统计。 |
 
+## MERGE INTO
+
+您可以使用 MERGE INTO 语句，根据源关系（source relation）中的每一行是否与目标表匹配，在一条原子语句中对 Iceberg 表进行有条件的更新、删除和插入。此功能从 v4.2 起支持。
+
+MERGE INTO 复用了与 UPDATE 相同的 Iceberg V2 **Merge-On-Read** 提交路径：被更新或删除的匹配行生成位置删除文件（position delete file），被更新的行和新插入的行生成新数据文件，所有文件在同一个 Iceberg 快照中一起提交。读者始终只能看到 MERGE 前或 MERGE 后的完整状态，不会出现中间态，结果表对 Spark 等其它 Iceberg 引擎完全兼容。
+
+### 语法
+
+```SQL
+MERGE INTO <target_table> [ [AS] <target_alias> ]
+USING <source_relation> [ [AS] <source_alias> ]
+ON <merge_condition>
+[ WHEN MATCHED [ AND <condition> ] THEN { UPDATE SET <column_name> = <expression> [, ...] | DELETE } ]
+[ ... ]
+[ WHEN NOT MATCHED [ AND <condition> ] THEN { INSERT (<column_name> [, ...]) VALUES (<expression> [, ...]) | INSERT * } ]
+[ ... ]
+```
+
+### 参数
+
+- `target_table`：要修改的 Iceberg 表。您可以使用：
+  - 完全限定名称：`catalog_name.database_name.table_name`
+  - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
+  - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+- `source_relation`：驱动 merge 的数据源。可以是表、视图或带括号的子查询。当 `ON` 条件或 `WHEN` 子句需要引用其列时，请为其指定别名。
+
+- `merge_condition`：`ON` 谓词，用于判断目标行与源行是否匹配。通常按键列关联目标表和源。
+
+- `WHEN MATCHED [AND <condition>] THEN ...`：作用于匹配到源行的目标行。动作为 `UPDATE SET`（改写所列的列）或 `DELETE`（删除该匹配行）。可以编写多个 `WHEN MATCHED` 子句，每个可带一个额外的 `AND <condition>`；对某一行而言，第一个条件成立的子句生效。
+
+- `WHEN NOT MATCHED [AND <condition>] THEN ...`：作用于未匹配到任何目标行的源行。动作为插入一行新数据，可通过显式的列与值列表（`INSERT (...) VALUES (...)`），或通过 `INSERT *`（按同名列将源的每一列映射到目标列）。
+
+### 使用说明
+
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3 表或非 Iceberg 表（例如原生 OLAP 表）执行 MERGE INTO 会在分析阶段被拒绝。
+- 至少需要一个 `WHEN` 子句。
+- 每个目标行**最多只能被一个源行匹配**。若某个目标行匹配了多个源行，语句会在运行时失败，而不是执行有歧义的变更。必要时请提前对源进行去重或聚合。
+- 在 `WHEN MATCHED ... THEN UPDATE` 子句中不能更新分区列。
+- 隐藏的元数据列 `_file` 和 `_pos` 不能在 `UPDATE SET` 中赋值，也不能作为 `INSERT` 的目标列。
+- 不支持 `DEFAULT` 值，因为 Iceberg V2 没有列默认值语义。
+- 在 `INSERT (...) VALUES (...)` 中，值的数量必须与所列列的数量一致，且同一列不能重复出现。
+- 无条件的 `WHEN MATCHED` 子句必须是所有 `WHEN MATCHED` 子句中的最后一个；无条件的 `WHEN NOT MATCHED` 子句必须是所有 `WHEN NOT MATCHED` 子句中的最后一个。
+- `INSERT *` 要求源能被一个名字限定引用：可以是显式别名，或裸表（此时使用表名）。当源是子查询时，必须显式指定别名。
+- 仅支持 Parquet 格式的 Iceberg 表，与已有的 Iceberg sink 一致。
+
+### 示例
+
+以下示例针对 Iceberg 表 `iceberg_catalog.db.t_merge`，其包含 `id`、`name`、`age`、`salary` 列。
+
+#### Upsert（更新匹配行，插入新行）
+
+最常见的 MERGE 模式：更新已存在的行，插入不存在的行：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_updates AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### 仅更新匹配行
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 3 AS id, 'UPDATED' AS name, 75000 AS salary) AS s
+ON t.id = s.id
+WHEN MATCHED THEN UPDATE SET name = s.name, salary = s.salary;
+```
+
+#### 删除匹配行
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 2 AS id) AS s
+ON t.id = s.id
+WHEN MATCHED THEN DELETE;
+```
+
+#### 插入未匹配的行
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING (SELECT 10 AS id, 'Frank' AS name, 40 AS age, 80000 AS salary) AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### 条件子句
+
+在 `WHEN` 子句上添加 `AND <condition>`，即可为每一行选择动作。一个常见场景是应用变更流（CDC）：源表 `t_changes` 带有一个 `op` 列，标记每行是更新、删除还是插入，一条 MERGE 语句即可分派这三种动作：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING iceberg_catalog.db.t_changes AS s
+ON t.id = s.id
+WHEN MATCHED AND s.op = 'DELETE' THEN DELETE
+WHEN MATCHED AND s.op = 'UPDATE' THEN UPDATE SET name = s.name, age = s.age, salary = s.salary
+WHEN NOT MATCHED AND s.op <> 'DELETE' THEN INSERT (id, name, age, salary) VALUES (s.id, s.name, s.age, s.salary);
+```
+
+#### INSERT *
+
+当源暴露出与目标同名的列时，`INSERT *` 会插入所有目标列而无需一一列出。源必须能被一个名字限定引用；若源是子查询，则必须带别名：
+
+```SQL
+MERGE INTO iceberg_catalog.db.t_merge AS t
+USING source_new_rows AS s
+ON t.id = s.id
+WHEN NOT MATCHED THEN INSERT *;
+```
+
+### 监控指标
+
+对 Iceberg 表实际写入的 MERGE INTO 语句会在提交后更新以下 FE 端指标。不产生任何文件的 no-op MERGE（例如空源，或所有匹配/未匹配行都被过滤掉、没有任何动作生效）会被跳过、不提交，也不会增加这些计数。它们与现有的 `iceberg_write_*`、`iceberg_delete_*`、`iceberg_update_*` 共用 `iceberg_*` 命名空间，可通过标准 FE 指标接口拉取。完整说明请参考 [监控指标](../../../administration/management/monitoring/metric_details/i-p.md)。
+
+| 指标 | 单位 | 标签 | 描述 |
+| --- | --- | --- | --- |
+| `iceberg_merge_total` | 计数 | `status`（`success`、`failed`），`reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`） | 针对 Iceberg 表的 MERGE INTO 任务总数，每个任务结束后加 1。 |
+| `iceberg_merge_duration_ms_total` | 毫秒 | — | Iceberg MERGE INTO 任务的累计执行时间。 |
+| `iceberg_merge_rows` | 行 | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO 处理的总行数，按文件类型拆分。`position_delete` 统计被 UPDATE 或 DELETE 命中的目标行（写为位置删除）；`data` 统计写入的数据行（更新的行加上插入的行）。 |
+| `iceberg_merge_bytes` | 字节 | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO 写入的总字节数，按新数据文件和位置删除文件分别统计。 |
+| `iceberg_merge_files` | 计数 | `file_type`（`data`、`position_delete`） | Iceberg MERGE INTO 写入的文件总数，按新数据文件和位置删除文件分别统计。 |
+
 ## TRUNCATE
 
 您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。
