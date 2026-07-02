@@ -130,14 +130,8 @@ public class PredicateColumnsMgr {
     }
 
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
+        // only support OLAP table right now
         if (!table.isNativeTableOrMaterializedView()) {
-            if (ColumnUsage.UseCase.getPredicateColumnUseCase().contains(useCase)) {
-                String uuid = table.getUUID();
-                if (uuid != null && !uuid.isEmpty()) {
-                    ExternalPredicateColumnsStorage.getInstance()
-                            .record(uuid, column.getName(), useCase.toString());
-                }
-            }
             return;
         }
         Optional<ColumnUsage> mayUsage = ColumnUsage.build(column, table, useCase);
@@ -236,7 +230,6 @@ public class PredicateColumnsMgr {
 
             PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
             PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
-            ExternalPredicateColumnsStorage extStorage = ExternalPredicateColumnsStorage.getInstance();
 
             if (!storage.isSystemTableReady()) {
                 LOG.warn("system table of predicate_columns is still not ready");
@@ -249,22 +242,6 @@ public class PredicateColumnsMgr {
             } else {
                 mgr.vacuum();
                 mgr.persist();
-            }
-
-            if (!extStorage.isSystemTableReady()) {
-                LOG.warn("system table of external_predicate_columns is still not ready");
-                return;
-            }
-
-            if (!extStorage.isRestored()) {
-                extStorage.restore();
-                extStorage.finishRestore();
-            } else {
-                long ttlHour = Config.statistic_predicate_columns_ttl_hours;
-                if (ttlHour >= 0) {
-                    extStorage.vacuum(TimeUtils.getSystemNow().minusHours(ttlHour));
-                }
-                extStorage.persist();
             }
         }
     }
