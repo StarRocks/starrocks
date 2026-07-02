@@ -174,12 +174,8 @@ static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileD
     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
         const auto& segment_meta = rowset.segment_metas(i);
         const bool shared_file = is_shared_segment(rowset, i);
-        // Use the segment's recorded owner tablet id (matches how the .vi was named at write time);
-        // fall back to this tablet for segments written before vector_index_tablet_id existed.
-        const int64_t vi_tablet_id =
-                segment_meta.has_vector_index_tablet_id() ? segment_meta.vector_index_tablet_id() : tablet_id;
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_path = join_path(base_dir, gen_vector_index_filename(segment_meta.filename(), vi_tablet_id, vi_id));
+            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, tablet_id, vi_id));
             if (shared_file && shared_file_deleter != nullptr) {
                 RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
             } else {
@@ -1479,16 +1475,12 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
-            // Protect associated .vi files using per-segment vector index metadata. Name them by the
+            // Protect associated .vi files using per-segment vector index metadata. Named by the
             // segment's recorded owner tablet id (not check_meta->id()) so a segment shared across
-            // tablets after a split is protected under the same .vi name every referencing tablet uses;
-            // fall back to check_meta->id() for segments written before vector_index_tablet_id existed.
+            // tablets after a split is protected under the same .vi name every referencing tablet uses.
             for (const auto& segment_meta : rowset.segment_metas()) {
-                const int64_t vi_tablet_id = segment_meta.has_vector_index_tablet_id()
-                                                     ? segment_meta.vector_index_tablet_id()
-                                                     : check_meta->id();
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_tablet_id, vi_id);
+                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, check_meta->id(), vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }

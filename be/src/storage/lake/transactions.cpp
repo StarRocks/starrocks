@@ -768,12 +768,8 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     // Helper to collect .vi files tracked in a rowset's segment_metas
     auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
         for (const auto& segment_meta : rowset.segment_metas()) {
-            // Name .vi files by the segment's recorded owner tablet id (matches how they were written);
-            // fall back to this txn's tablet for segments written before vector_index_tablet_id existed.
-            const int64_t vi_tablet_id =
-                    segment_meta.has_vector_index_tablet_id() ? segment_meta.vector_index_tablet_id() : tablet_id;
             for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_meta, tablet_id, vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
@@ -799,11 +795,8 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             const auto& segment_name = segment_metas[idx].filename();
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_name));
             // Delete .vi files for this new segment, named by its recorded owner tablet id.
-            const int64_t vi_tablet_id = segment_metas[idx].has_vector_index_tablet_id()
-                                                 ? segment_metas[idx].vector_index_tablet_id()
-                                                 : tablet_id;
             for (int64_t vi_id : segment_metas[idx].vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename(segment_name, vi_tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_metas[idx], tablet_id, vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }

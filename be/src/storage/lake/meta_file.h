@@ -192,5 +192,18 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
                                                const TxnLogPB_OpCompaction& op_compaction,
                                                RowsetMetadataPB& last_input_rowset);
 
+// Backstop for SegmentMetadataPB::vector_index_tablet_id: called at every publish funnel that adds
+// a rowset WRITTEN BY |tablet_id| to that tablet's metadata (op_write / compaction output / schema
+// change), it stamps the owner on any segment that recorded vector_index_ids without it, so a
+// writer path that forgot the stamp still persists a correct owner. Segments marked shared() are
+// skipped: those arrive via a tablet-split cross-publish and were written by another tablet — their
+// recorded owner (or its absence) must be carried verbatim, never overwritten with the local id.
+// Replication: the non-PK applier's apply_replication_log adds rowsets directly and is deliberately
+// not backstopped. PK replication reuses the op_write funnels, so a replicated segment lacking an
+// owner gets stamped with the destination tablet id — harmless, because .vi files are not
+// replicated: any owner value resolves to a nonexistent file, the same degraded behavior such
+// segments had before this field existed.
+void fill_missing_vector_index_owner(RowsetMetadataPB* rowset, int64_t tablet_id);
+
 } // namespace lake
 } // namespace starrocks

@@ -868,6 +868,55 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(118, metadata->next_rowset_id());
 }
 
+// The publish funnel backstops SegmentMetadataPB::vector_index_tablet_id: a writer path that
+// records vector_index_ids but forgets to stamp the owner still persists a correct owner
+// (= the publishing tablet, which wrote the segment). Segments arriving from a tablet-split
+// cross-publish (shared=true) were written by ANOTHER tablet and must be carried verbatim.
+TEST_F(MetaFileTest, test_apply_opwrite_backstops_vector_index_owner) {
+    const int64_t tablet_id = 31003;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    {
+        // ids recorded, owner forgotten, not shared: the backstop fills the publishing tablet.
+        auto* forgot_owner = rowset->add_segment_metas();
+        forgot_owner->set_filename("forgot_owner.dat");
+        forgot_owner->add_vector_index_ids(100);
+        // ids + explicit owner: preserved, never overwritten.
+        auto* has_owner = rowset->add_segment_metas();
+        has_owner->set_filename("has_owner.dat");
+        has_owner->add_vector_index_ids(100);
+        has_owner->set_vector_index_tablet_id(9999);
+        // ids, owner forgotten, but shared (split cross-publish): written by another tablet,
+        // stamping the local id would be wrong — must stay absent.
+        auto* shared_seg = rowset->add_segment_metas();
+        shared_seg->set_filename("shared.dat");
+        shared_seg->add_vector_index_ids(100);
+        shared_seg->set_shared(true);
+        // no vector indexes: no owner field at all.
+        auto* no_vi = rowset->add_segment_metas();
+        no_vi->set_filename("no_vi.dat");
+    }
+
+    builder.apply_opwrite(op_write, {}, {});
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& written = metadata->rowsets(0);
+    ASSERT_EQ(4, written.segment_metas_size());
+    ASSERT_TRUE(written.segment_metas(0).has_vector_index_tablet_id());
+    EXPECT_EQ(tablet_id, written.segment_metas(0).vector_index_tablet_id());
+    ASSERT_TRUE(written.segment_metas(1).has_vector_index_tablet_id());
+    EXPECT_EQ(9999, written.segment_metas(1).vector_index_tablet_id());
+    EXPECT_FALSE(written.segment_metas(2).has_vector_index_tablet_id());
+    EXPECT_FALSE(written.segment_metas(3).has_vector_index_tablet_id());
+}
+
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     const int64_t tablet_id = 31002;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);

@@ -662,6 +662,9 @@ private:
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
+            // Schema-change conversion segments were written by this (shadow) tablet; backstop
+            // the .vi owner id. ADD VECTOR INDEX rewrites flow through here.
+            fill_missing_vector_index_owner(new_rowset, _metadata->id());
         }
         if (op_schema_change.has_delvec_meta()) {
             DCHECK(op_schema_change.linked_segment());
@@ -1073,6 +1076,8 @@ private:
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
+            // These segments were written by this tablet; backstop the .vi owner id.
+            fill_missing_vector_index_owner(rowset, _metadata->id());
             rowset->set_id(_metadata->next_rowset_id());
             rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*rowset));
@@ -1185,6 +1190,8 @@ private:
             // Replace the first input rowset with output rowset
             auto output_rowset = _metadata->mutable_rowsets(first_idx);
             output_rowset->CopyFrom(op_compaction.output_rowset());
+            // Compaction outputs are written by this tablet; backstop the .vi owner id.
+            fill_missing_vector_index_owner(output_rowset, _metadata->id());
             output_rowset->set_id(_metadata->next_rowset_id());
             output_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(_metadata->next_rowset_id() + get_rowset_id_step(*output_rowset));
@@ -1266,6 +1273,9 @@ private:
             new_rowset->CopyFrom(rowset);
             new_rowset->set_version(_new_version);
             _metadata->set_next_rowset_id(new_rowset->id() + get_rowset_id_step(*new_rowset));
+            // Schema-change conversion segments were written by this (shadow) tablet; backstop
+            // the .vi owner id. ADD VECTOR INDEX rewrites flow through here.
+            fill_missing_vector_index_owner(new_rowset, _metadata->id());
         }
         DCHECK(!op_schema_change.has_delvec_meta());
         return Status::OK();

@@ -29,6 +29,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
@@ -379,14 +380,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
-        // Owner tablet id for .vi naming: use the recorded id so a segment shared across tablets
-        // after a split resolves the same .vi; fall back to this tablet for segments written
-        // before vector_index_tablet_id existed (those are never shared yet).
-        seg_options.vector_index_tablet_id = tablet_id();
-        if (meta_pos < _metadata->segment_metas_size() &&
-            _metadata->segment_metas(meta_pos).has_vector_index_tablet_id()) {
-            seg_options.vector_index_tablet_id = _metadata->segment_metas(meta_pos).vector_index_tablet_id();
-        }
+        // Owner tablet id for .vi naming: a segment shared across tablets after a split must
+        // resolve the same .vi from every reader (see resolve_vector_index_owner_tablet_id).
+        seg_options.vector_index_tablet_id =
+                meta_pos < _metadata->segment_metas_size()
+                        ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
+                        : tablet_id();
 
         if (options.rowid_range_option != nullptr) { // physical split.
             auto [rowid_range, is_first_split_of_segment] =
@@ -482,11 +481,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
-        seg_options.vector_index_tablet_id = tablet_id();
-        if (meta_pos < _metadata->segment_metas_size() &&
-            _metadata->segment_metas(meta_pos).has_vector_index_tablet_id()) {
-            seg_options.vector_index_tablet_id = _metadata->segment_metas(meta_pos).vector_index_tablet_id();
-        }
+        seg_options.vector_index_tablet_id =
+                meta_pos < _metadata->segment_metas_size()
+                        ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
+                        : tablet_id();
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -545,11 +543,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
         }
-        seg_options.vector_index_tablet_id = tablet_id();
-        if (meta_pos < _metadata->segment_metas_size() &&
-            _metadata->segment_metas(meta_pos).has_vector_index_tablet_id()) {
-            seg_options.vector_index_tablet_id = _metadata->segment_metas(meta_pos).vector_index_tablet_id();
-        }
+        seg_options.vector_index_tablet_id =
+                meta_pos < _metadata->segment_metas_size()
+                        ? resolve_vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos), tablet_id())
+                        : tablet_id();
         // Apply per-segment rowid range if provided
         if (rowid_range_per_segment != nullptr && i < rowid_range_per_segment->size()) {
             seg_options.rowid_range_option = (*rowid_range_per_segment)[i];
