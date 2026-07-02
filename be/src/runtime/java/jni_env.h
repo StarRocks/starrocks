@@ -14,25 +14,13 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
+#include <jni.h>
 
-namespace starrocks {
-
-class ProcessMetricsRegistry;
-
-struct BackendMetricsInitOptions {
-    std::vector<std::string> storage_paths;
-    bool collect_hook_enabled = true;
-    bool init_system_metrics = false;
-    bool bind_ipv6 = false;
-};
-
-class BackendMetricsInitializer {
-public:
-    static BackendMetricsInitOptions from_config(std::vector<std::string> storage_paths);
-
-    static void initialize(ProcessMetricsRegistry* process_metrics_registry, const BackendMetricsInitOptions& options);
-};
-
-} // namespace starrocks
+// Implemented by libhdfs:
+// hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
+//
+// StarRocks intentionally uses this function instead of attaching directly:
+// 1. A thread cannot attach to more than one virtual machine.
+// 2. libhdfs depends on this function and performs initialization through it.
+//    If the JVM already exists, libhdfs reuses it instead of creating another.
+extern "C" JNIEnv* getJNIEnv(void);

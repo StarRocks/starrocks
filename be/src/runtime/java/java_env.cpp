@@ -18,14 +18,15 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstdlib>
 #include <functional>
 #include <future>
 #include <limits>
 
+#include "base/logging.h"
 #include "base/status.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "runtime/java/jvm_metrics.h"
 
 namespace starrocks {
 
@@ -33,13 +34,12 @@ JavaEnv::JavaEnv() = default;
 
 JavaEnv::~JavaEnv() = default;
 
-Status JavaEnv::init() {
-    if (_jvm_call_pool != nullptr) {
-        return Status::OK();
+Status JavaEnv::init(MetricRegistry* metrics, bool enable_jvm_metrics) {
+    if (_jvm_call_pool == nullptr) {
+        _jvm_call_pool = std::make_unique<PriorityThreadPool>(
+                "jvm", std::max<int32_t>(1, config::jvm_call_thread_pool_size), std::numeric_limits<uint32_t>::max());
     }
-    _jvm_call_pool = std::make_unique<PriorityThreadPool>(
-            "jvm", std::max<int32_t>(1, config::jvm_call_thread_pool_size), std::numeric_limits<uint32_t>::max());
-    return Status::OK();
+    return _init_jvm_metrics(metrics, enable_jvm_metrics);
 }
 
 void JavaEnv::shutdown() {
@@ -50,6 +50,29 @@ void JavaEnv::shutdown() {
 
 void JavaEnv::destroy() {
     _jvm_call_pool.reset();
+    _jvm_metrics_registry = nullptr;
+}
+
+Status JavaEnv::_init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics) {
+#ifndef __APPLE__
+    if (!enable_jvm_metrics || metrics == nullptr || _jvm_metrics_registry == metrics) {
+        return Status::OK();
+    }
+    if (_jvm_metrics_registry != nullptr) {
+        LOG(WARNING) << "jvm metrics are already installed on another registry, skip duplicate install";
+        return Status::OK();
+    }
+
+    auto* jvm_metrics = JVMMetrics::instance();
+    auto status = jvm_metrics->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
+        return Status::OK();
+    }
+    jvm_metrics->install(metrics);
+    _jvm_metrics_registry = metrics;
+#endif
+    return Status::OK();
 }
 
 Status JavaEnv::call_function_in_pthread(const std::function<Status()>& func) {
@@ -67,19 +90,6 @@ Status JavaEnv::call_function_in_pthread(const std::function<Status()>& func) {
         return Status::InternalError("failed to submit JVM call to jvm_call_pool");
     }
     return future.get();
-}
-
-Status detect_java_runtime() {
-    const char* p = std::getenv("JAVA_HOME");
-    if (p == nullptr) {
-        return Status::RuntimeError("env 'JAVA_HOME' is not set");
-    }
-    return JavaEnv::GetInstance()->call_function_in_pthread([]() {
-        if (getJNIEnv() == nullptr) {
-            return Status::RuntimeError("couldn't get JNIEnv, please check your java runtime");
-        }
-        return Status::OK();
-    });
 }
 
 } // namespace starrocks

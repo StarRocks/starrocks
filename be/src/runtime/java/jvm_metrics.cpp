@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/jvm_metrics.h"
+#include "runtime/java/jvm_metrics.h"
+
+#include <fmt/format.h>
 
 #include <vector>
 
+#include "base/logging.h"
 #include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
-#include "runtime/java/java_env.h"
-#include "udf/java/java_udf.h"
+#include "runtime/java/java_runtime.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/java/jvm_helper.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                       \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                       \
@@ -42,9 +46,9 @@ JVMMetrics* JVMMetrics::instance() {
 }
 
 Status JVMMetrics::init() {
-    RETURN_IF_ERROR(detect_java_runtime());
+    RETURN_IF_ERROR(detect_java_runtime_on_current_thread());
 
-    // check JNIEnv before calling JVMFunctionHelper::getInstance() to avoid crash
+    // Check JNIEnv before calling JVMHelper::getInstance() to avoid CHECK failure.
     if (getJNIEnv() == nullptr) {
         return Status::InternalError("get JNIEnv failed");
     }

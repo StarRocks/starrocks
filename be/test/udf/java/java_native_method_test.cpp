@@ -31,7 +31,7 @@
 #include "column/raw_data_visitor.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
