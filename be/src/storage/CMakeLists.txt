@@ -94,6 +94,7 @@ set(STORAGE_FILES
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
+    non_closing_chunk_iterator.cpp
     kv_store.cpp
     local_tablet_reader.cpp
     olap_server.cpp

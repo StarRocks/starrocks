@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "column/schema.h"
@@ -28,15 +29,19 @@ namespace starrocks {
 class SeekTuple {
 public:
     // default is infinite.
-    SeekTuple() = default;
+    // _schema is held by shared_ptr so copying a SeekTuple (and the SeekRanges that contain it) is a cheap
+    // refcount bump rather than a full Schema rebuild; the schema is immutable after construction, so sharing
+    // is safe. Keep it non-null even when default-constructed so schema() never dereferences a null pointer.
+    SeekTuple() : _schema(std::make_shared<Schema>()) {}
 
-    SeekTuple(Schema schema, std::vector<Datum> values) : _schema(std::move(schema)), _values(std::move(values)) {
+    SeekTuple(Schema schema, std::vector<Datum> values)
+            : _schema(std::make_shared<Schema>(std::move(schema))), _values(std::move(values)) {
 #ifndef NDEBUG
-        if (_schema.sort_key_idxes().empty()) {
+        if (_schema->sort_key_idxes().empty()) {
             // Ensure the key columns are continuous and started from zero.
             // But the value columns may not be continuous in delta column.
-            for (size_t i = 0; i < _schema.num_key_fields(); i++) {
-                CHECK_EQ(ColumnId(i), _schema.field(i)->id());
+            for (size_t i = 0; i < _schema->num_key_fields(); i++) {
+                CHECK_EQ(ColumnId(i), _schema->field(i)->id());
             }
         }
 #endif
@@ -44,7 +49,7 @@ public:
 
     bool empty() const { return _values.empty(); }
 
-    const Schema& schema() const { return _schema; }
+    const Schema& schema() const { return *_schema; }
 
     size_t columns() const { return _values.size(); }
 
@@ -63,7 +68,7 @@ public:
     std::string debug_string() const;
 
 private:
-    Schema _schema;
+    std::shared_ptr<Schema> _schema;
     std::vector<Datum> _values;
 };
 
@@ -75,7 +80,7 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, uint8_t pa
             output.push_back(KEY_NULL_FIRST_MARKER);
         } else {
             output.push_back(KEY_NORMAL_MARKER);
-            const auto& field = *_schema.field(cid);
+            const auto& field = *_schema->field(cid);
             if (field.short_key_length() > 0) {
                 const KeyCoder* coder = get_key_coder(field.type()->type());
                 coder->encode_ascending(_values[cid], field.short_key_length(), &output);
@@ -100,7 +105,7 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, std::vecto
             output.push_back(KEY_NULL_FIRST_MARKER);
         } else {
             output.push_back(KEY_NORMAL_MARKER);
-            const auto& field = *_schema.field(sort_key_idxes[i]);
+            const auto& field = *_schema->field(sort_key_idxes[i]);
             if (field.short_key_length() > 0) {
                 const KeyCoder* coder = get_key_coder(field.type()->type());
                 coder->encode_ascending(_values[sort_key_idxes[i]], field.short_key_length(), &output);

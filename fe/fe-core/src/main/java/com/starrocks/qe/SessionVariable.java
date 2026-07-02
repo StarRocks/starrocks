@@ -411,6 +411,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LAKE_TABLET_INTERNAL_PARALLEL = "enable_lake_tablet_internal_parallel";
 
+    public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
+            "enable_lake_prepared_physical_split_scan";
+
+    public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
+            "lake_tablet_internal_parallel_skew_split_ratio";
+
     public static final String TABLET_INTERNAL_PARALLEL_MODE = "tablet_internal_parallel_mode";
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
@@ -994,6 +1000,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+    public static final String ONE_TABLET_AGG_OPT_MAX_TABLET_ROWS = "one_tablet_agg_opt_max_tablet_rows";
+
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
@@ -1321,6 +1329,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN, flag = VariableMgr.INVISIBLE)
+    private boolean enableLakePreparedPhysicalSplitScan = false;
+
+    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO, flag = VariableMgr.INVISIBLE)
+    private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -3095,6 +3109,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
 
+    // Disable the one-tablet optimization (one-phase aggregation / single-tablet gather output) when the
+    // single selected tablet's fuzzy row count exceeds this value; such a large tablet would otherwise be
+    // scanned and aggregated serially on one node. Default 10000000 (10M rows) enables the gate for
+    // genuinely large tablets while sparing small/medium ones; set to -1 to disable the gate entirely and
+    // keep the pre-existing one-tablet behavior regardless of tablet size.
+    @VarAttr(name = ONE_TABLET_AGG_OPT_MAX_TABLET_ROWS, flag = VariableMgr.INVISIBLE)
+    private long oneTabletAggOptMaxTabletRows = 10000000;
+
     @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
     private boolean enablePushdownOrPredicate = true;
 
@@ -4721,6 +4743,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTabletInternalParallel || (RunMode.isSharedDataMode() && enableLakeTabletInternalParallel);
     }
 
+    public boolean isEnableLakePreparedPhysicalSplitScan() {
+        return enableLakePreparedPhysicalSplitScan;
+    }
+
+    public double getLakeTabletInternalParallelSkewSplitRatio() {
+        return lakeTabletInternalParallelSkewSplitRatio;
+    }
+
     public boolean isEnableResourceGroup() {
         return true;
     }
@@ -5694,6 +5724,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
     }
 
+    public long getOneTabletAggOptMaxTabletRows() {
+        return oneTabletAggOptMaxTabletRows;
+    }
+
+    public void setOneTabletAggOptMaxTabletRows(long oneTabletAggOptMaxTabletRows) {
+        this.oneTabletAggOptMaxTabletRows = oneTabletAggOptMaxTabletRows;
+    }
+
     public TPredicateTreeParams getPredicateTreeParams() {
         TPredicateTreeParams params = new TPredicateTreeParams();
         params.setEnable_or(enablePushdownOrPredicate);
@@ -6563,6 +6601,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } else {
             tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
         }
+        tResult.setEnable_lake_prepared_physical_split_scan(enableLakePreparedPhysicalSplitScan);
+        tResult.setLake_tablet_internal_parallel_skew_split_ratio(lakeTabletInternalParallelSkewSplitRatio);
 
         tResult.setTablet_internal_parallel_mode(
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));

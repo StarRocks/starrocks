@@ -57,6 +57,23 @@ CONF_mInt32(lake_flush_thread_num_per_store, "0");
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on.
+// A prepared-split child morsel reuses the seed's prepared range (cheap), so a smaller cap cuts big
+// tablets into finer morsels that fill more otherwise-idle drivers. Combined as
+// min(tablet_internal_parallel_max_splitted_scan_rows, this): can only make splits finer, never coarser
+// (an over-large value degrades to the shared default); the [min_splitted_scan_rows, ...] clamp still
+// guarantees >= one pipeline chunk per morsel. Does not affect shared-nothing or the flag-off path.
+// Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
+
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) — it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 

@@ -21,8 +21,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -758,6 +762,40 @@ public class Utils {
         }
 
         return true;
+    }
+
+    // Gate for the one-tablet optimization (one-phase aggregation, single-tablet gather output): even when a
+    // scan is pruned to a single tablet, that tablet may be huge, and running the whole scan+aggregation on a
+    // single node/instance serializes it. Return true when the single selected tablet's row count exceeds
+    // maxTabletRows so callers can disable the optimization. maxTabletRows < 0 disables the gate (preserving
+    // current behavior). Uses getFuzzyRowCount(), which is lock-free on both LocalTablet and LakeTablet; an
+    // unresolved or not-yet-collected (0) row count is treated as "not too large" so the opt stays on.
+    public static boolean isSelectedSingleTabletTooLarge(Table table, long selectedIndexMetaId,
+                                                         List<Long> selectedPartitionIds,
+                                                         List<Long> selectedTabletIds, long maxTabletRows) {
+        if (maxTabletRows < 0 || !(table instanceof OlapTable) || selectedPartitionIds == null
+                || selectedTabletIds == null || selectedTabletIds.size() != 1) {
+            return false;
+        }
+        OlapTable olapTable = (OlapTable) table;
+        long tabletId = selectedTabletIds.get(0);
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                MaterializedIndex index = subPartition.getLatestIndex(selectedIndexMetaId);
+                if (index == null) {
+                    continue;
+                }
+                Tablet tablet = index.getTablet(tabletId);
+                if (tablet != null) {
+                    return tablet.getFuzzyRowCount() > maxTabletRows;
+                }
+            }
+        }
+        return false;
     }
 
     public static boolean mustGenerateMultiStageAggregate(Operator inputOp, Operator childOp) {

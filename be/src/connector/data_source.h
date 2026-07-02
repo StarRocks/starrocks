@@ -44,6 +44,12 @@ public:
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
     virtual bool has_any_predicate() const { return _has_any_predicate; }
+    virtual bool has_reusable_state() const { return false; }
+    virtual bool can_reuse_with(pipeline::ScanMorsel& morsel) const { return false; }
+    virtual Status reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) {
+        return Status::NotSupported("data source reuse is not supported");
+    }
+    virtual void release_for_reuse(RuntimeState* state) { close(state); }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;

@@ -1198,7 +1198,7 @@ CONF_mBool(use_default_dop_when_shared_scan, "true");
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
 CONF_mInt64(tablet_internal_parallel_min_splitted_scan_rows, "16384");
-// Default is 16384*64, where 16384 is the chunk size in pipeline.
+// Default is 16384*64. (Note: 16384 == 4 * vector_chunk_size(4096), i.e. 4 pipeline chunks, not one.)
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_rows, "1048576");
 // Default is 512MB.
 CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
@@ -1209,6 +1209,21 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
+// Upper bound on splitted_scan_rows applied ONLY when enable_lake_prepared_physical_split_scan is on.
+// A prepared-split child morsel reuses the seed's prepared range (cheap), so a smaller cap cuts big
+// tablets into finer morsels that fill more otherwise-idle drivers. Combined as
+// min(tablet_internal_parallel_max_splitted_scan_rows, this): can only make splits finer, never coarser
+// (an over-large value degrades to the shared default); the [min_splitted_scan_rows, ...] clamp still
+// guarantees >= one pipeline chunk per morsel. Does not affect shared-nothing or the flag-off path.
+// Default 262144 (1/4 of the shared 1048576 default).
+CONF_mInt64(lake_prepared_split_max_splitted_scan_rows, "262144");
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) — it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
 
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
@@ -1907,6 +1922,9 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+// Whether to pass the exact SparseRange down to page-level zonemap filtering.
+// Disabled by default to preserve the historical coarse begin/end envelope behavior.
+CONF_mBool(enable_index_page_level_zonemap_filter_scan_range_pushdown, "false");
 CONF_mBool(enable_index_bloom_filter, "true");
 CONF_mBool(enable_index_bitmap_filter, "true");
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/lake/tablet_manager.h"
@@ -29,6 +31,9 @@ class TabletMetadataPB;
 class SlotDescriptor;
 namespace lake {
 class TabletManager;
+}
+namespace pipeline {
+struct LakeSplitContext;
 }
 } // namespace starrocks
 
@@ -62,6 +67,10 @@ public:
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    bool has_reusable_state() const override;
+    bool can_reuse_with(pipeline::ScanMorsel& morsel) const override;
+    Status reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) override;
+    void release_for_reuse(RuntimeState* state) override;
 
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
@@ -69,7 +78,9 @@ public:
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        _reader->get_split_tasks(split_tasks);
+        if (_reader != nullptr) {
+            _reader->get_split_tasks(split_tasks);
+        }
     }
 
     // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
@@ -81,17 +92,39 @@ public:
     const TabletReaderParams& TEST_params() const { return _params; }
 
 private:
+    struct ReusableReaderKey {
+        lake::PreparedTabletReadStatePtr prepared_tablet_read_state;
+    };
+    struct RuntimeFilterSnapshot {
+        bool has_descriptor = false;
+        bool stream_build = false;
+        bool arrived = false;
+        size_t version = 0;
+    };
+    using RuntimeFilterSnapshots = std::unordered_map<int32_t, RuntimeFilterSnapshot>;
+
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     void decide_chunk_size(bool has_predicate);
     Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
-    Status init_tablet_reader(RuntimeState* state);
+    Status init_tablet_reader(RuntimeState* state, bool use_prepared_state = true);
+    Status reopen_reader(RuntimeState* state);
+    void apply_child_split_context(const pipeline::LakeSplitContext& split_context, bool use_prepared_state);
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
+    void refresh_reusable_reader_key();
+    const pipeline::LakeSplitContext* reusable_child_context(pipeline::ScanMorsel& morsel) const;
+    Status rebuild_scan_conjuncts(RuntimeState* state);
+    void reset_reader_before_runtime_filter_reinit(RuntimeState* state);
+    Status reinit_reader_with_late_runtime_filters(RuntimeState* state,
+                                                   RuntimeFilterSnapshots runtime_filter_snapshots);
+    RuntimeFilterSnapshots capture_runtime_filter_snapshots() const;
+    void remember_runtime_filter_snapshots(RuntimeFilterSnapshots snapshots);
+    bool needs_late_runtime_filter_reinit(const RuntimeFilterSnapshots& current_snapshots) const;
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -123,6 +156,9 @@ private:
     std::shared_ptr<lake::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
+    bool _needs_reopen = false;
+    ReusableReaderKey _reusable_reader_key;
+    RuntimeFilterSnapshots _observed_runtime_filter_snapshots;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
@@ -206,6 +242,16 @@ private:
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_rowsets_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_scan_rows_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_scan_ranges_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prerefinement_coarse_counter = nullptr;
+    RuntimeProfile::Counter* _lake_reusable_segment_iter_created_counter = nullptr;
+    RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
+    RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
+    // Number of pre-refinement coarse split morsels this scan consumed; emitted per morsel, reset on reuse.
+    int64_t _lake_prerefinement_coarse_splits = 0;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;
@@ -285,6 +331,8 @@ public:
 
     bool could_split_physically() const { return _could_split_physically; }
 
+    bool enable_lake_prepared_physical_split_scan() const { return _enable_lake_prepared_physical_split_scan; }
+
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
@@ -296,6 +344,7 @@ protected:
 
     bool _could_split = false;
     bool _could_split_physically = false;
+    bool _enable_lake_prepared_physical_split_scan = false;
     int64_t splitted_scan_rows = 0;
 
 private:

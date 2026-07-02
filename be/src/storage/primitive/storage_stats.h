@@ -147,6 +147,13 @@ struct OlapReaderStatistics {
     int64_t prefetch_hit_count = 0;
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
+
+    int64_t lake_prepared_rowsets = 0;
+    int64_t lake_prepared_segments = 0;
+    int64_t lake_prepared_scan_rows = 0;
+    int64_t lake_prepared_scan_ranges = 0;
+    int64_t lake_reusable_segment_iter_created = 0;
+    int64_t lake_reusable_segment_iter_reused = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------

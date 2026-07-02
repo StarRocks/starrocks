@@ -41,6 +41,7 @@ public:
     virtual Status append_morsels(int driver_seq, Morsels&& morsels);
     virtual StatusOr<int> next_driver_seq();
     virtual bool enable_random_append_split_morsel() const { return false; }
+    virtual void add_split_source_morsels(int64_t count) {}
     virtual void set_has_more_scan_ranges(bool v) {}
     virtual Status mark_split_source_morsel_finished();
     virtual bool reach_limit() const { return false; }
