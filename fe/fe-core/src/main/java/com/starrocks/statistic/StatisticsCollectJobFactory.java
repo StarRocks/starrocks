@@ -31,7 +31,6 @@ import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
-import com.starrocks.statistic.columns.ExternalPredicateColumnsStorage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -330,20 +329,7 @@ public class StatisticsCollectJobFactory {
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
 
         if (columnNames == null || columnNames.isEmpty()) {
-            List<String> collectible = StatisticUtils.getCollectibleColumns(table);
-            String tableUUID = table.getUUID();
-            if (tableUUID != null && !tableUUID.isEmpty()) {
-                Set<String> predicateCols =
-                        ExternalPredicateColumnsStorage.getInstance().queryGlobalState(tableUUID);
-                if (!predicateCols.isEmpty()) {
-                    columnNames = collectible.stream()
-                            .filter(predicateCols::contains)
-                            .collect(Collectors.toList());
-                }
-            }
-            if (columnNames == null || columnNames.isEmpty()) {
-                columnNames = collectible;
-            }
+            columnNames = StatisticUtils.getCollectibleColumns(table);
         }
         List<String> needCollectStatsColumns;
         if (basicStatsMeta != null) {
