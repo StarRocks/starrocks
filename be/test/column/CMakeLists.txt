@@ -14,11 +14,25 @@
 
 set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    array_column_test.cpp
+    array_view_column_test.cpp
+    binary_column_test.cpp
     column_base_test.cpp
-    mysql_row_buffer_test.cpp
-    german_string_test.cpp
+    column_cow_test.cpp
+    column_hash_test.cpp
+    column_helper_test.cpp
+    column_view_test.cpp
+    const_column_test.cpp
+    decimalv3_column_test.cpp
     global_dict_core_test.cpp
+    german_string_test.cpp
+    json_column_test.cpp
+    map_column_test.cpp
+    mysql_row_buffer_test.cpp
     object_column_core_test.cpp
+    simd_mulselector_test.cpp
+    simd_selector_test.cpp
+    struct_column_test.cpp
     column_visitor_test.cpp
     raw_data_visitor_test.cpp
     column_filter_range_test.cpp
@@ -55,6 +69,10 @@ set(COLUMN_TEST_FILES
     buffer_test.cpp
 )
 
+if (USE_AVX2)
+    list(APPEND COLUMN_TEST_FILES avx_numeric_column_test.cpp)
+endif ()
+
 set(COLUMN_TEST_LINK_LIBS
     ColumnCore
     Types
@@ -84,6 +102,7 @@ set(CHUNK_TEST_FILES
     chunk_factory_test.cpp
     chunk_schema_helper_test.cpp
     chunk_core_test.cpp
+    chunk_test.cpp
     segmented_chunk_core_test.cpp
     field_test.cpp
     schema_test.cpp
@@ -114,6 +133,8 @@ target_link_libraries(chunk_test ${CHUNK_TEST_LINK_LIBS} gtest_main)
 
 set(COLUMN_SORT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    fixed_length_column_extended_test.cpp
+    nullable_column_test.cpp
     sorting/sort_core_test.cpp
 )
 

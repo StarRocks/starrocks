@@ -5,22 +5,6 @@ set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
-        ./column/array_column_test.cpp
-        ./column/column_view_test.cpp
-        ./column/column_hash_test.cpp
-        ./column/array_view_column_test.cpp
-        ./column/binary_column_test.cpp
-        ./column/chunk_test.cpp
-        ./column/column_helper_test.cpp
-        ./column/const_column_test.cpp
-        ./column/decimalv3_column_test.cpp
-        ./column/fixed_length_column_extended_test.cpp
-        ./column/json_column_test.cpp
-        ./column/map_column_test.cpp
-        ./column/struct_column_test.cpp
-        ./column/nullable_column_test.cpp
-        ./column/object_column_test.cpp
-        ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
@@ -256,8 +240,6 @@ set(EXEC_FILES
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
         ./exec/jdbc/type_checker_xml_loader_test.cpp
-        ./column/simd_selector_test.cpp
-        ./column/simd_mulselector_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
@@ -288,10 +270,6 @@ if (NOT APPLE)
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
     )
-endif ()
-
-if (USE_AVX2)
-    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
 if (STARROCKS_JIT_ENABLE)

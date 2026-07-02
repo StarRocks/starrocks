@@ -28,7 +28,6 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
-#include "runtime/mem_pool.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
 #include "velocypack/vpack.h"
