@@ -351,8 +351,13 @@ Status BuiltinInvertedIndexIterator::read_from_inverted_index(const std::string&
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status BuiltinInvertedIndexIterator::read_null(const std::string& column_name, roaring::Roaring* bitmap) {
     return Status::InternalError("Unsupported");
+=======
+Status BuiltinInvertedIndexIterator::read_null(const std::string_view column_name, roaring::Roaring* bitmap) {
+    return _bitmap_itr->read_null_bitmap(bitmap);
+>>>>>>> a78c8804ec ([BugFix] Exclude NULL rows from NOT MATCH answered by GIN inverted index (#75578))
 }
 
 } // namespace starrocks
