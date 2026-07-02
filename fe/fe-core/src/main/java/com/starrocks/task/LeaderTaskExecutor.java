@@ -133,11 +133,11 @@ public class LeaderTaskExecutor {
     }
 
     /**
-     * Coordinated stop for leader demotion. Uses shutdown() (not shutdownNow()) so in-flight
-     * tasks complete their bounded {@code subTasksDoneSignal.await(timeoutSec)} naturally —
-     * interrupting via shutdownNow() would cause the caller (e.g. ExportExportingTask) to
-     * translate the InterruptedException into a TIMEOUT cancel of a healthy job and skip
-     * the job.setDoExportingThread(null) cleanup.
+     * Coordinated stop for leader demotion. Uses shutdownNow() on the work executor so in-flight
+     * tasks are interrupted and cancelled fast instead of waiting out their bounded awaits. Tasks
+     * on this pool (e.g. ExportExportingTask) treat the interrupt as a shutdown signal - they
+     * unwind and leave a healthy job for the next leader to reschedule, rather than mapping it to
+     * a business TIMEOUT cancel. The scheduled TaskChecker pool is shut down gracefully (bookkeeping).
      *
      * If {@code awaitMillis > 0}, also blocks up to that budget waiting for both internal
      * pools to actually terminate. This is required on the leader demotion drain path so a
@@ -149,7 +149,7 @@ public class LeaderTaskExecutor {
      */
     public void close(long awaitMillis) {
         scheduledThreadPool.shutdown();
-        executor.shutdown();
+        executor.shutdownNow();
         if (awaitMillis > 0L) {
             long deadline = System.currentTimeMillis() + awaitMillis;
             try {

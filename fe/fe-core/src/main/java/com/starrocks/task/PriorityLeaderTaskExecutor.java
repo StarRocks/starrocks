@@ -129,11 +129,13 @@ public class PriorityLeaderTaskExecutor {
     }
 
     /**
-     * Coordinated stop for leader demotion. Uses shutdown() (not shutdownNow()) so in-flight
-     * priority tasks are not interrupted mid-flight; if {@code awaitMillis > 0}, blocks up to
-     * that budget waiting for both internal pools to actually terminate. This is required on
+     * Coordinated stop for leader demotion. Uses shutdownNow() on the work executor so in-flight
+     * priority tasks are interrupted and cancelled fast instead of waiting out their bounded awaits;
+     * tasks on this pool must treat the interrupt as a shutdown signal (unwind, leave healthy work
+     * for the next leader) rather than as a business timeout. If {@code awaitMillis > 0}, blocks up
+     * to that budget waiting for both internal pools to actually terminate. This is required on
      * the leader demotion drain path so a re-elected leader does not race the old leader's
-     * still-running tasks.
+     * still-running tasks. The scheduled TaskChecker pool is shut down gracefully (bookkeeping).
      *
      * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
      *                    or negative means do not wait (legacy behaviour). The budget is
@@ -141,7 +143,7 @@ public class PriorityLeaderTaskExecutor {
      */
     public void close(long awaitMillis) {
         scheduledThreadPool.shutdown();
-        executor.shutdown();
+        executor.shutdownNow();
         if (awaitMillis > 0L) {
             long deadline = System.currentTimeMillis() + awaitMillis;
             try {

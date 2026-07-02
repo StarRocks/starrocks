@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.net.HttpURLConnection;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -142,6 +143,25 @@ public class CheckpointControllerTest {
 
         Assertions.assertNotNull(result.poll(1, TimeUnit.SECONDS),
                 "stop request must wake createImage result wait");
+    }
+
+    @Test
+    public void testOnStopRequestedDisconnectsOwnInFlightConnection() {
+        // The controller holds its own in-flight HTTP connection; onStopRequested() must disconnect
+        // exactly that connection (never a global registry) to break out of an uninterruptible read.
+        HttpURLConnection conn = Mockito.mock(HttpURLConnection.class);
+        controller.inFlightConnection = conn;
+
+        controller.onStopRequested();
+
+        Mockito.verify(conn).disconnect();
+    }
+
+    @Test
+    public void testOnStopRequestedNoConnectionIsNoop() {
+        // With no in-flight connection, onStopRequested() must not fail (nothing to disconnect).
+        controller.inFlightConnection = null;
+        controller.onStopRequested();
     }
 
     @Test

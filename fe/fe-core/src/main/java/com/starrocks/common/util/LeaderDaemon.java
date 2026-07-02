@@ -136,7 +136,9 @@ public abstract class LeaderDaemon {
 
     /**
      * Coordinated stop for leader demotion:
-     *   1. mark stopped and wake interval waits without interrupting the current cycle;
+     *   1. mark stopped, wake interval waits, and (unless {@link #interruptOnStop()} is overridden
+     *      to {@code false}) interrupt the worker so it breaks out of any blocking primitive
+     *      (queue poll, latch/future await, sleep, interruptible lock) at once;
      *   2. join up to {@code timeoutMs};
      *   3. on timeout, invoke {@link #onJoinTimeout()} (default: terminate the JVM) and return
      *      without clearing {@code worker}/{@code isRunning} - a subsequent {@link #start()}
@@ -145,7 +147,7 @@ public abstract class LeaderDaemon {
      * Idempotent.
      */
     public final void stopGracefully(long timeoutMs) {
-        requestStop(false);
+        requestStop(interruptOnStop());
         Thread t = worker;
         if (t != null) {
             try {
@@ -231,9 +233,19 @@ public abstract class LeaderDaemon {
 
     /**
      * The body of each iteration. Runs only after FE is ready and the captured leader lease
-     * is still valid. Subclasses must not block indefinitely; leader demotion waits for the
-     * current cycle to finish and terminates the process on timeout instead of interrupting the
-     * worker inside storage or journal code that may treat interruption as fatal.
+     * is still valid. Subclasses must not block indefinitely.
+     *
+     * By default leader demotion INTERRUPTS the worker (see {@link #stopGracefully(long)}), so
+     * subclasses should block only in interruptible primitives and must let an
+     * {@link InterruptedException} propagate (or re-check {@link #isStopped()} and return) - they
+     * MUST NOT map it to a business outcome (e.g. cancel a healthy job as "timeout"). If the cycle
+     * cannot finish within {@code leader_demotion_drain_timeout_sec} the process is terminated via
+     * {@link #onJoinTimeout()} as a last resort.
+     *
+     * A subclass that runs interrupt-unsafe work on its own thread - a direct BDBJE/JE call
+     * (interrupting it can invalidate the environment) or an uninterruptible native/socket read -
+     * must override {@link #interruptOnStop()} to return {@code false} and cooperatively bail out
+     * by polling {@link #isStopped()} and/or waking its wait in {@link #onStopRequested()}.
      */
     protected abstract void runAfterLeaseValid() throws InterruptedException;
 
@@ -255,10 +267,26 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Hook called immediately after a stop request is accepted and before {@link #stopGracefully(long)}
-     * waits for the worker thread. Subclasses should use this to wake their own cancellable waits.
+     * Optional hook called immediately after a stop request is accepted and before
+     * {@link #stopGracefully(long)} waits for the worker thread. Most daemons do not need it:
+     * the default stop interrupts the worker, which already breaks any interruptible wait.
+     * It matters only for daemons that override {@link #interruptOnStop()} to {@code false} and
+     * therefore need to cooperatively wake their own uninterruptible wait (e.g. offer a sentinel
+     * to a result queue, or disconnect an in-flight HTTP connection).
      */
     protected void onStopRequested() {
+    }
+
+    /**
+     * Whether {@link #stopGracefully(long)} may interrupt the worker thread. Default {@code true}:
+     * interrupt is the fast, standard way to cancel a blocked cycle. Override to return
+     * {@code false} ONLY for daemons whose worker executes interrupt-unsafe work directly on its
+     * own thread - a raw BDBJE/JE operation (an interrupt can invalidate the environment) or an
+     * uninterruptible native/socket read - and instead bail out cooperatively via
+     * {@link #isStopped()} polling and {@link #onStopRequested()}.
+     */
+    protected boolean interruptOnStop() {
+        return true;
     }
 
     /**

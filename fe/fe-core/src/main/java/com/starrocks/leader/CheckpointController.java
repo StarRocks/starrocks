@@ -107,6 +107,15 @@ public class CheckpointController extends LeaderDaemon {
     // save the cluster snapshot info getted from the checkpoint worker.
     private volatile ClusterSnapshotInfo clusterSnapshotInfo;
 
+    // The HTTP connection this controller's worker thread is currently blocked on (image
+    // push / download / journal_id probe), or null between calls. Held so onStopRequested()
+    // can disconnect OUR OWN connection on demotion to break out of an otherwise-uninterruptible
+    // socket read (a push can block up to PUT_TIMEOUT_SECOND). Scoped to this controller, so it
+    // never touches another caller's connection. Only one HTTP op runs at a time on the
+    // single-threaded worker, so a single reference is sufficient.
+    // Package-private so same-package tests can set it to verify the disconnect-on-stop path.
+    volatile HttpURLConnection inFlightConnection;
+
     public CheckpointController(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
@@ -139,14 +148,14 @@ public class CheckpointController extends LeaderDaemon {
      * pushImage, deleteOldJournals) are idempotent at the system level - worker FE
      * keeps writing the image regardless of this leader's lifecycle, and the next
      * leader will re-orchestrate pushImage / deleteOldJournals from scratch. So we
-     * only have to wake the current checkpoint wait, release leader-session bookkeeping,
-     * and ask MetaHelper to break out of any in-flight HTTP, then let the daemon thread exit.
+     * only have to wake the current checkpoint wait, break out of any in-flight HTTP,
+     * and let the daemon thread exit; onStopped() clears the leader-session bookkeeping.
      *
-     * Today {@link MetaHelper#cancelInFlight()} is a no-op (see TODO there), so a
-     * push/download stuck in HttpURLConnection.read will block this drain up to its
-     * own connect/read timeout (up to 3600s per node for push). The bookkeeping
-     * fields below are still cleared so the next leader does not inherit stale
-     * "pending push" / "last-failed-worker" state.
+     * Bare {@link HttpURLConnection} socket reads honor neither {@link Thread#interrupt()}
+     * nor any cooperative flag, so we disconnect the connection this controller's own worker
+     * is currently blocked on. That unblocks its read within the drain budget instead of
+     * waiting out the per-node push/download timeout (up to 3600s). We only ever disconnect
+     * OUR OWN connection, so no other caller's request is affected.
      */
     @Override
     protected void onStopRequested() {
@@ -154,7 +163,14 @@ public class CheckpointController extends LeaderDaemon {
         if (currentResult != null) {
             currentResult.offer(new CheckpointCompletionStatus(false, "leader checkpoint controller is stopping", null));
         }
-        MetaHelper.cancelInFlight();
+        HttpURLConnection conn = inFlightConnection;
+        if (conn != null) {
+            try {
+                conn.disconnect();
+            } catch (Throwable t) {
+                LOG.warn("failed to disconnect in-flight checkpoint connection on stop", t);
+            }
+        }
     }
 
     @Override
@@ -167,6 +183,18 @@ public class CheckpointController extends LeaderDaemon {
         // the next createImage() call - no need to clear here.
         nodesToPushImage.clear();
         lastFailedTime.clear();
+    }
+
+    /**
+     * Interrupt-unsafe: the worker calls BDBJE/JE directly (getFinalizedJournalId /
+     * deleteJournals -> removeDatabase) where an interrupt can invalidate the environment, and
+     * blocks in uninterruptible HttpURLConnection reads. It stops cooperatively instead: the
+     * isStopped() polling between phases + onStopRequested() (waking the result queue and
+     * disconnecting the in-flight HTTP connection).
+     */
+    @Override
+    protected boolean interruptOnStop() {
+        return false;
     }
 
     protected void runCheckpointController() {
@@ -326,7 +354,12 @@ public class CheckpointController extends LeaderDaemon {
                 "/image?version=" + journalId
                 + "&subdir=" + subDir
                 + "&image_format_version=" + imageFormatVersion;
-        MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir);
+        try {
+            MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir,
+                    conn -> inFlightConnection = conn);
+        } finally {
+            inFlightConnection = null;
+        }
 
         // clean the old images
         MetaCleaner cleaner = new MetaCleaner(imageDir);
@@ -472,7 +505,7 @@ public class CheckpointController extends LeaderDaemon {
                     + "&for_global_state=" + belongToGlobalStateMgr
                     + "&image_format_version=" + formatVersion.toString();
             try {
-                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000);
+                MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> inFlightConnection = conn);
 
                 LOG.info("push image successfully, url = {}", url);
                 if (MetricRepo.hasInit) {
@@ -481,6 +514,8 @@ public class CheckpointController extends LeaderDaemon {
             } catch (IOException e) {
                 pushSuccess = false;
                 LOG.error("Exception when pushing image file. url = {}", url, e);
+            } finally {
+                inFlightConnection = null;
             }
             if (pushSuccess) {
                 iterator.remove();
@@ -508,6 +543,7 @@ public class CheckpointController extends LeaderDaemon {
                  */
                 idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/journal_id?prefix=" + journal.getPrefix());
                 conn = (HttpURLConnection) idURL.openConnection();
+                inFlightConnection = conn;
                 conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                 conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
                 String idString = conn.getHeaderField("id");
@@ -521,6 +557,7 @@ public class CheckpointController extends LeaderDaemon {
                 minReplayedJournalId = 0;
                 break;
             } finally {
+                inFlightConnection = null;
                 if (conn != null) {
                     conn.disconnect();
                 }

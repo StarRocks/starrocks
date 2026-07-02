@@ -27,14 +27,43 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LeaderDaemonTest {
     @Test
-    public void testStopGracefullyDoesNotInterruptRunningCycle(@Mocked GlobalStateMgr globalStateMgr)
+    public void testStopGracefullyInterruptsRunningCycleByDefault(@Mocked GlobalStateMgr globalStateMgr)
             throws Exception {
+        // Default contract: stopGracefully() interrupts the worker so a cycle blocked in an
+        // interruptible primitive (here CountDownLatch.await) unblocks at once, without the test
+        // ever releasing the latch.
         mockValidLeaderLease(globalStateMgr);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         AtomicBoolean interrupted = new AtomicBoolean(false);
         AtomicBoolean stopped = new AtomicBoolean(false);
         TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+
+        daemon.start();
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        daemon.stopGracefully(5000L);
+
+        Assertions.assertTrue(interrupted.get());
+        Assertions.assertTrue(daemon.isStopped());
+        Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertTrue(stopped.get());
+    }
+
+    @Test
+    public void testStopGracefullyDoesNotInterruptWhenOptedOut(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        // Interrupt-unsafe daemons override interruptOnStop() to false (e.g. CheckpointController,
+        // which calls BDBJE directly). stopGracefully() then must NOT interrupt the worker; it
+        // relies on the cycle finishing / cooperative bail. Here the daemon exits only once the
+        // test releases the latch, and the worker is never interrupted.
+        mockValidLeaderLease(globalStateMgr);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
+        TestLeaderDaemon daemon = new TestLeaderDaemon(globalStateMgr, entered, release, interrupted, stopped);
+        daemon.interruptOnStopFlag = false;
 
         daemon.start();
         Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -50,6 +79,7 @@ public class LeaderDaemonTest {
         stopper.join(5000L);
         Assertions.assertFalse(stopper.isAlive());
         Assertions.assertFalse(daemon.isRunning());
+        Assertions.assertFalse(interrupted.get());
         Assertions.assertTrue(stopped.get());
     }
 
@@ -140,6 +170,9 @@ public class LeaderDaemonTest {
         private final CountDownLatch release;
         private final AtomicBoolean interrupted;
         private final AtomicBoolean stopped;
+        // Whether stopGracefully() may interrupt this daemon's worker. Default true (the framework
+        // default); the opt-out test sets it false to exercise the interrupt-unsafe daemon path.
+        boolean interruptOnStopFlag = true;
 
         TestLeaderDaemon(GlobalStateMgr globalStateMgr, CountDownLatch entered, CountDownLatch release,
                          AtomicBoolean interrupted, AtomicBoolean stopped) {
@@ -165,6 +198,11 @@ public class LeaderDaemonTest {
         @Override
         protected GlobalStateMgr getGlobalStateMgr() {
             return globalStateMgr;
+        }
+
+        @Override
+        protected boolean interruptOnStop() {
+            return interruptOnStopFlag;
         }
 
         @Override

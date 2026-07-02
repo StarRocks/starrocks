@@ -62,6 +62,7 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class MetaHelper {
@@ -77,26 +78,6 @@ public class MetaHelper {
         return CHECKPOINT_LIMIT_BYTES;
     }
 
-    /**
-     * Best-effort cancel for any blocking HTTP operation currently issued by MetaHelper on
-     * behalf of leader-only daemons (e.g. CheckpointController push/download). Today this is
-     * a no-op: {@link #httpGet} and {@link #downloadImageFile} use bare {@link HttpURLConnection},
-     * which honors neither {@link Thread#interrupt()} nor any other external cancel signal for
-     * socket reads. The only way a stuck call exits is its own connect/read timeout, which
-     * may be up to an hour for push and {@code MetaService.DOWNLOAD_TIMEOUT_SECOND} for
-     * download.
-     *
-     * TODO(cancel-infra): wire this up to actively disconnect the active {@link HttpURLConnection}
-     * (or switch to a cancellable HTTP client) so leader-demotion {@code onStopped()} can
-     * break out of these calls within the {@code leader_demotion_drain_timeout_sec} budget.
-     * This is tracked alongside the planned {@code Locker.lockInterruptibly} cleanup, since
-     * both block the same goal of making demotion drain deterministic for non-interruptible
-     * blocking operations.
-     */
-    public static void cancelInFlight() {
-        // intentionally empty - see TODO(cancel-infra) above
-    }
-
     // rename the .PART_SUFFIX file to filename
     public static File complete(String filename, File dir) throws IOException {
         File file = new File(dir, filename + MetaHelper.PART_SUFFIX);
@@ -109,6 +90,18 @@ public class MetaHelper {
 
     public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir)
             throws IOException {
+        downloadImageFile(urlStr, timeout, journalId, destDir, null);
+    }
+
+    /**
+     * Same as {@link #downloadImageFile(String, int, String, File)} but publishes the freshly
+     * opened {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can
+     * hold its own reference and {@link HttpURLConnection#disconnect() disconnect} it on demotion
+     * to break out of a stuck socket read. MetaHelper itself performs no cancellation.
+     */
+    public static void downloadImageFile(String urlStr, int timeout, String journalId, File destDir,
+                                         Consumer<HttpURLConnection> onConnect)
+            throws IOException {
         HttpURLConnection conn = null;
         String checksum = null;
         String destFilename = Storage.IMAGE + "." + journalId;
@@ -117,6 +110,9 @@ public class MetaHelper {
         try (FileOutputStream out = new FileOutputStream(partFile)) {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
+            if (onConnect != null) {
+                onConnect.accept(conn);
+            }
             conn.setConnectTimeout(timeout);
             conn.setReadTimeout(timeout);
 
@@ -169,11 +165,25 @@ public class MetaHelper {
     }
 
     public static void httpGet(String urlStr, int timeout) throws IOException {
+        httpGet(urlStr, timeout, null);
+    }
+
+    /**
+     * Same as {@link #httpGet(String, int)} but publishes the freshly opened
+     * {@link HttpURLConnection} to {@code onConnect} so the *calling* leader daemon can hold its
+     * own reference and {@link HttpURLConnection#disconnect() disconnect} it on demotion to break
+     * out of a stuck socket read (e.g. a checkpoint push that can otherwise block up to an hour).
+     * MetaHelper itself performs no cancellation.
+     */
+    public static void httpGet(String urlStr, int timeout, Consumer<HttpURLConnection> onConnect) throws IOException {
         URL url = new URL(urlStr);
         HttpURLConnection conn = null;
 
         try {
             conn = (HttpURLConnection) url.openConnection();
+            if (onConnect != null) {
+                onConnect.accept(conn);
+            }
             conn.setConnectTimeout(timeout);
             conn.setReadTimeout(timeout);
 

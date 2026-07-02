@@ -206,8 +206,12 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
             }
 
             submitToSchedule(routineLoadTaskInfo);
+        } catch (InterruptedException e) {
+            // Propagate so the LeaderDaemon loop breaks promptly when the scheduler is being
+            // stopped (e.g. on leader demotion) instead of swallowing the cancel and re-polling.
+            throw e;
         } catch (Exception e) {
-            LOG.warn("Taking routine load task from queue has been interrupted", e);
+            LOG.warn("Failed to take/schedule routine load task from queue", e);
             return;
         }
     }
