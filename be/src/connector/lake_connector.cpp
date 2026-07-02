@@ -282,6 +282,7 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     _raw_rows_read = 0;
     _bytes_read = 0;
     _cpu_time_spent_ns = 0;
+    _lake_prerefinement_coarse_splits = 0;
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -692,6 +693,9 @@ Status LakeDataSource::reopen_reader(RuntimeState* /*state*/) {
 
 void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext& split_context,
                                                bool use_prepared_state) {
+    if (is_pre_refinement_coarse_split(split_context)) {
+        ++_lake_prerefinement_coarse_splits;
+    }
     _params.refine_initial_coarse_split_and_append_refined_tasks = false;
     if (_provider->could_split_physically()) {
         _params.rowid_range_option = rowid_range_for_child_split(split_context, use_prepared_state);
@@ -1330,8 +1334,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedScanRows", TUnit::UNIT, prepared_split_name);
     _lake_prepared_scan_ranges_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "PreparedScanRanges", TUnit::UNIT, prepared_split_name);
-    _lake_prepared_split_tasks_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "PreparedSplitTasks", TUnit::UNIT, prepared_split_name);
+    _lake_prerefinement_coarse_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "PreRefinementCoarseMorsels", TUnit::UNIT, prepared_split_name);
     _lake_reusable_segment_iter_created_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ReusableSegmentIterCreated", TUnit::UNIT, prepared_split_name);
     _lake_reusable_segment_iter_reused_counter =
@@ -1446,7 +1450,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
     COUNTER_UPDATE(_lake_prepared_scan_rows_counter, _reader->stats().lake_prepared_scan_rows);
     COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, _reader->stats().lake_prepared_scan_ranges);
-    COUNTER_UPDATE(_lake_prepared_split_tasks_counter, _reader->stats().lake_prepared_split_tasks);
+    COUNTER_UPDATE(_lake_prerefinement_coarse_counter, _lake_prerefinement_coarse_splits);
     COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, _reader->stats().lake_reusable_segment_iter_created);
     COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, _reader->stats().lake_reusable_segment_iter_reused);
 

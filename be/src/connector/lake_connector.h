@@ -246,10 +246,12 @@ private:
     RuntimeProfile::Counter* _lake_prepared_segments_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_scan_rows_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_scan_ranges_counter = nullptr;
-    RuntimeProfile::Counter* _lake_prepared_split_tasks_counter = nullptr;
+    RuntimeProfile::Counter* _lake_prerefinement_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_reusable_segment_iter_created_counter = nullptr;
     RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
     RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
+    // Number of pre-refinement coarse split morsels this scan consumed; emitted per morsel, reset on reuse.
+    int64_t _lake_prerefinement_coarse_splits = 0;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;

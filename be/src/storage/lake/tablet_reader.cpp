@@ -138,14 +138,13 @@ static void append_refined_segment_split_tasks(const RowsetPtr& rowset, const Se
                                                const PreparedTabletReadStatePtr& prepared_tablet_read_state,
                                                const PreparedSegmentReadStatePtr& segment_state, size_t rowset_idx,
                                                size_t segment_idx, const SparseRange<>& refined_scan_range,
-                                               rowid_t rows_per_split,
+                                               rowid_t rows_per_split, bool is_first_split_of_segment,
                                                std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (refined_scan_range.span_size() == 0) {
         return;
     }
 
     auto range_iter = refined_scan_range.new_iterator();
-    bool is_first_split_of_segment = true;
     while (range_iter.has_more()) {
         SparseRange<> split_range;
         range_iter.next_range(rows_per_split, &split_range);
@@ -749,7 +748,6 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
                 continue;
             }
 
-            const auto old_num_tasks = _split_tasks.size();
             auto ctx = std::make_unique<pipeline::LakeSplitContext>();
             ctx->rowid_range = std::move(seed_rowid_range);
             ctx->rowid_range_source = pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
@@ -758,7 +756,6 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
             ctx->rowset_index = rowset_idx;
             ctx->segment_index = segment_idx;
             _split_tasks.emplace_back(std::move(ctx));
-            _stats.lake_prepared_split_tasks += _split_tasks.size() - old_num_tasks;
         }
     }
     return Status::OK();
@@ -849,11 +846,15 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         allocated_coarse_ranges = segment_state->allocated_coarse_ranges;
     }
     SparseRange<> remaining_scan_range = subtract_sparse_ranges(pruned_scan_range, allocated_coarse_ranges);
-    const auto old_num_tasks = _split_tasks.size();
+    // Emit is_first_split_of_segment=true from the refined tasks only when no coarse split was allocated
+    // for this segment. If a coarse split was allocated, the coarse/seed child already carries the flag
+    // (allocate_initial_coarse_split / the seed child above), so letting the first refined split also carry
+    // it would double-count segment-level stats. This keeps exactly one split per segment flagged.
+    const bool refined_carries_first_split = allocated_coarse_ranges.span_size() == 0;
     append_refined_segment_split_tasks(rowset, segment, prepared_tablet_read_state, segment_state, rowset_idx,
-                                       segment_idx, remaining_scan_range, rows_per_split(params), &_split_tasks);
+                                       segment_idx, remaining_scan_range, rows_per_split(params),
+                                       refined_carries_first_split, &_split_tasks);
     _stats.lake_prepared_segments++;
-    _stats.lake_prepared_split_tasks += _split_tasks.size() - old_num_tasks;
 
     if (*local_rowid_range == nullptr) {
         // Keep this seed child as an empty read if its coarse range was fully pruned.

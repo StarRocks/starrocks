@@ -152,7 +152,6 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_segments = 0;
     int64_t lake_prepared_scan_rows = 0;
     int64_t lake_prepared_scan_ranges = 0;
-    int64_t lake_prepared_split_tasks = 0;
     int64_t lake_reusable_segment_iter_created = 0;
     int64_t lake_reusable_segment_iter_reused = 0;
     // ------ for lake tablet ------
