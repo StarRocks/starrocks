@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
+#include <map>
 
 #include "cache/cache_options.h"
 #include "cache/scan/cache_input_stream.h"
@@ -262,6 +263,11 @@ struct TableSpecificData {
     std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor;
     const TIcebergSchema* iceberg_schema = nullptr;
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
+
+    // Lance native reader parameters.
+    std::string lance_dataset_uri;
+    int32_t lance_fragment_id = 0;
+    std::map<std::string, std::string> lance_storage_options;
 };
 
 struct HdfsScannerParams {

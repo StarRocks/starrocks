@@ -1,0 +1,18 @@
+[package]
+name = "starrocks_lance_rs"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+
+[lib]
+name = "starrocks_lance_rs"
+crate-type = ["staticlib"]
+
+[dependencies]
+arrow-array = { version = "=55.2.0", features = ["ffi"] }
+arrow-schema = { version = "=55.2.0", features = ["ffi"] }
+futures = "0.3"
+lance = { version = "=0.35.0" }
+libc = "0.2"
+tokio = { version = "1", features = ["rt-multi-thread"] }

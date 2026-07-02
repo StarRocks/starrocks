@@ -30,6 +30,7 @@
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/lance/lance_scanner.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -864,6 +865,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     bool use_lance_jni_reader = false;
     if (scan_range.__isset.use_lance_jni_reader) {
         use_lance_jni_reader = scan_range.use_lance_jni_reader;
+        scanner_params.table_specific.lance_dataset_uri = scan_range.dataset_uri;
+        scanner_params.table_specific.lance_fragment_id = scan_range.fragment_id;
+        if (scan_range.__isset.lance_storage_options) {
+            scanner_params.table_specific.lance_storage_options = scan_range.lance_storage_options;
+        }
     }
     bool use_odps_jni_reader = false;
     if (scan_range.__isset.use_odps_jni_reader) {
@@ -894,7 +900,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (_scanner_params.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
     } else if (use_lance_jni_reader) {
-        scanner = create_lance_jni_scanner(jni_scanner_create_options).release();
+        scanner = new LanceScanner();
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();
     } else if (use_hudi_jni_reader) {
