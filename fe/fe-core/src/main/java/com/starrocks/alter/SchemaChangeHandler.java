@@ -721,7 +721,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return false;
         }
         fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
-        return oriColumn.equalsIgnoreComment(modColumn);
+        return oriColumn.equalsIgnoreComment(modColumn) && !Objects.equals(oriColumn.getComment(), modColumn.getComment());
     }
 
     // User can modify column type and column position
