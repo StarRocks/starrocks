@@ -293,7 +293,6 @@ set(EXEC_FILES
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./udf/python/env_test.cpp
-        ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
         ./util/network_util_test.cpp
