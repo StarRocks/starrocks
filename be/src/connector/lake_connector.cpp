@@ -1746,8 +1746,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     // default); the min_splitted_scan_rows clamp below still guarantees >= one pipeline chunk per morsel.
     int64_t max_splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_rows;
     if (_enable_lake_prepared_physical_split_scan) {
-        max_splitted_scan_rows =
-                std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
+        max_splitted_scan_rows = std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
     }
     *splitted_scan_rows =
             config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
