@@ -141,22 +141,20 @@ inline std::string gen_vector_index_path_from_segment_path(std::string_view segm
     return fmt::format("{}/{}", dir, vi_filename);
 }
 
-// Resolve the tablet id embedded in a persisted segment's .vi filenames: the recorded owner
-// (vector_index_tablet_id, the tablet that WROTE the segment) when present, otherwise
-// |fallback_tablet_id| — for segments persisted before the field existed, where the current
-// tablet is correct unless the segment was later shared across tablets by a tablet split.
-// Always resolve through here instead of re-implementing the ternary at call sites, so the
-// fallback rule lives in exactly one place.
-inline int64_t resolve_vector_index_owner_tablet_id(const SegmentMetadataPB& segment_meta, int64_t fallback_tablet_id) {
-    return segment_meta.has_vector_index_tablet_id() ? segment_meta.vector_index_tablet_id() : fallback_tablet_id;
+// The tablet id embedded in a persisted segment's .vi filenames: the recorded owner
+// (vector_index_tablet_id, the tablet that WROTE the segment), carried verbatim across tablet
+// split so every reader resolves the same .vi. Every segment that records vector_index_ids also
+// records this owner (stamped at write time by the tablet writers / segment rewrite), so callers
+// must only ask for it on a vector-indexed segment; the DCHECK guards that invariant.
+inline int64_t vector_index_owner_tablet_id(const SegmentMetadataPB& segment_meta) {
+    DCHECK(segment_meta.has_vector_index_tablet_id())
+            << "vector-indexed segment missing its recorded owner tablet id: " << segment_meta.filename();
+    return segment_meta.vector_index_tablet_id();
 }
 
-// .vi filename for one index of a persisted segment, named by the segment's recorded owner
-// (see resolve_vector_index_owner_tablet_id for the fallback rule).
-inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB& segment_meta,
-                                                         int64_t fallback_tablet_id, int64_t index_id) {
-    return gen_vector_index_filename(segment_meta.filename(),
-                                     resolve_vector_index_owner_tablet_id(segment_meta, fallback_tablet_id), index_id);
+// .vi filename for one index of a persisted (vector-indexed) segment, named by its recorded owner.
+inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB& segment_meta, int64_t index_id) {
+    return gen_vector_index_filename(segment_meta.filename(), vector_index_owner_tablet_id(segment_meta), index_id);
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration

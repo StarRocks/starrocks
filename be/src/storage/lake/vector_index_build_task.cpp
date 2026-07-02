@@ -112,7 +112,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             const auto& seg_name = segment_meta.filename();
             // Name .vi files by the segment's recorded owner tablet id so a segment shared across
             // tablets after a split builds/reads the same .vi.
-            const int64_t vi_tablet_id = resolve_vector_index_owner_tablet_id(segment_meta, _tablet_id);
+            const int64_t vi_tablet_id = vector_index_owner_tablet_id(segment_meta);
             std::vector<int64_t> index_ids;
             for (int64_t idx_id : segment_meta.vector_index_ids()) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).

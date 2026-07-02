@@ -287,9 +287,9 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
     // The src .vi is named by the src segment's recorded owner; the dest is a brand-new segment
     // written by this tablet, so its .vi is named by this tablet (owner recorded by the caller
     // via stamp_rewrite_vector_index_owner).
-    const int64_t src_vi_tablet_id = resolve_vector_index_owner_tablet_id(src_seg_meta, params.tablet->id());
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
-        auto src_vi = params.tablet->segment_location(gen_vector_index_filename(src_path, src_vi_tablet_id, index_id));
+        auto src_vi = params.tablet->segment_location(
+                gen_vector_index_filename(src_path, vector_index_owner_tablet_id(src_seg_meta), index_id));
         auto dest_vi =
                 params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
@@ -613,7 +613,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
             // sibling tablets is routed through the shared-file deleter and delayed, not deleted.
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 FileMetaPB vi_meta;
-                vi_meta.set_name(gen_vector_index_filename_for_segment(src_seg_meta, params.tablet->id(), index_id));
+                vi_meta.set_name(gen_vector_index_filename_for_segment(src_seg_meta, index_id));
                 if (src_seg_meta.has_shared()) {
                     vi_meta.set_shared(src_seg_meta.shared());
                 }

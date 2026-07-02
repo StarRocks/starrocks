@@ -70,7 +70,8 @@ public:
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
     // Owner tablet id for this segment's .vi path (see SegmentMetadataPB.vector_index_tablet_id);
-    // filled by lake Rowset::read(). -1 = unset, consumers fall back to tablet_id.
+    // filled by lake Rowset::read() for vector-indexed segments. -1 = unset (non-lake or no vector
+    // index); the cloud-native ANN read path requires it set.
     int64_t vector_index_tablet_id = -1;
     // rowset base segment id
     uint32_t rowset_id = 0;

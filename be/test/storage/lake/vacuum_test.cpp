@@ -3118,13 +3118,15 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                             "vector_index_ids": [
                                 100,
                                 200
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5000
                         },
                         {
                             "filename": "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5000
                         }
                     ]
                 }
@@ -3146,7 +3148,8 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                             "filename": "00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5000
                         }
                     ]
                 }
@@ -3160,13 +3163,15 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                             "vector_index_ids": [
                                 100,
                                 200
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5000
                         },
                         {
                             "filename": "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5000
                         }
                     ]
                 }
@@ -3407,25 +3412,29 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "filename": "00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         }
                     ]
                 }
@@ -3451,19 +3460,22 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "filename": "00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         }
                     ]
                 }
@@ -3477,13 +3489,15 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "filename": "00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat",
                             "vector_index_ids": [
                                 100
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         }
                     ]
                 }
@@ -3551,14 +3565,16 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
                             "filename": "00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat",
                             "vector_index_ids": [
                                 300
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5200
                         },
                         {
                             "filename": "00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat",
                             "vector_index_ids": [
                                 300,
                                 400
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5200
                         }
                     ]
                 }
@@ -3571,7 +3587,8 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
                             "filename": "00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat",
                             "vector_index_ids": [
                                 300
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5200
                         }
                     ]
                 }
@@ -3624,7 +3641,8 @@ TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
                             "filename": "00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat",
                             "vector_index_ids": [
                                 500
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5300
                         }
                     ]
                 }
@@ -3684,7 +3702,8 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
                             "filename": "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
                             "vector_index_ids": [
                                 700
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
@@ -3718,7 +3737,8 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
                             "filename": "00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat",
                             "vector_index_ids": [
                                 700
-                            ]
+                            ],
+                            "vector_index_tablet_id": 5400
                         },
                         {
                             "filename": "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"

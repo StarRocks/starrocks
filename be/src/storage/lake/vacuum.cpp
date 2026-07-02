@@ -175,7 +175,7 @@ static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileD
         const auto& segment_meta = rowset.segment_metas(i);
         const bool shared_file = is_shared_segment(rowset, i);
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, tablet_id, vi_id));
+            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
             if (shared_file && shared_file_deleter != nullptr) {
                 RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
             } else {
@@ -394,8 +394,8 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     const auto& segment_meta = rowset.segment_metas(i);
                     if (segment_meta.shared()) {
                         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                            RETURN_IF_ERROR(deleter->delay_delete(join_path(
-                                    data_dir, gen_vector_index_filename_for_segment(segment_meta, tablet_id, vi_id))));
+                            RETURN_IF_ERROR(deleter->delay_delete(
+                                    join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
                         }
                     }
                 }
@@ -1493,7 +1493,7 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
             // check_meta->id(): split-shared segments must be protected under the writer's name).
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, check_meta->id(), vi_id);
+                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }

@@ -769,7 +769,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
         for (const auto& segment_meta : rowset.segment_metas()) {
             for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename_for_segment(segment_meta, tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
@@ -796,7 +796,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_name));
             // Delete .vi files for this new segment, named by its recorded owner tablet id.
             for (int64_t vi_id : segment_metas[idx].vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename_for_segment(segment_metas[idx], tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_metas[idx], vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
