@@ -683,7 +683,7 @@ The following limits apply when you collect statistics for external tables:
   - Currently, only Leader FE node can trigger ANALYZE tasks.
   - The system only supports checking for partition changes on Hive and Iceberg tables, and only collects statistics on the partitions where the data has changed. For the Delta Lake/Hudi tables, the system collects statistics of the entire table.
   - If Partition Transforms are applied to Iceberg tables, the collection of statistics is supported only for `identity`, `year`, `month`, `day`, `hour` type Transforms.
-  - Collecting statistics for Partition Evolution for Iceberg tables is not supported.
+  - Collecting statistics for Partition Evolution for Iceberg tables is supported in version 4.0 and above.
 
 The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
 
