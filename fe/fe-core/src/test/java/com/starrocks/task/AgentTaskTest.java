@@ -44,6 +44,7 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Range;
+import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +59,7 @@ import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletRange;
@@ -490,5 +492,38 @@ public class AgentTaskTest {
         CreateReplicaTask task = builder.build();
         TCreateTabletReq req = task.toThrift();
         Assertions.assertTrue(req.isSetRange());
+    }
+
+    @Test
+    public void testFailAllPendingWaitersReleasesLatch() {
+        AgentTaskQueue.clearAllTasks();
+        MarkedCountDownLatch<Long, Long> l = new MarkedCountDownLatch<>(1);
+        l.addMark(backendId1, tabletId1);
+        ((CreateReplicaTask) createReplicaTask).setLatch(l);
+        AgentTaskQueue.addTask(createReplicaTask);
+
+        // Leader-demotion drain: fail every in-flight agent task latch so a waiter
+        // (e.g. TabletTaskExecutor.waitForFinished) unblocks at once with the demotion reason
+        // instead of waiting out its timeout.
+        AgentTaskQueue.failAllPendingWaiters(new Status(TStatusCode.CANCELLED, "leader is demoting"));
+
+        Assertions.assertEquals(0, l.getCount());
+        Assertions.assertFalse(l.getStatus().ok());
+        AgentTaskQueue.clearAllTasks();
+    }
+
+    @Test
+    public void testAddTaskRejectedWhenLeaderDemoting() {
+        AgentTaskQueue.clearAllTasks();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeaderDemoting() {
+                return true;
+            }
+        };
+        // Source guard: once demoting, no new agent task may be enqueued, so a create-tablet
+        // started after the drain fails fast instead of hanging on a never-marked latch.
+        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 }

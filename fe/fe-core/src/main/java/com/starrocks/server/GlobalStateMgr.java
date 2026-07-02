@@ -2149,6 +2149,7 @@ public class GlobalStateMgr {
         LOG.info("leader demotion to {} starting", targetType);
         long startMs = System.currentTimeMillis();
         runDemotionStage("beginLeaderDemotion", () -> beginLeaderDemotion(targetType));
+        runDemotionStage("failInFlightAgentTasks", this::failInFlightAgentTasks);
         runDemotionStage("sealJournalWriter", this::sealJournalWriter);
         runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
         runDemotionStage("flushLeaderSessionState", this::flushLeaderSessionState);
@@ -2168,6 +2169,18 @@ public class GlobalStateMgr {
             return;
         }
         LOG.info("leader demotion stage '{}' completed in {}ms", stageName, System.currentTimeMillis() - startMs);
+    }
+
+    /**
+     * Abandon every in-flight BE agent task the (demoting) leader issued: fail their completion
+     * latches so waiters (e.g. create-tablet in TabletTaskExecutor.waitForFinished, which can run on
+     * a user connection thread that demotion never interrupts) unblock immediately and release their
+     * db locks, instead of waiting out tablet_create_timeout for an operation whose journal write is
+     * already fenced. AgentTaskQueue.addTask() rejects new tasks once demoting, closing the TOCTOU.
+     */
+    private void failInFlightAgentTasks() {
+        com.starrocks.task.AgentTaskQueue.failAllPendingWaiters(
+                new com.starrocks.common.Status(TStatusCode.CANCELLED, "leader is demoting"));
     }
 
     @VisibleForTesting

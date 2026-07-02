@@ -40,7 +40,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
+import com.starrocks.common.Status;
 import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +76,14 @@ public class AgentTaskQueue {
     }
 
     public static synchronized boolean addTask(AgentTask task) {
+        // Source guard for leader demotion: once demoting, refuse to enqueue new agent tasks.
+        // Together with failAllPendingWaiters() (which drains what is already queued) this closes the
+        // TOCTOU where a create-tablet started just after the drain would otherwise wait out its
+        // timeout. The throw fails the doomed operation fast (its journal write would be fenced anyway).
+        if (GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+            throw new IllegalStateException(
+                    "leader is demoting, refuse to enqueue agent task: " + task);
+        }
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();
 
@@ -259,6 +269,31 @@ public class AgentTaskQueue {
     public static synchronized void clearAllTasks() {
         tasks.clear();
         taskNum = 0;
+    }
+
+    /**
+     * Leader-demotion drain: fail the completion latch of every in-flight agent task so any waiter
+     * (e.g. TabletTaskExecutor.waitForFinished waiting on a create-tablet latch) unblocks at once
+     * with {@code status} instead of waiting out its timeout. Snapshots under the queue lock, then
+     * cancels outside it, so we do not hold the global queue monitor across N latch operations
+     * (which would stall concurrent BE-response processing). Tasks without a latch are no-ops.
+     * Pairs with the addTask() demoting guard, which prevents new tasks from being enqueued after
+     * this runs.
+     */
+    public static void failAllPendingWaiters(Status status) {
+        List<AgentTask> snapshot = Lists.newArrayList();
+        synchronized (AgentTaskQueue.class) {
+            for (Map<Long, AgentTask> signatureMap : tasks.values()) {
+                snapshot.addAll(signatureMap.values());
+            }
+        }
+        for (AgentTask task : snapshot) {
+            try {
+                task.cancelPendingWaiter(status);
+            } catch (Throwable t) {
+                LOG.warn("failed to cancel pending waiter for agent task {}", task, t);
+            }
+        }
     }
 
     public static synchronized int getTaskNum() {
