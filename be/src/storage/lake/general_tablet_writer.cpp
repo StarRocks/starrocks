@@ -503,6 +503,14 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
                 }
             }
         }
+        // Record the owning tablet id for .vi naming, mirroring
+        // HorizontalGeneralTabletWriter::record_segment_vector_index_ids: the .vi filename embeds it
+        // (fill_vector_index_file_paths above uses _tablet_id), and readers must use this recorded id
+        // rather than their own so a segment shared across tablets after a split still resolves to the
+        // same .vi (see SegmentMetadataPB.vector_index_tablet_id).
+        if (!segment_file_info.vector_index_ids.empty()) {
+            segment_file_info.vector_index_tablet_id = _tablet_id;
+        }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
