@@ -687,6 +687,7 @@ jobs:
       UBUNTU_RELEASE_RESULT: ${{ needs.system-test-release-ubuntu.result }}
       UBUNTU_ASAN_RESULT: ${{ needs.system-test-asan-ubuntu.result }}
       BE_UT_LINUX: ${{ needs.info.outputs.BE_UT_LINUX }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
       - name: init
         run: |
