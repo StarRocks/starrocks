@@ -217,11 +217,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     // Deletes the stale raw-keyed rows for exactly the (partition, column) pairs this job just
-    // (re-)wrote under the hashed table_uuid. Without this, a partition that gets re-collected
-    // would keep both its old raw-keyed row and its new hashed-keyed row alive at once, and the
-    // SUM-based aggregation in buildQueryExternalFullStatisticsSQL would double-count it. This is
-    // best-effort: a failure here only means the stale row lingers until next collection, it must
-    // never fail a job whose actual stats write already succeeded.
+    // (re-)wrote under the hashed table_uuid. Purely storage hygiene: buildQueryExternalFullStatisticsSQL
+    // dedups by (partition_name, column_name, latest update_time) internally, so a lingering stale
+    // row is never double-counted even if this cleanup fails - it just wastes a bit of space until
+    // the next collection retries it. Best-effort: must never fail a job whose actual stats write
+    // already succeeded.
     private void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
         String rawTableUuid = table.getUUID();
         boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);

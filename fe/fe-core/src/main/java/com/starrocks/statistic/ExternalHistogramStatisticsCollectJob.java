@@ -23,6 +23,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
@@ -34,6 +36,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob {
+    private static final Logger LOG = LogManager.getLogger(ExternalHistogramStatisticsCollectJob.class);
+
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT '$tableUUID', '$columnNameStr', '$catalogName', '$dbName', '$tableName'," +
                     " histogram(`column_key`, cast($bucketNum as int), cast($sampleRatio as double)), " +
@@ -100,8 +104,12 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, columnName, columnType);
             collectStatisticSync(sql, context, analyzeStatus);
             // Best-effort: remove the stale raw-keyed row this column's fresh hashed-keyed row just
-            // superseded, so a later read never has to arbitrate between two rows for one column.
-            new StatisticExecutor().dropExternalHistogramRawColumn(context, table.getUUID(), columnName);
+            // superseded. The read side no longer depends on this for correctness (it dedups by
+            // update_time), so this is purely storage hygiene - failures are logged, not fatal.
+            if (!statisticExecutor.dropExternalHistogramRawColumn(context, table.getUUID(), columnName)) {
+                LOG.warn("[ExternalStats] failed to clean up stale raw-keyed histogram row | catalog={} db={} table={} " +
+                        "column={}", catalogName, db.getOriginName(), table.getName(), columnName);
+            }
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);

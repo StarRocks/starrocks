@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -112,9 +113,18 @@ public class PartitionSelector {
     // why not use `PARTITION_ID` here? because partition_id in partitions_meta is physical partition id which may be confused.
     private static final String PARTITIONS_META_TEMPLATE = "SELECT PARTITION_NAME FROM INFORMATION_SCHEMA.PARTITIONS_META " +
             "WHERE DB_NAME ='%s' and TABLE_NAME='%s' AND %s;";
-    private static final String EXTERNAL_TABLE_PARTITION_META_TEMPLATE = "SELECT PARTITION_NAME, SUM(ROW_COUNT) as ROW_COUNT," +
-            "CAST(SUM(DATA_SIZE) AS BIGINT) as DATA_SIZE FROM _statistics_.external_column_statistics " +
-            "WHERE TABLE_UUID = '%s' AND PARTITION_NAME in ('%s') GROUP BY PARTITION_NAME;";
+    // TABLE_UUID matches both the hashed and raw representations (external_column_statistics
+    // stores table_uuid hashed - see StatisticUtils.hashTableUuidForPkStorage - to stay within
+    // BE's primary_key_limit_size); matching only the raw value here would silently return no
+    // rows once a table's stats have been (re-)collected under the hashed key. The inner subquery
+    // dedups to the freshest row per (PARTITION_NAME, COLUMN_NAME) so a partition isn't counted
+    // twice if both its hashed and raw rows happen to be alive at once.
+    private static final String EXTERNAL_TABLE_PARTITION_META_TEMPLATE =
+            "SELECT PARTITION_NAME, SUM(ROW_COUNT) as ROW_COUNT, CAST(SUM(DATA_SIZE) AS BIGINT) as DATA_SIZE FROM (" +
+            "SELECT *, ROW_NUMBER() OVER (PARTITION BY PARTITION_NAME, COLUMN_NAME ORDER BY UPDATE_TIME DESC) AS RN " +
+            "FROM _statistics_.external_column_statistics " +
+            "WHERE TABLE_UUID IN ('%s', '%s') AND PARTITION_NAME in ('%s')) DEDUP_T " +
+            "WHERE RN = 1 GROUP BY PARTITION_NAME;";
     // NOTE: `json` to `datetime` is not supported yet, so we use `string` here.
     private static final String JSON_QUERY_TEMPLATE = "CAST(CAST(JSON_QUERY(%s, '$[0].[%d]') AS STRING) AS %s)";
 
@@ -810,7 +820,9 @@ public class PartitionSelector {
      * such as Iceberg/Hudi by its table UUID.
      */
     public static Map<String, Pair<Long, Long>> getExternalTablePartitionStats(Table table, Set<String> needPartitionNames) {
-        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, table.getUUID(),
+        String rawTableUuid = table.getUUID();
+        String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(rawTableUuid);
+        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, hashedTableUuid, rawTableUuid,
                 String.join(",", needPartitionNames));
         LOG.info("Get external table partition stats by sql: {}", sql);
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);

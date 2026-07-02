@@ -98,4 +98,51 @@ class StatisticSQLBuilderTest {
         Assertions.assertFalse(sql.contains(hashed),
                 "cleanup delete must never also match the hashed uuid (it holds the fresh data): " + sql);
     }
+
+    @Test
+    void buildQueryExternalFullStatisticsSQLDedupsByLatestUpdateTime() {
+        // Correctness must not depend on the write-side cleanup delete succeeding: if both a
+        // raw-keyed and hashed-keyed row are briefly alive for the same partition/column, the
+        // query must keep only the freshest one (by update_time) before aggregating, not double-
+        // count both.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(
+                TABLE_UUID, ImmutableList.of("col1"), ImmutableList.of(IntegerType.BIGINT));
+        Assertions.assertTrue(sql.contains(
+                "row_number() over ( partition by partition_name, column_name order by update_time desc) as rn"), sql);
+        Assertions.assertTrue(sql.contains(") dedup_t WHERE rn = 1 GROUP BY column_name"), sql);
+    }
+
+    @Test
+    void buildQueryConnectorHistogramStatisticsSQLDedupsByLatestUpdateTime() {
+        String sql = StatisticSQLBuilder.buildQueryConnectorHistogramStatisticsSQL(TABLE_UUID, ImmutableList.of("col1"));
+        Assertions.assertTrue(sql.contains(
+                "row_number() over ( partition by column_name order by update_time desc) as rn"), sql);
+        Assertions.assertTrue(sql.contains(") dedup_t WHERE rn = 1"), sql);
+    }
+
+    @Test
+    void tableUUIDPredicatesEscapeQuotesAndBackslashes() {
+        // table_uuid is derived from catalog/db/table names (Table.getUUID()), so it must be
+        // escaped like any other untrusted value before being embedded into a SQL string literal.
+        // StarRocks decodes backslash escapes inside string literals, so doubling quotes alone
+        // (the old StringEscapeUtils.escapeSql behavior) is not sufficient - see SqlUtils.escapeSqlString.
+        String doubleQuoteTrickyUUID = "iceberg.db.o\"brien\\table.uuid"; // contains " and \
+        String doubleQuoted = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(
+                doubleQuoteTrickyUUID, ImmutableList.of("col1"), ImmutableList.of(IntegerType.BIGINT));
+        Assertions.assertTrue(doubleQuoted.contains("iceberg.db.o\\\"brien\\\\table.uuid\""), doubleQuoted);
+
+        String singleQuoteTrickyUUID = "iceberg.db.o'brien\\table.uuid"; // contains ' and \
+        String singleQuoted = StatisticSQLBuilder.buildDropExternalStatSQL(singleQuoteTrickyUUID);
+        Assertions.assertTrue(singleQuoted.contains("iceberg.db.o''brien\\\\table.uuid'"), singleQuoted);
+    }
+
+    @Test
+    void cleanupDeletesEscapeRawUuidAndNames() {
+        String trickyUUID = "iceberg.db.o'brien\\table.uuid";
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(
+                trickyUUID, ImmutableList.of("p'1"), ImmutableList.of("c\\1"));
+        Assertions.assertTrue(sql.contains("TABLE_UUID = 'iceberg.db.o''brien\\\\table.uuid'"), sql);
+        Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p''1')"), sql);
+        Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('c\\\\1')"), sql);
+    }
 }
