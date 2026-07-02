@@ -737,6 +737,12 @@ public class DefaultCoordinator extends Coordinator {
 
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
             throws StarRocksException, RpcException {
+        if (returnedAllResults && status.isCancelled()) {
+            // Receiver already got EOS; any in-flight deploy that races with our QUERY_FINISHED cancel
+            // returns Cancelled("QueryFinished") or Cancelled("Query terminates prematurely") on the BE.
+            // These are not real errors.
+            return;
+        }
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
                 cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
