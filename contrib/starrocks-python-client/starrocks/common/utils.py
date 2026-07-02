@@ -133,6 +133,11 @@ class TableAttributeNormalizer:
     # Matches spaces around closing parenthesis
     _CLOSE_PAREN_SPACE_PATTERN = re.compile(r'\s*(\)\s?)\s*')
     _COMMA_SPACE_PATTERN = re.compile(r'\s*,\s*')
+    # Same as _COMMA_SPACE_PATTERN, but the leading string-literal alternation ensures
+    # commas inside single- or double-quoted string literals
+    _COMMA_SPACE_LITERAL_SAFE_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\s*,\s*)"""
+    )
 
     # ---------------------------------------------------------------------------
     # Patterns to canonicalize StarRocks' own rewrites of view / materialized-view
@@ -277,8 +282,12 @@ class TableAttributeNormalizer:
         """
         if not sql:
             return sql
-        # Standardize comma spacing: "a , b" / "a,b" -> "a, b".
-        sql = TableAttributeNormalizer._COMMA_SPACE_PATTERN.sub(', ', sql)
+        # Standardize comma spacing: "a , b" / "a,b" -> "a, b", but leave commas inside
+        # string literals alone so that e.g. 'a,b' and 'a, b' stay distinct.
+        # group(1) is None when the alternation matched a string literal (skip it).
+        sql = TableAttributeNormalizer._COMMA_SPACE_LITERAL_SAFE_PATTERN.sub(
+            lambda m: m.group(0) if m.group(1) is None else ', ', sql
+        )
         # "INNER JOIN" -> "JOIN"; "<x> OUTER JOIN" -> "<x> JOIN".
         sql = TableAttributeNormalizer._INNER_JOIN_PATTERN.sub('join', sql)
         sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(r'\1 join', sql)

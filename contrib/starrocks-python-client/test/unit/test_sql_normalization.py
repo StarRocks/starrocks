@@ -377,6 +377,12 @@ class TestStarRocksCanonicalization:
             "select a , b , c from t",
         )
 
+    def test_comma_inside_string_literal_preserved(self):
+        """Commas inside string literals must not be re-spaced."""
+        a = TableAttributeNormalizer.normalize_sql("select 'a,b' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'a, b' as c from t")
+        assert a != b
+
     def test_newline_differences_normalized(self):
         """Literal '\\n' and actual newlines normalize identically."""
         self._assert_equivalent(
