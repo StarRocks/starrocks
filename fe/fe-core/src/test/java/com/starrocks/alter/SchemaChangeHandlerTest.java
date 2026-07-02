@@ -1155,6 +1155,45 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals("", table.getColumn("v1").getComment(), exception.getMessage());
     }
 
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_dup (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_dup");
+        // "MODIFY COLUMN v1 INT" changes nothing (no-op); batched with a real change on v2.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_dup MODIFY COLUMN v1 INT, MODIFY COLUMN v2 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        // Must not throw the comment-combine error; the no-op clause stays on the schema-change path.
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClauseOnPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_pk (k1 INT NOT NULL, v10 VARCHAR(40) NULL, v11 INT NULL) "
+                + "PRIMARY KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_pk");
+        // "MODIFY COLUMN v10 VARCHAR(40)" is a no-op (v10 already is VARCHAR(40)); batched with a real change on v11.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_pk MODIFY COLUMN v10 VARCHAR(40), MODIFY COLUMN v11 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
     private void assertCommentOnlyModify(String tableName, String alterSql, String columnName, String expectedComment)
             throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
