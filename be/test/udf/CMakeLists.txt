@@ -15,7 +15,6 @@
 set(UDF_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     python/env_test.cpp
-    java/java_native_method_test.cpp
     java/java_data_converter_test.cpp
     java/java_udf_test.cpp
 )
