@@ -32,6 +32,7 @@ set(RUNTIME_TEST_FILES
     # this before serde_core_test, whose HLL tests exercise that allocator.
     runtime_env_test.cpp
     java_env_test.cpp
+    jvm_helper_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
     serde_core_test.cpp

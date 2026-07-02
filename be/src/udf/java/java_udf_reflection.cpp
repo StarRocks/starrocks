@@ -29,12 +29,12 @@ namespace {
 constexpr const char* CLASS_LOADER_NAME = "com.starrocks.udf.UDFClassLoader";
 constexpr const char* CLASS_ANALYZER_NAME = "com.starrocks.udf.UDFClassAnalyzer";
 
-#define RETURN_ERROR_IF_EXCEPTION(env, errmsg)                              \
-    if (auto e = env->ExceptionOccurred()) {                                \
-        LOCAL_REF_GUARD(e);                                                 \
-        auto msg = JVMFunctionHelper::getInstance().dumpExceptionString(e); \
-        env->ExceptionClear();                                              \
-        return Status::InternalError(fmt::format(errmsg, msg));             \
+#define RETURN_ERROR_IF_EXCEPTION(env, errmsg)                      \
+    if (auto e = env->ExceptionOccurred()) {                        \
+        LOCAL_REF_GUARD(e);                                         \
+        auto msg = JVMHelper::getInstance().dumpExceptionString(e); \
+        env->ExceptionClear();                                      \
+        return Status::InternalError(fmt::format(errmsg, msg));     \
     }
 
 } // namespace
@@ -45,11 +45,11 @@ JavaUdfClassLoader::~JavaUdfClassLoader() {
 }
 
 Status JavaUdfClassLoader::init() {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
     if (env == nullptr) {
         return Status::InternalError("Init JNIEnv fail");
     }
-    std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_LOADER_NAME);
+    std::string name = JVMHelper::to_jni_class_name(CLASS_LOADER_NAME);
     jclass clazz = env->FindClass(name.c_str());
     LOCAL_REF_GUARD(clazz);
 
@@ -94,14 +94,14 @@ Status JavaUdfClassLoader::init() {
 }
 
 StatusOr<JVMClass> JavaUdfClassLoader::getClass(const std::string& className) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    auto& jvm = JVMHelper::getInstance();
+    JNIEnv* env = jvm.getEnv();
     CHECK(env != nullptr) << "couldn't got a JNIEnv";
 
     // class Name java.lang.Object -> java/lang/Object
-    std::string jni_class_name = JVMFunctionHelper::to_jni_class_name(className);
+    std::string jni_class_name = JVMHelper::to_jni_class_name(className);
     // invoke class loader
-    ASSIGN_OR_RETURN(jstring jstr_name, helper.to_jstring(jni_class_name));
+    ASSIGN_OR_RETURN(jstring jstr_name, jvm.to_jstring(jni_class_name));
     LOCAL_REF_GUARD(jstr_name);
 
     auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_class, jstr_name);
@@ -118,11 +118,11 @@ StatusOr<JVMClass> JavaUdfClassLoader::getClass(const std::string& className) {
 
 StatusOr<JVMClass> JavaUdfClassLoader::genCallStub(const std::string& stubClassName, jclass clazz, jobject method,
                                                    int type, int numActualVarArgs) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    auto& jvm = JVMHelper::getInstance();
+    JNIEnv* env = jvm.getEnv();
 
-    std::string jni_class_name = JVMFunctionHelper::to_jni_class_name(stubClassName);
-    ASSIGN_OR_RETURN(jstring jstr_name, helper.to_jstring(jni_class_name));
+    std::string jni_class_name = JVMHelper::to_jni_class_name(stubClassName);
+    ASSIGN_OR_RETURN(jstring jstr_name, jvm.to_jstring(jni_class_name));
     LOCAL_REF_GUARD(jstr_name);
 
     // generate call stub; pass numActualVarArgs for varargs methods
@@ -136,17 +136,17 @@ StatusOr<JVMClass> JavaUdfClassLoader::genCallStub(const std::string& stubClassN
 }
 
 jmethodID JavaUdfMethodDescriptor::get_method_id() const {
-    return JVMFunctionHelper::getInstance().getEnv()->FromReflectedMethod(method.handle());
+    return JVMHelper::getInstance().getEnv()->FromReflectedMethod(method.handle());
 }
 
 Status JavaUdfClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* has) {
     DCHECK(clazz != nullptr);
     DCHECK(has != nullptr);
 
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = getJNIEnv();
+    auto& jvm = JVMHelper::getInstance();
+    JNIEnv* env = jvm.getEnv();
 
-    std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
+    std::string anlyzer_clazz_name = JVMHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
     LOCAL_REF_GUARD(class_analyzer);
 
@@ -160,7 +160,7 @@ Status JavaUdfClassAnalyzer::has_method(jclass clazz, const std::string& method,
         return Status::InternalError("couldn't found hasMethod method");
     }
 
-    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
+    ASSIGN_OR_RETURN(jstring method_name, jvm.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     *has = env->CallStaticBooleanMethod(class_analyzer, hasMethod, method_name, (jobject)clazz);
@@ -189,9 +189,9 @@ void JavaUdfClassAnalyzer::strip_jni_generic_types(std::string* sign) {
 Status JavaUdfClassAnalyzer::get_signature(jclass clazz, const std::string& method, std::string* sign) {
     DCHECK(clazz != nullptr);
     DCHECK(sign != nullptr);
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
-    std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
+    auto& jvm = JVMHelper::getInstance();
+    JNIEnv* env = jvm.getEnv();
+    std::string anlyzer_clazz_name = JVMHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
     LOCAL_REF_GUARD(class_analyzer);
 
@@ -204,7 +204,7 @@ Status JavaUdfClassAnalyzer::get_signature(jclass clazz, const std::string& meth
         return Status::InternalError("couldn't found getSignature method");
     }
 
-    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
+    ASSIGN_OR_RETURN(jstring method_name, jvm.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     jobject result_sign = env->CallStaticObjectMethod(class_analyzer, getSign, method_name, (jobject)clazz);
@@ -215,7 +215,7 @@ Status JavaUdfClassAnalyzer::get_signature(jclass clazz, const std::string& meth
     if (result_sign == nullptr) {
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
-    *sign = helper.to_string(result_sign);
+    *sign = jvm.to_string(result_sign);
     // Strip generic type parameters from signature to produce standard JNI method descriptor.
     // Java's getGenericParameterTypes() may produce signatures with generic info that:
     // 1. JNI GetMethodID cannot match against the erased method descriptor, returning NULL.
@@ -228,10 +228,10 @@ Status JavaUdfClassAnalyzer::get_signature(jclass clazz, const std::string& meth
 }
 
 StatusOr<jobject> JavaUdfClassAnalyzer::get_method_object(jclass clazz, const std::string& method) {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    auto& jvm = JVMHelper::getInstance();
+    JNIEnv* env = jvm.getEnv();
 
-    std::string anlyzer_clazz_name = JVMFunctionHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
+    std::string anlyzer_clazz_name = JVMHelper::to_jni_class_name(CLASS_ANALYZER_NAME);
     jclass class_analyzer = env->FindClass(anlyzer_clazz_name.c_str());
     LOCAL_REF_GUARD(class_analyzer);
     DCHECK(class_analyzer);
@@ -239,7 +239,7 @@ StatusOr<jobject> JavaUdfClassAnalyzer::get_method_object(jclass clazz, const st
     jmethodID getMethodObject = env->GetStaticMethodID(
             class_analyzer, "getMethodObject", "(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/reflect/Method;");
     DCHECK(getMethodObject);
-    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
+    ASSIGN_OR_RETURN(jstring method_name, jvm.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     jobject method_object = env->CallStaticObjectMethod(class_analyzer, getMethodObject, method_name, (jobject)clazz);
