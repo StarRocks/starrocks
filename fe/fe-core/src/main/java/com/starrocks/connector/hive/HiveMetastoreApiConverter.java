@@ -637,14 +637,27 @@ public class HiveMetastoreApiConverter {
         collectionDelim = collectionDelim.isEmpty() ? null : collectionDelim;
         mapkeyDelim = mapkeyDelim.isEmpty() ? null : mapkeyDelim;
 
+        int enclose = 0;
+        int escape = 0;
+        // LazySimpleSerDe escape (DDL: ROW FORMAT DELIMITED ... ESCAPED BY 'c'), stored as
+        // serde property 'escape.delim'. Hive enables escaping only when the property is
+        // present and, like the delimiters, uses only its first character. The BE needs it
+        // to keep an escaped separator (e.g. "a\,b") inside the field instead of splitting
+        // on it.
+        String escapeDelim = parameters.getOrDefault(serdeConstants.ESCAPE_CHAR, "");
+        if (!escapeDelim.isEmpty()) {
+            escape = escapeDelim.charAt(0);
+        }
+
         // OpenCSVSerde is a quote-aware CSV parser. It applies separator/quote/escape
         // defaults (',' '"' '\') even when they are not explicitly set in
         // SERDEPROPERTIES, so we must detect the SerDe by its class name (the params
         // map alone is not enough) and pass enclose/escape down to the BE.
         // https://cwiki.apache.org/confluence/display/hive/csv+serde
-        int enclose = 0;
-        int escape = 0;
         if (OpenCSVSerde.class.getName().equals(serdeLib)) {
+            // OpenCSVSerde ignores LazySimpleSerDe's 'escape.delim'; only its own
+            // escapeChar property (with its '\' default) applies.
+            escape = 0;
             if (fieldDelim == null) {
                 fieldDelim = ",";
             }

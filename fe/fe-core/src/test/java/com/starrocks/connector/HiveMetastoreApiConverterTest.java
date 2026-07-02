@@ -126,6 +126,39 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
+    public void testToTextFileFormatDescForLazySimpleEscape() {
+        // LazySimpleSerDe with ESCAPED BY (serde property 'escape.delim'): the escape
+        // char must reach the BE so "a\,b" is one field, while enclose stays unset.
+        Map<String, String> params = new HashMap<>();
+        params.put("field.delim", ",");
+        params.put("escape.delim", "\\");
+        TextFileFormatDesc lazy = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                params, "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, lazy.getEnclose());
+        Assertions.assertEquals('\\', lazy.getEscape());
+
+        // Like the delimiters, only the first character is used.
+        Map<String, String> multiChar = new HashMap<>();
+        multiChar.put("escape.delim", "#!");
+        TextFileFormatDesc first = HiveMetastoreApiConverter.toTextFileFormatDesc(multiChar, null);
+        Assertions.assertEquals('#', first.getEscape());
+
+        // Without the property, escaping stays off.
+        TextFileFormatDesc off = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                new HashMap<>(), "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe");
+        Assertions.assertEquals(0, off.getEscape());
+
+        // OpenCSVSerde ignores LazySimpleSerDe's escape.delim: its own escapeChar
+        // (here explicitly disabled) wins.
+        Map<String, String> mixed = new HashMap<>();
+        mixed.put("escape.delim", "#");
+        mixed.put("escapeChar", "");
+        TextFileFormatDesc opencsv = HiveMetastoreApiConverter.toTextFileFormatDesc(
+                mixed, "org.apache.hadoop.hive.serde2.OpenCSVSerde");
+        Assertions.assertEquals(0, opencsv.getEscape());
+    }
+
+    @Test
     public void testToFullSchemasForHudiTable(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList();
