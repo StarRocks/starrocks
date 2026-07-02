@@ -29,13 +29,6 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks {
-struct JavaUDAFState {
-    JavaUDAFState(int handle_) : handle(handle_) {}
-    ~JavaUDAFState() = default;
-    // UDAF State
-    int handle;
-};
-
 class JavaDataTypeConverter {
 public:
     static jobject convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows);
