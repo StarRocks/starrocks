@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer.mv;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -131,6 +132,12 @@ public class IVMAnalyzer {
                     // bitmap_agg: exact distinct count. bitmap_union(to_bitmap(col)) normalizes to this;
                     // BITMAP state unions associatively, so the delta merge is well-defined.
                     .put(FunctionSet.BITMAP_AGG,             args -> args.length == 1)
+                    // bitmap_union/hll_union/percentile_union: the argument is already a metric sketch
+                    // (from bitmap_hash/hll_hash/percentile_hash, or a metric column), unioned
+                    // associatively like bitmap_agg.
+                    .put(FunctionSet.BITMAP_UNION,           args -> args.length == 1 && args[0].isBitmapType())
+                    .put(FunctionSet.HLL_UNION,              args -> args.length == 1 && args[0].isHllType())
+                    .put(FunctionSet.PERCENTILE_UNION,       args -> args.length == 1 && args[0].isPercentile())
                     .build();
 
     private static boolean isFixedOrFloat(Type t) {
@@ -537,7 +544,10 @@ public class IVMAnalyzer {
     }
 
     private Expr buildStateMergeFuncExpr(IVMAggFunctionInfo aggFunctionInfo) throws AnalysisException {
-        String aggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunctionInfo.aggFuncName);
+        Function origFn = aggFunctionInfo.aggFunc.getFn();
+        String aggFuncName = origFn != null
+                ? AggStateUtils.getBaseAggFuncName(origFn)
+                : AggStateUtils.getAggFuncNameOfCombinator(aggFunctionInfo.aggFuncName);
         String stateMergeFuncName = AggStateUtils.stateMergeFunctionName(aggFuncName);
         SlotRef slotRef = new SlotRef(null, aggFunctionInfo.newAggFuncName);
         // <func>_state_merge(<slotRef>)
