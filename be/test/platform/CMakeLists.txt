@@ -13,6 +13,7 @@
 # limitations under the License.
 
 set(PLATFORM_TEST_FILES
+    ../fs/poco_http_client_test.cpp
     ../base/cxa_throw_wrap.cpp
     download_util_test.cpp
     fs_broker_test.cpp

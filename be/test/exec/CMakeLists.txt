@@ -75,7 +75,7 @@ set(EXEC_RUNTIME_TEST_LINK_LIBS
     ExprCore
     Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ChunkCore
     ColumnCore

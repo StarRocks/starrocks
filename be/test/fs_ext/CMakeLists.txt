@@ -12,28 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(BE_TEST_MACOS_LINK_STUBS)
-if (APPLE)
-    list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
-endif()
-
-set(STORAGE_BASE_TEST_FILES
-    ${BE_TEST_MACOS_LINK_STUBS}
-    merge_iterator_test.cpp
-    row_source_mask_test.cpp
-    short_key_index_test.cpp
+set(HDFS_FILESYSTEM_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    hdfs_filesystem_test.cpp
 )
 
-set(STORAGE_BASE_TEST_LINK_LIBS
-    StorageBase
-    ComputeEnv
-    StoragePrimitive
+set(HDFS_FILESYSTEM_TEST_LINK_LIBS
+    HdfsFileSystem
     FileSystem
-    IO
     Runtime
-    ChunkCore
-    ColumnCore
-    Types
+    IO
     Common
     Base
     Gutil
@@ -47,8 +35,8 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_storage_base_test_objs OBJECT ${STORAGE_BASE_TEST_FILES})
-target_link_libraries(starrocks_storage_base_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_storage_base_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(storage_base_test $<TARGET_OBJECTS:starrocks_storage_base_test_objs>)
-target_link_libraries(storage_base_test ${STORAGE_BASE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_hdfs_filesystem_test_objs OBJECT ${HDFS_FILESYSTEM_TEST_FILES})
+target_link_libraries(starrocks_hdfs_filesystem_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_hdfs_filesystem_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(hdfs_filesystem_test hdfs_filesystem_test_main.cpp $<TARGET_OBJECTS:starrocks_hdfs_filesystem_test_objs>)
+target_link_libraries(hdfs_filesystem_test ${HDFS_FILESYSTEM_TEST_LINK_LIBS})

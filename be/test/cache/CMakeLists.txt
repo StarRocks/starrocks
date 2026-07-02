@@ -45,7 +45,7 @@ set(CACHE_TEST_LINK_LIBS
 
 list(APPEND CACHE_TEST_LINK_LIBS
     Runtime
-    FSCore
+    FileSystem
     IO
     Common
     Base

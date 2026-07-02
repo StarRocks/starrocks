@@ -12,16 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-#include <functional>
-#include <future>
-#include <memory>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
 
-#include "common/status.h"
+#include "common/configbase.h"
+#include "gtest/gtest.h"
 
-namespace starrocks {
-using PromiseStatus = std::promise<Status>;
-using PromiseStatusPtr = std::unique_ptr<PromiseStatus>;
-PromiseStatusPtr call_hdfs_scan_function_in_pthread(const std::function<Status()>& func);
-
-} // namespace starrocks
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    if (getenv("STARROCKS_HOME") == nullptr) {
+        fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
+        return -1;
+    }
+    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
+    if (!starrocks::config::init(conffile.c_str())) {
+        fprintf(stderr, "error read config file.\n");
+        return -1;
+    }
+    return RUN_ALL_TESTS();
+}

@@ -25,7 +25,7 @@
 
 #include "base/random/random.h"
 #include "common/status.h"
-#include "fs/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/fs_hdfs.h"
 
 namespace starrocks {
 

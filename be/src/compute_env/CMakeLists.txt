@@ -143,7 +143,7 @@ target_link_libraries(ComputeEnv PUBLIC
     ExprCore
     Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ColumnSortCore
     ChunkCore
