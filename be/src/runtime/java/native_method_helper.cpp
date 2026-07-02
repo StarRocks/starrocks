@@ -15,10 +15,13 @@
 #include "runtime/java/native_method_helper.h"
 
 #include <cstdlib>
+#include <exception>
 #include <limits>
 #include <mutex>
 #include <new>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -42,6 +45,18 @@ namespace starrocks {
 namespace {
 
 constexpr const char* kNativeMethodHelperClassName = "com/starrocks/utils/NativeMethodHelper";
+
+class NativeMethodRegistrationError final : public std::exception {
+public:
+    explicit NativeMethodRegistrationError(Status status) : _status(std::move(status)), _message(_status.to_string()) {}
+
+    const char* what() const noexcept override { return _message.c_str(); }
+    const Status& status() const { return _status; }
+
+private:
+    Status _status;
+    std::string _message;
+};
 
 class GetColumnAddrVistor : public ColumnVisitorAdapter<GetColumnAddrVistor> {
 public:
@@ -319,25 +334,21 @@ Status jni_exception_status(JNIEnv* env, const std::string& action) {
     if (thr == nullptr) {
         return Status::InternalError(action);
     }
-    std::string message = JVMHelper::getInstance().dumpExceptionString(thr);
     env->ExceptionClear();
+    std::string message = JVMHelper::getInstance().dumpExceptionString(thr);
     env->DeleteLocalRef(thr);
     return Status::InternalError(fmt::format("{}: {}", action, message));
 }
 
 Status register_native_methods(JNIEnv* env) {
-    if (env == nullptr) {
-        return Status::InternalError("JNIEnv is null when registering NativeMethodHelper");
-    }
-
     jclass native_method_class = env->FindClass(kNativeMethodHelperClassName);
     if (native_method_class == nullptr) {
         return jni_exception_status(env, "Failed to find NativeMethodHelper class");
     }
+    LOCAL_REF_GUARD_ENV(env, native_method_class);
 
     int res = env->RegisterNatives(native_method_class, kNativeMethods,
                                    sizeof(kNativeMethods) / sizeof(kNativeMethods[0]));
-    env->DeleteLocalRef(native_method_class);
     if (res != 0) {
         if (env->ExceptionCheck()) {
             return jni_exception_status(env, "Failed to register NativeMethodHelper natives");
@@ -356,10 +367,20 @@ Status NativeMethodHelper::ensure_registered(JNIEnv* env) {
     }
 
     static std::once_flag register_once;
-    static Status register_status = Status::OK();
 
-    std::call_once(register_once, [&]() { register_status = register_native_methods(env); });
-    return register_status;
+    try {
+        // RegisterNatives must run exactly once after success. If registration fails, throw from
+        // the call_once body so the once_flag remains unset and a later call can retry.
+        std::call_once(register_once, [&]() {
+            Status status = register_native_methods(env);
+            if (!status.ok()) {
+                throw NativeMethodRegistrationError(std::move(status));
+            }
+        });
+    } catch (const NativeMethodRegistrationError& e) {
+        return e.status();
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks
