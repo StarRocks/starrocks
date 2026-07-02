@@ -673,8 +673,6 @@ partition_name:
   - 目前只有 Leader FE 节点可以触发收集任务。
   - 仅支持检查 Hive、Iceberg 外表的分区变动，只收集数据发生变动分区的统计信息。对于 Delta Lake/Hudi 外表，系统会收集整表的统计信息。
   - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
-  - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
-
   - Iceberg 表 Partition Evolution 统计信息的收集功能在 4.0 及更高版本中已启用。
 
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
