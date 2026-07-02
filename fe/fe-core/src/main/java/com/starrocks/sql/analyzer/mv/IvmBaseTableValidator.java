@@ -65,18 +65,20 @@ public final class IvmBaseTableValidator {
 
     /**
      * Maps each base column aggregate type to the MV aggregate that is both delta-rollup-safe
-     * (its state-union is invariant under base merging) AND end-to-end supported by IVM. Limited
-     * to SUM / MAX / MIN: BITMAP_UNION / HLL_UNION / PERCENTILE_UNION are delta-safe too, but
-     * IVM's combinator path ({@code IVMAnalyzer.IVM_SUPPORTED_AGG_FUNCTIONS}) does not cover them,
-     * so advertising them here would only defer the rejection to a more confusing error. Row-
-     * counting aggregates (COUNT, AVG, NDV) and REPLACE-family columns are excluded because CDC
-     * delta carries pre-merge events whose count/last-value diverges from the base view.
+     * (its state-union is invariant under base merging) AND end-to-end supported by IVM: SUM / MAX /
+     * MIN plus the metric-state unions BITMAP_UNION / HLL_UNION / PERCENTILE_UNION (their state IS the
+     * metric type and merges associatively). Row-counting aggregates (COUNT, AVG, NDV) and
+     * REPLACE-family columns are excluded because CDC delta carries pre-merge events whose
+     * count/last-value diverges from the base view.
      */
     private static final Map<AggregateType, String> COMPATIBLE_MV_AGG_BY_BASE_AGG_TYPE =
             ImmutableMap.<AggregateType, String>builder()
                     .put(AggregateType.SUM, FunctionSet.SUM)
                     .put(AggregateType.MAX, FunctionSet.MAX)
                     .put(AggregateType.MIN, FunctionSet.MIN)
+                    .put(AggregateType.BITMAP_UNION, FunctionSet.BITMAP_UNION)
+                    .put(AggregateType.HLL_UNION, FunctionSet.HLL_UNION)
+                    .put(AggregateType.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION)
                     .build();
 
     private static final Set<String> DELTA_ROLLUP_AGGS_FOR_AGG_BASE =

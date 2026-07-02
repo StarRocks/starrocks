@@ -1,0 +1,120 @@
+-- name: test_ivm_bitmap_union_dup @cloud
+-- bitmap_union(to_bitmap(col)) on a DUPLICATE base normalizes to bitmap_agg: incremental exact distinct count.
+CREATE TABLE bm_dup (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO bm_dup VALUES (1,10),(1,20),(1,20),(2,30);
+CREATE MATERIALIZED VIEW mv_bm_dup
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(to_bitmap(uid)) AS b FROM bm_dup GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_bm_dup WITH SYNC MODE;
+SELECT k, bitmap_count(b) AS dc FROM mv_bm_dup ORDER BY k;
+INSERT INTO bm_dup VALUES (1,30),(2,30),(2,40);
+REFRESH MATERIALIZED VIEW mv_bm_dup WITH SYNC MODE;
+SELECT k, bitmap_count(b) AS dc FROM mv_bm_dup ORDER BY k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, bitmap_count(b) FROM mv_bm_dup
+    EXCEPT SELECT k, COUNT(DISTINCT uid) FROM bm_dup GROUP BY k) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, COUNT(DISTINCT uid) FROM bm_dup GROUP BY k
+    EXCEPT SELECT k, bitmap_count(b) FROM mv_bm_dup) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_bm_dup%' OR DEFINITION LIKE '%mv_bm_dup%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_hll_union_dup @cloud
+-- hll_union(hll_hash(col)) on a DUPLICATE base: incremental approximate distinct count (exact for tiny sets).
+CREATE TABLE hll_dup (k INT, uid INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO hll_dup VALUES (1,10),(1,20),(1,20),(2,30);
+CREATE MATERIALIZED VIEW mv_hll_dup
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, hll_union(hll_hash(uid)) AS h FROM hll_dup GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_hll_dup WITH SYNC MODE;
+SELECT k, hll_cardinality(h) AS dc FROM mv_hll_dup ORDER BY k;
+INSERT INTO hll_dup VALUES (1,30),(2,30),(2,40);
+REFRESH MATERIALIZED VIEW mv_hll_dup WITH SYNC MODE;
+SELECT k, hll_cardinality(h) AS dc FROM mv_hll_dup ORDER BY k;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, hll_cardinality(h) FROM mv_hll_dup
+    EXCEPT SELECT k, COUNT(DISTINCT uid) FROM hll_dup GROUP BY k) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_hll_dup%' OR DEFINITION LIKE '%mv_hll_dup%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_bitmap_union_aggbase @cloud
+-- bitmap_union over a BITMAP_UNION column on an AGGREGATE base: roll up city-level bitmaps to day-level.
+CREATE TABLE bm_agg (day INT, city INT, uv BITMAP BITMAP_UNION)
+AGGREGATE KEY(day, city) DISTRIBUTED BY HASH(day) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO bm_agg VALUES (1,100,to_bitmap(10)),(1,100,to_bitmap(20)),(1,200,to_bitmap(20)),(2,100,to_bitmap(30));
+CREATE MATERIALIZED VIEW mv_bm_agg
+DISTRIBUTED BY HASH(day) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT day, bitmap_union(uv) AS uv_bm FROM bm_agg GROUP BY day;
+REFRESH MATERIALIZED VIEW mv_bm_agg WITH SYNC MODE;
+SELECT day, bitmap_count(uv_bm) AS dc FROM mv_bm_agg ORDER BY day;
+INSERT INTO bm_agg VALUES (1,300,to_bitmap(40)),(2,200,to_bitmap(50));
+REFRESH MATERIALIZED VIEW mv_bm_agg WITH SYNC MODE;
+SELECT day, bitmap_count(uv_bm) AS dc FROM mv_bm_agg ORDER BY day;
+SELECT COUNT(*) AS diff FROM (
+    SELECT day, bitmap_count(uv_bm) FROM mv_bm_agg
+    EXCEPT SELECT day, bitmap_count(bitmap_union(uv)) FROM bm_agg GROUP BY day) t;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT day, bitmap_count(bitmap_union(uv)) FROM bm_agg GROUP BY day
+    EXCEPT SELECT day, bitmap_count(uv_bm) FROM mv_bm_agg) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_bm_agg%' OR DEFINITION LIKE '%mv_bm_agg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_hll_union_aggbase @cloud
+-- hll_union over an HLL_UNION column on an AGGREGATE base (HLL is exact for tiny cardinalities).
+CREATE TABLE hll_agg (day INT, city INT, uv HLL HLL_UNION)
+AGGREGATE KEY(day, city) DISTRIBUTED BY HASH(day) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO hll_agg VALUES (1,100,hll_hash(10)),(1,100,hll_hash(20)),(1,200,hll_hash(20)),(2,100,hll_hash(30));
+CREATE MATERIALIZED VIEW mv_hll_agg
+DISTRIBUTED BY HASH(day) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT day, hll_union(uv) AS uv_hll FROM hll_agg GROUP BY day;
+REFRESH MATERIALIZED VIEW mv_hll_agg WITH SYNC MODE;
+SELECT day, hll_cardinality(uv_hll) AS dc FROM mv_hll_agg ORDER BY day;
+INSERT INTO hll_agg VALUES (1,300,hll_hash(40)),(2,200,hll_hash(50));
+REFRESH MATERIALIZED VIEW mv_hll_agg WITH SYNC MODE;
+SELECT day, hll_cardinality(uv_hll) AS dc FROM mv_hll_agg ORDER BY day;
+SELECT COUNT(*) AS diff FROM (
+    SELECT day, hll_cardinality(uv_hll) FROM mv_hll_agg
+    EXCEPT SELECT day, hll_cardinality(hll_union(uv)) FROM hll_agg GROUP BY day) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_hll_agg%' OR DEFINITION LIKE '%mv_hll_agg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_percentile_union_aggbase @cloud
+-- percentile_union over a PERCENTILE_UNION column on an AGGREGATE base; read the median back.
+CREATE TABLE pct_agg (day INT, city INT, val PERCENTILE PERCENTILE_UNION)
+AGGREGATE KEY(day, city) DISTRIBUTED BY HASH(day) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO pct_agg VALUES (1,100,percentile_hash(10)),(1,100,percentile_hash(20)),(1,200,percentile_hash(30)),(2,100,percentile_hash(100));
+CREATE MATERIALIZED VIEW mv_pct_agg
+DISTRIBUTED BY HASH(day) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT day, percentile_union(val) AS p FROM pct_agg GROUP BY day;
+REFRESH MATERIALIZED VIEW mv_pct_agg WITH SYNC MODE;
+SELECT day, ROUND(percentile_approx_raw(p, 0.5), 3) AS median FROM mv_pct_agg ORDER BY day;
+INSERT INTO pct_agg VALUES (1,300,percentile_hash(40)),(2,200,percentile_hash(200));
+REFRESH MATERIALIZED VIEW mv_pct_agg WITH SYNC MODE;
+SELECT day, ROUND(percentile_approx_raw(p, 0.5), 3) AS median FROM mv_pct_agg ORDER BY day;
+SELECT COUNT(*) AS diff FROM (
+    SELECT day, ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pct_agg
+    EXCEPT SELECT day, ROUND(percentile_approx_raw(percentile_union(val), 0.5), 3) FROM pct_agg GROUP BY day) t;
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_pct_agg%' OR DEFINITION LIKE '%mv_pct_agg%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;

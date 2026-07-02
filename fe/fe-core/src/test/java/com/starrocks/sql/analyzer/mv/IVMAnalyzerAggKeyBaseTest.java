@@ -76,11 +76,23 @@ public class IVMAnalyzerAggKeyBaseTest extends BookmarkTestBase {
                 + ") DUPLICATE KEY(k) "
                 + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
                 + "PROPERTIES ('replication_num' = '1');");
-        // BITMAP_UNION value column: delta-mergeable, but BITMAP_UNION is not in IVM's supported
-        // aggregate set, so the AGG-base whitelist must not advertise it.
+        // Metric-state value columns (BITMAP/HLL/PERCENTILE _UNION): delta-mergeable and supported
+        // as a strict rollup — the MV aggregate must match the column's union type.
         createTableStatic("CREATE TABLE base_agg_bitmap ("
                 + "    k INT NOT NULL,"
                 + "    tags BITMAP BITMAP_UNION"
+                + ") AGGREGATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        createTableStatic("CREATE TABLE base_agg_hll ("
+                + "    k INT NOT NULL,"
+                + "    hs HLL HLL_UNION"
+                + ") AGGREGATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');");
+        createTableStatic("CREATE TABLE base_agg_percentile ("
+                + "    k INT NOT NULL,"
+                + "    ps PERCENTILE PERCENTILE_UNION"
                 + ") AGGREGATE KEY(k) "
                 + "DISTRIBUTED BY HASH(k) BUCKETS 1 "
                 + "PROPERTIES ('replication_num' = '1');");
@@ -290,18 +302,36 @@ public class IVMAnalyzerAggKeyBaseTest extends BookmarkTestBase {
     }
 
     /**
-     * BITMAP_UNION is delta-mergeable but not in IVM's supported aggregate set, so the AGG-base
-     * whitelist must reject it rather than advertise support that checkAggregate later refuses.
+     * BITMAP_UNION over a BITMAP_UNION column is a strict rollup: the MV aggregate matches the base
+     * column's union type, and the BITMAP state merges associatively under base merging. Accept it.
      */
     @Test
-    public void testRejectBitmapUnionNotSupportedByIvm() {
+    public void testAcceptBitmapUnionOnAggBase() throws Exception {
         String ddl = "CREATE MATERIALIZED VIEW mv_bitmap "
                 + "REFRESH DEFERRED MANUAL "
                 + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                 + "AS SELECT k, BITMAP_UNION(tags) FROM " + DB_NAME + ".base_agg_bitmap GROUP BY k";
-        SemanticException ex = assertThrows(SemanticException.class, () -> runIvmAnalyzer(ddl));
-        assertTrue(ex.getMessage().contains("AGGREGATE KEY"),
-                "error should mention AGGREGATE KEY: " + ex.getMessage());
+        runIvmAnalyzer(ddl);
+    }
+
+    /** HLL_UNION over an HLL_UNION column: same strict-rollup rule as BITMAP_UNION. */
+    @Test
+    public void testAcceptHllUnionOnAggBase() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_hll "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT k, HLL_UNION(hs) FROM " + DB_NAME + ".base_agg_hll GROUP BY k";
+        runIvmAnalyzer(ddl);
+    }
+
+    /** PERCENTILE_UNION over a PERCENTILE_UNION column: same strict-rollup rule. */
+    @Test
+    public void testAcceptPercentileUnionOnAggBase() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_percentile "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT k, PERCENTILE_UNION(ps) FROM " + DB_NAME + ".base_agg_percentile GROUP BY k";
+        runIvmAnalyzer(ddl);
     }
 
     /**
