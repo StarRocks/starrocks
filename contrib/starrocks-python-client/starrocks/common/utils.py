@@ -147,11 +147,23 @@ class TableAttributeNormalizer:
     # definitions compare equal. See ``_canonicalize_statement``.
     # ---------------------------------------------------------------------------
     # "JOIN" is stored as "INNER JOIN"; collapse it back to a bare "JOIN".
-    _INNER_JOIN_PATTERN = re.compile(r'\binner\s+join\b', re.IGNORECASE)
+    # The leading string-literal alternation (same technique as _ALIAS_AS_PATTERN) ensures
+    # the rewrite never fires inside a quoted string; group(1) is None for those matches.
+    _INNER_JOIN_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\binner\s+join\b)""", re.IGNORECASE
+    )
     # "<x> OUTER JOIN" is equivalent to "<x> JOIN"; drop the redundant OUTER.
-    _OUTER_JOIN_PATTERN = re.compile(r'\b(left|right|full)\s+outer\s+join\b', re.IGNORECASE)
+    # group(1) is the whole "<dir> outer join" match (None inside a string literal);
+    # group(2) is the retained direction (left/right/full).
+    _OUTER_JOIN_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\b(left|right|full)\s+outer\s+join\b)""",
+        re.IGNORECASE,
+    )
     # StarRocks may add or drop LATERAL before unnest / table functions.
-    _LATERAL_PATTERN = re.compile(r'\blateral\s+', re.IGNORECASE)
+    # group(1) is None when the alternation matched a string literal (skip it).
+    _LATERAL_PATTERN = re.compile(
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\blateral\s+)""", re.IGNORECASE
+    )
     # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int))
     # is removed entirely. StarRocks is inconsistent about emitting it (e.g. on 3.5.x it
     # stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically meaningful, so
@@ -218,6 +230,83 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
+    def _strip_line_comments(sql: str) -> str:
+        """Replace ``-- ...`` line comments (through the end of the line) with a single space.
+
+        A plain regex would also strip a ``--`` that appears inside a string literal or a
+        backtick-quoted identifier, where it is data rather than a comment — and, worse, would
+        leave the literal unterminated. This state machine skips both so that e.g.
+        ``SELECT 'a -- b'`` keeps its literal intact. Mirrors the quote/backtick tracking used
+        by ``strip_identifier_backticks``; runs before backticks are removed.
+        """
+        result: List[str] = []
+        in_string = False
+        in_backtick = False
+        quote_char = None
+        i = 0
+        n = len(sql)
+        while i < n:
+            ch = sql[i]
+            if in_string:
+                result.append(ch)
+                if ch == quote_char and sql[i - 1] != '\\':
+                    in_string = False
+            elif in_backtick:
+                result.append(ch)
+                if ch == '`':
+                    in_backtick = False
+            elif ch == '`':
+                in_backtick = True
+                result.append(ch)
+            elif ch in ("'", '"'):
+                in_string = True
+                quote_char = ch
+                result.append(ch)
+            elif ch == '-' and i + 1 < n and sql[i + 1] == '-':
+                # Line comment: replace "-- ... \n" (newline included) with one space.
+                result.append(' ')
+                i += 2
+                while i < n and sql[i] != '\n':
+                    i += 1
+                i += 1  # also consume the terminating newline (no-op past end of string)
+                continue
+            else:
+                result.append(ch)
+            i += 1
+        return ''.join(result)
+
+    @staticmethod
+    def _collapse_whitespace_outside_strings(sql: str) -> str:
+        """Collapse each run of whitespace to a single space, but leave whitespace inside
+        string literals untouched so that e.g. ``'a   b'`` and ``'a b'`` stay distinct.
+
+        Runs after backticks have been removed, so only quoted string literals need guarding.
+        """
+        result: List[str] = []
+        in_string = False
+        quote_char = None
+        i = 0
+        n = len(sql)
+        while i < n:
+            ch = sql[i]
+            if in_string:
+                result.append(ch)
+                if ch == quote_char and sql[i - 1] != '\\':
+                    in_string = False
+            elif ch in ("'", '"'):
+                in_string = True
+                quote_char = ch
+                result.append(ch)
+            elif ch.isspace():
+                result.append(' ')
+                while i + 1 < n and sql[i + 1].isspace():
+                    i += 1
+            else:
+                result.append(ch)
+            i += 1
+        return ''.join(result)
+
+    @staticmethod
     def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False, canonicalize: bool = True) -> Optional[str]:
         """
         Normalize an SQL string for comparison.
@@ -248,7 +337,7 @@ class TableAttributeNormalizer:
         # e.g., 'O\'Brien' becomes 'O''Brien' for standard SQL
         sql = sql.replace("\\'", "''")
 
-        sql = re.sub(r"--.*?(?:\n|$)", " ", sql)
+        sql = TableAttributeNormalizer._strip_line_comments(sql)
         if lowercase:
             sql = sql.lower().strip()
 
@@ -260,7 +349,7 @@ class TableAttributeNormalizer:
         # Removes backticks
         sql = TableAttributeNormalizer.strip_identifier_backticks(sql)
 
-        sql = re.sub(r"\s+", " ", sql).strip()
+        sql = TableAttributeNormalizer._collapse_whitespace_outside_strings(sql).strip()
         if canonicalize:
             sql = TableAttributeNormalizer._canonicalize_statement(sql)
         # Strip trailing semicolons together with any surrounding whitespace.
@@ -289,10 +378,17 @@ class TableAttributeNormalizer:
             lambda m: m.group(0) if m.group(1) is None else ', ', sql
         )
         # "INNER JOIN" -> "JOIN"; "<x> OUTER JOIN" -> "<x> JOIN".
-        sql = TableAttributeNormalizer._INNER_JOIN_PATTERN.sub('join', sql)
-        sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(r'\1 join', sql)
+        # group(1) is None when the alternation matched a string literal (skip it).
+        sql = TableAttributeNormalizer._INNER_JOIN_PATTERN.sub(
+            lambda m: m.group(0) if m.group(1) is None else 'join', sql
+        )
+        sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(
+            lambda m: m.group(0) if m.group(1) is None else m.group(2) + ' join', sql
+        )
         # Drop LATERAL before unnest / table functions.
-        sql = TableAttributeNormalizer._LATERAL_PATTERN.sub('', sql)
+        sql = TableAttributeNormalizer._LATERAL_PATTERN.sub(
+            lambda m: m.group(0) if m.group(1) is None else '', sql
+        )
         # Drop the optional AS keyword for all aliases (column, table, CAST).
         # group(1) is None when the alternation matched a string literal (skip it).
         sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(

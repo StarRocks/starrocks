@@ -135,6 +135,29 @@ class TestNormalizeSQL:
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
 
+    def test_comment_marker_inside_string_literal_preserved(self):
+        """A '--' inside a string literal is data, not a comment, and must survive.
+
+        Regression: the comment-stripping regex truncated the literal (and left it
+        unterminated), so SELECT 'x -- foo' and SELECT 'x -- bar' normalized to the
+        same text — silently missing a real view definition change.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select 'x -- foo' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'x -- bar' as c from t")
+        assert a != b
+        assert a == "select 'x -- foo' c from t"
+
+    def test_whitespace_inside_string_literal_preserved(self):
+        """Runs of whitespace inside a string literal must not be collapsed.
+
+        Regression: the whitespace-collapse regex ran over the whole string, so
+        SELECT 'a   b' and SELECT 'a b' normalized to the same text.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select 'a   b' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'a b' as c from t")
+        assert a != b
+        assert a == "select 'a   b' c from t"
+
     def test_none_input(self):
         """Test None input handling."""
         result = TableAttributeNormalizer.normalize_sql(None)
@@ -381,6 +404,28 @@ class TestStarRocksCanonicalization:
         """Commas inside string literals must not be re-spaced."""
         a = TableAttributeNormalizer.normalize_sql("select 'a,b' as c from t")
         b = TableAttributeNormalizer.normalize_sql("select 'a, b' as c from t")
+        assert a != b
+
+    def test_inner_join_inside_string_literal_preserved(self):
+        """The INNER JOIN rewrite must not fire inside a string literal.
+
+        Regression: SELECT 'inner join' and SELECT 'join' must stay distinct, so a
+        real definition change is not silently collapsed in the regex fallback path.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select 'inner join' as txt")
+        b = TableAttributeNormalizer.normalize_sql("select 'join' as txt")
+        assert a != b
+
+    def test_outer_join_inside_string_literal_preserved(self):
+        """The OUTER JOIN rewrite must not fire inside a string literal."""
+        a = TableAttributeNormalizer.normalize_sql("select 'left outer join' as txt")
+        b = TableAttributeNormalizer.normalize_sql("select 'left join' as txt")
+        assert a != b
+
+    def test_lateral_inside_string_literal_preserved(self):
+        """The LATERAL rewrite must not fire inside a string literal."""
+        a = TableAttributeNormalizer.normalize_sql("select 'lateral unnest' as txt")
+        b = TableAttributeNormalizer.normalize_sql("select 'unnest' as txt")
         assert a != b
 
     def test_newline_differences_normalized(self):
