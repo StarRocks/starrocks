@@ -857,7 +857,7 @@ if (APPLE)
         list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
     endif()
 else()
-    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -liberty -lc -lm -ldl -rdynamic -pthread)
+    set(STARROCKS_SYSTEM_LINK_LIBS -lresolv -lc -lm -ldl -rdynamic -pthread)
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
