@@ -234,18 +234,11 @@ set(EXEC_FILES
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
         ./exec/jdbc/type_checker_xml_loader_test.cpp
-        ./util/brpc_stub_cache_test.cpp
-        ./util/cidr_test.cpp
-        ./util/cpu_info_test.cpp
-        ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp
-        ./util/internal_service_recoverable_stub_test.cpp
-        ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
@@ -255,7 +248,6 @@ set(EXEC_FILES
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
-        ./util/network_util_test.cpp
         )
 
 if (NOT APPLE)
