@@ -1004,6 +1004,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
 
+    public static final String HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM = "hdfs_backend_selector_cache_replica_num";
+
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
@@ -2165,6 +2167,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorForceRebalance = false;
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM)
+    private int hdfsBackendSelectorCacheReplicaNum = 1;
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
@@ -3960,6 +3965,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
+    public int getHdfsBackendSelectorCacheReplicaNum() {
+        return Math.max(1, hdfsBackendSelectorCacheReplicaNum);
+    }
+
+    public void setHdfsBackendSelectorCacheReplicaNum(int hdfsBackendSelectorCacheReplicaNum) {
+        this.hdfsBackendSelectorCacheReplicaNum = hdfsBackendSelectorCacheReplicaNum;
     }
 
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
