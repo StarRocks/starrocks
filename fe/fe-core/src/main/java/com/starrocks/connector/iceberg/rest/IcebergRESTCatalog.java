@@ -69,7 +69,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private final Configuration conf;
     private final RESTCatalog delegate;
     private final boolean nestedNamespaceEnabled;
-    private final boolean enableVendedCredentials;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -87,7 +86,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
-        this.enableVendedCredentials =
+        boolean enableVendedCredentials =
                 Boolean.parseBoolean(copiedProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
         if (enableVendedCredentials) {
             copiedProperties.put("header.X-Iceberg-Access-Delegation", "vended-credentials");
@@ -115,7 +114,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.delegate = restCatalog;
         this.conf = conf;
         this.nestedNamespaceEnabled = false;
-        this.enableVendedCredentials = false;
     }
 
     @Override
@@ -385,10 +383,5 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public String defaultTableLocation(Namespace ns, String tableName) {
         // iceberg rest catalog doesn't require location property, and could choose the default location.
         return null;
-    }
-
-    @Override
-    public boolean isVendedCredentialsEnabled() {
-        return enableVendedCredentials;
     }
 }
