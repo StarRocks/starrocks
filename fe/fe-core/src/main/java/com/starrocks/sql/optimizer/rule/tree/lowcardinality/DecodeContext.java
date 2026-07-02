@@ -106,16 +106,7 @@ class DecodeContext {
 
     Map<ScalarOperator, ScalarOperator> stringExprToDictExprMap = Maps.newHashMap();
 
-    // Maintains a mapping from struct ColumnRefs to field ColumnRefs to use for encoded fields.
-    // Currently only fields which correspond to a ColumnRef can be encoded. All field ColumnRefOperators should have
-    // STRING or ARRAY<STRING> types. Nested structs are not supported.
-    Map<Integer, Map<String, ColumnRefOperator>> structRefToFieldUseStringRefMap = Maps.newHashMap();
-
-    // Maintains a mapping from struct operators to field ColumnRefs to use for encoded fields.
-    // Currently only fields which correspond to a ColumnRef can be encoded. All field ColumnRefOperators should have
-    // STRING or ARRAY<STRING> types. Nested structs are not supported.
-    Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRefMap =
-            Maps.newIdentityHashMap();
+    StructManager structManager;
 
     UnionDictionaryManager unionDictionaryManager;
 
@@ -130,22 +121,14 @@ class DecodeContext {
         rewriteStringAggregations();
     }
 
-    Map<String, ColumnRefOperator> getFieldUseStringRefMap(ScalarOperator operator) {
-        if (operator.isColumnRef()) {
-            ColumnRefOperator c = operator.cast();
-            return structRefToFieldUseStringRefMap.get(c.getId());
-        }
-        return structOpToFieldUseStringRefMap.get(operator);
-
-    }
-
     ColumnRefOperator getUseStringRef(ScalarOperator operator) {
         if (operator.isColumnRef()) {
             return (ColumnRefOperator) operator;
         }
         if (operator instanceof SubfieldOperator) {
             SubfieldOperator subfieldOperator = operator.cast();
-            Map<String, ColumnRefOperator> fieldsUseRefMap = getFieldUseStringRefMap(subfieldOperator.getChild(0));
+            Map<String, ColumnRefOperator> fieldsUseRefMap = structManager.getFieldStringRefMap(
+                    subfieldOperator.getChild(0));
             Preconditions.checkNotNull(fieldsUseRefMap);
             Preconditions.checkState(subfieldOperator.getFieldNames().size() == 1
                     && fieldsUseRefMap.containsKey(subfieldOperator.getFieldNames().get(0)));
@@ -297,7 +280,7 @@ class DecodeContext {
         } else if (column.getType().isStringType()) {
             return factory.create(column.getName(), Type.INT, column.isNullable());
         } else if (column.getType().isStructType()) {
-            Map<String, ColumnRefOperator> fieldsData = getFieldUseStringRefMap(column);
+            Map<String, ColumnRefOperator> fieldsData = structManager.getFieldStringRefMap(column);
             Preconditions.checkNotNull(fieldsData);
             List<StructField> structFields = Lists.newArrayList();
             StructType type = (StructType) column.getType();
@@ -350,7 +333,7 @@ class DecodeContext {
             StructType exprType =  (StructType) expression.getType();
             StructType dictType = (StructType) dictExpression.getType();
             List<ScalarOperator> newFields = Lists.newArrayList();
-            Map<String, ColumnRefOperator> fieldsStringRefMap = getFieldUseStringRefMap(useStringRef);
+            Map<String, ColumnRefOperator> fieldsStringRefMap = structManager.getFieldStringRefMap(useStringRef);
             Preconditions.checkNotNull(fieldsStringRefMap);
             for (int i = 0; i < exprType.getFields().size(); ++i) {
                 String fieldName = exprType.getField(i).getName();
@@ -408,7 +391,7 @@ class DecodeContext {
                 Preconditions.checkState(expression instanceof SubfieldOperator);
                 SubfieldOperator subfieldOperator = expression.cast();
                 if (subfieldOperator.getFieldNames().size() != 1 ||
-                        !getFieldUseStringRefMap(expression.getChild(0))
+                        !structManager.getFieldStringRefMap(expression.getChild(0))
                                 .containsKey(subfieldOperator.getFieldNames().get(0))) {
                     // Getting non dictified field from a struct
                     return result;
@@ -495,7 +478,8 @@ class DecodeContext {
                     operator.getCopyFlag());
             if (!originalType.getField(operator.getFieldNames().get(0)).getType().matchesType(
                     newType.getField(operator.getFieldNames().get(0)).getType())) {
-                Map<String, ColumnRefOperator> useFieldRefMap = getFieldUseStringRefMap(operator.getChild(0));
+                Map<String, ColumnRefOperator> useFieldRefMap = structManager.getFieldStringRefMap(
+                        operator.getChild(0));
                 Preconditions.checkNotNull(useFieldRefMap);
                 ColumnRefOperator fieldUseStringRef = useFieldRefMap.get(operator.getFieldNames().get(0));
                 Preconditions.checkNotNull(fieldUseStringRef);
@@ -653,7 +637,7 @@ class DecodeContext {
         @Override
         public ScalarOperator visitSubfield(SubfieldOperator operator, Void context) {
             Preconditions.checkState(operator.getFieldNames().size() == 1);
-            Map<String, ColumnRefOperator> fieldData = getFieldUseStringRefMap(operator.getChild(0));
+            Map<String, ColumnRefOperator> fieldData = structManager.getFieldStringRefMap(operator.getChild(0));
             Preconditions.checkNotNull(fieldData);
             ColumnRefOperator useStringRef = fieldData.get(operator.getFieldNames().get(0));
             Preconditions.checkNotNull(useStringRef);
