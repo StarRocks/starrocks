@@ -91,7 +91,7 @@ public class DefaultPreSplitPipelineTest {
         return new DefaultPreSplitPipeline(
                 metaTierSampler, dataTierSampler, tabletReshardJobManager,
                 database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES,
-                POLL_INTERVAL, clock);
+                POLL_INTERVAL, clock, null);
     }
 
     @Test
@@ -378,7 +378,7 @@ public class DefaultPreSplitPipelineTest {
         when(table.getPartitionInfo()).thenReturn(partitionInfo);
 
         DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
-                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE);
+                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE, null);
 
         Assertions.assertThrows(MetaTierUnavailableException.class,
                 () -> pipeline.getMetaTierSamplerForTest().tryPlan(sampleRequest, 3),

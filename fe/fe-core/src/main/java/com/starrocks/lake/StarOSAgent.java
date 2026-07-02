@@ -657,11 +657,16 @@ public class StarOSAgent {
     /**
      * Create shards for a tablet split.
      *
-     * <p>Each new shard joins its own list of group ids (PACK group per colocate range),
-     * while still pinning placement to its old shard via
-     * {@code PlacementRelationship.WITH_SHARD}.
+     * <p>Each new shard joins its own list of group ids (PACK group per colocate range). Unless
+     * {@code spreadNewShards} is set, it also pins placement to its old shard via
+     * {@code PlacementRelationship.WITH_SHARD} so an online split reuses the source worker's warm
+     * cache. Pre-split passes {@code spreadNewShards == true}: the source tablet is empty, so the
+     * WITH_SHARD pin is dropped and StarOS spreads the new shards across workers (via the SPREAD
+     * group), preventing every tablet's delta-writer / flush / spill-merge from funneling onto one
+     * node during the load that follows. The colocate PACK group, when present, is unaffected.
      *
-     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id.
+     * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id (used only for
+     * the WITH_SHARD pin; ignored when {@code spreadNewShards} is true).
      * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
      * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
      * have the same key set; the call fails if a new shard has no group assignment.
@@ -671,7 +676,8 @@ public class StarOSAgent {
                                                  FilePathInfo pathInfo,
                                                  FileCacheInfo cacheInfo,
                                                  @NotNull Map<String, String> properties,
-                                                 ComputeResource computeResource) throws DdlException {
+                                                 ComputeResource computeResource,
+                                                 boolean spreadNewShards) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         try {
@@ -691,11 +697,13 @@ public class StarOSAgent {
                 builder.clearPlacementPreferences();
                 builder.clearGroupIds();
                 builder.addAllGroupIds(groupIds);
-                builder.addPlacementPreferences(PlacementPreference.newBuilder()
-                        .setPlacementPolicy(PlacementPolicy.PACK)
-                        .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
-                        .setRelationshipTargetId(oldShardId)
-                        .build());
+                if (!spreadNewShards) {
+                    builder.addPlacementPreferences(PlacementPreference.newBuilder()
+                            .setPlacementPolicy(PlacementPolicy.PACK)
+                            .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
+                            .setRelationshipTargetId(oldShardId)
+                            .build());
+                }
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }

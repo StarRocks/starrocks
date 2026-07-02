@@ -36,6 +36,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -588,7 +589,7 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
-            int activeComputeNodeCount, ConnectContext ctx) {
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
@@ -627,6 +628,13 @@ public final class TabletPreSplitCoordinator {
         try {
             TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
                     database, table, oldTabletIdToRanges);
+            // Carry the load's acquired compute resource (the one that sized the split) so the job's
+            // shard creation + publish run in the load's warehouse. Use prepared.computeResource() (passed
+            // in), NOT ctx.getCurrentComputeResource(): the latter can be the session warehouse when the
+            // load specifies a different `warehouse` property.
+            if (loadComputeResource != null) {
+                combinedJob.setWarehouseId(loadComputeResource.getWarehouseId());
+            }
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
         } catch (StarRocksException submitFailure) {
