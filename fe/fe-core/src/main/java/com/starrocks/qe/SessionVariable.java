@@ -4970,6 +4970,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
     }
 
+    // Disable both skew-join rewrites at once. setEnableOptimizerSkewJoinOptimizeV1/V2 each turn the
+    // other on, so callers that need both off (e.g. MERGE INTO, whose per-driver duplicate check must
+    // not have its join key salted by V1 or broadcast by V2) must use this.
+    public void disableSkewJoinOptimize() {
+        this.enableOptimizerSkewJoinByBroadCastSkewValues = false;
+        this.enableOptimizerSkewJoinByQueryRewrite = false;
+    }
+
     public boolean isEnableColumnExprPredicate() {
         return enableColumnExprPredicate;
     }
