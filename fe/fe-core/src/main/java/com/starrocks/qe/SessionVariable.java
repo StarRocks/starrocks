@@ -1000,6 +1000,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
 
+    public static final String ONE_TABLET_AGG_OPT_MAX_TABLET_ROWS = "one_tablet_agg_opt_max_tablet_rows";
+
     public static final String ENABLE_PUSHDOWN_OR_PREDICATE = "enable_pushdown_or_predicate";
     public static final String ENABLE_SHOW_PREDICATE_TREE_IN_PROFILE = "enable_show_predicate_tree_in_profile";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
@@ -3093,6 +3095,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = SCAN_OR_TO_UNION_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private long scanOrToUnionThreshold = 50000000;
+
+    // Disable the one-tablet optimization (one-phase aggregation / single-tablet gather output) when the
+    // single selected tablet's fuzzy row count exceeds this value; such a large tablet would otherwise be
+    // scanned and aggregated serially on one node. Default 10000000 (10M rows) enables the gate for
+    // genuinely large tablets while sparing small/medium ones; set to -1 to disable the gate entirely and
+    // keep the pre-existing one-tablet behavior regardless of tablet size.
+    @VarAttr(name = ONE_TABLET_AGG_OPT_MAX_TABLET_ROWS, flag = VariableMgr.INVISIBLE)
+    private long oneTabletAggOptMaxTabletRows = 10000000;
 
     @VarAttr(name = ENABLE_PUSHDOWN_OR_PREDICATE, flag = VariableMgr.INVISIBLE)
     private boolean enablePushdownOrPredicate = true;
@@ -5691,6 +5701,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setScanOrToUnionThreshold(long scanOrToUnionThreshold) {
         this.scanOrToUnionThreshold = scanOrToUnionThreshold;
+    }
+
+    public long getOneTabletAggOptMaxTabletRows() {
+        return oneTabletAggOptMaxTabletRows;
+    }
+
+    public void setOneTabletAggOptMaxTabletRows(long oneTabletAggOptMaxTabletRows) {
+        this.oneTabletAggOptMaxTabletRows = oneTabletAggOptMaxTabletRows;
     }
 
     public TPredicateTreeParams getPredicateTreeParams() {

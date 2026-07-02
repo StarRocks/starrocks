@@ -326,7 +326,8 @@ public class PlanFragmentBuilder {
         if ((!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.isShortCircuit()) {
+                .reduce(Integer::sum).orElse(2) <= 1)
+                && !hasOversizedSingleTablet(execPlan)) || execPlan.isShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
             for (PlanFragment fragment : execPlan.getFragments()) {
                 fragment.setSingleTabletGatherOutputFragment(true);
@@ -343,6 +344,28 @@ public class PlanFragmentBuilder {
 
         exchangeFragment.setOutputExprs(outputExprs);
         execPlan.getFragments().add(exchangeFragment);
+    }
+
+    // Consistency guard for one_tablet_agg_opt_max_tablet_rows: when a single scanned tablet is too large the
+    // logical one-tablet optimization is disabled at its source (Utils.isSelectedSingleTabletTooLarge in
+    // LogicalProperty), so the physical single-tablet gather output must be disabled too. Otherwise a now
+    // two-phase (shuffled, multi-instance) aggregation could be wrongly pinned to a single-tablet gather.
+    private static boolean hasOversizedSingleTablet(ExecPlan execPlan) {
+        long maxTabletRows = execPlan.getConnectContext().getSessionVariable().getOneTabletAggOptMaxTabletRows();
+        if (maxTabletRows < 0) {
+            return false;
+        }
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode) {
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                if (Utils.isSelectedSingleTabletTooLarge(olapScanNode.getDesc().getTable(),
+                        olapScanNode.getSelectedIndexMetaId(), olapScanNode.getSelectedPartitionIds(),
+                        olapScanNode.getScanTabletIds(), maxTabletRows)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean useQueryCache(ExecPlan execPlan) {
