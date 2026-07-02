@@ -311,15 +311,20 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     }
 
     for (const auto& file : metadata.orphan_files()) {
-        if (file.shared()) {
-            continue;
-        }
-
         if (retain_info.contains_file(file.name())) {
             continue;
         }
 
-        RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
+        // A shared orphan is a bundle file physically shared with sibling tablets; its shared-ness
+        // is encoded in FileMetaPB.shared (see MetaFileBuilder / RowsetUpdateState::rewrite_segment).
+        // Route it through the bundle-file deleter so collect_alive_bundle_files can veto deletion
+        // while any sibling still references it, instead of the plain deleter which would delete it
+        // outright and wedge the sibling's publish.
+        if (file.shared() && bundle_file_deleter != nullptr) {
+            RETURN_IF_ERROR(bundle_file_deleter->delete_file(join_path(base_dir, file.name())));
+        } else {
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
+        }
         *garbage_data_size += file.size();
     }
     return Status::OK();
