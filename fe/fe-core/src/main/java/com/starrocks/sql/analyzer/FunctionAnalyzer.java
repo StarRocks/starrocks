@@ -175,6 +175,25 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
         }
+        // percentile_hash is a scalar function: validate here on the scalar path,
+        // because analyzeBuiltinAggFunction only runs for AggregateFunction.
+        // percentile_hash(value [, compression]). The 1-arg overload keeps the
+        // legacy storage compression (1000). The 2-arg overload requires a
+        // constant compression; out-of-range / NULL / non-finite values are
+        // canonicalized to DEFAULT_COMPRESSION_FACTOR so downstream code can
+        // trust the literal.
+        if (fnName.equals(FunctionSet.PERCENTILE_HASH)) {
+            List<Expr> percentileHashChildren = functionCallExpr.getChildren();
+            if (percentileHashChildren.size() == 2) {
+                Expr cArg = functionCallExpr.getChild(1);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "second", "compression",
+                            "percentile_hash", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 1);
+            }
+        }
+
         Function fn = functionCallExpr.getFn();
         final String funcName = fnName;
         if (fn instanceof StateFunctionCombinator) {
@@ -509,10 +528,17 @@ public class FunctionAnalyzer {
             // Validate second parameter (percentile) is numeric or array type
             validatePercentileParameter(functionCallExpr.getChild(1), "second", 
                     "percentile_approx", functionCallExpr.getPos());
-            // Validate optional third parameter (compression) is numeric type
+            // NULL is allowed past validate-numeric and routed through clamp,
+            // which canonicalizes it to DEFAULT just like out-of-range ints.
             if (children.size() == 3) {
-                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression", 
-                        "percentile_approx", functionCallExpr.getPos());
+                Expr cArg = functionCallExpr.getChild(2);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "third", "compression",
+                            "percentile_approx", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 2);
+            } else {
+                injectDefaultCompression(functionCallExpr);
             }
         }
 
@@ -533,10 +559,17 @@ public class FunctionAnalyzer {
             // Validate third parameter (percentile) is numeric or array type
             validatePercentileParameter(functionCallExpr.getChild(2), "third", 
                     "percentile_approx_weighted", functionCallExpr.getPos());
-            // Validate optional fourth parameter (compression) is numeric type
+            // NULL is allowed past validate-numeric and routed through clamp,
+            // which canonicalizes it to DEFAULT just like out-of-range ints.
             if (children.size() == 4) {
-                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression", 
-                        "percentile_approx_weighted", functionCallExpr.getPos());
+                Expr cArg = functionCallExpr.getChild(3);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "fourth", "compression",
+                            "percentile_approx_weighted", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 3);
+            } else {
+                injectDefaultCompression(functionCallExpr);
             }
         }
 
@@ -750,8 +783,8 @@ public class FunctionAnalyzer {
      * @param pos The position in the source code for error reporting
      * @throws SemanticException if the parameter is not numeric type
      */
-    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
-                                                  String paramName, String functionName, 
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition,
+                                                  String paramName, String functionName,
                                                   NodePosition pos) {
         if (!paramExpr.getType().isNumericType()) {
             throw new SemanticException(
@@ -759,6 +792,88 @@ public class FunctionAnalyzer {
                             functionName, paramPosition, paramName, paramExpr.getType().toSql()),
                     pos);
         }
+    }
+
+    /**
+     * Append {@code IntLiteral(DEFAULT)} as the next child and re-bind the
+     * FunctionCallExpr to the compression-aware overload, so that downstream
+     * (planner / BE) always sees an explicit compression argument. The
+     * registered overloads of percentile_approx[_weighted] expose the
+     * compression slot as DOUBLE in their signature (see the note on
+     * {@link #clampCompressionLiteral}); the IntLiteral here matches the
+     * pattern used for user-written integer literals — SR's standard implicit
+     * cast handles the int→double conversion when the value is materialized.
+     */
+    private static void injectDefaultCompression(FunctionCallExpr fn) {
+        Function current = fn.getFn();
+        if (current == null) {
+            // The aggregate-combinator path (e.g. percentile_approx_if) re-runs this
+            // validation on a freshly-built, unresolved FunctionCallExpr whose fn is null;
+            // its mutations are discarded. Skip injection — the real call is canonicalized
+            // on its own resolved pass, and BE keeps its legacy default for the 2-arg arity.
+            return;
+        }
+        Type[] currentArgs = current.getArgs();
+        Type[] expandedArgs = new Type[currentArgs.length + 1];
+        System.arraycopy(currentArgs, 0, expandedArgs, 0, currentArgs.length);
+        expandedArgs[currentArgs.length] = FloatType.DOUBLE;
+        Function expanded = ExprUtils.getBuiltinFunction(
+                current.getFunctionName().getFunction(), expandedArgs,
+                Function.CompareMode.IS_IDENTICAL);
+        Preconditions.checkState(expanded != null,
+                "no compression-aware overload registered for "
+                        + current.getFunctionName().getFunction());
+        IntLiteral defaultC = new IntLiteral(PercentileCompression.DEFAULT, fn.getPos());
+        fn.addChild(defaultC);
+        fn.setFn(expanded);
+    }
+
+    /**
+     * Canonicalize the compression argument of a percentile function. Only an
+     * integer literal, a user variable bound to an integer constant, or literal
+     * NULL is accepted; CAST, arithmetic, and column references (including
+     * CTE-projected ones) are rejected up front so the planner, MV rewrite, and
+     * BE all see one canonical compression literal rather than an expression that
+     * would only fold later. Values outside [MIN, MAX] and literal NULL are
+     * replaced with the default.
+     *
+     * AST mutation via {@code setChild} follows the established
+     * {@code FunctionAnalyzer} pattern (see {@code date_trunc} normalization).
+     * <p>
+     * The user-facing contract for compression is integer-only, but the
+     * registered BE function signature keeps DOUBLE for the compression slot:
+     * the percentile aggregates are registered via a variadic template on BE
+     * ({@code add_aggregate_mapping_variadic<DOUBLE, DOUBLE, ...>}) which forces
+     * a single trailing-arg type. Switching to BIGINT end-to-end would require
+     * a new fixed-arity BE template plus parallel changes to FunctionSet,
+     * gensrc, and the resolver — out of scope here. SR's standard implicit
+     * cast wraps this IntLiteral in a planner-side {@code CAST(int AS DOUBLE)}
+     * before the value reaches BE, so the wire format is unaffected.
+     */
+    private static void clampCompressionLiteral(FunctionCallExpr fn, int argIdx) {
+        if (fn.getChildren().size() <= argIdx) {
+            return;
+        }
+        Expr arg = fn.getChild(argIdx);
+        long c;
+        boolean isInvalid;
+        if (arg instanceof NullLiteral) {
+            isInvalid = true;
+            c = 0;
+        } else {
+            // extractIntegerValue accepts both literal ints and user variables
+            // bound to integer constants (`set @c = 5000`).
+            Optional<Long> extracted = extractIntegerValue(arg);
+            if (!extracted.isPresent()) {
+                throw new SemanticException(
+                        "compression must be an integer literal", fn.getPos());
+            }
+            c = extracted.get();
+            isInvalid = c < PercentileCompression.MIN || c > PercentileCompression.MAX;
+        }
+        long finalC = isInvalid ? PercentileCompression.DEFAULT : c;
+        IntLiteral clamped = new IntLiteral(finalC, arg.getPos());
+        fn.setChild(argIdx, clamped);
     }
 
     /**
