@@ -1,0 +1,98 @@
+-- name: test_window_merge_sort
+DROP TABLE IF EXISTS window_merge_sort_t1;
+
+CREATE TABLE window_merge_sort_t1 (
+    p INT NULL,
+    s INT NULL,
+    x INT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(p, s, x)
+DISTRIBUTED BY HASH(p) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO window_merge_sort_t1 VALUES
+    (1, 1, 1),
+    (2, 2, 2),
+    (3, 3, 3),
+    (NULL, NULL, 4),
+    (NULL, NULL, 5),
+    (NULL, NULL, 6),
+    (NULL, NULL, 7),
+    (NULL, NULL, 8),
+    (NULL, NULL, 9),
+    (NULL, NULL, 10),
+    (NULL, NULL, 11),
+    (NULL, NULL, 12),
+    (NULL, NULL, 13);
+
+SET enable_split_window_skew_to_union = false;
+SET enable_window_skew_merge_sort = false;
+
+function: assert_explain_not_contains('SELECT p, s, x, sum(x) OVER (PARTITION BY p, s ORDER BY x) FROM window_merge_sort_t1', 'MERGING-EXCHANGE')
+SELECT p, s, x, running_sum
+FROM (
+    SELECT p, s, x, sum(x) OVER (PARTITION BY p, s ORDER BY x) AS running_sum
+    FROM window_merge_sort_t1
+) q
+ORDER BY p, s, x;
+
+function: assert_explain_contains('SELECT p, s, x, sum(x) OVER ([merge_sort] PARTITION BY p, s ORDER BY x) FROM window_merge_sort_t1', 'MERGING-EXCHANGE', 'ANALYTIC')
+SELECT p, s, x, running_sum
+FROM (
+    SELECT p, s, x, sum(x) OVER ([merge_sort] PARTITION BY p, s ORDER BY x) AS running_sum
+    FROM window_merge_sort_t1
+) q
+ORDER BY p, s, x;
+
+ANALYZE FULL TABLE window_merge_sort_t1;
+ANALYZE TABLE window_merge_sort_t1 UPDATE HISTOGRAM ON p, s
+PROPERTIES(
+   "histogram_sample_ratio" = "1.0"
+);
+
+SET enable_window_skew_merge_sort = true;
+function: wait_plan_contains('SELECT p, s, x, sum(x) OVER (PARTITION BY p, s ORDER BY x) FROM window_merge_sort_t1', 'MERGING-EXCHANGE', 'ANALYTIC')
+SELECT p, s, x, running_sum
+FROM (
+    SELECT p, s, x, sum(x) OVER (PARTITION BY p, s ORDER BY x) AS running_sum
+    FROM window_merge_sort_t1
+) q
+ORDER BY p, s, x;
+
+SET enable_window_skew_merge_sort = false;
+
+-- Correctness at DOP > 1: the [merge_sort] hint must never change results. The BE only uses the
+-- ordered-partition exchange when its upstream is a single ordered stream (DOP == 1); otherwise it
+-- runs the analytic on the partition-sorted streams directly. The hot NULL partition is skewed.
+SET pipeline_dop = 8;
+
+-- A single hinted window must equal the unhinted baseline (expect 0 differing rows).
+WITH baseline AS (
+    SELECT p, s, x, sum(x) OVER (PARTITION BY p, s ORDER BY x) AS rs FROM window_merge_sort_t1
+),
+hinted AS (
+    SELECT p, s, x, sum(x) OVER ([merge_sort] PARTITION BY p, s ORDER BY x) AS rs FROM window_merge_sort_t1
+)
+SELECT count(*) FROM baseline b JOIN hinted h ON (b.p <=> h.p) AND (b.s <=> h.s) AND b.x = h.x
+WHERE NOT (b.rs <=> h.rs);
+
+-- Stacked windows sharing one SortGroup: hinting only the upper window must not change results.
+WITH baseline AS (
+    SELECT p, s, x,
+        sum(x) OVER (PARTITION BY p, s ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS f1,
+        sum(x) OVER (PARTITION BY p, s ORDER BY x) AS f2
+    FROM window_merge_sort_t1
+),
+hinted AS (
+    SELECT p, s, x,
+        sum(x) OVER (PARTITION BY p, s ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS f1,
+        sum(x) OVER ([merge_sort] PARTITION BY p, s ORDER BY x) AS f2
+    FROM window_merge_sort_t1
+)
+SELECT count(*) FROM baseline b JOIN hinted h ON (b.p <=> h.p) AND (b.s <=> h.s) AND b.x = h.x
+WHERE NOT (b.f1 <=> h.f1) OR NOT (b.f2 <=> h.f2);
+SET pipeline_dop = 0;
+
+DROP TABLE IF EXISTS window_merge_sort_t1;

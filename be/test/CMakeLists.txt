@@ -71,6 +71,7 @@ set(EXEC_FILES
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
