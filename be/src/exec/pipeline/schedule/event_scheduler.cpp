@@ -46,20 +46,28 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     auto fragment_ctx = driver->fragment_ctx();
     if (fragment_ctx->is_canceled() && !driver->is_operator_cancelled()) {
         add_to_ready_queue = true;
+<<<<<<< HEAD:be/src/exec/pipeline/schedule/event_scheduler.cpp
     } else if (driver->need_report_exec_state()) {
         add_to_ready_queue = true;
+=======
+>>>>>>> fbacba949f ([BugFix] Check driver readiness before profile-report reschedule in event scheduler (#75725)):be/src/exec/runtime/schedule/event_scheduler.cpp
     } else if (driver->pending_finish()) {
         if (!driver->is_still_pending_finish()) {
             driver->set_driver_state(fragment_ctx->is_canceled() ? DriverState::CANCELED : DriverState::FINISH);
             add_to_ready_queue = true;
+        } else if (need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
+            // Still waiting on pending I/O: don't change the driver state (it stays PENDING_FINISH), but keep
+            // enqueuing it periodically so the executor's !is_ready() path fires report_exec_state_if_necessary().
+            // Otherwise a long pending-finish driver stops sending runtime profiles until the final finish event.
+            add_to_ready_queue = true;
         }
     } else if (driver->is_finished()) {
         add_to_ready_queue = true;
-    } else {
-        if (driver->check_is_ready()) {
-            driver->set_driver_state(DriverState::READY);
-            add_to_ready_queue = true;
-        }
+    } else if (driver->check_is_ready()) {
+        driver->set_driver_state(DriverState::READY);
+        add_to_ready_queue = true;
+    } else if (need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
+        add_to_ready_queue = true;
     }
 
     if (add_to_ready_queue) {
