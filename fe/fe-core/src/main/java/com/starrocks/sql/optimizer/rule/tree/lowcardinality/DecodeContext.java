@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
@@ -193,6 +194,28 @@ class DecodeContext {
         }
     }
 
+    private boolean isNullSensitiveToRef(ScalarOperator op, int refId) {
+        if (!op.getUsedColumns().contains(refId)) {
+            return false;
+        }
+        if (op instanceof IsNullPredicateOperator) {
+            return true;
+        }
+        if (op instanceof CallOperator) {
+            String fn = ((CallOperator) op).getFnName();
+            if (FunctionSet.IFNULL.equalsIgnoreCase(fn) || FunctionSet.COALESCE.equalsIgnoreCase(fn)
+                    || FunctionSet.NULLIF.equalsIgnoreCase(fn) || FunctionSet.CONCAT_WS.equalsIgnoreCase(fn)) {
+                return true;
+            }
+        }
+        for (ScalarOperator child : op.getChildren()) {
+            if (isNullSensitiveToRef(child, refId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void rewriteGlobalDict() {
         GlobalDictRewriter dictRewriter = new GlobalDictRewriter();
         for (Integer stringId : stringRefToDefineExprMap.keySet()) {
@@ -210,6 +233,21 @@ class DecodeContext {
                 continue;
             }
             ScalarOperator stringDefineExpr = stringRefToDefineExprMap.get(stringId);
+
+            // Check before flattening: if a NULL-sensitive expression is built on a DERIVED dict
+            // (one defined by another expression, not a base column), do NOT flatten it through the
+            // child define. Keep it referencing the intermediate dict directly, so producer and
+            // consumer build the dictionary the same way (a derived dict carries a synthetic NULL
+            // code that flattening would drop).
+            ColumnRefOperator keepUseRef = getUseStringRef(stringDefineExpr);
+            if (keepUseRef != null && !stringRefToDicts.containsKey(keepUseRef.getId())
+                    && stringRefToDefineExprMap.containsKey(keepUseRef.getId())
+                    && isNullSensitiveToRef(stringDefineExpr, keepUseRef.getId())) {
+                ColumnRefOperator keepDictRef = stringRefToDictRefMap.get(keepUseRef);
+                globalDictsExpr.put(dictRef.getId(),
+                        new DictMappingOperator(keepDictRef, stringDefineExpr.clone(), dictRef.getType()));
+                continue;
+            }
 
             ScalarOperator defineExpr = stringDefineExpr.accept(dictRewriter, null);
             List<ColumnRefOperator> defineUsedStringRef = defineExpr.getColumnRefs();
