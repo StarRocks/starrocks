@@ -531,6 +531,32 @@ else()
     set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
 endif()
 
+find_program(CARGO_EXECUTABLE cargo)
+if (NOT CARGO_EXECUTABLE)
+    message(FATAL_ERROR "cargo is required to build the Lance native reader")
+endif()
+
+set(LANCE_RS_DIR "${SRC_DIR}/exec/lance-rs")
+set(LANCE_RS_TARGET_DIR "${CMAKE_BINARY_DIR}/lance-rs-target")
+set(LANCE_RS_LIB "${LANCE_RS_TARGET_DIR}/release/libstarrocks_lance_rs.a")
+set(LANCE_RS_PROTOC "${THIRDPARTY_DIR}/bin/protoc")
+add_custom_command(
+    OUTPUT ${LANCE_RS_LIB}
+    COMMAND ${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${LANCE_RS_TARGET_DIR}
+            PROTOC=${LANCE_RS_PROTOC}
+            ${CARGO_EXECUTABLE} build --manifest-path ${LANCE_RS_DIR}/Cargo.toml --release --locked
+    DEPENDS ${LANCE_RS_DIR}/Cargo.toml
+            ${LANCE_RS_DIR}/Cargo.lock
+            ${LANCE_RS_DIR}/src/lib.rs
+            ${LANCE_RS_PROTOC}
+    WORKING_DIRECTORY ${LANCE_RS_DIR}
+    COMMENT "Building Lance Rust native reader"
+)
+add_custom_target(starrocks_lance_rs_build DEPENDS ${LANCE_RS_LIB})
+add_library(starrocks_lance_rs STATIC IMPORTED GLOBAL)
+set_target_properties(starrocks_lance_rs PROPERTIES IMPORTED_LOCATION ${LANCE_RS_LIB})
+add_dependencies(starrocks_lance_rs starrocks_lance_rs_build)
+
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     Webserver
@@ -671,6 +697,7 @@ set(STARROCKS_DEPENDENCIES
     avrocpp
     serdes
     fiu
+    starrocks_lance_rs
     icuuc
     icui18n
     icudata

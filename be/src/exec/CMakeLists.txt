@@ -390,6 +390,8 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_avro.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
+    lance/lance_native_reader.cpp
+    lance/lance_scanner.cpp
     file_scanner/avro_cpp_scanner.cpp
     file_scanner/avro_scanner.cpp
     file_scanner/csv_scanner.cpp
@@ -547,3 +549,4 @@ ADD_BE_LIB(Exec
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSinkCore ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore RuntimeEnv ComputeEnv Cache)
 target_link_libraries(Exec PRIVATE FormatsIO Platform)
+add_dependencies(Exec starrocks_lance_rs_build)
