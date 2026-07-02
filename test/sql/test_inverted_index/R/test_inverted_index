@@ -400,7 +400,6 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column not match "
 1	ABC
 2	abc
 3	ABD
-5	None
 -- !result
 SELECT * FROM t_gin_index_single_predicate_english WHERE text_column <= "this";
 -- result:
@@ -554,7 +553,6 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 1	ABC
 3	ABD
 4	This is Gin Index
-5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "abc ABC";
 -- result:
@@ -565,8 +563,23 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_an
 1	ABC
 3	ABD
 4	This is Gin Index
-5	None
 -- !result
+<<<<<<< HEAD
+=======
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
+-- result:
+1	ABC
+3	ABD
+4	This is Gin Index
+-- !result
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
+-- result:
+1	ABC
+2	abc
+3	ABD
+4	This is Gin Index
+-- !result
+>>>>>>> a78c8804ec ([BugFix] Exclude NULL rows from NOT MATCH answered by GIN inverted index (#75578))
 DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
@@ -616,12 +629,10 @@ SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
 -- result:
 3	ABD
-5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match_any "this abc";
 -- result:
 3	ABD
-5	None
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 -- result:

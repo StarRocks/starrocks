@@ -362,7 +362,14 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     roaring::Roaring roaring;
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {
+<<<<<<< HEAD:be/src/storage/column_expr_predicate.cpp
         *row_bitmap -= roaring;
+=======
+        *row_bitmap -= roaring_opt.value();
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
+>>>>>>> a78c8804ec ([BugFix] Exclude NULL rows from NOT MATCH answered by GIN inverted index (#75578)):be/src/storage/primitive/column_expr_predicate.cpp
     } else {
         *row_bitmap &= roaring;
     }
