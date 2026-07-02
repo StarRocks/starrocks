@@ -322,6 +322,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_builds_vi_for_unmodif
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
     ASSERT_OK(fs::path_exist(vi_location(seg_meta.filename())) ? Status::OK()
                                                                : Status::NotFound(vi_location(seg_meta.filename())));
     ASSERT_EQ(read_footer(seg_meta.filename()).vector_index_storage_type(), VECTOR_INDEX_STORAGE_STANDALONE);
@@ -353,6 +358,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_rewrite_above_threshold_reco
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
     ASSERT_EQ(read_footer(seg_meta.filename()).vector_index_storage_type(), VECTOR_INDEX_STORAGE_STANDALONE);
 }
 
@@ -410,6 +420,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_carries_vi_for_update
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
     ASSERT_OK(fs::path_exist(vi_location(seg_meta.filename())) ? Status::OK()
                                                                : Status::NotFound(vi_location(seg_meta.filename())));
     // The vector column is raw-copied (no column writer), so the footer flag may stay unset; what
@@ -457,6 +472,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_auto_increment_rewrite_keeps_async
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
     ASSERT_EQ(read_footer(seg_meta.filename()).vector_index_storage_type(), VECTOR_INDEX_STORAGE_STANDALONE);
     check_vector_data(version, /*bias=*/0.1f);
 }
@@ -496,6 +516,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_auto_increment_rewrite_builds_sync
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
     ASSERT_OK(fs::path_exist(vi_location(seg_meta.filename())) ? Status::OK()
                                                                : Status::NotFound(vi_location(seg_meta.filename())));
     ASSERT_EQ(read_footer(seg_meta.filename()).vector_index_storage_type(), VECTOR_INDEX_STORAGE_STANDALONE);
@@ -549,6 +574,11 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_copy_only_rewrite_keeps_sche
     auto seg_meta = rewritten_segment_meta(version);
     ASSERT_EQ(seg_meta.vector_index_ids_size(), 1);
     ASSERT_EQ(seg_meta.vector_index_ids(0), kIndexId);
+    // The rewrite records the writing tablet as the .vi owner across every rewrite path
+    // (sync / async / auto-increment / copy-only); otherwise a later tablet split derives the
+    // .vi name from the child id and misses the file written under this tablet.
+    ASSERT_TRUE(seg_meta.has_vector_index_tablet_id());
+    ASSERT_EQ(seg_meta.vector_index_tablet_id(), _tablet_metadata->id());
 }
 
 } // namespace starrocks::lake

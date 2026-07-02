@@ -295,10 +295,22 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
         file_info->vector_index_ids.push_back(index_id);
     }
+    // The dest .vi owner is stamped by the caller via stamp_rewrite_vector_index_owner, uniformly
+    // across every rewrite path.
+    return Status::OK();
+}
+
+// The dest segment is a brand-new file written by this tablet, so whatever vector_index_ids the
+// rewrite recorded (inline build, scheduled async build, or carried src ids) have their .vi named
+// under params.tablet->id(). Record that as the owner (SegmentMetadataPB.vector_index_tablet_id) for
+// EVERY rewrite path, not just the copy-only async one: SegmentRewriter can also leave ids on
+// auto-increment rewrites and on partial updates with vector-indexed unmodified columns, and
+// MetaFileBuilder persists ids while clearing the owner unless we set it here. Stamping the writer id
+// keeps the .vi name reader-agnostic if the segment is later shared by a tablet split.
+static void stamp_rewrite_vector_index_owner(const RowsetUpdateStateParams& params, FileInfo* file_info) {
     if (!file_info->vector_index_ids.empty()) {
         file_info->vector_index_tablet_id = params.tablet->id();
     }
-    return Status::OK();
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
@@ -547,6 +559,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
                 has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
                 params.tablet, std::move(vector_index_opts)));
         file_info.path = dest_path;
+        stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
@@ -568,14 +581,15 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         if (!defer_vector_index_build) {
             RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
         } else if (unmodified_column_ids.empty()) {
+            // Copy-only async fast path: the rewrite never sees a SegmentWriter, so carry the src's
+            // scheduled ids (async has no .vi file to copy) lest the metadata refresh wipe them.
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 file_info.vector_index_ids.push_back(index_id);
             }
-            // The deferred build names the dest .vi by this tablet (the dest owner); record it.
-            if (!file_info.vector_index_ids.empty()) {
-                file_info.vector_index_tablet_id = params.tablet->id();
-            }
         }
+        // Stamp the dest owner for every partial-update rewrite path (including async rewrites that
+        // left ids for vector-indexed unmodified columns), not just the branches above.
+        stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
