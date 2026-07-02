@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -266,6 +267,101 @@ protected:
         return down_cast<JsonColumn*>(col.get());
     }
 
+<<<<<<< HEAD
+=======
+    MutableColumns to_mutable_columns(Columns&& columns) {
+        return ColumnHelper::to_mutable_columns(std::move(columns));
+    }
+
+    // One written segment plus everything needed to read it back.
+    struct SegmentHandle {
+        std::shared_ptr<MemoryFileSystem> fs;
+        std::string fname;
+        std::shared_ptr<Segment> segment;
+        std::shared_ptr<ColumnMetaPB> meta;
+        std::unique_ptr<ColumnReader> reader;
+        size_t num_rows = 0;
+    };
+
+    // Write one JSON segment from `jsons`; segment nullability follows jsons[0]->is_nullable().
+    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname) {
+        SegmentHandle handle;
+        handle.fs = std::make_shared<MemoryFileSystem>();
+        EXPECT_TRUE(handle.fs->create_dir(TEST_DIR).ok());
+        handle.fname = TEST_DIR + fname;
+        handle.meta = std::make_shared<ColumnMetaPB>();
+        handle.segment = create_dummy_segment(handle.fs, handle.fname);
+
+        TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+
+        ASSIGN_OR_ABORT(auto wfile, handle.fs->new_writable_file(handle.fname));
+        ColumnWriterOptions writer_opts;
+        writer_opts.need_flat = need_flat;
+        writer_opts.meta = handle.meta.get();
+        writer_opts.meta->set_column_id(0);
+        writer_opts.meta->set_unique_id(0);
+        writer_opts.meta->set_type(TYPE_JSON);
+        writer_opts.meta->set_length(0);
+        writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+        writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+        writer_opts.meta->set_is_nullable(jsons[0]->is_nullable());
+        writer_opts.need_zone_map = false;
+        writer_opts.is_compaction = true;
+
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+        EXPECT_OK(writer->init());
+        for (auto& json : jsons) {
+            EXPECT_TRUE(writer->append(*json).ok());
+            handle.num_rows += json->size();
+        }
+        EXPECT_TRUE(writer->finish().ok());
+        EXPECT_TRUE(writer->write_data().ok());
+        EXPECT_TRUE(writer->write_ordinal_index().ok());
+        EXPECT_TRUE(wfile->close().ok());
+
+        handle.segment->set_num_rows(handle.num_rows);
+        auto res = ColumnReader::create(handle.meta.get(), handle.segment.get(), nullptr);
+        EXPECT_TRUE(res.ok());
+        handle.reader = std::move(res).value();
+        return handle;
+    }
+
+    enum class ReadMode { kBatch, kRange, kByRowid };
+
+    // Read the whole segment into `dst` through one of the three iterator read paths.
+    // With `path == nullptr` a flat segment is read through JsonMergeIterator; with a
+    // from-compaction access path it is read through JsonFlatColumnIterator.
+    Status read_segment(const SegmentHandle& handle, ReadMode mode, Column* dst, ColumnAccessPath* path = nullptr) {
+        ASSIGN_OR_RETURN(auto iter, handle.reader->new_iterator(path));
+        ASSIGN_OR_RETURN(auto read_file, handle.fs->new_random_access_file(handle.fname));
+
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        iter_opts.read_file = read_file.get();
+        RETURN_IF_ERROR(iter->init(iter_opts));
+        RETURN_IF_ERROR(iter->seek_to_first());
+
+        switch (mode) {
+        case ReadMode::kBatch: {
+            size_t n = handle.num_rows;
+            return iter->next_batch(&n, dst);
+        }
+        case ReadMode::kRange: {
+            SparseRange<> range;
+            range.add(Range<>(0, static_cast<rowid_t>(handle.num_rows)));
+            return iter->next_batch(range, dst);
+        }
+        case ReadMode::kByRowid: {
+            std::vector<rowid_t> rowids(handle.num_rows);
+            std::iota(rowids.begin(), rowids.end(), 0);
+            return iter->fetch_values_by_rowid(rowids.data(), rowids.size(), dst);
+        }
+        }
+        return Status::OK();
+    }
+
+>>>>>>> 1c6244907b ([BugFix] Handle NOT NULL -> nullable flat-JSON columns in compaction read path (fix JsonMergeIterator CHECK crash) (#75680))
 private:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
@@ -1476,4 +1572,264 @@ TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactRemainLevel) {
     EXPECT_EQ(R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
               read_col->debug_item(18));
 }
+<<<<<<< HEAD
+=======
+
+TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactRemainLevelWithConfig) {
+    FlatJsonConfig config;
+    config.set_flat_json_sparsity_factor(0.6);
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+        more_flat_json({
+            R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+            R"({"a": 12, "b": "abc2", "c": {"d": 22, "e": 221}, "f4": {"m": 142, "n": 342}})",
+            R"({"a": 13, "b": "abc3", "c": {"d": 23, "e": 231}, "f4": {"m": 143, "n": 343}})",
+        }, true),
+        more_flat_json({
+            R"({"a": 14, "b": "xwy4", "c": {"d": 24, "e": 241}, "g4": {"x": 143, "y": 434}})",
+            R"({"a": 15, "b": "xwy5", "c": {"d": 25, "e": 251}, "g5": {"x": 153, "y": 435}})",
+            R"({"a": 16, "b": "xwy6", "c": {"d": 26, "e": 261}, "g6": {"x": 163, "y": 436}})",
+            R"({"a": 17, "b": "xwy7", "c": {"d": 27, "e": 271}, "g7": {"x": 173, "y": 437}})",
+            R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+            R"({"a": 19, "b": "xwy9", "c": {"d": 29, "e": 291}, "g9": {"x": 193, "y": 439}})",
+            R"({"a": 10, "b": "xwy0", "c": {"d": 20, "e": 201}, "g0": {"x": 103, "y": 430}})",
+        }, true),
+        more_flat_json({
+             R"({"a": 20, "b": "qwe1", "c": {"d": 30, "e": 301}, "f4": {"m": 540, "n": 240}})",
+             R"({"a": 21, "b": "efg1", "c": {"d": 31, "e": 311}, "f4": {"m": 541, "n": 241}})",
+             R"({"a": 22, "b": "efg2", "c": {"d": 32, "e": 321}, "f4": {"m": 542, "n": 242}})",
+             R"({"a": 23, "b": "efg3", "c": {"d": 33, "e": 331}, "f4": {"m": 543, "n": 243}})",
+             R"({"a": 24, "b": "efg4", "c": {"d": 34, "e": 341}, "f4": {"m": 544, "n": 244}})",
+             R"({"a": 25, "b": "efg5", "c": {"d": 35, "e": 351}, "f4": {"m": 545, "n": 245}})",
+             R"({"a": 26, "b": "efg6", "c": {"d": 36, "e": 361}, "f4": {"m": 546, "n": 246}})",
+             R"({"a": 27, "b": "efg7", "c": {"d": 37, "e": 371}, "f4": {"m": 547, "n": 247}})",
+             R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+             R"({"a": 29, "b": "efg9", "c": {"d": 39, "e": 391}, "f4": {"m": 549, "n": 249}})",
+        }, true),
+    });
+    // clang-format on
+
+    JsonPathDeriver deriver;
+    deriver.init_flat_json_config(&config);
+    test_compact_path(jsons, &deriver);
+
+    EXPECT_EQ(4, deriver.flat_paths().size());
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR), c.d(BIGINT), c.e(BIGINT)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    writer_opts.flat_json_config = &config;
+
+    test_json(writer_opts, jsons, read_col, nullptr);
+
+    EXPECT_EQ(R"({"a": 11, "b": "abc1", "c": {"d": 21, "e": 211}, "f4": {"m": 141, "n": 341}})",
+              read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 18, "b": "xwy8", "c": {"d": 28, "e": 281}, "g8": {"x": 183, "y": 438}})",
+              read_col->debug_item(7));
+    EXPECT_EQ(R"({"a": 28, "b": "efg8", "c": {"d": 38, "e": 381}, "f4": {"m": 548, "n": 248}})",
+              read_col->debug_item(18));
+}
+
+// Regression for the NOT NULL -> nullable flat-JSON compaction crash.
+//
+// A JSON column relaxed from NOT NULL to nullable via metadata-only fast schema evolution leaves old
+// segments physically NOT NULL (no null sub-stream -> reader builds _null_iter == nullptr) while the
+// compaction output column is nullable (null_column != nullptr). The merge read path used to CHECK that
+// the two nullabilities matched and aborted (SIGABRT). It must instead synthesize an all-not-null null
+// column, because a NOT NULL segment by construction contains no null values.
+TEST_F(FlatJsonColumnCompactTest, CompactJsonNotNullToNullableSchemaEvolution) {
+    // clang-format off
+    // Non-nullable inputs -> segment is written NOT NULL (no null stream).
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", false),
+            normal_json(R"({"a": 2, "b": 22})", false),
+            normal_json(R"({"a": 3, "b": 23})", false),
+            normal_json(R"({"a": 4, "b": 24})", false),
+            normal_json(R"({"a": 5, "b": 25})", false),
+    });
+    // clang-format on
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/notnull_to_nullable.data");
+    // Segment was stored flat and NOT NULL.
+    EXPECT_TRUE(handle.meta->json_meta().is_flat());
+    EXPECT_FALSE(handle.meta->is_nullable());
+
+    // All three read paths carry the fix; compaction uses the SparseRange overload in production.
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        // Output column relaxed to nullable, as compaction sees it after the ALTER.
+        MutableColumnPtr col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        auto st = read_segment(handle, mode, col.get());
+        ASSERT_TRUE(st.ok()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
+
+        auto* nullable = down_cast<NullableColumn*>(col.get());
+        ASSERT_EQ(5, nullable->size()) << "mode=" << static_cast<int>(mode);
+        // Synthesized null bytes are all 0 (not-null) and the column reports no nulls.
+        EXPECT_FALSE(nullable->has_null());
+        const auto& null_data = nullable->null_column()->get_data();
+        ASSERT_EQ(5, null_data.size());
+        for (size_t i = 0; i < null_data.size(); i++) {
+            EXPECT_EQ(0, null_data[i]) << "mode=" << static_cast<int>(mode) << " row " << i;
+        }
+        // JSON values read back correctly.
+        EXPECT_EQ(R"({"a": 1, "b": 21})", col->debug_item(0));
+        EXPECT_EQ(R"({"a": 2, "b": 22})", col->debug_item(1));
+        EXPECT_EQ(R"({"a": 3, "b": 23})", col->debug_item(2));
+        EXPECT_EQ(R"({"a": 4, "b": 24})", col->debug_item(3));
+        EXPECT_EQ(R"({"a": 5, "b": 25})", col->debug_item(4));
+    }
+}
+
+// Compaction merges segments of mixed physical nullability into one nullable output after the
+// NOT NULL -> nullable ALTER: old segments have no null stream, new ones do. Reading them
+// sequentially into the same output also exercises the backfill with a non-empty destination
+// (the `before` offset), which a single-segment read cannot catch.
+TEST_F(FlatJsonColumnCompactTest, CompactJsonMixedNullabilitySegments) {
+    // clang-format off
+    MutableColumns not_null_a = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", false),
+            normal_json(R"({"a": 2, "b": 22})", false),
+            normal_json(R"({"a": 3, "b": 23})", false),
+    });
+    MutableColumns nullable_b = to_mutable_columns({
+            normal_json(R"({"a": 4, "b": 24})", true),
+            normal_json(R"({"a": 5, "b": 25})", true),
+            normal_json(R"({"a": 6, "b": 26})", true),
+            normal_json(R"({"a": 7, "b": 27})", true),
+            normal_json(R"(NULL)", true),
+    });
+    MutableColumns not_null_c = to_mutable_columns({
+            normal_json(R"({"a": 8, "b": 28})", false),
+            normal_json(R"({"a": 9, "b": 29})", false),
+            normal_json(R"({"a": 10, "b": 30})", false),
+    });
+    // clang-format on
+
+    auto handle_a = write_segment(not_null_a, /*need_flat=*/true, "/mixed_a.data");
+    auto handle_b = write_segment(nullable_b, /*need_flat=*/true, "/mixed_b.data");
+    auto handle_c = write_segment(not_null_c, /*need_flat=*/true, "/mixed_c.data");
+    EXPECT_FALSE(handle_a.meta->is_nullable());
+    EXPECT_TRUE(handle_b.meta->is_nullable());
+    EXPECT_FALSE(handle_c.meta->is_nullable());
+
+    MutableColumnPtr col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+    ASSERT_OK(read_segment(handle_a, ReadMode::kBatch, col.get())); // backfill with empty dst
+    ASSERT_OK(read_segment(handle_b, ReadMode::kBatch, col.get())); // regular null-stream read
+    ASSERT_OK(read_segment(handle_c, ReadMode::kBatch, col.get())); // backfill with non-empty dst
+
+    auto* nullable = down_cast<NullableColumn*>(col.get());
+    ASSERT_EQ(11, nullable->size());
+    EXPECT_TRUE(nullable->has_null());
+    const auto& null_data = nullable->null_column()->get_data();
+    ASSERT_EQ(11, null_data.size());
+    for (size_t i = 0; i < null_data.size(); i++) {
+        EXPECT_EQ(i == 7 ? 1 : 0, null_data[i]) << "row " << i;
+    }
+    EXPECT_EQ(R"({"a": 1, "b": 21})", col->debug_item(0));
+    EXPECT_EQ(R"({"a": 4, "b": 24})", col->debug_item(3));
+    EXPECT_EQ(R"(NULL)", col->debug_item(7));
+    EXPECT_EQ(R"({"a": 8, "b": 28})", col->debug_item(8));
+    EXPECT_EQ(R"({"a": 10, "b": 30})", col->debug_item(10));
+}
+
+// The inverse mismatch -- a segment with a null stream read into a non-nullable output -- cannot be
+// satisfied and used to abort on the same CHECK. It must fail with InternalError instead of
+// crashing the process.
+TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableSegmentToNonNullableOutputError) {
+    // clang-format off
+    // 1 NULL out of 5 rows (20%) stays under the default json_flat_null_factor, so the segment is
+    // written flat with a null stream.
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", true),
+            normal_json(R"({"a": 2, "b": 22})", true),
+            normal_json(R"({"a": 3, "b": 23})", true),
+            normal_json(R"({"a": 4, "b": 24})", true),
+            normal_json(R"(NULL)", true),
+    });
+    // clang-format on
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/nullable_to_notnull.data");
+    EXPECT_TRUE(handle.meta->json_meta().is_flat());
+    EXPECT_TRUE(handle.meta->is_nullable());
+
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        MutableColumnPtr col = JsonColumn::create();
+        auto st = read_segment(handle, mode, col.get());
+        ASSERT_FALSE(st.ok()) << "mode=" << static_cast<int>(mode);
+        EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
+    }
+}
+
+// Same NOT NULL -> nullable schema-evolution scenario as above, but read through
+// JsonFlatColumnIterator (compaction access path) instead of JsonMergeIterator.
+TEST_F(FlatJsonColumnCompactTest, CompactJsonNotNullToNullableSchemaEvolutionWithPaths) {
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", false),
+            normal_json(R"({"a": 2, "b": 22})", false),
+            normal_json(R"({"a": 3, "b": 23})", false),
+            normal_json(R"({"a": 4, "b": 24})", false),
+            normal_json(R"({"a": 5, "b": 25})", false),
+    });
+    // clang-format on
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/notnull_to_nullable_paths.data");
+    EXPECT_TRUE(handle.meta->json_meta().is_flat());
+    EXPECT_FALSE(handle.meta->is_nullable());
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b");
+    root->set_from_compaction(true);
+
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        MutableColumnPtr col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        auto st = read_segment(handle, mode, col.get(), root.get());
+        ASSERT_TRUE(st.ok()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
+
+        auto* nullable = down_cast<NullableColumn*>(col.get());
+        ASSERT_EQ(5, nullable->size()) << "mode=" << static_cast<int>(mode);
+        EXPECT_FALSE(nullable->has_null());
+        const auto& null_data = nullable->null_column()->get_data();
+        ASSERT_EQ(5, null_data.size());
+        for (size_t i = 0; i < null_data.size(); i++) {
+            EXPECT_EQ(0, null_data[i]) << "mode=" << static_cast<int>(mode) << " row " << i;
+        }
+        // Values survive the flat read; row 0 carries a=1, row 4 carries a=5.
+        EXPECT_NE(std::string::npos, col->debug_item(0).find("a: 1")) << col->debug_item(0);
+        EXPECT_NE(std::string::npos, col->debug_item(4).find("a: 5")) << col->debug_item(4);
+    }
+}
+
+// Inverse mismatch through JsonFlatColumnIterator: nullable flat segment into a
+// non-nullable output must fail with InternalError instead of crashing.
+TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWithPaths) {
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", true),
+            normal_json(R"({"a": 2, "b": 22})", true),
+            normal_json(R"({"a": 3, "b": 23})", true),
+            normal_json(R"({"a": 4, "b": 24})", true),
+            normal_json(R"(NULL)", true),
+    });
+    // clang-format on
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/nullable_to_notnull_paths.data");
+    EXPECT_TRUE(handle.meta->json_meta().is_flat());
+    EXPECT_TRUE(handle.meta->is_nullable());
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "b");
+    root->set_from_compaction(true);
+
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        MutableColumnPtr col = JsonColumn::create();
+        auto st = read_segment(handle, mode, col.get(), root.get());
+        ASSERT_FALSE(st.ok()) << "mode=" << static_cast<int>(mode);
+        EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
+    }
+}
+>>>>>>> 1c6244907b ([BugFix] Handle NOT NULL -> nullable flat-JSON columns in compaction read path (fix JsonMergeIterator CHECK crash) (#75680))
 } // namespace starrocks
