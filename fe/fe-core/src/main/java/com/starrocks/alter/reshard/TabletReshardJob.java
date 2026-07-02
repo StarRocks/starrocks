@@ -19,7 +19,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,6 +69,14 @@ public abstract class TabletReshardJob implements Writable {
     @SerializedName(value = "errorMessage")
     protected String errorMessage;
 
+    // The warehouse this job should run its compute work (shard creation + publish) in. Set by the
+    // pre-split caller to the triggering load's warehouse; null for an online split / merge (and for a
+    // job journaled before this field existed), which then fall back to the background warehouse.
+    // Nullable so a missing field on replay deserializes to null (background), not 0 (a real warehouse).
+    // Persisted so a leader-switch re-run targets the same warehouse.
+    @SerializedName(value = "warehouseId")
+    protected Long warehouseId;
+
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -78,6 +88,31 @@ public abstract class TabletReshardJob implements Writable {
 
     public JobType getJobType() {
         return jobType;
+    }
+
+    public Long getWarehouseId() {
+        return warehouseId;
+    }
+
+    /**
+     * Set the warehouse this job runs its compute work in. Called by the pre-split caller (before the
+     * job is journaled) with the triggering load's warehouse, so shard creation and publish run there
+     * rather than the background warehouse.
+     */
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
+    /**
+     * Resolve the compute resource for this job's compute work: the explicitly-set warehouse when one
+     * was provided (pre-split → the load's warehouse), otherwise the background warehouse (online
+     * split / merge, or a job journaled before warehouseId existed).
+     */
+    protected ComputeResource resolveComputeResource(long tableId) {
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        return warehouseId == null
+                ? warehouseMgr.getBackgroundComputeResource(tableId)
+                : warehouseMgr.acquireComputeResource(warehouseId);
     }
 
     public JobState getJobState() {

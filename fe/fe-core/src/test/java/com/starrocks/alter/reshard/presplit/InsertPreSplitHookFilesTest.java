@@ -257,7 +257,8 @@ public class InsertPreSplitHookFilesTest {
             targets.when(() -> PreSplitTargets.findEligibleTarget(database, mv))
                     .thenReturn(new PreSplitTargets.EligibleTarget(database, mv, /*partitionId*/ 11L,
                             /*oldTabletId*/ 22L));
-            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(any(), any(), anyLong(), anyLong(), any()))
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                    any(), any(), anyLong(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
 
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);
@@ -265,7 +266,7 @@ public class InsertPreSplitHookFilesTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
         }
     }
 

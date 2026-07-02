@@ -25,6 +25,9 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.PlacementPolicy;
+import com.staros.proto.PlacementPreference;
+import com.staros.proto.PlacementRelationship;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
@@ -48,6 +51,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -61,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -388,6 +393,67 @@ public class StarOSAgentTest {
             Assertions.assertEquals(1, realGroupIds.size());
             Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
         });
+    }
+
+    @Test
+    public void testCreateShardsForSplitSpreadDropsWithShardPin() throws Exception {
+        // Capture the CreateShardInfo payload the agent builds for client.createShard so we can
+        // assert the per-shard placement preferences for both spreadNewShards modes.
+        List<CreateShardInfo> captured = new ArrayList<>();
+        new Expectations(client) {
+            {
+                client.createShard("1", (List<CreateShardInfo>) any);
+                result = new Delegate<List<ShardInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<ShardInfo> createShard(String sid, List<CreateShardInfo> infos) {
+                        captured.clear();
+                        captured.addAll(infos);
+                        List<ShardInfo> out = new ArrayList<>(infos.size());
+                        for (CreateShardInfo info : infos) {
+                            out.add(ShardInfo.newBuilder().setShardId(info.getShardId()).build());
+                        }
+                        return out;
+                    }
+                };
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        long spreadGroupId = 700L;
+        long oldShardId = 11L;
+        // Two new shards split out of the same old shard (the degenerate pre-split case).
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, oldShardId);
+        newToOldShardId.put(102L, oldShardId);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(spreadGroupId));
+        newShardIdToGroupIds.put(102L, Lists.newArrayList(spreadGroupId));
+
+        // spreadNewShards = true (pre-split): no WITH_SHARD pin, so StarOS spreads the new shards;
+        // the (SPREAD) group ids are still carried.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, true);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertTrue(info.getPlacementPreferencesList().isEmpty(),
+                    "pre-split shard must not pin placement to the old shard");
+            Assertions.assertEquals(Lists.newArrayList(spreadGroupId), info.getGroupIdsList());
+        }
+
+        // spreadNewShards = false (online split): the WITH_SHARD pin to the old shard is kept so the
+        // split reuses the source worker's warm cache.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertEquals(1, info.getPlacementPreferencesList().size());
+            PlacementPreference pref = info.getPlacementPreferences(0);
+            Assertions.assertEquals(PlacementPolicy.PACK, pref.getPlacementPolicy());
+            Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
+            Assertions.assertEquals(oldShardId, pref.getRelationshipTargetId());
+        }
     }
 
     @Test
