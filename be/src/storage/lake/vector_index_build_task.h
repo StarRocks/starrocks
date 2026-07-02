@@ -40,6 +40,10 @@ public:
         int64_t rowset_version;
         FileInfo segment_file_info;
         std::vector<int64_t> index_ids;
+        // Tablet id to embed in the .vi filename: the segment's recorded owner
+        // (SegmentMetadataPB.vector_index_tablet_id) so a segment shared across tablets after a
+        // split builds/reads the same .vi; falls back to this task's tablet id when unset.
+        int64_t vector_index_tablet_id = -1;
     };
 
     explicit VectorIndexBuildTask(TabletManager* tablet_mgr);
@@ -68,8 +72,8 @@ public:
     Status execute(const BuildVectorIndexRequest& request, BuildVectorIndexResponse* response);
 
 private:
-    Status build_segment(int64_t tablet_id, const FileInfo& segment_file_info, const std::vector<int64_t>& index_ids,
-                         const TabletSchemaCSPtr& tablet_schema);
+    Status build_segment(int64_t tablet_id, int64_t vi_tablet_id, const FileInfo& segment_file_info,
+                         const std::vector<int64_t>& index_ids, const TabletSchemaCSPtr& tablet_schema);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id = 0;

@@ -192,6 +192,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
         }
+        // Persist the owning tablet id used to name these .vi files (see the field comment on
+        // SegmentMetadataPB::vector_index_tablet_id); refresh it wholesale like vector_index_ids.
+        segment_meta->clear_vector_index_tablet_id();
+        if (replace_seg.second.vector_index_tablet_id >= 0) {
+            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
+        }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
         // cross-publish, clear the flag so GC routes the rewrite file through the normal
@@ -1272,6 +1278,12 @@ Status MetaFileBuilder::set_final_rowset() {
         segment_meta->clear_vector_index_ids();
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
+        }
+        // See apply_opwrite: refresh the owning tablet id used to name these .vi files
+        // (SegmentMetadataPB::vector_index_tablet_id) wholesale like vector_index_ids.
+        segment_meta->clear_vector_index_tablet_id();
+        if (replace_seg.second.vector_index_tablet_id >= 0) {
+            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
         }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.

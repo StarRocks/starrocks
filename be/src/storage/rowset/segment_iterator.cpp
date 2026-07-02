@@ -1110,7 +1110,12 @@ Status SegmentIterator::_init_ann_reader() {
 #ifdef WITH_TENANN
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
-            index_path = lake::gen_vector_index_path_from_segment_path(_segment->file_name(), _opts.tablet_id,
+            // Use the segment's recorded owner tablet id (set from SegmentMetadataPB by Rowset) so a
+            // segment shared across tablets after a split resolves the same .vi; fall back to the
+            // reading tablet for segments written before vector_index_tablet_id existed.
+            const int64_t vi_tablet_id = _opts.vector_index_tablet_id >= 0 ? _opts.vector_index_tablet_id
+                                                                           : static_cast<int64_t>(_opts.tablet_id);
+            index_path = lake::gen_vector_index_path_from_segment_path(_segment->file_name(), vi_tablet_id,
                                                                        tablet_index_meta->index_id());
         } else {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),

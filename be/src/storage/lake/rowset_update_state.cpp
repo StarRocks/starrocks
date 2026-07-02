@@ -284,13 +284,20 @@ static StatusOr<RewriteVectorIndexOptions> resolve_rewrite_vector_index_options(
 static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& params,
                                                const SegmentMetadataPB& src_seg_meta, const std::string& src_path,
                                                const std::string& dest_path, FileInfo* file_info) {
+    // The src .vi was named by the src segment's owner tablet id; the dest is a brand-new segment
+    // written by this tablet, so its .vi is named by (and recorded as owned by) this tablet.
+    const int64_t src_vi_tablet_id =
+            src_seg_meta.has_vector_index_tablet_id() ? src_seg_meta.vector_index_tablet_id() : params.tablet->id();
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
         auto src_vi =
-                params.tablet->segment_location(gen_vector_index_filename(src_path, params.tablet->id(), index_id));
+                params.tablet->segment_location(gen_vector_index_filename(src_path, src_vi_tablet_id, index_id));
         auto dest_vi =
                 params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
         file_info->vector_index_ids.push_back(index_id);
+    }
+    if (!file_info->vector_index_ids.empty()) {
+        file_info->vector_index_tablet_id = params.tablet->id();
     }
     return Status::OK();
 }
@@ -565,6 +572,10 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 file_info.vector_index_ids.push_back(index_id);
             }
+            // The deferred build names the dest .vi by this tablet (the dest owner); record it.
+            if (!file_info.vector_index_ids.empty()) {
+                file_info.vector_index_tablet_id = params.tablet->id();
+            }
         }
         (*replace_segments)[segment_id] = file_info;
     } else {
@@ -593,9 +604,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // unreachable after the replace (the dest segment has its own copy); orphan it too. In
         // async mode the src ids only marked a scheduled build — no .vi file ever existed.
         if (!defer_vector_index_build) {
+            // The replaced src .vi was named by the src segment's owner tablet id.
+            const int64_t src_vi_tablet_id = src_seg_meta.has_vector_index_tablet_id()
+                                                     ? src_seg_meta.vector_index_tablet_id()
+                                                     : params.tablet->id();
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 FileMetaPB vi_meta;
-                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), params.tablet->id(), index_id));
+                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), src_vi_tablet_id, index_id));
                 orphan_files->push_back(std::move(vi_meta));
             }
         }

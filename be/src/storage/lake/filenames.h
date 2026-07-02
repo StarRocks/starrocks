@@ -103,33 +103,37 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
-// Generate vector index filename from segment filename. The tablet_id disambiguates
-// segments that share a physical file across tablets (file bundling), where the recorded
-// segment filename is the shared bundle name and the offset alone is not on the read path;
-// without it those tablets would collide on the same .vi path and overwrite each other.
-// Non-bundled segments carry it too (redundant but keeps naming uniform, no special-casing).
-// e.g. "0123_abcd.dat" + tablet 9 + index 123 -> "0123_abcd_9_123.vi"
-inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t tablet_id, int64_t index_id) {
+// Generate vector index filename from segment filename. |owner_tablet_id| disambiguates segments
+// that share a physical file across tablets (file bundling), where the recorded segment filename is
+// the shared bundle name; without it those tablets would collide on the same .vi path and overwrite
+// each other. It must be the tablet that WROTE the segment (recorded in
+// SegmentMetadataPB::vector_index_tablet_id), NOT the tablet reading it, so a segment shared across
+// tablets after a tablet split resolves to the same .vi from every reader. Non-bundled segments
+// carry it too (redundant but keeps naming uniform, no special-casing).
+// e.g. "0123_abcd.dat" + owner 9 + index 123 -> "0123_abcd_9_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t owner_tablet_id,
+                                             int64_t index_id) {
     if (segment_filename.ends_with(".dat")) {
-        return fmt::format("{}_{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), tablet_id, index_id);
+        return fmt::format("{}_{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), owner_tablet_id,
+                           index_id);
     }
-    return fmt::format("{}_{}_{}.vi", segment_filename, tablet_id, index_id);
+    return fmt::format("{}_{}_{}.vi", segment_filename, owner_tablet_id, index_id);
 }
 
 // Compute the vector-index file path that sits next to a segment file in shared-data
 // layout: split |segment_path| into directory + basename, compute the .vi filename
 // from the basename, then re-join under the original directory.
 //
-//   "data/000_abcd.dat"  + tablet 9 + 0  -> "data/000_abcd_9_0.vi"
-//   "/foo/bar/seg.dat"   + tablet 9 + 5  -> "/foo/bar/seg_9_5.vi"
-//   "seg.dat"            + tablet 9 + 7  -> "seg_9_7.vi"            (no directory part)
-//   "/seg.dat"           + tablet 9 + 1  -> "seg_9_1.vi"            (root-only directory)
-inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t tablet_id,
+//   "data/000_abcd.dat"  + owner 9 + 0  -> "data/000_abcd_9_0.vi"
+//   "/foo/bar/seg.dat"   + owner 9 + 5  -> "/foo/bar/seg_9_5.vi"
+//   "seg.dat"            + owner 9 + 7  -> "seg_9_7.vi"            (no directory part)
+//   "/seg.dat"           + owner 9 + 1  -> "seg_9_1.vi"            (root-only directory)
+inline std::string gen_vector_index_path_from_segment_path(std::string_view segment_path, int64_t owner_tablet_id,
                                                            int64_t index_id) {
     const size_t last_slash = segment_path.find_last_of('/');
     std::string_view basename =
             (last_slash == std::string_view::npos) ? segment_path : segment_path.substr(last_slash + 1);
-    std::string vi_filename = gen_vector_index_filename(basename, tablet_id, index_id);
+    std::string vi_filename = gen_vector_index_filename(basename, owner_tablet_id, index_id);
     if (last_slash == std::string_view::npos) {
         return vi_filename;
     }

@@ -69,6 +69,10 @@ public:
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // Tablet id to use when deriving this segment's vector index (.vi) path. For cloud-native
+    // reads this is the recorded owner (SegmentMetadataPB.vector_index_tablet_id) so a segment
+    // shared across tablets after a split resolves the same .vi; defaults to tablet_id.
+    int64_t vector_index_tablet_id = -1;
     // rowset base segment id
     uint32_t rowset_id = 0;
     uint32_t dynamic_rss_id_base = 0;

@@ -110,12 +110,17 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             }
 
             const auto& seg_name = segment_meta.filename();
+            // Name .vi files by the segment's recorded owner tablet id so a segment shared across
+            // tablets after a split builds/reads the same .vi; fall back to this task's tablet for
+            // segments written before vector_index_tablet_id existed.
+            const int64_t vi_tablet_id =
+                    segment_meta.has_vector_index_tablet_id() ? segment_meta.vector_index_tablet_id() : _tablet_id;
             std::vector<int64_t> index_ids;
             for (int64_t idx_id : segment_meta.vector_index_ids()) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).
                 // This only runs for segments in the current batch (bounded by
                 // max_rowsets_per_batch), so S3 HEAD cost is minimal.
-                std::string vi_name = gen_vector_index_filename(seg_name, _tablet_id, idx_id);
+                std::string vi_name = gen_vector_index_filename(seg_name, vi_tablet_id, idx_id);
                 std::string vi_path = _tablet_mgr->segment_location(_tablet_id, vi_name);
                 if (fs::path_exist(vi_path)) {
                     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id
@@ -140,7 +145,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
                 segment_file_info.encryption_meta = segment_meta.encryption_meta();
             }
 
-            _work_items.push_back({cand.version, std::move(segment_file_info), std::move(index_ids)});
+            _work_items.push_back({cand.version, std::move(segment_file_info), std::move(index_ids), vi_tablet_id});
         }
 
         // Mark this version as processed in _rowset_versions.
@@ -164,7 +169,9 @@ Status VectorIndexBuildTask::build_one_segment(size_t work_index) {
     const auto& work = _work_items[work_index];
     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id << " building segment=" << work.segment_file_info.path
               << " version=" << work.rowset_version << " index_ids_count=" << work.index_ids.size();
-    RETURN_IF_ERROR(build_segment(_tablet_id, work.segment_file_info, work.index_ids, _tablet_schema));
+    RETURN_IF_ERROR(
+            build_segment(_tablet_id, work.vector_index_tablet_id, work.segment_file_info, work.index_ids,
+                          _tablet_schema));
     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id << " built segment=" << work.segment_file_info.path
               << " successfully";
     return Status::OK();
@@ -227,7 +234,7 @@ Status VectorIndexBuildTask::execute(const BuildVectorIndexRequest& request, Bui
     return Status::OK();
 }
 
-Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& segment_file_info,
+Status VectorIndexBuildTask::build_segment(int64_t tablet_id, int64_t vi_tablet_id, const FileInfo& segment_file_info,
                                            const std::vector<int64_t>& index_ids,
                                            const TabletSchemaCSPtr& tablet_schema) {
     // Open the segment file (FileInfo carries size/encryption for proper access)
@@ -290,7 +297,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& se
         if (auto pos = seg_basename.rfind('/'); pos != std::string_view::npos) {
             seg_basename = seg_basename.substr(pos + 1);
         }
-        std::string vi_name = gen_vector_index_filename(seg_basename, _tablet_id, index_id);
+        std::string vi_name = gen_vector_index_filename(seg_basename, vi_tablet_id, index_id);
         std::string vi_path = _tablet_mgr->segment_location(tablet_id, vi_name);
 
         ASSIGN_OR_RETURN(auto builder_type,
