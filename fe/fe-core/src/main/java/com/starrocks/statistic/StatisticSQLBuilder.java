@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.EXTERNAL_PARTITION_NAME_HASH_PREFIX;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
@@ -211,9 +212,14 @@ public class StatisticSQLBuilder {
         nameGroups.forEach((type, names) -> {
             VelocityContext context = new VelocityContext();
             context.put("type", type);
+            // Only consider rows whose partition_name has been hashed (see StatisticUtils#hashExternalPartitionName).
+            // Rows written before that change still carry the raw (unhashed) partition name under the same
+            // table_uuid/column_name, and this query aggregates across all partitions, so including both would
+            // double count row_count/data_size/ndv for the same logical partition.
             context.put("predicate",
                     "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
-                            names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+                            names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")" +
+                            " and partition_name like \"" + EXTERNAL_PARTITION_NAME_HASH_PREFIX + "%\"");
             querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
         });
 

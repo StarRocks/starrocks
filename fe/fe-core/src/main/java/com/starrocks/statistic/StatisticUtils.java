@@ -284,6 +284,19 @@ public class StatisticUtils {
         return instant.toEpochMilli();
     }
 
+    /**
+     * Hash a real (external table) partition name into a short, fixed-length form suitable for storing as the
+     * partition_name column of {@link StatsConstants#EXTERNAL_FULL_STATISTICS_TABLE_NAME}. Iceberg partition
+     * names produced by partition evolution (e.g. "tenant_id=hash-xxx") can be arbitrarily long and, combined
+     * with table_uuid and column_name, exceed the BE primary_key_limit_size. partition_name is never displayed
+     * to users nor substring-matched, so replacing it with a hash is safe; the fixed prefix marks the value as
+     * hashed so readers can distinguish it from any raw partition name written before this change.
+     */
+    public static String hashExternalPartitionName(String partitionName) {
+        long hash = Hashing.murmur3_128().hashUnencodedChars(partitionName).asLong();
+        return StatsConstants.EXTERNAL_PARTITION_NAME_HASH_PREFIX + String.format("%016x", hash);
+    }
+
     public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
         // get updated partitions
         Set<String> updatedPartitions = null;

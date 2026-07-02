@@ -71,6 +71,13 @@ public class StatsConstants {
     public static final String EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME = "external_histogram_statistics";
     public static final String MULTI_COLUMN_STATISTICS_TABLE_NAME = "multi_column_statistics";
 
+    // Prefix tagging hashed partition_name values written to EXTERNAL_FULL_STATISTICS_TABLE_NAME.
+    // Iceberg partition-evolution names (e.g. "tenant_id=hash-xxx") can exceed the BE primary_key_limit_size
+    // (128 bytes) once combined with table_uuid + column_name, so the raw partition name is replaced with a
+    // fixed-length hash before insert. The prefix lets reads filter out pre-migration rows that still carry the
+    // raw (unhashed) partition name, without needing to migrate or delete them.
+    public static final String EXTERNAL_PARTITION_NAME_HASH_PREFIX = "v2h-";
+
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 

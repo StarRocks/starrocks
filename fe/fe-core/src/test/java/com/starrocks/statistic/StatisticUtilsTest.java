@@ -113,4 +113,21 @@ class StatisticUtilsTest extends PlanTestBase {
             globalDefault.setBigQueryProfileThreshold(savedBigQueryThresholdMs + "ms");
         }
     }
+
+    @Test
+    void hashExternalPartitionName() {
+        String longPartitionName = "tenant_id=hash-2c933fdc";
+        String hashed = StatisticUtils.hashExternalPartitionName(longPartitionName);
+
+        Assertions.assertTrue(hashed.startsWith(StatsConstants.EXTERNAL_PARTITION_NAME_HASH_PREFIX));
+        // prefix + 16 fixed hex chars, regardless of input length
+        Assertions.assertEquals(StatsConstants.EXTERNAL_PARTITION_NAME_HASH_PREFIX.length() + 16, hashed.length());
+        // deterministic
+        Assertions.assertEquals(hashed, StatisticUtils.hashExternalPartitionName(longPartitionName));
+        // different input -> different hash
+        Assertions.assertNotEquals(hashed, StatisticUtils.hashExternalPartitionName("tenant_id=hash-deadbeef"));
+        // fixed length even for a very long, arbitrarily-formatted partition path
+        String veryLongPartitionName = "tenant_id=" + "a".repeat(200);
+        Assertions.assertEquals(hashed.length(), StatisticUtils.hashExternalPartitionName(veryLongPartitionName).length());
+    }
 }

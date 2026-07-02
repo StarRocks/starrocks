@@ -348,8 +348,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
+            // Store a fixed-length hash instead of the raw partition name: external partition names (e.g.
+            // Iceberg partition-evolution values like "tenant_id=hash-xxx") can be long enough that
+            // (table_uuid, partition_name, column_name) exceeds the BE primary_key_limit_size. partition_name is
+            // an opaque key here (never shown to users, never substring-matched), so hashing it is safe.
+            String hashedPartitionName = StatisticUtils.hashExternalPartitionName(data.getPartitionName());
+
             params.add("'" + table.getUUID() + "'");
-            params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
+            params.add("'" + StringEscapeUtils.escapeSql(hashedPartitionName) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
             params.add("'" + catalogName + "'");
             params.add("'" + db.getOriginName() + "'");
@@ -363,7 +369,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("now()");
             // int
             row.add(new StringLiteral(table.getUUID())); // table id, wait to byte
-            row.add(new StringLiteral(data.getPartitionName()));
+            row.add(new StringLiteral(hashedPartitionName));
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
             row.add(new StringLiteral(catalogName));
             row.add(new StringLiteral(db.getOriginName()));

@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -114,7 +115,7 @@ public class PartitionSelector {
             "WHERE DB_NAME ='%s' and TABLE_NAME='%s' AND %s;";
     private static final String EXTERNAL_TABLE_PARTITION_META_TEMPLATE = "SELECT PARTITION_NAME, SUM(ROW_COUNT) as ROW_COUNT," +
             "CAST(SUM(DATA_SIZE) AS BIGINT) as DATA_SIZE FROM _statistics_.external_column_statistics " +
-            "WHERE TABLE_UUID = '%s' AND PARTITION_NAME in ('%s') GROUP BY PARTITION_NAME;";
+            "WHERE TABLE_UUID = '%s' AND PARTITION_NAME in (%s) GROUP BY PARTITION_NAME;";
     // NOTE: `json` to `datetime` is not supported yet, so we use `string` here.
     private static final String JSON_QUERY_TEMPLATE = "CAST(CAST(JSON_QUERY(%s, '$[0].[%d]') AS STRING) AS %s)";
 
@@ -808,17 +809,28 @@ public class PartitionSelector {
     /**
      * Use `_statistics_.external_column_statistics` to get partition statistics for an external table
      * such as Iceberg/Hudi by its table UUID.
+     * <p>
+     * partition_name is stored hashed (see {@link com.starrocks.statistic.StatisticUtils#hashExternalPartitionName})
+     * so the IN-list is built from hashes; results are translated back to the real partition names the caller
+     * passed in via {@code needPartitionNames} before being returned.
      */
     public static Map<String, Pair<Long, Long>> getExternalTablePartitionStats(Table table, Set<String> needPartitionNames) {
-        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, table.getUUID(),
-                String.join(",", needPartitionNames));
+        if (needPartitionNames.isEmpty()) {
+            return Maps.newHashMap();
+        }
+        Map<String, String> hashToPartitionName = needPartitionNames.stream()
+                .collect(Collectors.toMap(StatisticUtils::hashExternalPartitionName, Function.identity(), (a, b) -> a));
+        String inClause = hashToPartitionName.keySet().stream()
+                .map(hash -> "'" + hash + "'")
+                .collect(Collectors.joining(","));
+        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, table.getUUID(), inClause);
         LOG.info("Get external table partition stats by sql: {}", sql);
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
-        return deserializeExternalStatisticsResult(batch);
+        return deserializeExternalStatisticsResult(batch, hashToPartitionName);
     }
 
     private static Map<String, Pair<Long, Long>> deserializeExternalStatisticsResult(
-            List<TResultBatch> batches) {
+            List<TResultBatch> batches, Map<String, String> hashToPartitionName) {
         Map<String, Pair<Long, Long>> result = new HashMap<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
@@ -827,7 +839,7 @@ public class PartitionSelector {
                 List<String> data = MetaFunctions.LookupRecord.fromJson(jsonString).data;
 
                 if (data != null && data.size() >= 3) {
-                    String partitionName = data.get(0);
+                    String partitionName = hashToPartitionName.getOrDefault(data.get(0), data.get(0));
                     long rowCount = Long.parseLong(data.get(1));
                     long dataSize = Long.parseLong(data.get(2));
                     result.put(partitionName, Pair.create(rowCount, dataSize));
