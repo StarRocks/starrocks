@@ -640,6 +640,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    /**
+     * Leader FE will also roll the edit log once the total size of meta journals written since
+     * the last roll exceeds this value, in bytes. This bounds the replay backlog between two
+     * checkpoints by size even when individual journal entries are large (e.g. materialized
+     * view refresh logs whose size is proportional to the number of base table partitions).
+     * 0 (default) disables the size-based trigger; *edit_log_roll_num* always applies.
+     */
+    @ConfField(mutable = true)
+    public static long edit_log_roll_bytes = 0;
+
     @ConfField(mutable = true)
     public static int edit_log_write_slow_log_threshold_ms = 2000;
 
