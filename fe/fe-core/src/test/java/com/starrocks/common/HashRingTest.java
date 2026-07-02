@@ -22,12 +22,14 @@ import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.PlainHashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -139,5 +141,38 @@ public class HashRingTest {
         List<String> nodes = generateNodes(kNodeSize);
         PlainHashRing hashRing = new PlainHashRing(Hashing.murmur3_128(), funnel, nodes);
         testWithHashRing(hashRing, nodes);
+    }
+
+    @Test
+    public void testConsistentHashRingFewerNodesThanRequested() {
+        // Requesting more distinct nodes than exist returns exactly the available nodes
+        // (deduplicated) and terminates, for any cluster size down to a single node.
+        for (int nodeSize = 1; nodeSize <= 3; nodeSize++) {
+            List<String> nodes = generateNodes(nodeSize);
+            ConsistentHashRing<String, String> hashRing =
+                    new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+            for (String key : generateKeys(kKeySize)) {
+                List<String> got = hashRing.get(key, nodeSize + 2);
+                Assertions.assertEquals(nodeSize, got.size());
+                Assertions.assertEquals(nodeSize, new HashSet<>(got).size());
+            }
+        }
+    }
+
+    @Test
+    public void testConsistentHashRingPrimaryStableAcrossCandidateCount() {
+        // The primary node must not depend on how many candidates are requested, so asking
+        // for a single candidate yields the same placement as asking for several.
+        List<String> nodes = generateNodes(kNodeSize);
+        ConsistentHashRing<String, String> hashRing =
+                new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+        for (String key : generateKeys(kKeySize)) {
+            List<String> one = hashRing.get(key, 1);
+            List<String> three = hashRing.get(key, 3);
+            Assertions.assertEquals(1, one.size());
+            Assertions.assertEquals(3, three.size());
+            Assertions.assertEquals(3, new HashSet<>(three).size());
+            Assertions.assertEquals(one.get(0), three.get(0));
+        }
     }
 }

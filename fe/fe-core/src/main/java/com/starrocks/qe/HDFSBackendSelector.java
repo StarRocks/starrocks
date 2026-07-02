@@ -358,10 +358,20 @@ public class HDFSBackendSelector implements BackendSelector {
         if (shuffleScanRange) {
             Collections.shuffle(remoteScanRangeLocations);
         }
+
+        // When re-balancing is skipped (data cache on and no forced re-balance), only the
+        // first ring node is ever used (both reBalanceScanRangeForComputeNode and the
+        // candidate selection take index 0). Asking the ring for kCandidateNumber distinct
+        // nodes then walks the ring for candidates that are thrown away, so request one.
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean skipReBalance = !sessionVariable.getHdfsBackendSelectorForceRebalance()
+                && sessionVariable.isEnableScanDataCache();
+        int candidateNumber = skipReBalance ? 1 : kCandidateNumber;
+
         // assign scan ranges.
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-            List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
+            List<ComputeNode> backends = hashRing.get(scanRangeLocations, candidateNumber);
             ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
             if (node == null) {
                 throw new StarRocksException("Failed to find backend to execute");
@@ -369,7 +379,7 @@ public class HDFSBackendSelector implements BackendSelector {
 
             ComputeNode candidateNode = null;
             if (candidateHashRing != null) {
-                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, kCandidateNumber);
+                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, candidateNumber);
                 // if data cache is enabled, skip re-balancing because it makes the cache position undefined.
                 candidateNode = candidateBackends.get(0);
             }
