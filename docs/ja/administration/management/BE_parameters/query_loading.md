@@ -627,7 +627,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: スレッド
 - 変更可能: いいえ
-- 説明: ExecEnvで作成されるUDF呼び出しPriorityThreadPoolのサイズを設定します（ユーザー定義関数/UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのUDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
+- 説明: JavaEnvが所有するJava UDF呼び出しPriorityThreadPoolのサイズを設定します（Java UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのJava UDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
 - 導入バージョン: v3.2.0
 
 ### update_memory_limit_percent

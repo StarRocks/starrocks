@@ -58,9 +58,6 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&_streaming_load_thread_pool));
 
-    _udf_call_pool =
-            std::make_unique<PriorityThreadPool>("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
-
     int automatic_partition_thread_num = config::automatic_partition_thread_pool_thread_num;
     int automatic_partition_queue_size = automatic_partition_thread_num * 10;
     RETURN_IF_ERROR(ThreadPoolBuilder("auto_partition")
@@ -263,7 +260,6 @@ void GlobalThreadPools::shutdown() {
     if (_load_rpc_pool) _load_rpc_pool->shutdown();
     if (_thread_pool) _thread_pool->shutdown();
     if (_dictionary_cache_pool) _dictionary_cache_pool->shutdown();
-    if (_udf_call_pool) _udf_call_pool->shutdown();
     if (_pipeline_prepare_pool) _pipeline_prepare_pool->shutdown();
     if (_streaming_load_thread_pool) _streaming_load_thread_pool->shutdown();
     if (_load_segment_thread_pool) _load_segment_thread_pool->shutdown();
@@ -272,7 +268,6 @@ void GlobalThreadPools::shutdown() {
 }
 
 void GlobalThreadPools::destroy() {
-    _udf_call_pool.reset();
     _pipeline_prepare_pool.reset();
     _pipeline_sink_io_pool.reset();
     _query_rpc_pool.reset();
