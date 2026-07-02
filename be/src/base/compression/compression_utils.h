@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
+#include "base/compression/block_compression.h"
 #include "base/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
@@ -24,6 +27,17 @@ namespace starrocks {
 
 class CompressionUtils {
 public:
+    static bool exceed_rpc_compression_max_input_size(size_t input_size, int64_t rpc_compress_max_input_size) {
+        return rpc_compress_max_input_size > 0 && input_size >= static_cast<size_t>(rpc_compress_max_input_size);
+    }
+
+    static bool can_compress_rpc_payload(const BlockCompressionCodec* codec, size_t input_size,
+                                         int64_t rpc_compress_max_input_size) {
+        return codec != nullptr && input_size > 0 &&
+               !exceed_rpc_compression_max_input_size(input_size, rpc_compress_max_input_size) &&
+               !codec->exceed_max_input_size(input_size);
+    }
+
     // Convert compression thrift type to proto type.
     // Return ComressionTypePB::UNKNOWN_COMPRESSION if input type is not recognized
     static CompressionTypePB to_compression_pb(TCompressionType::type t_type) {

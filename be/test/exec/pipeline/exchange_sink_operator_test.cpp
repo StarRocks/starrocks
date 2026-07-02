@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#define private public
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
+#undef private
 
 #include <gtest/gtest.h>
 
@@ -55,6 +57,42 @@ public:
     bool exceed_max_input_size(size_t len) const override { return len > 0; }
 
     size_t max_input_size() const override { return 0; }
+};
+
+class ThresholdBlockedCodec final : public BlockCompressionCodec {
+public:
+    ThresholdBlockedCodec() : BlockCompressionCodec(LZ4) {}
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
+        return Status::NotSupported("compress should be skipped");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
+
+    size_t max_compressed_len(size_t len) const override { return len; }
+
+    bool exceed_max_input_size(size_t len) const override { return false; }
+
+    size_t max_input_size() const override { return static_cast<size_t>(-1); }
+};
+
+class NonPoolCompressCodec final : public BlockCompressionCodec {
+public:
+    NonPoolCompressCodec() : BlockCompressionCodec(SNAPPY) {}
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
+        output->data[0] = 'x';
+        output->size = 1;
+        return Status::OK();
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
+
+    size_t max_compressed_len(size_t len) const override { return len; }
 };
 
 class ExchangeSinkOperatorTest : public ::testing::Test {
@@ -146,6 +184,51 @@ TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
     EXPECT_OK(sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first));
     // No compression applied: compress_type stays at default (NO_COMPRESSION).
     EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::NO_COMPRESSION);
+
+    op->close(_runtime_state.get());
+}
+
+// When rpc_compress_max_input_size is reached and overflow skip is enabled,
+// serialize_chunk should skip compression before calling the codec.
+TEST_F(ExchangeSinkOperatorTest, serialize_chunk_rpc_max_input_size_skip_enabled) {
+    auto op = _factory->create(1, 0);
+    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
+
+    ThresholdBlockedCodec codec;
+    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
+    sink->set_compress_codec_for_testing(&codec);
+
+    int64_t prev_max_input_size = config::rpc_compress_max_input_size;
+    bool prev_skip = config::enable_rpc_compress_overflow_skip;
+    DeferOp restore([&] {
+        config::rpc_compress_max_input_size = prev_max_input_size;
+        config::enable_rpc_compress_overflow_skip = prev_skip;
+    });
+    config::rpc_compress_max_input_size = 1;
+    config::enable_rpc_compress_overflow_skip = true;
+
+    ChunkPB chunk_pb;
+    bool is_first = true;
+    EXPECT_OK(sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first));
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::NO_COMPRESSION);
+
+    op->close(_runtime_state.get());
+}
+
+TEST_F(ExchangeSinkOperatorTest, serialize_chunk_non_pool_codec_compresses) {
+    auto op = _factory->create(1, 0);
+    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
+
+    NonPoolCompressCodec codec;
+    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
+    sink->set_compress_codec_for_testing(&codec);
+    sink->_compress_type = codec.type();
+
+    ChunkPB chunk_pb;
+    bool is_first = true;
+    EXPECT_OK(sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first));
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::SNAPPY);
+    EXPECT_EQ(chunk_pb.data(), "x");
 
     op->close(_runtime_state.get());
 }

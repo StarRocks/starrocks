@@ -483,13 +483,22 @@ This topic introduces the following types of BE configurations:
 - Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio `>` rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
 - Introduced in: v3.2.0
 
+### rpc_compress_max_input_size
+
+- Default: 0
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum input size allowed for RPC payload compression. If the serialized chunk size is greater than or equal to this value, StarRocks treats the payload as too large for RPC compression. The behavior is controlled by `enable_rpc_compress_overflow_skip`: skip compression and send the payload uncompressed when it is `true`, or return an `InternalError` when it is `false`. Set this value to 0 or a negative number to disable this RPC policy limit.
+- Introduced in: -
+
 ### enable_rpc_compress_overflow_skip
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Controls the behavior when the serialized chunk size exceeds the compression codec's maximum allowed input size. When set to `true` (default), StarRocks logs a warning and skips compression, sending the data uncompressed instead. When set to `false`, StarRocks returns an `InternalError` and aborts the RPC.
+- Description: Controls the behavior when the serialized chunk size reaches `rpc_compress_max_input_size` or exceeds the compression codec's maximum allowed input size. When set to `true` (default), StarRocks skips compression and sends the data uncompressed instead. The skip may be recorded in verbose row-level logs when verbose logging is enabled. When set to `false`, StarRocks returns an `InternalError` and aborts the RPC.
 - Introduced in: -
 
 ### ssl_private_key_path

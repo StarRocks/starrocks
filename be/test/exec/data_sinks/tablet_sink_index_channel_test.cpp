@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#define private public
 #include "exec/data_sinks/tablet_sink_index_channel.h"
+#undef private
 
 #include <gtest/gtest.h>
 
@@ -22,6 +24,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/util/thrift_util.h"
@@ -36,6 +39,42 @@
 #include "storage/primitive/tablet_info.h"
 
 namespace starrocks {
+
+class TabletThresholdBlockedCodec final : public BlockCompressionCodec {
+public:
+    TabletThresholdBlockedCodec() : BlockCompressionCodec(LZ4) {}
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
+        return Status::NotSupported("compress should be skipped");
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
+
+    size_t max_compressed_len(size_t len) const override { return len; }
+
+    bool exceed_max_input_size(size_t len) const override { return false; }
+
+    size_t max_input_size() const override { return static_cast<size_t>(-1); }
+};
+
+class TabletNonPoolCompressCodec final : public BlockCompressionCodec {
+public:
+    TabletNonPoolCompressCodec() : BlockCompressionCodec(SNAPPY) {}
+
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
+        output->data[0] = 'x';
+        output->size = 1;
+        return Status::OK();
+    }
+
+    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
+
+    size_t max_compressed_len(size_t len) const override { return len; }
+};
 
 class TabletSinkIndexChannelTest : public testing::Test {
 public:
@@ -131,6 +170,25 @@ protected:
         TDataSink data_sink;
         data_sink.__set_olap_table_sink(table_sink);
         return data_sink;
+    }
+
+    std::unique_ptr<OlapTableSink> _build_prepared_sink(RuntimeState* runtime_state) {
+        DescriptorTbl* desc_tbl = nullptr;
+        CHECK_OK(DescriptorTbl::create(runtime_state, _object_pool.get(), _desc_tbl, &desc_tbl,
+                                       config::vector_chunk_size));
+        runtime_state->set_desc_tbl(desc_tbl);
+        auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state);
+        CHECK_OK(sink->init(_data_sink, runtime_state));
+        CHECK_OK(sink->prepare(runtime_state));
+        return sink;
+    }
+
+    ChunkUniquePtr _build_test_chunk(RuntimeState* runtime_state) {
+        auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+        ChunkUniquePtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
+        return chunk;
     }
 
     void _serialize_load_profile(int64_t node_id, std::string* result) {
@@ -353,6 +411,76 @@ TEST_F(TabletSinkIndexChannelTest, load_diagnose) {
     // diagnose both profile and stack trace because the timeout is larger than
     // config::load_diagnose_rpc_timeout_stack_trace_threshold_ms
     test_load_diagnose_base("[E1008]Reached timeout 1200000ms@10.128.8.78:8060", 1200, 3, 3);
+}
+
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_rpc_max_input_size_skip_enabled) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    TabletThresholdBlockedCodec codec;
+    channel._compress_codec = &codec;
+    channel._compress_type = codec.type();
+
+    int64_t prev_max_input_size = config::rpc_compress_max_input_size;
+    bool prev_skip = config::enable_rpc_compress_overflow_skip;
+    DeferOp restore([&] {
+        config::rpc_compress_max_input_size = prev_max_input_size;
+        config::enable_rpc_compress_overflow_skip = prev_skip;
+    });
+    config::rpc_compress_max_input_size = 1;
+    config::enable_rpc_compress_overflow_skip = true;
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB chunk_pb;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &chunk_pb));
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::NO_COMPRESSION);
+    EXPECT_FALSE(channel._cancelled);
+}
+
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_rpc_max_input_size_skip_disabled) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    TabletThresholdBlockedCodec codec;
+    channel._compress_codec = &codec;
+    channel._compress_type = codec.type();
+
+    int64_t prev_max_input_size = config::rpc_compress_max_input_size;
+    bool prev_skip = config::enable_rpc_compress_overflow_skip;
+    DeferOp restore([&] {
+        config::rpc_compress_max_input_size = prev_max_input_size;
+        config::enable_rpc_compress_overflow_skip = prev_skip;
+    });
+    config::rpc_compress_max_input_size = 1;
+    config::enable_rpc_compress_overflow_skip = false;
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB chunk_pb;
+    auto st = channel._serialize_chunk(chunk.get(), &chunk_pb);
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+    EXPECT_TRUE(channel._cancelled);
+}
+
+TEST_F(TabletSinkIndexChannelTest, serialize_chunk_non_pool_codec_compresses) {
+    TQueryOptions query_options;
+    auto runtime_state = _build_runtime_state(query_options);
+    auto sink = _build_prepared_sink(runtime_state.get());
+    NodeChannel channel(sink.get(), 0, false);
+    TabletNonPoolCompressCodec codec;
+    channel._compress_codec = &codec;
+    channel._compress_type = codec.type();
+
+    int64_t prev_max_input_size = config::rpc_compress_max_input_size;
+    DeferOp restore([&] { config::rpc_compress_max_input_size = prev_max_input_size; });
+    config::rpc_compress_max_input_size = 0;
+
+    auto chunk = _build_test_chunk(runtime_state.get());
+    ChunkPB chunk_pb;
+    ASSERT_OK(channel._serialize_chunk(chunk.get(), &chunk_pb));
+    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::SNAPPY);
+    EXPECT_EQ(chunk_pb.data(), "x");
 }
 
 TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
