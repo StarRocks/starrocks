@@ -24,6 +24,7 @@
 #include "exec/analytic_node.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/empty_set_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
@@ -35,7 +36,7 @@
 #include "exec/runtime/query_context_manager.h"
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -103,8 +104,8 @@ public:
         _query_ctx->query_runtime_state().set_query_expire_seconds(60);
         _query_ctx->query_runtime_state().extend_delivery_lifetime();
         _query_ctx->query_runtime_state().extend_query_lifetime();
-        _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                     GlobalEnv::GetInstance()->query_pool_mem_tracker());
+        _query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                     RuntimeEnv::GetInstance()->query_pool_mem_tracker());
 
         // FragmentContextManager::get() only returns an already-registered fragment (nullptr otherwise),
         // so the fragment context has to be created and registered explicitly before it can be used.
