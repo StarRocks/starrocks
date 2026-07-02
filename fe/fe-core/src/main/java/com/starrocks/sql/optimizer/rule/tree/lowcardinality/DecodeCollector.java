@@ -137,7 +137,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
                     FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH,
                     FunctionSet.COALESCE, FunctionSet.XX_HASH3_64, FunctionSet.XX_HASH3_128, FunctionSet.STR_TO_DATE,
-                    FunctionSet.MURMUR_HASH3_32, FunctionSet.IFNULL);
+                    FunctionSet.MURMUR_HASH3_32, FunctionSet.IFNULL, FunctionSet.STARTS_WITH, FunctionSet.ENDS_WITH);
 
     public static final Set<String> LOW_CARD_STRUCT_FUNCTIONS =
             ImmutableSet.of(FunctionSet.NAMED_STRUCT, FunctionSet.STRUCT, FunctionSet.ROW);
