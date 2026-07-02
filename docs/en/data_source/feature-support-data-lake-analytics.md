@@ -450,6 +450,10 @@ Elasticsearch Catalog is supported from v3.1.0 onwards.
 
 Paimon Catalog is supported from v3.1.0 onwards.
 
+## Lance Catalog
+
+Lance Catalog is supported as a Beta feature.
+
 ## MaxCompute Catalog
 
 MaxCompute Catalog is supported from v3.3.0 onwards.
@@ -457,4 +461,3 @@ MaxCompute Catalog is supported from v3.3.0 onwards.
 ## Kudu Catalog
 
 Kudu Catalog is supported from v3.3.0 onwards.
-

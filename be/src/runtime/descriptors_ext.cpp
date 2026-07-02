@@ -382,6 +382,10 @@ StatusOr<TPartitionMap*> HiveTableDescriptor::deserialize_partition_map(
     return tPartitionMap;
 }
 
+LanceTableDescriptor::LanceTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                           std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr) {}
+
 Status HiveTableDescriptor::add_partition_value(ObjectPool* pool, int64_t id, const THdfsPartition& thrift_partition) {
     // Produce a uniform mismatch error so that callers see the same wording and
     // fields regardless of which branch (fast-path shared-lock hit, or slow-path
@@ -556,6 +560,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         case TTableType::PAIMON_TABLE:
             desc = ALLOC_DESC(PaimonTableDescriptor, tdesc, pool, mr);
+            break;
+        case TTableType::LANCE_TABLE:
+            desc = ALLOC_DESC(LanceTableDescriptor, tdesc, pool, mr);
             break;
         case TTableType::JDBC_TABLE:
             desc = ALLOC_DESC(JDBCTableDescriptor, tdesc, mr);

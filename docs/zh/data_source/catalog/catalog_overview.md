@@ -31,6 +31,7 @@ StarRocks 从 v2.3 版本开始支持 catalog 功能。通过 catalog，您可�
   - [Benchmark catalog](../catalog/benchmark_catalog.md)：用于查询 TPC-H、TPC-DS 和 SSB schema 的实时生成数据集。
   - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。StarRocks 从 v3.1 开始支持 Elasticsearch catalog。
   - [Paimon catalog](../catalog/paimon_catalog.md)：用于查询 Paimon 中的数据。StarRocks 从 v3.1 开始支持 Paimon catalog。
+  - [Lance catalog](../catalog/lance_catalog.md)：用于查询 Lance 数据集中的数据。
   - [Unified catalog](../catalog/unified_catalog.md)：用于将来自 Hive、Iceberg、Hudi 和 Delta Lake 数据源的数据作为统一数据源进行查询。StarRocks 从 v3.2 开始支持 Unified catalog。
 
   当您查询外部数据时，StarRocks 与外部数据源的以下两个组件进行交互：

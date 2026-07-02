@@ -681,6 +681,14 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TLanceTable {
+    // Lance dataset URI.
+    1: optional string dataset_uri
+
+    // Storage options passed to the Lance SDK.
+    2: optional map<string, string> storage_options
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -748,6 +756,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // Lance Table schema
+  37: optional TLanceTable lanceTable
 }
 
 struct TDescriptorTable {
