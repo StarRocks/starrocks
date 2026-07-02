@@ -198,18 +198,6 @@ description: "Alphabetical d - h"
 - 单位：计数
 - 描述：BE和FE之间所有类型请求的总计数，包括CREATE TABLE、Publish Version和tablet clone。
 
-## `external_stats_analyze_total`
-
-- 单位：计数
-- 类型：计数器
-- 描述：通过后台 ANALYZE 结果提供的外部表统计信息请求总数。
-
-## `external_stats_table_metadata_total`
-
-- 单位：计数
-- 类型：计数器
-- 描述：通过表元数据估算（前台路径）提供的外部表统计信息请求总数。
-
 ## `fd_num_limit`
 
 - 单位：计数
