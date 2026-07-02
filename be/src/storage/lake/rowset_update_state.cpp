@@ -568,9 +568,15 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // after rename, add old segment to orphan files, for gc later.
         FileMetaPB file_meta;
         file_meta.set_name(rowset_meta.segments(segment_id));
-        if (rowset_meta.shared_segments_size() > 0) {
-            file_meta.set_shared(rowset_meta.shared_segments(segment_id));
-        }
+        // A bundled segment is physically shared with sibling tablets, but its shared-ness is
+        // encoded by bundle_file_offsets rather than the `shared` flag. The orphan FileMetaPB only
+        // carries `shared`, so mirror is_shared_segment() here (shared || has_bundle_file_offset).
+        // Otherwise vacuum's collect_garbage_files sees file.shared()==false, routes the orphan to
+        // the plain deleter, and deletes the physical bundle file even while a sibling tablet still
+        // references it in a live rowset -- wedging that sibling's publish.
+        bool bundled = rowset_meta.bundle_file_offsets_size() > 0;
+        bool shared = rowset_meta.shared_segments_size() > 0 && rowset_meta.shared_segments(segment_id);
+        file_meta.set_shared(shared || bundled);
         orphan_files->push_back(std::move(file_meta));
     }
     TRACE("end rewrite segment");
