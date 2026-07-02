@@ -1679,17 +1679,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    Must scan files for per-column bounds and Puffin NDV. buildFileScanTaskIterator
         //    handles both full-table and delta internally.  Cost: O(files) planFiles + per-column
         //    metadata collection.  Accuracy: best (NDV + min/max).
-        Statistics fgStats;
         if (enableColumnStats) {
-            fgStats = getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
+            return getFullTableStatisticsFromPlanFiles(icebergTable, columns, session, predicate, limit, version);
+        }
         //
         // B. Incremental delta (append-only, column-stats off):
         //    Requires datafile-level precision (added_snapshot_id) because MergeAppend/compaction
         //    rewrites manifests and merges old + new records, making manifest-level addedRows
         //    / existingRows unreliable for a snapshot range. Delta files are few by definition,
         //    so O(files) plan cost is acceptable; accuracy is required.
-        } else if (isIncrementalDelta) {
-            fgStats = getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+        if (isIncrementalDelta) {
+            return getCardinalityFromPlanFiles(icebergTable, columns, predicate, limit, version);
+        }
         //
         // C. Whole-table snapshot (default, column-stats off, non-delta):
         //    Manifest addedRows+existingRows is PROVABLY exact for total live files regardless of
@@ -1700,10 +1701,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    never populated, incremental scan range delivery stays unlocked.
         //    Rare fallback: if a matching manifest is missing row-count metadata (v1 manifest list
         //    or pre-0.10 Iceberg), we fall through to Path B for exact cardinality via planFiles.
-        } else {
-            fgStats = getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
-        }
-        return fgStats;
+        return getStatisticsFromManifest(icebergTable, columns, predicate, limit, version);
     }
 
     // -------------------------------------------------------------------------
