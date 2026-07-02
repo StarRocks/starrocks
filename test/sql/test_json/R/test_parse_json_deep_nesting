@@ -1,0 +1,24 @@
+-- name: test_parse_json_deep_nesting @sequential
+CREATE TABLE t_pj (id INT, j VARCHAR(1048576))
+  DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_pj VALUES
+  (1, concat(repeat('[', 1000), repeat(']', 1000))),
+  (2, concat(repeat('[', 45000), repeat(']', 45000)));
+-- result:
+-- !result
+[UC] SELECT parse_json(j) FROM t_pj WHERE id = 2;
+SELECT parse_json(j) IS NULL FROM t_pj WHERE id = 2;
+-- result:
+1
+-- !result
+SELECT parse_json(j) IS NOT NULL FROM t_pj WHERE id = 1;
+-- result:
+1
+-- !result
+SELECT count(*) FROM t_pj;
+-- result:
+2
+-- !result

@@ -14,6 +14,7 @@
 
 set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    ../testutil/json_parse_config_test_env.cpp
     column_base_test.cpp
     mysql_row_buffer_test.cpp
     german_string_test.cpp

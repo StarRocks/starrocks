@@ -21,6 +21,7 @@
 
 #include "base/status.h"
 #include "base/statusor.h"
+#include "common/config_types_fwd.h"
 #include "types/json_value_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
@@ -88,6 +89,38 @@ static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';
 }
 
+// Returns false if the JSON text nests arrays/objects deeper than `limit`. The velocypack parser
+// recurses one C-stack frame per nesting level with no bound, so a document nested deeper than the
+// stack allows overflows it and crashes the BE with an uncatchable SIGSEGV. A cheap single linear
+// pass -- ignoring brackets inside string literals -- bounds the depth before the recursive parse is
+// reached, so over-deep input is rejected with a clean error instead.
+static bool json_nesting_within_limit(const Slice& src, int limit) {
+    int depth = 0;
+    bool in_str = false;
+    bool esc = false;
+    for (size_t i = 0; i < src.size; ++i) {
+        char c = src.data[i];
+        if (in_str) {
+            if (esc) {
+                esc = false;
+            } else if (c == '\\') {
+                esc = true;
+            } else if (c == '"') {
+                in_str = false;
+            }
+        } else if (c == '"') {
+            in_str = true;
+        } else if (c == '[' || c == '{') {
+            if (++depth > limit) {
+                return false;
+            }
+        } else if (c == ']' || c == '}') {
+            --depth;
+        }
+    }
+    return true;
+}
+
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
     if (src.size > kJSONLengthLimit) {
         return Status::NotSupported("JSON string exceed maximum length 16MB");
@@ -100,7 +133,11 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
         auto end = src.get_data() + src.get_size();
         auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
         if (iter != end && is_json_start_char(*iter)) {
-            // Parse it as an object or array
+            // Parse it as an object or array. Bound the nesting depth first: velocypack recurses
+            // without a limit, so a deeply nested document would overflow the stack and crash the BE.
+            if (!json_nesting_within_limit(src, config::json_parse_max_nesting_depth)) {
+                return Status::JsonFormatError("JSON nesting depth exceeds limit");
+            }
             auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
             JsonValue res;
             res.assign(*b);

@@ -302,6 +302,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
 
+### json_parse_max_nesting_depth
+
+- 默认值：10000
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：解析 JSON 文本（例如 `parse_json` 或 `CAST AS JSON`）时允许的数组/对象最大嵌套深度。JSON 解析器每层嵌套递归一次，嵌套过深的文档会导致栈溢出并使 BE 崩溃；超过该深度的输入将被拒绝并返回错误，而不会崩溃。默认值在栈溢出阈值之下留有较大余量。
+- 引入版本：v4.1.0
+
 ### lake_tablet_ignore_invalid_delete_predicate
 
 - 默认值：false

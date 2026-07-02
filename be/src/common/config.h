@@ -1984,6 +1984,12 @@ CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
+// Max array/object nesting depth accepted when parsing JSON text (parse_json, CAST AS JSON). The
+// JSON parser recurses one stack frame per nesting level with no bound, so input nested deeper than
+// this would overflow the stack and crash the BE; it is rejected with a clean error instead. The
+// default leaves a large margin below the stack-overflow threshold.
+CONF_mInt32(json_parse_max_nesting_depth, "10000");
+
 // Min data processed when scaling connector sink writers, default value is the same as Trino
 CONF_mInt64(writer_scaling_min_size_mb, "128");
 
