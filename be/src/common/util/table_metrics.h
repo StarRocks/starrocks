@@ -51,7 +51,8 @@ using TableMetricsPtr = std::shared_ptr<TableMetrics>;
 // so the real deletion will be done asynchronously by daemon thread.
 class TableMetricsManager {
 public:
-    TableMetricsManager() : _last_cleanup_ts(MonotonicSeconds()) {}
+    explicit TableMetricsManager(std::string prefix = "starrocks_be")
+            : _metrics(std::move(prefix)), _last_cleanup_ts(MonotonicSeconds()) {}
 
     MetricRegistry* metric_registry() { return &_metrics; }
 
@@ -72,7 +73,7 @@ public:
 private:
     bool can_install_metrics();
 
-    MetricRegistry _metrics{"starrocks_be"};
+    MetricRegistry _metrics;
     using MutexType = starrocks::bthreads::BThreadSharedMutex;
     using MetricsMap =
             phmap::parallel_flat_hash_map<uint64_t, TableMetricsPtr, phmap::Hash<uint64_t>, phmap::EqualTo<uint64_t>,

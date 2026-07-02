@@ -159,7 +159,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     int start_step = 1;
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
-    static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
+    static auto* process_metrics_registry = new ProcessMetricsRegistry(as_cn ? "starrocks_cn" : "starrocks_be");
 
     auto daemon = std::make_unique<Daemon>();
     daemon->init(as_cn, paths, process_metrics_registry);

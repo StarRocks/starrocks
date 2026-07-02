@@ -156,14 +156,14 @@ TEST_F(MetricsActionTest, prometheus_output_with_table_metrics) {
     ProcessMetricsRegistry registry("test");
     enable_table_metrics(&registry);
     s_expect_response =
-            "# TYPE starrocks_be_table_load_bytes counter\n"
-            "starrocks_be_table_load_bytes{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_load_rows counter\n"
-            "starrocks_be_table_load_rows{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_scan_read_bytes counter\n"
-            "starrocks_be_table_scan_read_bytes{table_id=\"42\"} 0\n"
-            "# TYPE starrocks_be_table_scan_read_rows counter\n"
-            "starrocks_be_table_scan_read_rows{table_id=\"42\"} 11\n";
+            "# TYPE test_table_load_bytes counter\n"
+            "test_table_load_bytes{table_id=\"42\"} 0\n"
+            "# TYPE test_table_load_rows counter\n"
+            "test_table_load_rows{table_id=\"42\"} 0\n"
+            "# TYPE test_table_scan_read_bytes counter\n"
+            "test_table_scan_read_bytes{table_id=\"42\"} 0\n"
+            "# TYPE test_table_scan_read_rows counter\n"
+            "test_table_scan_read_rows{table_id=\"42\"} 11\n";
     HttpRequest request(_evhttp_req);
     MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);

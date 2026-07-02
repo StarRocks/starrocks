@@ -19,6 +19,6 @@
 namespace starrocks {
 
 ProcessMetricsRegistry::ProcessMetricsRegistry(std::string root_registry_name)
-        : _root_registry(std::move(root_registry_name)) {}
+        : _root_registry(root_registry_name), _table_metrics_mgr(std::move(root_registry_name)) {}
 
 } // namespace starrocks
