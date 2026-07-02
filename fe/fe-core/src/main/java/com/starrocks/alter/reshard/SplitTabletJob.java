@@ -49,7 +49,6 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -219,8 +218,7 @@ public class SplitTabletJob extends TabletReshardJob {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             boolean useAggregatePublish = olapTable.isFileBundling();
-            ComputeResource computeResource = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                    .getBackgroundComputeResource(tableId);
+            ComputeResource computeResource = resolveComputeResource(tableId);
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
                         .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
@@ -897,12 +895,22 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        // Pre-split splits a freshly created EMPTY tablet — there is no warm cache to preserve, so
+        // spread the new shards (drop the WITH_SHARD pin) so the following load is not funneled onto
+        // the source tablet's single worker. An online split (non-empty source) keeps the WITH_SHARD
+        // pin to reuse the source worker's warm cache. Emptiness is the same signal the pre-split
+        // eligibility gate uses (TabletPreSplitCoordinator: base-index rowCount == 0).
+        boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise the background warehouse (online split) — unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
-                shardProperties, WarehouseManager.DEFAULT_RESOURCE);
+                shardProperties, computeResource,
+                spreadNewShards);
     }
 
     private static void addShardPlacementsForTablet(ReshardingTablet reshardingTablet,

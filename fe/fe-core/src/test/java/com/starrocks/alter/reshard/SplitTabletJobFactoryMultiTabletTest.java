@@ -241,7 +241,8 @@ public class SplitTabletJobFactoryMultiTabletTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 createShardsCalled.set(true);
             }
         };
