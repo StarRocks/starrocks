@@ -123,25 +123,6 @@ public final class MetricRepo {
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
-<<<<<<< HEAD
-    private static final String EXTERNAL_STATS_TABLE_METADATA_METRIC_NAME = "external_stats_table_metadata_total";
-    private static final String EXTERNAL_STATS_ANALYZE_METRIC_NAME = "external_stats_analyze_total";
-=======
-    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME = "plan_advisor_guide_generated_total";
-    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC =
-            "total generated plan advisor guides";
-    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME = "plan_advisor_guide_applied_total";
-    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC =
-            "total applied plan advisor guides";
-    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME =
-            "plan_advisor_optimization_duration_ms_total";
-    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC =
-            "total execution time saved by plan advisor in milliseconds";
-
-    private static final String SPM_BASELINE_COUNT_METRIC_NAME = "spm_baseline_count";
-    private static final String SPM_REWRITE_TOTAL_METRIC_NAME = "spm_rewrite_total";
-    private static final String SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME = "spm_capture_candidate_total";
->>>>>>> 7bb66c2df2 (Revert "[Enhancement] Improve Iceberg external table statistics: persistent predicate columns, E2E auto-ANALYZE wiring, and stats-source metrics" (#75716))
 
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
@@ -150,12 +131,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
-<<<<<<< HEAD
-    public static LongCounterMetric COUNTER_EXTERNAL_STATS_TABLE_METADATA;
-    public static LongCounterMetric COUNTER_EXTERNAL_STATS_ANALYZE;
-=======
-    public static LongCounterMetric COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL;
->>>>>>> 7bb66c2df2 (Revert "[Enhancement] Improve Iceberg external table statistics: persistent predicate columns, E2E auto-ANALYZE wiring, and stats-source metrics" (#75716))
+
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -813,20 +789,6 @@ public final class MetricRepo {
         COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
                 MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
-<<<<<<< HEAD
-        COUNTER_EXTERNAL_STATS_TABLE_METADATA = new LongCounterMetric(EXTERNAL_STATS_TABLE_METADATA_METRIC_NAME,
-                MetricUnit.REQUESTS, "total external table stats served from table metadata estimation");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_STATS_TABLE_METADATA);
-        COUNTER_EXTERNAL_STATS_ANALYZE = new LongCounterMetric(EXTERNAL_STATS_ANALYZE_METRIC_NAME,
-                MetricUnit.REQUESTS, "total external table stats served from background ANALYZE");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EXTERNAL_STATS_ANALYZE);
-=======
-        COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL = new LongCounterMetric(
-                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME,
-                MetricUnit.MILLISECONDS,
-                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC);
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL);
->>>>>>> 7bb66c2df2 (Revert "[Enhancement] Improve Iceberg external table statistics: persistent predicate columns, E2E auto-ANALYZE wiring, and stats-source metrics" (#75716))
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
