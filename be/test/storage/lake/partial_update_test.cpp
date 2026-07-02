@@ -276,6 +276,108 @@ TEST_P(LakePartialUpdateTest, test_write) {
     }
 }
 
+// Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
+// flagged shared so vacuum's cross-tablet alive-check protects it.
+//
+// Under file bundling one physical .dat holds the segments of several sibling tablets, and a
+// segment's shared-ness is encoded by bundle_file_offset (not the `shared` flag). The orphan
+// FileMetaPB only carries `shared`, so the orphan-producing paths must set it to
+// is_shared_segment() = shared || has_bundle_file_offset(). Otherwise collect_garbage_files sees
+// file.shared()==false, routes the orphan to the plain deleter, and deletes the physical bundle
+// file even while a sibling tablet still references it in a live rowset -- wedging that publish.
+//
+// This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
+// records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
+// segment is flagged shared.
+TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
+    // Column mode orphans the partial-column update segment via a different path; this test targets
+    // the row-mode rewrite orphan path.
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // 1. Normal full write so the partial update has base rows to rewrite against.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 2. Row-mode partial update write (num_rows > 0 so rewrite_segment rewrites + orphans the raw
+    //    segment); do not publish yet.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // 3. Simulate file bundling: stamp bundle_file_offset onto the written segment(s). Offset 0 keeps
+    //    the standalone segment file readable; num_rows is left intact so the rewrite runs normally.
+    std::set<std::string> bundled_segments;
+    {
+        ASSIGN_OR_ABORT(auto original_txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto new_txn_log = std::make_shared<TxnLogPB>(*original_txn_log);
+        auto* rowset = new_txn_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segments_size(), 0);
+        rowset->clear_bundle_file_offsets();
+        for (int i = 0; i < rowset->segments_size(); i++) {
+            bundled_segments.insert(rowset->segments(i));
+            rowset->add_bundle_file_offsets(0);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(new_txn_log));
+    }
+
+    // 4. Publish. rewrite_segment rewrites the bundled segment and orphans the raw one.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // 5. The orphaned raw bundle segment must be flagged shared for vacuum's alive-check.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    int checked = 0;
+    for (const auto& file : metadata->orphan_files()) {
+        if (bundled_segments.count(file.name()) > 0) {
+            checked++;
+            EXPECT_TRUE(file.shared()) << "orphaned bundle segment must be flagged shared: " << file.name();
+        }
+    }
+    EXPECT_EQ(checked, static_cast<int>(bundled_segments.size()))
+            << "every bundled segment should have been orphaned by the rewrite";
+}
+
 // This test case covers the following logic:
 // - with_default branch in get_column_values() (default values and column_to_expr_value override)
 // - Column mode generates DCG then switches to row mode, triggering need_dcg_check and DCG loading paths
