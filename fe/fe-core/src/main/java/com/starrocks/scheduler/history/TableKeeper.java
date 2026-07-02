@@ -204,11 +204,7 @@ public class TableKeeper {
             keeperList.add(LoadsHistorySyncer.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
-<<<<<<< HEAD
-=======
             keeperList.add(ExternalPredicateColumnsStorage.createKeeper());
-            keeperList.add(RejectedRecordsTable.createKeeper());
->>>>>>> ac95b45ef1 ([Enhancement] Improve Iceberg external table statistics: persistent predicate columns, E2E auto-ANALYZE wiring, and stats-source metrics (#75653))
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }
