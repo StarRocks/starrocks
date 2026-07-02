@@ -187,7 +187,10 @@ bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
     _group_reader_param.stats->page_index_success_counter += visitor.counter.page_index_success_counter;
     if (!sparse_range.ok()) {
         LOG(WARNING) << "filter row group failed: " << sparse_range.status().message();
-    } else if (sparse_range.value().has_value()) {
+    } else if (sparse_range.value().has_value() && _group_reader_param.row_id_ranges == nullptr) {
+        // Iceberg v2 GLM positional fetch (row_id_ranges set): the native row-id range installed in
+        // GroupReader::init is the exact set of rows to fetch and is authoritative. Skip predicate /
+        // page-index pruning here so it cannot assign over (clobber) or drop that selection.
         if (sparse_range.value()->span_size() == 0) {
             // no rows selected, the whole row group can be filtered
             filtered = true;
@@ -293,6 +296,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.datacache_options = &_datacache_options;
     _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
     _group_reader_param.scan_range = fd_scanner_ctx.scan_range;
+    _group_reader_param.row_id_ranges = fd_scanner_ctx.row_id_ranges;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -307,6 +311,16 @@ Status FileReader::_init_group_readers() {
 
         if (_file_metadata->t_metadata().row_groups[i].num_rows == 0) {
             continue;
+        }
+
+        // Iceberg v2 GLM lookup: skip row groups that hold none of the requested file-local positions.
+        if (_group_reader_param.row_id_ranges != nullptr) {
+            SparseRange<uint64_t> rg_range(row_group_first_row,
+                                           row_group_first_row + _file_metadata->t_metadata().row_groups[i].num_rows);
+            rg_range &= *_group_reader_param.row_id_ranges;
+            if (rg_range.empty()) {
+                continue;
+            }
         }
 
         auto row_group_reader =

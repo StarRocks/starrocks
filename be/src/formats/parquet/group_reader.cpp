@@ -94,6 +94,11 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_create_column_readers());
     _process_columns_and_conjunct_ctxs();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
+    // Iceberg v2 GLM lookup: restrict to the requested file-local positions so select_offset_index
+    // (triggered in prepare() once _range is a strict subset) reads only the pages that hold them.
+    if (_param.row_id_ranges != nullptr) {
+        _range &= *_param.row_id_ranges;
+    }
     return Status::OK();
 }
 

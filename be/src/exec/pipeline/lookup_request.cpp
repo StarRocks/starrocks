@@ -133,7 +133,7 @@ StatusOr<ChunkPtr> LookUpTask::_sort_chunk(RuntimeState* state, const ChunkPtr& 
 
 // Derives row-id ranges for the incoming batch and records duplicates so
 // downstream data can be replicated to match request cardinality.
-StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
+StatusOr<ChunkPtr> LookUpTask::_calculate_row_id_range(
         RuntimeState* state, const ChunkPtr& request_chunk,
         phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
         Buffer<uint32_t>* replicated_offsets) {
@@ -609,6 +609,154 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
     std::vector<SlotDescriptor*> slots;
 
+    for (const auto& slot : tuple_desc->slots()) {
+        if (slot->id() == _ctx->lookup_ref_slot_ids[0] || slot->id() == _ctx->lookup_ref_slot_ids[1]) {
+            continue;
+        }
+        slots.emplace_back(slot);
+    }
+    {
+        SCOPED_TIMER(_ctx->parent->_fill_response_timer);
+        size_t start_offset = 0;
+        for (const auto& request_ctx : _ctx->request_ctxs) {
+            ASSIGN_OR_RETURN(auto num_rows, request_ctx->fill_response(result_chunk, slots, start_offset));
+            start_offset += num_rows;
+        }
+    }
+
+    return Status::OK();
+}
+
+// Reads the fetched columns for the calculated row-id ranges. Unlike the v3 task, it hands the
+// file-local row positions to the scan natively (set_row_id_ranges) so the reader skips
+// non-matching row groups and pages, instead of building and evaluating a row-id predicate.
+StatusOr<ChunkPtr> IcebergV2LookUpTask::_get_data_from_storage(
+        RuntimeState* state,
+        const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges) {
+    SCOPED_TIMER(_ctx->parent->_get_data_from_storage_timer);
+    ChunkPtr result_chunk;
+    // Iterate scan ranges in ascending scan_range_id order so the accumulated rows match the
+    // (scan_range_id, row_id)-sorted request chunk. The hash-map's arbitrary iteration order would
+    // misalign the SORT_ORDINAL position column appended in process() and the replicated_offsets,
+    // attaching fetched payloads to the wrong request rows.
+    std::vector<int32_t> ordered_scan_range_ids;
+    ordered_scan_range_ids.reserve(row_id_ranges.size());
+    for (const auto& [scan_range_id, _] : row_id_ranges) {
+        ordered_scan_range_ids.push_back(scan_range_id);
+    }
+    std::sort(ordered_scan_range_ids.begin(), ordered_scan_range_ids.end());
+    for (int32_t scan_range_id : ordered_scan_range_ids) {
+        const auto& row_id_range = row_id_ranges.at(scan_range_id);
+        // The reader works in unsigned file-local positions; these are non-negative row ids.
+        // `native_range` must outlive the data source below (it is read during open/get_next).
+        SparseRange<uint64_t> native_range;
+        for (size_t i = 0; i < row_id_range->size(); i++) {
+            const Range<int64_t>& r = (*row_id_range)[i];
+            native_range.add(Range<uint64_t>(static_cast<uint64_t>(r.begin()), static_cast<uint64_t>(r.end())));
+        }
+
+        auto glm_ctx = down_cast<IcebergGlobalLateMaterilizationContext*>(
+                state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
+        if (glm_ctx == nullptr) {
+            return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
+                                         std::to_string(_ctx->scan_id));
+        }
+        auto hdfs_scan_node = glm_ctx->hdfs_scan_node;
+        hdfs_scan_node.tuple_id = _ctx->request_tuple_id;
+
+        auto provider = std::make_unique<connector::HiveDataSourceProvider>(nullptr, _ctx->scan_id, hdfs_scan_node);
+        const auto& scan_range = glm_ctx->get_hdfs_scan_range(scan_range_id);
+        auto data_source = std::make_shared<connector::HiveDataSource>(provider.get(), scan_range);
+        data_source->set_runtime_profile(_ctx->profile);
+        data_source->set_row_id_ranges(&native_range);
+
+        RETURN_IF_ERROR(data_source->open(state));
+        do {
+            ChunkPtr chunk = std::make_shared<Chunk>();
+            auto status = data_source->get_next(state, &chunk);
+            if (status.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(status);
+            if (chunk->num_rows() == 0) {
+                // An empty chunk is not end-of-stream for a restricted (sparse) read: a page/range
+                // can yield no surviving rows while later ranges still have data. Keep reading until
+                // EOF, otherwise we stop short and return fewer rows than requested positions.
+                continue;
+            }
+
+            // Accumulate data from multiple chunks, excluding row_id columns
+            if (result_chunk == nullptr) {
+                result_chunk = std::make_shared<Chunk>();
+                for (const auto& [slot_id, idx] : chunk->get_slot_id_to_index_map()) {
+                    if (slot_id == _ctx->lookup_ref_slot_ids[0] || slot_id == _ctx->lookup_ref_slot_ids[1]) {
+                        continue;
+                    }
+                    auto src_col = chunk->get_column_by_index(idx);
+                    result_chunk->append_column(std::move(src_col), slot_id);
+                }
+            } else {
+                for (const auto& [slot_id, idx] : chunk->get_slot_id_to_index_map()) {
+                    if (slot_id == _ctx->lookup_ref_slot_ids[0] || slot_id == _ctx->lookup_ref_slot_ids[1]) {
+                        continue;
+                    }
+                    auto src_col = chunk->get_column_by_index(idx);
+                    auto dst_col = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
+                    dst_col->append(*src_col, 0, chunk->num_rows());
+                }
+            }
+        } while (true);
+        data_source->close(state);
+    }
+    return result_chunk;
+}
+
+// Executes the Iceberg v2 lookup: build row-id ranges, fetch data natively by position, reorder to
+// the original request layout, and feed responses back to each waiting context.
+Status IcebergV2LookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
+    if (_ctx->request_ctxs.empty()) {
+        return Status::OK();
+    }
+
+    phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>> row_id_ranges;
+    Buffer<uint32_t> replicated_offsets;
+    ASSIGN_OR_RETURN(auto sorted_chunk,
+                     _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
+    ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, row_id_ranges));
+
+    if (result_chunk == nullptr) {
+        // A non-empty request must fetch at least one row; returning OK here would leave
+        // response_columns empty and crash FetchProcessor::_build_output_chunk. Fail soft instead.
+        return Status::InternalError("Iceberg v2 lookup fetched no rows for a non-empty request");
+    }
+
+    {
+        auto unordered_position_column = sorted_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
+        if (!replicated_offsets.empty()) {
+            // Replicate data for duplicate row_ids
+            for (const auto& [slot_id, _] : result_chunk->get_slot_id_to_index_map()) {
+                auto old_column = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
+                ASSIGN_OR_RETURN(auto new_column, old_column->replicate(replicated_offsets));
+                result_chunk->append_or_update_column(std::move(new_column), slot_id);
+            }
+            result_chunk->check_or_die();
+        }
+        // The fetched payload must have exactly one row per requested position; otherwise the
+        // position-column pairing below is misaligned. check_or_die() is a no-op in release builds,
+        // so guard explicitly to fail soft instead of overrunning the permutation in _sort_chunk.
+        if (result_chunk->num_rows() != unordered_position_column->size()) {
+            return Status::InternalError(
+                    fmt::format("Iceberg v2 lookup fetched {} rows but {} positions were requested",
+                                result_chunk->num_rows(), unordered_position_column->size()));
+        }
+        result_chunk->append_column(unordered_position_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
+        result_chunk->check_or_die();
+        ASSIGN_OR_RETURN(auto sorted_result_chunk, _sort_chunk(state, result_chunk, {unordered_position_column}));
+        result_chunk = sorted_result_chunk;
+    }
+
+    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
+    std::vector<SlotDescriptor*> slots;
     for (const auto& slot : tuple_desc->slots()) {
         if (slot->id() == _ctx->lookup_ref_slot_ids[0] || slot->id() == _ctx->lookup_ref_slot_ids[1]) {
             continue;

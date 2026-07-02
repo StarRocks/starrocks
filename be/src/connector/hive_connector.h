@@ -80,6 +80,10 @@ public:
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
     int32_t extended_column_index(SlotId id) const;
 
+    // Iceberg v2 GLM lookup: restrict the scan to these file-local row positions so the reader
+    // skips non-matching row groups/pages natively. The pointee must outlive the scan.
+    void set_row_id_ranges(const SparseRange<uint64_t>* ranges) { _row_id_ranges = ranges; }
+
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
@@ -94,6 +98,8 @@ public:
 private:
     const HiveDataSourceProvider* _provider;
     THdfsScanRange _scan_range;
+    // Iceberg v2 GLM lookup row-position restriction (not owned; set via set_row_id_ranges).
+    const SparseRange<uint64_t>* _row_id_ranges = nullptr;
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);

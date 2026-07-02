@@ -51,6 +51,13 @@ public:
         return hdfs_scan_ranges[scan_range_id];
     }
 
+    // True when scan ranges carry Iceberg row lineage (v3). For v1/v2 there is no lineage, so the
+    // fetch key is a plain (scan_range_id, file-local position) and the native-range lookup applies.
+    bool has_row_lineage() const {
+        std::shared_lock lock(_mutex);
+        return !hdfs_scan_ranges.empty() && hdfs_scan_ranges.front().__isset.first_row_id;
+    }
+
     mutable std::shared_mutex _mutex;
     std::vector<THdfsScanRange> hdfs_scan_ranges;
     THdfsScanNode hdfs_scan_node;

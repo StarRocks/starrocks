@@ -98,6 +98,15 @@ public:
 
 protected:
     StatusOr<ChunkPtr> _sort_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& order_by_columns);
+
+    // Sorts the request positions by (scan_range_id, row_id) and folds them into one
+    // SparseRange of row positions per scan range, recording duplicate-row replication
+    // offsets so the fetched data can be expanded back to the request cardinality.
+    StatusOr<ChunkPtr> _calculate_row_id_range(
+            RuntimeState* state, const ChunkPtr& request_chunk,
+            phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
+            Buffer<uint32_t>* replicated_offsets);
+
     LookUpTaskContextPtr _ctx;
 };
 
@@ -113,16 +122,28 @@ public:
     Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
 
 private:
-    StatusOr<ChunkPtr> _calculate_row_id_range(
-            RuntimeState* state, const ChunkPtr& request_chunk,
-            phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
-            Buffer<uint32_t>* replicated_offsets);
-
     StatusOr<ChunkPtr> _get_data_from_storage(
             RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
             const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
 
     TExpr create_row_id_filter_expr(SlotId slot_id, const SparseRange<int64_t>& row_id_range);
+};
+
+// Handles lookup batches against Iceberg v2 tables, where the fetch key is a
+// (scan_range_id, file-local row position). Unlike the v3 task, it does not encode
+// positions as a predicate: it pushes the row-id SparseRange straight into the scan
+// so the reader skips non-matching row groups and pages natively.
+class IcebergV2LookUpTask final : public LookUpTask {
+public:
+    IcebergV2LookUpTask(LookUpTaskContextPtr ctx) : LookUpTask(std::move(ctx)) {}
+    ~IcebergV2LookUpTask() override = default;
+
+    Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
+
+private:
+    StatusOr<ChunkPtr> _get_data_from_storage(
+            RuntimeState* state,
+            const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
 };
 
 class NativeLookUpTask final : public LookUpTask {
