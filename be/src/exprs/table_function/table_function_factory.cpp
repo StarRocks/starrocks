@@ -18,6 +18,7 @@
 
 #include "column/column.h"
 #include "column/runtime_type_traits.h"
+#include "common/storage_define.h"
 #include "exprs/table_function/generate_series.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/list_rowsets.h"
@@ -26,7 +27,6 @@
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "exprs/table_function/unnest_bitmap.h"
-#include "storage/primitive/storage_define.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {

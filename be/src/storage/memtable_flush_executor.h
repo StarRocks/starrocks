@@ -40,9 +40,9 @@
 
 #include "base/concurrency/spinlock.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "common/thread/threadpool.h"
 #include "storage/memtable.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

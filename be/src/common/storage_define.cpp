@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/storage_define.h"
+#include "common/storage_define.h"
 
 #include "common/config_scan_io_fwd.h"
 namespace starrocks {

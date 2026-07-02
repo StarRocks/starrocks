@@ -141,12 +141,9 @@ set(EXEC_FILES
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/agg/aggregate_traits_test.cpp
-        ./exprs/ai_functions_test.cpp
         ./exprs/arithmetic_operation_test.cpp
         ./exprs/decimal_binary_function_test.cpp
-        ./exprs/array_functions_test.cpp
         ./exprs/binary_function_test.cpp
-        ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
         ./exprs/cast_expr_test.cpp
@@ -161,8 +158,6 @@ set(EXEC_FILES
         ./exprs/condition_expr_test.cpp
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
-        ./exprs/geography_functions_test.cpp
-        ./exprs/ngram_search_test.cpp
         ./exprs/if_expr_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
@@ -170,24 +165,6 @@ set(EXEC_FILES
         ./exprs/like_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
-        ./exprs/percentile_functions_test.cpp
-        ./exprs/string_fn_concat_test.cpp
-        ./exprs/string_fn_field.cpp
-        ./exprs/string_fn_format_bytes_test.cpp
-        ./exprs/string_fn_locate_test.cpp
-        ./exprs/string_fn_pad_test.cpp
-        ./exprs/string_fn_regexp_replace_test.cpp
-        ./exprs/string_fn_repeat_test.cpp
-        ./exprs/string_fn_reverse_test.cpp
-        ./exprs/string_fn_sm3_test.cpp
-        ./exprs/string_fn_blake3_test.cpp
-        ./exprs/string_fn_space_test.cpp
-        ./exprs/string_fn_substr_test.cpp
-        ./exprs/string_fn_test.cpp
-        ./exprs/string_fn_trim_test.cpp
-        ./exprs/string_fn_money_format_decimal_test.cpp
-        ./exprs/string_fn_url_extract_parameter_test.cpp
-        ./exprs/string_fn_ngram_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
@@ -195,7 +172,6 @@ set(EXEC_FILES
         ./exprs/min_max_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
-        ./exprs/http_request_functions_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp

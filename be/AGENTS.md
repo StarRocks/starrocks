@@ -236,12 +236,12 @@ Data-plane workflow orchestration above concrete Storage and Exec for load, dele
 - Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
 
 ### ExprCore (`exprcore`)
-Core expression infrastructure and builtin aggregate registry that depend only on Runtime and lower layers.
+Core expression infrastructure and builtin aggregate registry that depend only on Platform, Geo, Runtime, and lower layers.
 - Targets: `ExprCore`
-- Allowed internal include prefixes: `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `exprs/`, `platform/`, `geo/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Platform`, `Geo`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `expr_core_test`
-- Remediation: Keep ExprCore limited to core expression infrastructure and builtin aggregate registry code; keep Java aggregate extensions and agg-state combinator integration in Exprs.
+- Remediation: Keep ExprCore limited to core expression infrastructure, builtin scalar helpers, builtin aggregate registry code, and dependencies no higher than Platform, Geo, Runtime, and lower layers; keep Java aggregate extensions and agg-state combinator integration in Exprs.
 
 ### ExecPrimitive (`execprimitive`)
 Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.

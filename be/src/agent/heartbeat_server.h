@@ -39,10 +39,10 @@
 
 #include "agent/status.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/Status_types.h"
 #include "gutil/macros.h"
-#include "storage/primitive/storage_define.h"
 #include "thrift/transport/TTransportUtils.h"
 
 namespace starrocks {
