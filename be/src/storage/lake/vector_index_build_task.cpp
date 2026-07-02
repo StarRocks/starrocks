@@ -169,9 +169,8 @@ Status VectorIndexBuildTask::build_one_segment(size_t work_index) {
     const auto& work = _work_items[work_index];
     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id << " building segment=" << work.segment_file_info.path
               << " version=" << work.rowset_version << " index_ids_count=" << work.index_ids.size();
-    RETURN_IF_ERROR(
-            build_segment(_tablet_id, work.vector_index_tablet_id, work.segment_file_info, work.index_ids,
-                          _tablet_schema));
+    RETURN_IF_ERROR(build_segment(_tablet_id, work.vector_index_tablet_id, work.segment_file_info, work.index_ids,
+                                  _tablet_schema));
     LOG(INFO) << "VectorIndexBuildTask: tablet=" << _tablet_id << " built segment=" << work.segment_file_info.path
               << " successfully";
     return Status::OK();

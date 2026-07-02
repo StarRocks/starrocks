@@ -289,8 +289,7 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
     const int64_t src_vi_tablet_id =
             src_seg_meta.has_vector_index_tablet_id() ? src_seg_meta.vector_index_tablet_id() : params.tablet->id();
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
-        auto src_vi =
-                params.tablet->segment_location(gen_vector_index_filename(src_path, src_vi_tablet_id, index_id));
+        auto src_vi = params.tablet->segment_location(gen_vector_index_filename(src_path, src_vi_tablet_id, index_id));
         auto dest_vi =
                 params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
