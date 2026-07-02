@@ -69,8 +69,14 @@ struct PreparedSegmentReadState {
     }
 
     void disable_pruned_scan_range_cache() {
+        // Only flip the atomic flag; do NOT reset pruned_scan_range here. This runs from a
+        // late-runtime-filter reopen on one split driver while sibling drivers of the same segment
+        // may be copying/dereferencing the shared_ptr (they gate solely on the atomic flags). Resetting
+        // it concurrently would race on the shared_ptr control block and free the SparseRange under them.
+        // The buffer stays alive until this state is destroyed; the flag alone stops further use. Reusing
+        // a not-yet-disabled range in the tiny race window is safe: it is a correct superset (the runtime
+        // filter is still applied per-row during the scan), only losing a little page-skipping.
         pruned_scan_range_cache_disabled.store(true, std::memory_order_release);
-        clear_pruned_scan_range();
     }
 
     // Rowid equivalents of RowsetReadOptions::ranges and Rowset::tablet_range.
@@ -99,8 +105,11 @@ struct PreparedSegmentReadState {
     }
 
     void disable_rowid_bounds_cache() {
+        // Only flip the atomic flag; do NOT clear the vectors here. Sibling split readers may be
+        // holding the addresses of seek_ranges_rowid_bounds / tablet_range_rowid_bounds concurrently
+        // (see disable_pruned_scan_range_cache). Clearing them would invalidate those pointers under the
+        // readers. The vectors stay alive until this state is destroyed; the flag alone stops further use.
         rowid_bounds_cache_disabled.store(true, std::memory_order_release);
-        clear_rowid_bounds_cache();
     }
 
     void disable_runtime_filter_dependent_cache() {
