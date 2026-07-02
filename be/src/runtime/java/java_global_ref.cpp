@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/status.h"
 #include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
 
 namespace starrocks {
 

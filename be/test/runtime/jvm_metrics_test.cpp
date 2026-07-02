@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/jvm_metrics.h"
+#include "runtime/java/jvm_metrics.h"
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
-#include "udf/java/java_udf.h"
+#include "base/utility/defer_op.h"
+#include "common/system/cpu_info.h"
+#include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
+#include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
 
@@ -26,6 +32,16 @@ class JVMMetricsTest : public testing::Test {
 public:
     JVMMetricsTest() = default;
     ~JVMMetricsTest() override = default;
+
+protected:
+    void SetUp() override {
+        if (std::getenv("JAVA_HOME") == nullptr) {
+            GTEST_SKIP() << "JAVA_HOME is not set";
+        }
+        if (getJNIEnv() == nullptr) {
+            GTEST_SKIP() << "JVM is unavailable";
+        }
+    }
 };
 
 TEST_F(JVMMetricsTest, normal) {
@@ -77,6 +93,29 @@ TEST_F(JVMMetricsTest, normal) {
     ASSERT_GE(jvm_metrics.jvm_heap_committed_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_used_bytes.value(), 0);
     ASSERT_GE(jvm_metrics.jvm_non_heap_committed_bytes.value(), 0);
+}
+
+TEST_F(JVMMetricsTest, JavaEnvInstallsJvmMetrics) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "JVM metrics initialization through JavaEnv is disabled on macOS";
+#else
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    MetricRegistry registry("java_env_test");
+    JavaEnv java_env;
+    DeferOp cleanup([&java_env]() {
+        java_env.shutdown();
+        java_env.destroy();
+    });
+
+    ASSERT_OK(java_env.init(&registry, true));
+
+    auto type_label = [](const std::string& type) { return MetricLabels().add("type", type); };
+    ASSERT_NE(nullptr, registry.get_metric("jvm_heap_size_bytes", type_label("used")));
+    ASSERT_NE(nullptr, registry.get_metric("jvm_non_heap_size_bytes", type_label("used")));
+    registry.trigger_hook();
+#endif
 }
 
 } // namespace starrocks

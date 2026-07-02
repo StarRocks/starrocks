@@ -296,7 +296,6 @@ set(EXEC_FILES
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
         ./udf/java/java_udf_test.cpp
-        ./udf/java/jvm_metrics_test.cpp
         ./util/network_util_test.cpp
         )
 

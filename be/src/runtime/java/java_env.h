@@ -14,27 +14,15 @@
 
 #pragma once
 
-#include <jni.h>
-
 #include <functional>
 #include <memory>
 
 #include "base/status.h"
 
-// implemented by libhdfs
-// hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
-// Why do we need to use this function?
-// 1. a thread can not attach to more than one virtual machine
-// 2. libhdfs depends on this function and does some initialization,
-// if the JVM has already created it, it won't create it anymore.
-// If we skip this function call will cause libhdfs to miss some initialization operations
-extern "C" JNIEnv* getJNIEnv(void);
-
 namespace starrocks {
 
+class MetricRegistry;
 class PriorityThreadPool;
-
-Status detect_java_runtime();
 
 class JavaEnv {
 public:
@@ -46,7 +34,7 @@ public:
     JavaEnv(const JavaEnv&) = delete;
     const JavaEnv& operator=(const JavaEnv&) = delete;
 
-    Status init();
+    Status init(MetricRegistry* metrics = nullptr, bool enable_jvm_metrics = false);
     void shutdown();
     void destroy();
 
@@ -54,7 +42,10 @@ public:
     Status call_function_in_pthread(const std::function<Status()>& func);
 
 private:
+    Status _init_jvm_metrics(MetricRegistry* metrics, bool enable_jvm_metrics);
+
     std::unique_ptr<PriorityThreadPool> _jvm_call_pool;
+    MetricRegistry* _jvm_metrics_registry = nullptr;
 };
 
 } // namespace starrocks

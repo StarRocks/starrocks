@@ -20,7 +20,7 @@
 #include "fs/fs_options_helper.h"
 #include "fs/hdfs/hdfs_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 
 namespace starrocks {
 

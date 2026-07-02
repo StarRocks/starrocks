@@ -26,6 +26,8 @@
 #include "base/utility/defer_op.h"
 #include "common/system/cpu_info.h"
 #include "runtime/java/java_global_ref.h"
+#include "runtime/java/java_runtime.h"
+#include "runtime/java/jni_env.h"
 #include "runtime/java/jvm_class.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_env_test_util.h"

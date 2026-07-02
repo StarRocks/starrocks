@@ -21,7 +21,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 
 set(UDF_FILES
   java/utils.cpp
-  java/jvm_metrics.cpp
   java/java_udf.cpp
   java/java_udf_context.cpp
   java/java_udf_reflection.cpp

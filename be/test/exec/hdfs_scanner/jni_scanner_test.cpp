@@ -23,7 +23,7 @@
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/java/java_env.h"
+#include "runtime/java/jni_env.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
 
