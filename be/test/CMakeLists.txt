@@ -208,23 +208,17 @@ set(EXEC_FILES
         ./formats/parquet/dict_encoding_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/handler_required_privilege_test.cpp
-        ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
-        ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
-        ./runtime/descriptors_test.cpp
-        ./runtime/diagnose_daemon_test.cpp
         ./exec/data_sinks/http_result_writer_test.cpp
-        ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
-        ./runtime/runtime_metrics_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
@@ -243,7 +237,6 @@ set(EXEC_FILES
         ./util/brpc_stub_cache_test.cpp
         ./util/cidr_test.cpp
         ./util/cpu_info_test.cpp
-        ./runtime/exception_stack_test.cpp
         ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp

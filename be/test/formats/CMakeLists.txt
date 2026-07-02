@@ -58,6 +58,7 @@ set(FORMAT_AVRO_TEST_FILES
 )
 
 set(FORMAT_ORC_TEST_FILES
+    orc/compressed_input_stream_lzo_test.cpp
     orc/orc_column_reader_test.cpp
     orc/orc_emit_rejected_rows_test.cpp
     orc/orc_lazy_load_test.cpp

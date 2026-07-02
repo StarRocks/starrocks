@@ -40,6 +40,10 @@ private:
 };
 
 TEST_F(ExceptionStackTest, print_exception_stack) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "__cxa_throw wrapping is disabled on macOS test binaries";
+#endif
+
     std::string exception = "runtime_error";
     std::string res;
     try {
