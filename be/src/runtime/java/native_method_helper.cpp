@@ -12,12 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_native_method.h"
+#include "runtime/java/native_method_helper.h"
 
+#include <cstdlib>
+#include <exception>
 #include <limits>
+#include <mutex>
 #include <new>
+#include <string>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
+#include "base/logging.h"
 #include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -27,12 +34,29 @@
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
+#include "fmt/core.h"
 #include "gutil/casts.h"
+#include "runtime/java/jvm_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 
 namespace starrocks {
+namespace {
+
+constexpr const char* kNativeMethodHelperClassName = "com/starrocks/utils/NativeMethodHelper";
+
+class NativeMethodRegistrationError final : public std::exception {
+public:
+    explicit NativeMethodRegistrationError(Status status) : _status(std::move(status)), _message(_status.to_string()) {}
+
+    const char* what() const noexcept override { return _message.c_str(); }
+    const Status& status() const { return _status; }
+
+private:
+    Status _status;
+    std::string _message;
+};
 
 class GetColumnAddrVistor : public ColumnVisitorAdapter<GetColumnAddrVistor> {
 public:
@@ -197,7 +221,7 @@ private:
     LogicalType* _result;
 };
 
-jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
+jlong resize_string_data(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     BinaryColumn* binary_column = nullptr;
     if (column->is_nullable()) {
@@ -218,12 +242,12 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
     return reinterpret_cast<jlong>(binary_column->get_bytes().data());
 }
 
-void JavaNativeMethods::resize(JNIEnv* env, jclass clazz, jlong columnAddr, jint size) {
+void resize_column(JNIEnv* env, jclass clazz, jlong columnAddr, jint size) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     column->resize(size);
 }
 
-jint JavaNativeMethods::getColumnLogicalType(JNIEnv* env, jclass clazz, jlong columnAddr) {
+jint get_column_logical_type(JNIEnv* env, jclass clazz, jlong columnAddr) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     LogicalType type;
     GetColumnLogicalTypeVistor vistor(&type);
@@ -234,7 +258,7 @@ jint JavaNativeMethods::getColumnLogicalType(JNIEnv* env, jclass clazz, jlong co
     return type;
 }
 
-jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
+jlongArray get_addrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     if (!column->is_nullable()) {
         env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
@@ -242,9 +266,9 @@ jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAd
         return nullptr;
     }
     // return fixed array size
-    int array_size = 4;
+    constexpr int array_size = 4;
     auto jarr = env->NewLongArray(array_size);
-    jlong array[array_size];
+    jlong array[array_size] = {};
     GetColumnAddrVistor vistor(array);
     if (!column->accept(&vistor).ok()) {
         env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
@@ -255,18 +279,18 @@ jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAd
     return jarr;
 }
 
-jlong JavaNativeMethods::memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
-    long address = reinterpret_cast<long>(malloc(bytes));
+jlong memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
+    long address = reinterpret_cast<long>(std::malloc(bytes));
     VLOG_ROW << "Allocated " << bytes << " bytes of memory address " << address;
     return address;
 }
 
-void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
+void memory_free(JNIEnv* env, jclass clazz, jlong address) {
     VLOG_ROW << "Freed memory address " << address << ".";
-    free(reinterpret_cast<void*>(address)); // NOLINT
+    std::free(reinterpret_cast<void*>(address)); // NOLINT
 }
 
-jlongArray JavaNativeMethods::getStructFieldAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
+jlongArray get_struct_field_addrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
     auto* column = reinterpret_cast<Column*>(columnAddr); // NOLINT
     if (column == nullptr || !column->is_nullable()) {
         env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
@@ -290,6 +314,73 @@ jlongArray JavaNativeMethods::getStructFieldAddrs(JNIEnv* env, jclass clazz, jlo
         env->SetLongArrayRegion(jarr, 0, n, addrs.data());
     }
     return jarr;
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wwrite-strings"
+JNINativeMethod kNativeMethods[] = {
+        {"resizeStringData", "(JI)J", (void*)&resize_string_data},
+        {"resize", "(JI)V", (void*)&resize_column},
+        {"getColumnLogicalType", "(J)I", (void*)&get_column_logical_type},
+        {"getAddrs", "(J)[J", (void*)&get_addrs},
+        {"getStructFieldAddrs", "(J)[J", (void*)&get_struct_field_addrs},
+        {"memoryTrackerMalloc", "(J)J", (void*)&memory_malloc},
+        {"memoryTrackerFree", "(J)V", (void*)&memory_free},
+};
+#pragma GCC diagnostic pop
+
+Status jni_exception_status(JNIEnv* env, const std::string& action) {
+    jthrowable thr = env->ExceptionOccurred();
+    if (thr == nullptr) {
+        return Status::InternalError(action);
+    }
+    env->ExceptionClear();
+    std::string message = JVMHelper::getInstance().dumpExceptionString(thr);
+    env->DeleteLocalRef(thr);
+    return Status::InternalError(fmt::format("{}: {}", action, message));
+}
+
+Status register_native_methods(JNIEnv* env) {
+    jclass native_method_class = env->FindClass(kNativeMethodHelperClassName);
+    if (native_method_class == nullptr) {
+        return jni_exception_status(env, "Failed to find NativeMethodHelper class");
+    }
+    LOCAL_REF_GUARD_ENV(env, native_method_class);
+
+    int res = env->RegisterNatives(native_method_class, kNativeMethods,
+                                   sizeof(kNativeMethods) / sizeof(kNativeMethods[0]));
+    if (res != 0) {
+        if (env->ExceptionCheck()) {
+            return jni_exception_status(env, "Failed to register NativeMethodHelper natives");
+        }
+        return Status::InternalError(
+                fmt::format("Failed to register NativeMethodHelper natives, RegisterNatives returned {}", res));
+    }
+    return Status::OK();
+}
+
+} // namespace
+
+Status NativeMethodHelper::ensure_registered(JNIEnv* env) {
+    if (env == nullptr) {
+        return Status::InternalError("JNIEnv is null when registering NativeMethodHelper");
+    }
+
+    static std::once_flag register_once;
+
+    try {
+        // RegisterNatives must run exactly once after success. If registration fails, throw from
+        // the call_once body so the once_flag remains unset and a later call can retry.
+        std::call_once(register_once, [&]() {
+            Status status = register_native_methods(env);
+            if (!status.ok()) {
+                throw NativeMethodRegistrationError(std::move(status));
+            }
+        });
+    } catch (const NativeMethodRegistrationError& e) {
+        return e.status();
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

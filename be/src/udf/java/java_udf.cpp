@@ -24,10 +24,10 @@
 #include "exprs/function_context.h"
 #include "fmt/core.h"
 #include "jni.h"
+#include "runtime/java/native_method_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "udf/java/java_native_method.h"
 #include "udf/java/java_udf_context.h"
 #include "udf/java/java_udf_reflection.h"
 #include "udf/java/type_traits.h"
@@ -45,7 +45,6 @@
 namespace starrocks {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
-constexpr const char* CLASS_NATIVE_METHOD_HELPER_NAME = "com.starrocks.utils.NativeMethodHelper";
 
 constexpr const char* BATCH_UPDATE_SIGNATURE =
         "(Ljava/lang/Object;Ljava/lang/reflect/Method;Lcom/starrocks/udf/FunctionStates;[I[Ljava/lang/Object;)V";
@@ -86,19 +85,6 @@ constexpr const char* WRITE_RESULT_SIGNATURE = "(ILjava/lang/Object;JLcom/starro
     target = env->GetMethodID(clazz, name, signature); \
     DCHECK(target != nullptr);
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wwrite-strings"
-static JNINativeMethod java_native_methods[] = {
-        {"resizeStringData", "(JI)J", (void*)&JavaNativeMethods::resizeStringData},
-        {"resize", "(JI)V", (void*)&JavaNativeMethods::resize},
-        {"getColumnLogicalType", "(J)I", (void*)&JavaNativeMethods::getColumnLogicalType},
-        {"getAddrs", "(J)[J", (void*)&JavaNativeMethods::getAddrs},
-        {"getStructFieldAddrs", "(J)[J", (void*)&JavaNativeMethods::getStructFieldAddrs},
-        {"memoryTrackerMalloc", "(J)J", (void*)&JavaNativeMethods::memory_malloc},
-        {"memoryTrackerFree", "(J)V", (void*)&JavaNativeMethods::memory_free},
-};
-#pragma GCC diagnostic pop
-
 StatusOr<jobject> MapMeta::newLocalInstance(jobject keys, jobject values) const {
     JNIEnv* env = JVMHelper::getInstance().getEnv();
     auto res = env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
@@ -115,18 +101,14 @@ JVMFunctionHelper& JVMFunctionHelper::getInstance() {
 void JVMFunctionHelper::_init() {
     auto* env = JVMHelper::getInstance().getEnv();
 
-    // init JNI native methods
-    std::string native_method_name = JVMHelper::to_jni_class_name(CLASS_NATIVE_METHOD_HELPER_NAME);
-    jclass native_method_class = JNI_FIND_CLASS(native_method_name.c_str());
-    DCHECK(native_method_class != nullptr);
-    int res = env->RegisterNatives(native_method_class, java_native_methods,
-                                   sizeof(java_native_methods) / sizeof(java_native_methods[0]));
+    // Register the shared Java native methods before UDFHelper invokes them.
+    Status native_method_status = NativeMethodHelper::ensure_registered(env);
+    CHECK(native_method_status.ok()) << native_method_status.to_string();
 
     // init UDF Helper
     std::string name = JVMHelper::to_jni_class_name(CLASS_UDF_HELPER_NAME);
     _udf_helper_class = JNI_FIND_CLASS(name.c_str());
     DCHECK(_udf_helper_class != nullptr);
-    DCHECK_EQ(res, 0);
 
     INIT_HELPER_METHOD(_create_boxed_array, "createBoxedArray", "(IIZ[Ljava/nio/ByteBuffer;)[Ljava/lang/Object;");
     INIT_HELPER_METHOD(_create_boxed_decimal_array, "createBoxedDecimalArray",
