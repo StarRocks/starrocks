@@ -334,6 +334,23 @@ class TestStarRocksCanonicalization:
             "select x from t, lateral unnest(arr) u(v)",
         )
 
+    def test_lateral_only_stripped_before_table_function(self):
+        """LATERAL is only dropped when it precedes a table-function call.
+
+        Regression: `lateral` used as a column identifier (backticks are already
+        stripped by this pass) must not be removed, or `select `lateral` as x` would
+        collapse to `select x`, hiding a real definition change.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select `lateral` as x from t")
+        b = TableAttributeNormalizer.normalize_sql("select x from t")
+        assert a != b
+        assert a == "select lateral x from t"
+
+    def test_lateral_column_vs_keyword_distinct(self):
+        """A column named `lateral` and a genuine LATERAL table function stay distinct."""
+        col = TableAttributeNormalizer.normalize_sql("select `lateral` from t")
+        assert "lateral" in col
+
     def test_case_when_predicate_parenthesized(self):
         """StarRocks wraps the CASE WHEN predicate in redundant parentheses."""
         self._assert_equivalent(

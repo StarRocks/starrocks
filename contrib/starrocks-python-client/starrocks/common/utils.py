@@ -159,10 +159,14 @@ class TableAttributeNormalizer:
         r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\b(left|right|full)\s+outer\s+join\b)""",
         re.IGNORECASE,
     )
-    # StarRocks may add or drop LATERAL before unnest / table functions.
+    # StarRocks may add or drop LATERAL before a table function (e.g. "lateral unnest(...)").
+    # The trailing lookahead requires an immediately following function call (identifier + "(")
+    # so the rewrite only fires where StarRocks actually emits LATERAL. Without it, a column
+    # named `lateral` (backticks are already stripped by this point) in e.g. "select lateral
+    # as x" would be dropped, collapsing it to "select x" and hiding a real definition change.
     # group(1) is None when the alternation matched a string literal (skip it).
     _LATERAL_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\blateral\s+)""", re.IGNORECASE
+        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\blateral\s+(?=\w+\s*\())""", re.IGNORECASE
     )
     # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int))
     # is removed entirely. StarRocks is inconsistent about emitting it (e.g. on 3.5.x it
