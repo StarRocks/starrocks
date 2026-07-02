@@ -22,6 +22,7 @@
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/list_rowsets.h"
 #include "exprs/table_function/multi_unnest.h"
+#include "exprs/table_function/parquet_read_rows.h"
 #include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
@@ -132,6 +133,10 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},
                          {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BOOLEAN, TYPE_VARCHAR},
                          std::make_shared<ListRowsets>());
+
+    // ----=====---- parquet_read_rows ----====----
+    add_function_mapping("parquet_read_rows", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_BIGINT, TYPE_JSON},
+                         std::make_shared<ParquetReadRows>());
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;
