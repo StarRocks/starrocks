@@ -476,8 +476,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
-        rowset_meta.num_rows() == 0) {
+    //
+    // NOTE: do NOT short-circuit on `rowset_meta.num_rows() == 0`. Under file bundling one physical
+    // .dat holds the segments of several sibling tablets, so a tablet whose slice received no rows
+    // still gets a (0-row) segment that points into the shared bundle file. If we skip the rewrite
+    // here, that raw bundle segment is left as a live rowset segment. It is not valid standalone
+    // data (its "shared-ness" is encoded by bundle_file_offset) and, worse, it pins the shared
+    // bundle file: once a sibling tablet with rows rewrites its own slice and orphans the bundle
+    // file, vacuum deletes the physical file while this empty rowset still references it, wedging
+    // publish with "segment does not exist". Letting the rewrite run turns the 0-row slice into a
+    // private (non-bundled) segment and orphans the raw bundle segment, so nothing keeps a dangling
+    // reference to a shared file. Truly segment-less rowsets are still short-circuited by the
+    // rewrite_segments_meta_size() == 0 check above.
+    if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
