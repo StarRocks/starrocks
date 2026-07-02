@@ -463,6 +463,8 @@ jobs:
       #      removed the live label (doc 004 case)
       - name: add automerge label (rescue after stale label clear)
         if: >
+          needs.be-ut-refactor-compile.result != 'failure' &&
+          needs.be-ut-refactor-compile.result != 'cancelled' &&
           (
             needs.build.result == 'success' ||
             (
@@ -490,6 +492,8 @@ jobs:
 
       - name: auto-approve (rescue after stale label clear)
         if: >
+          needs.be-ut-refactor-compile.result != 'failure' &&
+          needs.be-ut-refactor-compile.result != 'cancelled' &&
           (
             needs.build.result == 'success' ||
             (
@@ -517,6 +521,8 @@ jobs:
 
       - name: enable automerge (rescue after stale label clear)
         if: >
+          needs.be-ut-refactor-compile.result != 'failure' &&
+          needs.be-ut-refactor-compile.result != 'cancelled' &&
           (
             needs.build.result == 'success' ||
             (
@@ -555,7 +561,7 @@ jobs:
           python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL} ${build_res}
 
   auto-merge:
-    needs: [pr-label, code-checker, build]
+    needs: [pr-label, code-checker, build, be-ut-refactor-compile]
     name: Auto Merge
     runs-on: [ self-hosted, sync-normal ]
     if: >
@@ -565,6 +571,8 @@ jobs:
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
       !contains(needs.pr-label.outputs.labels, 'pending') &&
       !contains(needs.pr-label.outputs.labels, 'ERROR') &&
+      needs.be-ut-refactor-compile.result != 'failure' &&
+      needs.be-ut-refactor-compile.result != 'cancelled' &&
       (
         needs.build.result == 'success' ||
         (
