@@ -87,6 +87,21 @@ public class ShowCreateRoutineLoadDDLTest {
     }
 
     @Test
+    public void testAdjacentBackslashQuoteRoundTrip() {
+        // A backslash immediately followed by a double quote is the trickiest interaction:
+        // the pair must escape to \\\" and decode back to \" rather than collapsing.
+        String jsonPaths = "[\"$.a\\\"b\"]";
+        KafkaRoutineLoadJob job = jobWithProperties(Map.of(
+                CreateRoutineLoadStmt.FORMAT, "json",
+                CreateRoutineLoadStmt.JSONPATHS, jsonPaths));
+
+        String propertiesSql = job.jobPropertiesToSql();
+        Assertions.assertTrue(propertiesSql.contains("\"jsonpaths\"=\"[\\\"$.a\\\\\\\"b\\\"]\""), propertiesSql);
+
+        Assertions.assertEquals(jsonPaths, roundTrip(job).get(CreateRoutineLoadStmt.JSONPATHS));
+    }
+
+    @Test
     public void testJsonRootAndMergeConditionRoundTrip() {
         String jsonRoot = "$.\"da\\ta\"";
         String mergeCondition = "src.op = \"delete\"";
