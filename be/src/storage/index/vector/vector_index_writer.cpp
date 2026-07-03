@@ -50,38 +50,10 @@ void VectorIndexWriter::create(const std::shared_ptr<TabletIndex>& tablet_index,
 }
 
 Status VectorIndexWriter::init() {
-<<<<<<< HEAD
-    // Step 1: enforce minimum threshold by algorithm type.
-    // IVFPQ requires training points >= nlist. If the input is below this,
-    // faiss will throw, so we floor the threshold at nlist to skip the build
-    // rather than crash. Other algorithms (HNSW etc.) keep the default
-    // threshold from config so callers that want "build immediately" must
-    // explicitly request it via index_build_threshold below.
-    auto index_type_it = _tablet_index->common_properties().find("index_type");
-    if (index_type_it != _tablet_index->common_properties().end()) {
-        std::string index_type = index_type_it->second;
-        std::transform(index_type.begin(), index_type.end(), index_type.begin(), ::tolower);
-        if (index_type == "ivfpq") {
-            auto nlist_it = _tablet_index->index_properties().find("nlist");
-            if (nlist_it != _tablet_index->index_properties().end()) {
-                auto nlist = static_cast<uint32_t>(std::atoi(nlist_it->second.c_str()));
-                _start_vector_index_build_threshold = std::max(_start_vector_index_build_threshold, nlist);
-            }
-        }
-    }
-
-    // Step 2: user-specified property has final control over threshold.
-    auto find_result = _tablet_index->common_properties().find("index_build_threshold");
-    if (find_result != _tablet_index->common_properties().end()) {
-        _start_vector_index_build_threshold = std::atoi(find_result->second.c_str());
-    }
-
-=======
     // Threshold resolution is the single source of truth shared with the async build
     // path (lake::get_vector_index_build_threshold); see resolve_vector_index_build_threshold
     // for the precedence rules (config default -> user override -> IVFPQ nlist floor).
     _start_vector_index_build_threshold = resolve_vector_index_build_threshold(*_tablet_index);
->>>>>>> 280c2d57caa... [Enhancement] Build vector index for shared-data bundle segments (#75542)
     return Status::OK();
 }
 
