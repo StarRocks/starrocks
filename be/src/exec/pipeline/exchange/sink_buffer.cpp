@@ -16,8 +16,13 @@
 
 #include <bthread/bthread.h>
 
+<<<<<<< HEAD
 #include <chrono>
 #include <memory>
+=======
+#include <cerrno>
+#include <cstddef>
+>>>>>>> cf631f0d09 ([Enhancement] Cancel in-flight exchange sink RPCs on fragment cancellation (#75613))
 #include <mutex>
 #include <string_view>
 
@@ -214,10 +219,29 @@ int64_t SinkBuffer::_network_time() {
 
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
+<<<<<<< HEAD
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
     }
     if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+=======
+    _is_finishing = true;
+    // Cancel all in-flight RPCs. Without this, a cancelled fragment keeps waiting until these RPCs drain.
+    // bthread_id_list_reset() may call on_error() callback of valid call ids, which may lead to deadlock if the thread
+    // is still holding the lock. So the lock-and-swap idiom is used. See bRPC comments (id.h) for more details.
+    for (auto& [_, sink_context] : _sink_ctxs) {
+        bthread_id_list_t tmplist;
+        bthread_id_list_init(&tmplist, 0, 0);
+        {
+            std::lock_guard cids_guard(sink_context->in_flight_rpc_cids_mutex);
+            bthread_id_list_swap(&tmplist, &sink_context->in_flight_rpc_cids);
+        }
+        bthread_id_list_reset(&tmplist, ECANCELED);
+        bthread_id_list_destroy(&tmplist);
+    }
+
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
+>>>>>>> cf631f0d09 ([Enhancement] Cancel in-flight exchange sink RPCs on fragment cancellation (#75613))
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
@@ -422,6 +446,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         SET_IGNORE_OVERCROWDED(closure->cntl, query);
 
+<<<<<<< HEAD
         Status st;
         if (bthread_self()) {
             st = _send_rpc(closure, request);
@@ -433,6 +458,19 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             st = _send_rpc(closure, request);
         }
         return st;
+=======
+        // The call id must be obtained before launching the RPC, as per bRPC doc.
+        const auto call_id = closure->cntl.call_id();
+        {
+            std::lock_guard cids_guard(context.in_flight_rpc_cids_mutex);
+            // Do not cancel eos request, because eos request is the last request to be sent, and it must be sent to the destination.
+            if (!request.params->eos()) {
+                bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
+            }
+        }
+
+        return _send_rpc(closure, request);
+>>>>>>> cf631f0d09 ([Enhancement] Cancel in-flight exchange sink RPCs on fragment cancellation (#75613))
     }
     return Status::OK();
 }
