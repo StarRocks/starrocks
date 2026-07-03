@@ -382,8 +382,8 @@ public:
     }
 
     ScheduleToken acquire_schedule_token() {
-        bool val = false;
-        return {this, _schedule_token.compare_exchange_strong(val, true)};
+        bool val = true;
+        return {this, _schedule_token.compare_exchange_strong(val, false)};
     }
 
     DECLARE_RACE_DETECTOR(schedule)
