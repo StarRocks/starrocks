@@ -2423,6 +2423,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
 }
 
 TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLookupPath) {
+    // Legacy (non-lineage) GLM lookup: _row_id is the file-local row position. The read range is
+    // file-local, so a row group starting at row 7 must emit 7..10 for its first four rows.
     auto* param = _create_group_reader_param();
     auto* reserved_slots = new std::vector<SlotDescriptor*>();
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
@@ -2446,16 +2448,54 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
     param->scan_range = _pool.add(scan_range);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
-    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7, 7);
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
     ASSERT_OK(group_reader->init());
 
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
-    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(0, 4), nullptr, column));
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
     ASSERT_EQ(4, column->size());
     ASSERT_EQ(7, column->get(0).get_int64());
     ASSERT_EQ(8, column->get(1).get_int64());
     ASSERT_EQ(9, column->get(2).get_int64());
     ASSERT_EQ(10, column->get(3).get_int64());
+}
+
+TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
+    // Row lineage (v3): _row_id = scan_range->first_row_id + file-local position. For a row group
+    // that does not start the file (first row 7 here) the base must stay the file-level
+    // first_row_id; a row-group-level base would double-count the row-group start and emit
+    // 1014..1017 instead of 1007..1010.
+    auto* param = _create_group_reader_param();
+    auto* reserved_slots = new std::vector<SlotDescriptor*>();
+    auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
+                                                     TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    reserved_slots->push_back(row_id_slot);
+    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->timezone = "UTC";
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+
+    auto* file = _create_file();
+    param->file = file;
+    param->file_metadata = file_meta;
+    param->chunk_size = config::vector_chunk_size;
+
+    auto* scan_range = new THdfsScanRange();
+    scan_range->__set_first_row_id(1000);
+    param->scan_range = _pool.add(scan_range);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto group_reader = std::make_unique<GroupReader>(*param, 0, skip_rows_ctx, 7);
+    ASSERT_OK(group_reader->init());
+
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
+    ASSERT_OK(group_reader->_column_readers[100]->read_range(Range<uint64_t>(7, 11), nullptr, column));
+    ASSERT_EQ(4, column->size());
+    ASSERT_EQ(1007, column->get(0).get_int64());
+    ASSERT_EQ(1008, column->get(1).get_int64());
+    ASSERT_EQ(1009, column->get(2).get_int64());
+    ASSERT_EQ(1010, column->get(3).get_int64());
 }
 
 TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation) {

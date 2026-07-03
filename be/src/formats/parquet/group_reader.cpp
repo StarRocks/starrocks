@@ -61,17 +61,6 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRows
     _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
 }
 
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
-                         int64_t row_group_first_row, int64_t row_group_first_row_id)
-        : _row_group_first_row(row_group_first_row),
-          _row_group_first_row_id(row_group_first_row_id),
-          _skip_rows_ctx(std::move(skip_rows_ctx)),
-          _param(param) {
-    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
-    _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
-    _variant = std::make_unique<VariantProjectionHandler>(this, _param, _row_group_metadata);
-}
-
 GroupReader::~GroupReader() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
@@ -527,9 +516,16 @@ Status GroupReader::_create_column_readers() {
                                  _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
                 std::optional<int64_t> first_row_id = std::nullopt;
                 if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
-                    first_row_id = std::optional<int64_t>(_row_group_first_row_id);
+                    // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
+                    // index (it already includes the row-group start), so the base must be the
+                    // file-level first_row_id. A row-group-level base double-counts the row-group
+                    // start and shifts the emitted _row_id for every row group after the first,
+                    // diverging from the physical _row_id column of compacted files. The file-level
+                    // base also keeps the reader's zone-map filters (base + rg_first_row) correct.
+                    first_row_id = std::optional<int64_t>(_param.scan_range->first_row_id);
                 } else if (use_legacy_lookup_row_id) {
-                    first_row_id = std::optional<int64_t>(_row_group_first_row_id);
+                    // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
+                    first_row_id = std::optional<int64_t>(0);
                 }
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
