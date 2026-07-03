@@ -398,6 +398,36 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         }
     }
 
+    // Defer an over-large compaction so its ~O(GB) synchronous publish (compact_mapper read +
+    // PK-index apply) does not stall the hot tablet's serialized ingest version chain. The
+    // compaction is kept full-size (no shrinking -> no churn); it is simply not submitted this
+    // round -> pick returns empty -> segment score 0 -> FE de-prioritizes it. Bounded by the
+    // read-pressure emergency valve (same signal as skip_sparse_low_score_level [D]) so rowsets
+    // cannot pile up unbounded: once the tablet's read pressure crosses emergency_score the
+    // large compaction proceeds. Cheap SST/index compaction is unaffected (independent path).
+    if (config::lake_pk_compaction_defer_large_result_bytes > 0 &&
+        static_cast<int64_t>(cur_compaction_result_bytes) > config::lake_pk_compaction_defer_large_result_bytes) {
+        double tablet_read_pressure = 0.0;
+        for (const auto& rc : rowset_vec) {
+            tablet_read_pressure += rc.score;
+        }
+        const bool emergency = config::lake_pk_compaction_emergency_score > 0.0 &&
+                               tablet_read_pressure >= config::lake_pk_compaction_emergency_score;
+        if (!emergency) {
+            VLOG(2) << strings::Substitute(
+                    "lake PK compaction deferred (large result): tablet=$0 result_bytes=$1 > defer=$2 "
+                    "read_pressure=$3 (em=$4)",
+                    tablet_metadata->id(), cur_compaction_result_bytes,
+                    config::lake_pk_compaction_defer_large_result_bytes, tablet_read_pressure,
+                    config::lake_pk_compaction_emergency_score);
+            rowset_indexes.clear();
+            if (has_dels != nullptr) {
+                has_dels->clear();
+            }
+            return rowset_indexes;
+        }
+    }
+
     return rowset_indexes;
 }
 

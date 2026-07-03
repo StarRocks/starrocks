@@ -1523,6 +1523,22 @@ CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
 // level's compact_level which can be stale after pick_max_level merges levels.
 // Set to 0 to disable the override (no size cap).
 CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
+// Defer (do NOT submit) a lake primary-key compaction whose projected output exceeds this
+// many bytes, to keep its synchronous publish off the hot tablet's serialized ingest
+// version chain. A lake PK compaction publishes in strict per-tablet version order (see
+// lake::publish_version / acquire_publish_tablet in storage/lake/transactions.cpp): a
+// multi-GB compaction's publish (compact_mapper read + PK-index apply, ~14s for a 2GB
+// output rowset) blocks every queued realtime-ingest publish behind it on the same tablet,
+// producing a large ingest P99 tail under skew workloads where one contiguous hot key-head
+// funnels onto a single tablet. Unlike lake_pk_compaction_max_result_bytes (which SHRINKS
+// each compaction and causes churn/pileup), this DEFERS an over-large compaction WITHOUT
+// shrinking it, so compactions stay full-size but rare on hot tablets. The deferral is
+// bounded by lake_pk_compaction_emergency_score: once the tablet's read pressure crosses
+// that valve the large compaction proceeds anyway, so rowsets can't accumulate unbounded.
+// Cheap SST/index compaction is unaffected (it runs independently of the picked rowsets).
+// Default 0 = disabled (legacy behavior; non-hot tablets whose compactions never reach this
+// size are unaffected even when set).
+CONF_mInt64(lake_pk_compaction_defer_large_result_bytes, "0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
