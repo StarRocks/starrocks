@@ -370,8 +370,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：8
 - タイプ：Int
 - 単位：-
-- 変更可能：No
-- 説明：共有データクラスターで同時に AutoVacuum を実行できるパーティションの最大数。AutoVacuum はコンパクション後のガベージコレクションです。
+- 変更可能：Yes
+- 説明：共有データクラスターで同時に AutoVacuum を実行できるパーティションの最大数。AutoVacuum はコンパクション後のガベージコレクションです。`0` または負の値を設定すると、AutoVacuum は完全に無効になります。
 - 導入時期：v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`

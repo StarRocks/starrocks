@@ -370,8 +370,8 @@ This topic introduces the following types of FE configurations:
 - Default: 8
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions.
+- Is mutable: Yes
+- Description: The maximum number of partitions that can undergo AutoVacuum simultaneously in a shared-data cluster. AutoVacuum is the Garbage Collection after Compactions. Setting it to `0` or a negative value disables AutoVacuum entirely.
 - Introduced in: v3.1.0
 
 ### `lake_autovacuum_partition_naptime_seconds`

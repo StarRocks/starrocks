@@ -27,7 +27,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
@@ -47,21 +48,23 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
-public class AutovacuumDaemon extends FrontendDaemon {
+public class AutovacuumDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AutovacuumDaemon.class);
 
     private static final long MILLISECONDS_PER_SECOND = 1000;
@@ -69,23 +72,165 @@ public class AutovacuumDaemon extends FrontendDaemon {
     private static final long MINUTES_PER_HOUR = 60;
     private static final long MILLISECONDS_PER_HOUR = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
+    // Queue capacity large enough to absorb the brief window after lake_autovacuum_parallel_partitions is
+    // raised but before the ConfigRefreshDaemon listener has resized the pool. The outer gate in
+    // scheduleVacuumRound() already caps the number of in-flight partitions, so the queue is normally empty.
+    private static final int EXECUTOR_QUEUE_SIZE = 4096;
+
+    // Hard cap on effective parallelism. lake_autovacuum_parallel_partitions is mutable, so clamp it to
+    // this: it keeps in-flight submissions far below EXECUTOR_QUEUE_SIZE, so the pool's BlockedPolicy queue
+    // never fills and never blocks the daemon thread, however aggressively the config is tuned.
+    private static final int MAX_PARALLEL_PARTITIONS = 256;
+
+    // When a collection finds nothing to vacuum, wait this long before scanning again so an idle cluster
+    // is not walked every round. Rounds with a non-empty queue are unaffected.
+    private static final long EMPTY_COLLECT_BACKOFF_MS = 30 * 1000L;
+
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
-    private final BlockingThreadPoolExecutorService executorService = BlockingThreadPoolExecutorService.newInstance(
-            Config.lake_autovacuum_parallel_partitions, 0, 1, TimeUnit.HOURS, "autovacuum");
+
+    // LRU-ordered candidates from the last collection, drained across subsequent rounds. A round collects
+    // again only once this queue is empty, so most rounds skip the expensive full scan (see
+    // refillPendingCandidatesIfEmpty).
+    private final Deque<VacuumCandidate> pendingCandidates = new ArrayDeque<>();
+    // Set after a collection that found no candidates; suppresses re-scanning until this time.
+    private long nextCollectTimeMs = 0;
+
+    // Lazily created on the leader (see getExecutorService()). It is resized in place when
+    // lake_autovacuum_parallel_partitions changes, never rebuilt.
+    private ThreadPoolExecutor executorService = null;
+    private boolean executorListenerRegistered = false;
 
     public AutovacuumDaemon() {
-        super("auto-vacuum", 2000);
+        super("auto-vacuum", 2000 /* 2s */);
+    }
+
+    // A fixed-size pool resized in place via the ConfigRefreshDaemon listener (mirrors
+    // PublishVersionDaemon#getTaskExecutor). The pool's BlockedPolicy would block the caller for up to 60s
+    // once its queue fills; that never happens here because the outer gate in scheduleVacuumRound() plus the
+    // MAX_PARALLEL_PARTITIONS clamp keep in-flight work far below EXECUTOR_QUEUE_SIZE. Created lazily so that
+    // unit tests exercising only vacuumPartitionImpl() never register a listener on the global ConfigRefreshDaemon.
+    private ThreadPoolExecutor getExecutorService() {
+        if (executorService == null) {
+            int numThreads = Math.min(Math.max(1, Config.lake_autovacuum_parallel_partitions), MAX_PARALLEL_PARTITIONS);
+            executorService = ThreadPoolManager.newDaemonFixedThreadPool(
+                    numThreads, EXECUTOR_QUEUE_SIZE, "auto_vacuum", true);
+            executorService.allowCoreThreadTimeOut(true);
+            // Register the config-change listener only once per daemon instance.
+            if (!executorListenerRegistered) {
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
+                        .registerListener(this::adjustExecutorService);
+                executorListenerRegistered = true;
+            }
+        }
+        return executorService;
+    }
+
+    private void adjustExecutorService() {
+        if (executorService == null) {
+            return;
+        }
+        int newNumThreads = Math.min(Config.lake_autovacuum_parallel_partitions, MAX_PARALLEL_PARTITIONS);
+        if (newNumThreads <= 0) {
+            return;
+        }
+        ThreadPoolManager.setFixedThreadPoolSize(executorService, newNumThreads);
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void onStopped() {
+        // Leader demotion: release leader-session-only state so a follower does not retain it.
+        // executorListenerRegistered stays set so the ConfigRefreshDaemon listener is registered
+        // exactly once per instance across demote/re-elect cycles (mirrors PublishVersionDaemon).
+        ThreadPoolExecutor executor = executorService;
+        if (executor != null) {
+            executor.shutdownNow();
+            executorService = null;
+        }
+        vacuumingPartitions.clear();
+        pendingCandidates.clear();
+        nextCollectTimeMs = 0;
+    }
+
+    @Override
+    protected void runAfterLeaseValid() {
         if (FeConstants.runningUnitTest) {
             return;
         }
+        scheduleVacuumRound();
+    }
 
-        // acquire background resource
-        acquireBackgroundComputeResource();
+    private void scheduleVacuumRound() {
+        // Concurrency is bounded here (the "outer gate"), not by the thread pool capacity. This makes
+        // lake_autovacuum_parallel_partitions take effect at runtime and, crucially, keeps a slow vacuum
+        // from ever blocking this daemon thread. The value is clamped to MAX_PARALLEL_PARTITIONS so
+        // in-flight work stays well below the pool queue and its BlockedPolicy never blocks the daemon. A
+        // non-positive value disables AutoVacuum entirely (see the config docs); adjustExecutorService
+        // likewise leaves the pool untouched for such values.
+        int parallelPartitions = Math.min(Config.lake_autovacuum_parallel_partitions, MAX_PARALLEL_PARTITIONS);
+        if (parallelPartitions <= 0 || vacuumingPartitions.size() >= parallelPartitions) {
+            return;
+        }
+        refillPendingCandidatesIfEmpty();
+        submitPendingCandidates(parallelPartitions);
+    }
 
+    // A full candidate collection walks every db/table under a table lock, which is too expensive to run
+    // every couple of seconds just to fill a few free slots. So collect only once the previous batch has
+    // been fully drained, cache the result ordered oldest-first (LRU), and let subsequent rounds drain from
+    // that cache. Re-collecting and re-sorting each time the queue empties keeps fairness: a partition that
+    // keeps losing the race only gets older and rises toward the front on the next collection, so nothing
+    // starves.
+    private void refillPendingCandidatesIfEmpty() {
+        if (!pendingCandidates.isEmpty()) {
+            return;
+        }
+        // Back off scanning when the previous collection came up empty, so an idle cluster is not walked
+        // on every round.
+        if (System.currentTimeMillis() < nextCollectTimeMs) {
+            return;
+        }
+        List<VacuumCandidate> candidates = collectVacuumCandidates();
+        if (candidates.isEmpty()) {
+            nextCollectTimeMs = System.currentTimeMillis() + EMPTY_COLLECT_BACKOFF_MS;
+            return;
+        }
+        candidates.sort(Comparator.comparingLong(candidate -> candidate.lastVacuumTime));
+        pendingCandidates.addAll(candidates);
+    }
+
+    private void submitPendingCandidates(int parallelPartitions) {
+        while (vacuumingPartitions.size() < parallelPartitions) {
+            VacuumCandidate candidate = pendingCandidates.poll();
+            if (candidate == null) {
+                break;
+            }
+            PhysicalPartition partition = candidate.partition;
+            long partitionId = partition.getId();
+            // The cached candidate may be stale by now (already picked up in an earlier round, or vacuumed
+            // since the last full collection), so re-check before submitting.
+            if (vacuumingPartitions.contains(partitionId) || !shouldVacuum(partition)) {
+                continue;
+            }
+            if (vacuumingPartitions.add(partitionId)) {
+                try {
+                    getExecutorService().execute(
+                            () -> vacuumPartition(candidate.db, candidate.table, partition));
+                } catch (RuntimeException e) {
+                    // Submission failed (e.g. RejectedExecutionException when the pool queue is saturated).
+                    // The task never runs, so vacuumPartition's finally never removes the id; roll it back
+                    // here, otherwise this partition would stay "in flight" forever until an FE restart.
+                    // Stop the round too: a saturated pool would otherwise block on BlockedPolicy for every
+                    // remaining candidate.
+                    vacuumingPartitions.remove(partitionId);
+                    LOG.warn("Failed to submit vacuum task for partition {}, stopping this round", partitionId, e);
+                    break;
+                }
+            }
+        }
+    }
+
+    private List<VacuumCandidate> collectVacuumCandidates() {
+        List<VacuumCandidate> candidates = new ArrayList<>();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -101,9 +246,10 @@ public class AutovacuumDaemon extends FrontendDaemon {
             }
 
             for (Table table : tables) {
-                vacuumTable(db, table);
+                collectTableCandidates(db, (OlapTable) table, candidates);
             }
         }
+        return candidates;
     }
 
     public boolean shouldVacuum(PhysicalPartition partition) {
@@ -143,24 +289,35 @@ public class AutovacuumDaemon extends FrontendDaemon {
         return true;
     }
 
-    private void vacuumTable(Database db, Table baseTable) {
-        OlapTable table = (OlapTable) baseTable;
-        List<PhysicalPartition> partitions;
-
+    private void collectTableCandidates(Database db, OlapTable table, List<VacuumCandidate> candidates) {
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            partitions = table.getPhysicalPartitions().stream()
-                    .filter(p -> shouldVacuum(p))
-                    .collect(Collectors.toList());
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
-        }
-
-        for (PhysicalPartition partition : partitions) {
-            if (vacuumingPartitions.add(partition.getId())) {
-                executorService.execute(() -> vacuumPartition(db, table, partition));
+            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+                // Skip partitions already being vacuumed so only fresh candidates take part in this round's
+                // fairness ordering (mirrors CompactionScheduler excluding runningCompactions).
+                if (!vacuumingPartitions.contains(partition.getId()) && shouldVacuum(partition)) {
+                    candidates.add(new VacuumCandidate(db, table, partition));
+                }
             }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    // A snapshot of a partition that needs vacuuming, captured under the table lock. lastVacuumTime is
+    // sampled here so this round's ordering stays stable even if the partition is updated concurrently.
+    private static class VacuumCandidate {
+        private final Database db;
+        private final OlapTable table;
+        private final PhysicalPartition partition;
+        private final long lastVacuumTime;
+
+        VacuumCandidate(Database db, OlapTable table, PhysicalPartition partition) {
+            this.db = db;
+            this.table = table;
+            this.partition = partition;
+            this.lastVacuumTime = partition.getLastVacuumTime();
         }
     }
 
