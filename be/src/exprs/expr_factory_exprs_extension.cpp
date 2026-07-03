@@ -13,16 +13,12 @@
 // limitations under the License.
 
 #include "common/object_pool.h"
-#include "exprs/array_map_expr.h"
-#include "exprs/array_sort_lambda_expr.h"
 #include "exprs/arrow_function_call.h"
 #include "exprs/dict_query_expr.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr_factory.h"
-#include "exprs/function_call_expr.h"
 #include "exprs/java_function_call_expr.h"
-#include "exprs/map_apply_expr.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"
 #endif
@@ -58,18 +54,6 @@ Status expr_factory_non_core_create_post_hook(ObjectPool* pool, const TExprNode&
     }
 
     switch (texpr_node.node_type) {
-    case TExprNodeType::FUNCTION_CALL:
-    case TExprNodeType::COMPUTE_FUNCTION_CALL:
-        if (texpr_node.fn.name.function_name == "array_map") {
-            *expr = pool->add(new ArrayMapExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "array_sort_lambda") {
-            *expr = pool->add(new ArraySortLambdaExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "map_apply") {
-            *expr = pool->add(new MapApplyExpr(texpr_node));
-        } else {
-            *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
-        }
-        break;
     case TExprNodeType::DICT_EXPR:
         *expr = pool->add(new DictMappingExpr(texpr_node));
         break;

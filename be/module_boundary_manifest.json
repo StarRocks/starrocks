@@ -647,21 +647,15 @@
     {
       "id": "exprcore",
       "doc_label": "ExprCore",
-      "summary": "Core expression infrastructure and builtin aggregate registry that depend only on Platform, Geo, Runtime, and lower layers.",
+      "summary": "Core expression infrastructure, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.",
       "owned_targets": ["ExprCore"],
       "additional_owned_globs": [
         "be/src/exprs/table_function/table_function.h"
       ],
       "allowed_include_prefixes": ["exprs/", "platform/", "geo/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exprs/agg/combinator/", "exprs/agg/java_"],
+      "forbidden_include_prefixes": ["exprs/agg/java_"],
       "forbidden_includes": [
         "exprs/agg/aggregate_factory_exprs_extension.h",
-        "exprs/agg/combinator/agg_state_combine.h",
-        "exprs/agg/combinator/agg_state_merge.h",
-        "exprs/agg/combinator/agg_state_union.h",
-        "exprs/agg/combinator/agg_state_utils.h",
-        "exprs/agg/combinator/state_merge_function.h",
-        "exprs/agg/combinator/state_union_function.h",
         "exprs/agg/java_udaf_function.h",
         "exprs/agg/java_window_function.h",
         "exprs/arrow_function_call.h",
@@ -669,14 +663,13 @@
         "exprs/dictmapping_expr.h",
         "exprs/dict_query_expr.h",
         "exprs/expr_factory_exprs_extension.h",
-        "exprs/function_call_expr.h",
         "exprs/java_function_call_expr.h",
         "exprs/utility_functions.h"
       ],
       "allowed_target_deps": ["Platform", "Geo", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["expr_core_test"],
       "allowed_test_link_deps": ["ExprCore", "Platform", "Geo", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExprCore limited to core expression infrastructure, builtin scalar helpers, builtin aggregate registry code, and dependencies no higher than Platform, Geo, Runtime, and lower layers; keep Java aggregate extensions and agg-state combinator integration in Exprs."
+      "remediation": "Keep ExprCore limited to core expression infrastructure, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers; keep Java aggregate extensions in Exprs."
     },
     {
       "id": "udf",
