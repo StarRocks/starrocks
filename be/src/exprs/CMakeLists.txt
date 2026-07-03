@@ -117,8 +117,6 @@ set(EXPR_CORE_FILES
   udf/udf_call_stub.cpp
   variant_path_reader.cpp
   variant_functions.cpp
-  agg/aggregate_factory_exprs_extension.cpp
-  expr_factory_exprs_extension.cpp
   arrow_function_call.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp

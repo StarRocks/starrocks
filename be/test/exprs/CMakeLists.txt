@@ -119,4 +119,3 @@ endif()
 
 add_executable(expr_core_test expr_core_test_main.cpp ${EXPR_CORE_TEST_OBJECTS})
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(expr_core_test ExprCore)
