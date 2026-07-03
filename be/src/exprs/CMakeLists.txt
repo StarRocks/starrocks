@@ -40,6 +40,9 @@ set(EXPR_CORE_FILES
   sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
+  ai_functions.cpp
+  array_functions.cpp
+  binary_functions.cpp
   bit_functions.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
@@ -60,11 +63,15 @@ set(EXPR_CORE_FILES
   expr_factory.cpp
   expr_executor.cpp
   function_helper.cpp
+  find_in_set.cpp
+  geo_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp
+  http_request_functions.cpp
   hyperloglog_functions.cpp
   info_func.cpp
+  inet_aton.cpp
   in_const_predicate.cpp
   in_predicate.cpp
   is_null_predicate.cpp
@@ -74,15 +81,23 @@ set(EXPR_CORE_FILES
   lambda_function.cpp
   like_predicate.cpp
   literal.cpp
+  locate.cpp
   math_functions.cpp
   map_expr.cpp
   map_element_expr.cpp
   map_functions.cpp
   match_expr.cpp
+  ngram.cpp
   placeholder_ref.cpp
+  percentile_functions.cpp
   regexp_split.cpp
+  split.cpp
+  split_part.cpp
+  str_to_map.cpp
+  string_functions.cpp
   struct_functions.cpp
   subfield_expr.cpp
+  substring_index.cpp
   table_function/json_each.cpp
   time_functions.cpp
   variant_path_reader.cpp
@@ -96,28 +111,17 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore)
+target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore Platform Geo)
 
 set(EXPR_FILES
   agg/combinator/agg_state_utils.cpp
   agg/aggregate_factory_exprs_extension.cpp
-  binary_functions.cpp
   expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
-  array_functions.cpp
   arrow_function_call.cpp
   dictmapping_expr.cpp
-  find_in_set.cpp
   function_call_expr.cpp
-  geo_functions.cpp
-  inet_aton.cpp
-  locate.cpp
-  percentile_functions.cpp
-  split.cpp
-  split_part.cpp
-  str_to_map.cpp
-  string_functions.cpp
   utility_functions.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
@@ -126,12 +130,8 @@ set(EXPR_FILES
   array_map_expr.cpp
   array_sort_lambda_expr.cpp
   map_apply_expr.cpp
-  substring_index.cpp
   dict_query_expr.cpp
   dictionary_get_expr.cpp
-  ngram.cpp
-  ai_functions.cpp
-  http_request_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)

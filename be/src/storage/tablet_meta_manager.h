@@ -39,11 +39,11 @@
 #include <string>
 
 #include "common/compiler_util.h"
+#include "common/storage_define.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/kv_store.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/tablet_meta.h"
 
 namespace starrocks {

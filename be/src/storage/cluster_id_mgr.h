@@ -17,7 +17,7 @@
 #include <cstdint>
 
 #include "common/status.h"
-#include "storage/primitive/storage_define.h"
+#include "common/storage_define.h"
 
 namespace starrocks {
 

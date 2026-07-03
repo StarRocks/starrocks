@@ -42,7 +42,6 @@ ADD_BE_LIB(StoragePrimitive
     primitive/primary_key_encoder.cpp
     primitive/schema_helper.cpp
     primitive/predicate_tree/predicate_tree.cpp
-    primitive/storage_define.cpp
     primitive/storage_ids.cpp
     primitive/tablet_column.cpp
     primitive/tablet_info.cpp

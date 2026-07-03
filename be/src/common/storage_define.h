@@ -20,7 +20,7 @@
 #include <string>
 
 #include "common/constexpr.h"
-#include "storage/primitive/storage_path_constants.h"
+#include "common/storage_path_constants.h"
 
 namespace starrocks {
 

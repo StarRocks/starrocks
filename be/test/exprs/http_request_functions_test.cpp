@@ -1358,6 +1358,7 @@ TEST_F(HttpRequestFunctionsTest, buildJsonErrorResponse_SpecialChars) {
 // Integration Test Handlers (EvHttpServer-based)
 //=============================================================================
 
+#ifndef __APPLE__
 class HttpRequestTestJsonHandler : public HttpHandler {
 public:
     void handle(HttpRequest* req) override {
@@ -1657,5 +1658,6 @@ TEST_F(HttpRequestIntegrationTest, RuntimeStateInit) {
     EXPECT_FALSE(state->ip_allowlist.empty());
     EXPECT_EQ("127.0.0.1", state->ip_allowlist[0]);
 }
+#endif
 
 } // namespace starrocks

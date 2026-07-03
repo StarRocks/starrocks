@@ -43,6 +43,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "gutil/strings/substitute.h"
 #include "platform/store_path.h"
 #include "rocksdb/convenience.h"
@@ -52,7 +53,6 @@
 #include "rocksdb/slice_transform.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_metrics.h"
 

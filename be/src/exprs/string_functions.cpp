@@ -55,6 +55,7 @@
 #include "common/compiler_util.h"
 #include "common/constexpr.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "exprs/binary_function.h"
 #include "exprs/math_functions.h"
 #include "exprs/regexp_split.h"
@@ -64,7 +65,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 // A regex to match any regex pattern is equivalent to a substring search.
