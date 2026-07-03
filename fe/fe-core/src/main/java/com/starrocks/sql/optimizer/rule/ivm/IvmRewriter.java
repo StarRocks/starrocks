@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.optimizer.rule.ivm;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonSyntaxException;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -34,7 +36,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -110,6 +114,7 @@ public class IvmRewriter {
             tree.setChild(0, OptExpression.create(
                     new LogicalDeltaOperator(true, actionColumn), trialPlan));
             deriveLogicalProperty(tree);
+            bindStateColumnsForAggregate(optimizerContext, trialPlan);
             scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
 
             // Phase 2: Convergence check — every Delta/Version marker must have been
@@ -255,6 +260,74 @@ public class IvmRewriter {
             return op.getProjection().getColumnRefMap();
         }
         return null;
+    }
+
+    /**
+     * Binds each aggregate output to the MV column that stores its state, keyed by ColumnRef id
+     * (consumed by {@link IvmDeltaAggregateRule}); no-op for non-aggregate plans.
+     *
+     * <p>A state column is recognized structurally: an INSERT output whose expression resolves,
+     * through pass-through projections, to a bare aggregation output ref. That matches the hidden
+     * __AGG_STATE_ columns and collapsed union columns (whose visible output IS the state), and
+     * excludes finalized outputs like CASE(sum_state_merge(...)), group keys and __ROW_ID__.
+     * Keying by ref id instead of zipping prefix-filtered schema positions against id-sorted
+     * aggregates keeps the pairing correct for any column layout.</p>
+     */
+    private static void bindStateColumnsForAggregate(OptimizerContext optimizerContext, OptExpression plan) {
+        List<ColumnRefOperator> outputColumns =
+                optimizerContext.getTvrOptContext().getIvmInsertOutputColumns();
+        if (outputColumns == null) {
+            return;
+        }
+        Map<ColumnRefOperator, ScalarOperator> translations = Maps.newHashMap();
+        LogicalAggregationOperator aggOperator = null;
+        OptExpression node = plan;
+        while (node != null) {
+            Operator op = node.getOp();
+            if (op.getProjection() != null) {
+                translations.putAll(op.getProjection().getColumnRefMap());
+            }
+            if (op instanceof LogicalProjectOperator) {
+                translations.putAll(((LogicalProjectOperator) op).getColumnRefMap());
+            } else if (op instanceof LogicalAggregationOperator) {
+                aggOperator = (LogicalAggregationOperator) op;
+                break;
+            } else if (!(op instanceof LogicalFilterOperator) && !(op instanceof LogicalTopNOperator)) {
+                break;
+            }
+            node = node.getInputs().isEmpty() ? null : node.inputAt(0);
+        }
+        if (aggOperator == null) {
+            return;
+        }
+        MaterializedView mv = loadTargetMv(optimizerContext);
+        if (mv == null) {
+            return;
+        }
+        List<Column> schema = mv.getFullSchema();
+        Preconditions.checkState(outputColumns.size() == schema.size(),
+                "IVM insert output count %s must match MV '%s' schema size %s",
+                outputColumns.size(), mv.getName(), schema.size());
+        Map<Integer, String> stateColumnByAggRefId = Maps.newHashMap();
+        for (int i = 0; i < outputColumns.size(); i++) {
+            ScalarOperator resolved = outputColumns.get(i);
+            for (int hop = 0; hop < 8 && resolved instanceof ColumnRefOperator
+                    && translations.containsKey(resolved); hop++) {
+                ScalarOperator next = translations.get(resolved);
+                if (next == resolved) {
+                    break;
+                }
+                resolved = next;
+            }
+            if (resolved instanceof ColumnRefOperator
+                    && aggOperator.getAggregations().containsKey((ColumnRefOperator) resolved)) {
+                stateColumnByAggRefId.put(((ColumnRefOperator) resolved).getId(), schema.get(i).getName());
+            }
+        }
+        Preconditions.checkState(stateColumnByAggRefId.size() == aggOperator.getAggregations().size(),
+                "every aggregate of MV '%s' must bind to exactly one state column, bound %s of %s",
+                mv.getName(), stateColumnByAggRefId.size(), aggOperator.getAggregations().size());
+        optimizerContext.getTvrOptContext().setIvmStateColumnNameByAggRefId(stateColumnByAggRefId);
     }
 
     static MaterializedView loadTargetMv(OptimizerContext optimizerContext) {
