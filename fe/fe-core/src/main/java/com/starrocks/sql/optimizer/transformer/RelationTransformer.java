@@ -111,6 +111,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCacheStatsScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
@@ -801,6 +802,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
         OptExprBuilder scanBuilder = new OptExprBuilder(scanOperator, Collections.emptyList(),
                 new ExpressionMapping(node.getScope(), outputVariables));
+        if (scanOperator instanceof LogicalChangesScanOperator
+                && session.getSessionVariable().isEnableCdcNetChange()) {
+            scanBuilder = ChangesScanBuilder.applyNetChange(
+                    scanBuilder, columnRefFactory, session.getSessionVariable().getWindowPartitionMode());
+        }
         if (isAddExtraFilterOperator(session.getSessionVariable(), node)) {
             LogicalFilterOperator filterOperator = new LogicalFilterOperator(partitionPredicate);
             scanBuilder = scanBuilder.withNewRoot(filterOperator);

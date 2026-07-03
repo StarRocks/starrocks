@@ -1,0 +1,79 @@
+-- name: test_pk_net_change @cloud
+
+CREATE TABLE pk_nc (k int, v int, c varchar(10))
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "pk_nc", "pknc")
+
+-- bk0->bk1: seed three keys.
+INSERT INTO pk_nc VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
+[UC]function: bk1=create_bookmark("${db[0]}", "pk_nc", "pknc")
+
+-- bk1->bk2: first update of k=2.
+UPDATE pk_nc SET v = 200 WHERE k = 2;
+[UC]function: bk2=create_bookmark("${db[0]}", "pk_nc", "pknc")
+
+-- bk2->bk3: second update of k=2 (so k=2 is updated twice across the window),
+-- plus a delete of k=3.
+UPDATE pk_nc SET v = 201 WHERE k = 2;
+DELETE FROM pk_nc WHERE k = 3;
+[UC]function: bk3=create_bookmark("${db[0]}", "pk_nc", "pknc")
+
+-- bk3->bk4: insert a fresh key k=4 and update the never-before-touched k=1.
+INSERT INTO pk_nc VALUES (4, 40, 'd');
+UPDATE pk_nc SET v = 11 WHERE k = 1;
+[UC]function: bk4=create_bookmark("${db[0]}", "pk_nc", "pknc")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk0}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk1}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk2}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk3}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk4}, "pknc")
+} END CLEANUP
+
+-- Baseline (net-change off): the full window emits every per-transaction diff.
+-- 7 INSERTs (k1,k2,k3 born; k2 twice more; k4 born; k1 updated) and 4 DELETEs
+-- (k2 old twice, k3, k1 old).
+SELECT __CHANGE_TYPE__, count(*) FROM pk_nc [_CHANGES_${bk0}_${bk4}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+
+SET enable_cdc_net_change = true;
+
+-- From an empty base every key that still exists collapses to a single INSERT at
+-- its final value; a key that was born and then deleted vanishes entirely. So
+-- there are zero DELETEs. k=1 ends at v=11, k=2 collapses two updates to its
+-- final v=201, k=3 (born then deleted) is gone, k=4 is a plain insert.
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk0}_${bk4}_] ORDER BY k;
+
+-- Same window, only the per-change-type counts: three INSERTs, no DELETE.
+SELECT __CHANGE_TYPE__, count(*) FROM pk_nc [_CHANGES_${bk0}_${bk4}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+
+-- From a populated base (bk1, where k1=10/k2=20/k3=30 already exist), the net
+-- change of each key carries its base value in the DELETE and its final value in
+-- the INSERT; intermediate update values are dropped. An update surfaces as
+-- DELETE(old)+INSERT(final), a delete as a lone DELETE, an insert as a lone
+-- INSERT.
+--   k=1: updated once          -> DEL(1,10,a) + INS(1,11,a)
+--   k=2: updated twice (20->200->201), only the base and final survive
+--                              -> DEL(2,20,b) + INS(2,201,b)
+--   k=3: deleted               -> DEL(3,30,c)
+--   k=4: inserted              -> INS(4,40,d)
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk4}_]
+ORDER BY k, __CHANGE_TYPE__ DESC;
+
+-- By default the net-change window is sort-based: the plan enforces a SORT below the
+-- analytic node so each key's rows arrive grouped before MIN/MAX.
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'SORT')
+
+-- window_partition_mode = 2 switches the window to hash-based (the analytic groups by a
+-- hash table, so no SORT is enforced). Assert the PLAN actually changed -- a result-only
+-- check would not prove it, since sort-based and hash-based yield the same net rows -- then
+-- confirm the net result is indeed identical to the sort-based plan above.
+SET window_partition_mode = 2;
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'useHashBasedPartition')
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'SORT')
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk4}_]
+ORDER BY k, __CHANGE_TYPE__ DESC;

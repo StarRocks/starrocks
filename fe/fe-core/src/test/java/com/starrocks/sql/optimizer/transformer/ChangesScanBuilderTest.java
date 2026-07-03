@@ -28,6 +28,7 @@ import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
+import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
@@ -36,12 +37,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +54,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -61,6 +66,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * point shared by the SQL analyzer and non-SQL callers (IVM refresh). Covers
  * bookmark resolution, non-trackable-delta messaging, and the scoped-table
  * substitution that RelationTransformer relies on.
+ *
+ * <p>Also covers net-change gating: {@code applyNetChange} stacks a Window
+ * and Filter above the scan only for a primary-key table (the SQL path gates on
+ * {@code enable_cdc_net_change}), and is a no-op otherwise.
  *
  * <p>Bookmarks are minted by calling BookmarkManager directly; INSERTs are
  * not available in the FE UT framework, so consecutive create() calls only
@@ -470,6 +479,229 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                 "actual: " + ex.getMessage());
     }
 
+    @Test
+    public void testNetChangeOnPkWhenFlagOn() throws Exception {
+        String name = "pk_nc_on_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_on_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_on_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertFalse(analyticNodes.isEmpty(),
+                    "flag-on PK table must produce a window/analytic node:\n" + plan);
+            // The analytic node must compute both a min and a max (one per function call).
+            assertTrue(analyticNodes.get(0).getAnalyticFnCalls().size() >= 2,
+                    "window node must carry both MIN and MAX calls:\n" + plan);
+            assertTrue(plan.contains("ChangesScanNode"),
+                    "plan must include ChangesScanNode:\n" + plan);
+            // The window groups by primary key with no ORDER BY, so it is sort-based and needs its
+            // input sorted by the key. The optimizer must enforce that sort below the window; if it
+            // is missing, a key split across rowsets gets netted over wrong partition boundaries
+            // (see ChangesScanBuilder.buildNetChangeOperators enforceSortColumns).
+            assertTrue(plan.contains("SORT"),
+                    "net-change window must have a SORT enforced below it:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testNetChangeUsesHashPartitionWhenModeHash() throws Exception {
+        String name = "pk_nc_hash_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_hash_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_hash_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean oldFlag = connectContext.getSessionVariable().isEnableCdcNetChange();
+        int oldMode = connectContext.getSessionVariable().getWindowPartitionMode();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        connectContext.getSessionVariable().setWindowPartitionMode(2);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertFalse(analyticNodes.isEmpty(),
+                    "flag-on PK table must produce a window/analytic node:\n" + plan);
+            // window_partition_mode = 2 makes the net-change window hash-based, matching an equivalent
+            // no-hint SQL window: the analytic groups by a hash table, so no SORT is enforced below it.
+            assertTrue(plan.contains("useHashBasedPartition"),
+                    "net-change window must be hash-based at window_partition_mode = 2:\n" + plan);
+            assertFalse(plan.contains("SORT"),
+                    "hash-based net-change window must not enforce a SORT:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(oldFlag);
+            connectContext.getSessionVariable().setWindowPartitionMode(oldMode);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testNoNetChangeWhenFlagOff() throws Exception {
+        String name = "pk_nc_off_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_off_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_off_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        try {
+            assertFalse(connectContext.getSessionVariable().isEnableCdcNetChange());
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            assertTrue(analyticNodes.isEmpty(), "flag-off must not add a window node");
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testNoNetChangeOnDupEvenWhenFlagOn() throws Exception {
+        String name = "dup_nc_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_dup_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_dup_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            assertTrue(analyticNodes.isEmpty(), "DUP table is a no-op even with flag on");
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testApplyNetChangeOptExpressionOverload() throws Exception {
+        // The OptExpression overload (the IVM-rule world) stacks Filter over Window over the scan
+        // for a primary-key table, honoring window_partition_mode; a non-PK table comes back as a
+        // bare scan. Exercises the overload directly, off the SQL/builder path.
+        assertFalse(connectContext.getSessionVariable().isEnableCdcNetChange());
+
+        String pkName = "pk_ovl_" + TABLE_COUNTER.getAndIncrement();
+        long pkId = createPkTable(pkName);
+        OlapTable pk = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(pkId);
+        pk.maySetDatabaseId(dbId);
+        String dupName = "dup_ovl_" + TABLE_COUNTER.getAndIncrement();
+        long dupId = createDupTable(dupName);
+        OlapTable dup = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(dupId);
+        dup.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder pkB = BookmarkHolder.forEmptyInfo("ovl_pk_base");
+        BookmarkHolder pkH = BookmarkHolder.forEmptyInfo("ovl_pk_head");
+        Bookmark pkBase = bm.create(dbId, pkId, pkB);
+        bumpVisibleVersion(pk, 5L);
+        Bookmark pkHead = bm.create(dbId, pkId, pkH);
+        BookmarkHolder dupB = BookmarkHolder.forEmptyInfo("ovl_dup_base");
+        BookmarkHolder dupH = BookmarkHolder.forEmptyInfo("ovl_dup_head");
+        Bookmark dupBase = bm.create(dbId, dupId, dupB);
+        bumpVisibleVersion(dup, 5L);
+        Bookmark dupHead = bm.create(dbId, dupId, dupH);
+
+        try {
+            // PK, sort-based (window_partition_mode = 1): Filter -> Window -> ChangesScan.
+            ColumnRefFactory f1 = new ColumnRefFactory();
+            LogicalChangesScanOperator pkScan = transformBareChangesScan(pkName, pkBase, pkHead, f1);
+            OptExpression sortFold = ChangesScanBuilder.applyNetChange(pkScan, f1, 1);
+            assertEquals(OperatorType.LOGICAL_FILTER, sortFold.getOp().getOpType());
+            OptExpression win = sortFold.inputAt(0);
+            assertEquals(OperatorType.LOGICAL_WINDOW, win.getOp().getOpType());
+            assertEquals(OperatorType.LOGICAL_CHANGES_SCAN, win.inputAt(0).getOp().getOpType());
+            assertFalse(((LogicalWindowOperator) win.getOp()).isUseHashBasedPartition(),
+                    "window_partition_mode = 1 must be sort-based");
+
+            // PK, hash-based (window_partition_mode = 2): same shape, hash-based window.
+            ColumnRefFactory f2 = new ColumnRefFactory();
+            LogicalChangesScanOperator pkScan2 = transformBareChangesScan(pkName, pkBase, pkHead, f2);
+            OptExpression hashFold = ChangesScanBuilder.applyNetChange(pkScan2, f2, 2);
+            assertTrue(((LogicalWindowOperator) hashFold.inputAt(0).getOp()).isUseHashBasedPartition(),
+                    "window_partition_mode = 2 must be hash-based");
+
+            // DUP: no-op, the bare scan comes back with no window/filter stacked.
+            ColumnRefFactory f3 = new ColumnRefFactory();
+            LogicalChangesScanOperator dupScan = transformBareChangesScan(dupName, dupBase, dupHead, f3);
+            OptExpression noop = ChangesScanBuilder.applyNetChange(dupScan, f3, 1);
+            assertEquals(OperatorType.LOGICAL_CHANGES_SCAN, noop.getOp().getOpType());
+            assertTrue(noop.getInputs().isEmpty(), "non-PK table must not stack any operator");
+        } finally {
+            bm.releaseReference(dbId, pkId, pkBase.getBookmarkId(), pkB.getHolderId());
+            bm.releaseReference(dbId, pkId, pkHead.getBookmarkId(), pkH.getHolderId());
+            bm.releaseReference(dbId, dupId, dupBase.getBookmarkId(), dupB.getHolderId());
+            bm.releaseReference(dbId, dupId, dupHead.getBookmarkId(), dupH.getHolderId());
+        }
+    }
+
+    /**
+     * Transform {@code SELECT k, v FROM table[_CHANGES_base_head_]} with net change off, returning
+     * the bare LogicalChangesScanOperator (full column refs, no fold) for direct overload testing.
+     */
+    private LogicalChangesScanOperator transformBareChangesScan(
+            String table, Bookmark base, Bookmark head, ColumnRefFactory factory) throws Exception {
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                table, base.getBookmarkId(), head.getBookmarkId());
+        QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        LogicalPlan plan = new RelationTransformer(factory, connectContext)
+                .transformWithSelectLimit(stmt.getQueryRelation());
+        return findChangesScan(plan.getRoot());
+    }
+
     /** Capture {@code live}'s current partition state in the map shape a Bookmark holds. */
     private static Map<Long, Map<Long, PhysicalPartitionMeta>> liveSnapshot(OlapTable live) {
         Map<Long, Map<Long, PhysicalPartitionMeta>> parts = new HashMap<>();
@@ -539,6 +771,14 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
     private long createDupTable(String name) throws Exception {
         String ddl = "CREATE TABLE " + name + " (k int, v int) "
                 + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
+                + "PROPERTIES ('replication_num' = '1');";
+        return createTable(ddl);
+    }
+
+    /** Create a single-partition PK cloud-native table and return its id. */
+    private long createPkTable(String name) throws Exception {
+        String ddl = "CREATE TABLE " + name + " (k int, v int) "
+                + "PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                 + "PROPERTIES ('replication_num' = '1');";
         return createTable(ddl);
     }

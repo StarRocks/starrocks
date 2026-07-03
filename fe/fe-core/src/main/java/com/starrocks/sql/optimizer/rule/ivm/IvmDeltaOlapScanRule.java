@@ -118,6 +118,10 @@ public class IvmDeltaOlapScanRule extends TransformationRule {
         LogicalChangesScanOperator changesScan = ChangesScanBuilder.buildScanOperator(
                 table, range, colRefToCol, colToColRef, descriptors);
 
+        OptExpression scanTree = ChangesScanBuilder.applyNetChange(
+                    changesScan, context.getColumnRefFactory(),
+                    context.getSessionVariable().getWindowPartitionMode());
+
         ColumnRefOperator actionColumn = delta.getActionColumn();
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator col : scan.getOutputColumns()) {
@@ -127,8 +131,6 @@ public class IvmDeltaOlapScanRule extends TransformationRule {
             projectMap.put(actionColumn, changeTypeRef);
         }
 
-        return List.of(OptExpression.create(
-                new LogicalProjectOperator(projectMap),
-                OptExpression.create(changesScan)));
+        return List.of(OptExpression.create(new LogicalProjectOperator(projectMap), scanTree));
     }
 }

@@ -384,6 +384,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
+    // When true, a CHANGES query folds its per-transaction changes into the whole-range net change.
+    // A primary-key table folds each key's changes to one net DELETE/INSERT pair — its value at the
+    // range start and its value at the end; a Duplicate Key or Aggregate Key table is append-only
+    // (its CHANGES are already net changes), so the flag is a no-op for it.
+    public static final String ENABLE_CDC_NET_CHANGE = "enable_cdc_net_change";
 
     public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
 
@@ -1304,6 +1309,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableMVPlanner = false;
     @VarAttr(name = ENABLE_INCREMENTAL_REFRESH_MV)
     private boolean enableIncrementalRefreshMV = false;
+    @VarAttr(name = ENABLE_CDC_NET_CHANGE)
+    private boolean enableCdcNetChange = false;
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
@@ -2727,6 +2734,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getWindowPartitionMode() {
         return windowPartitionMode;
+    }
+
+    public void setWindowPartitionMode(int windowPartitionMode) {
+        this.windowPartitionMode = windowPartitionMode;
     }
 
     public SessionVariableConstants.ExecMode getExecMode() {
@@ -4815,6 +4826,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIncrementalRefreshMv(boolean enable) {
         // Deprecated no-op kept for dump/session replay compatibility.
+    }
+
+    public boolean isEnableCdcNetChange() {
+        return enableCdcNetChange;
+    }
+
+    public void setEnableCdcNetChange(boolean enableCdcNetChange) {
+        this.enableCdcNetChange = enableCdcNetChange;
     }
 
     public long getLogRejectedRecordNum() {

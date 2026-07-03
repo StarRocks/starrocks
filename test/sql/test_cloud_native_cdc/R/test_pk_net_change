@@ -1,0 +1,92 @@
+-- name: test_pk_net_change @cloud
+CREATE TABLE pk_nc (k int, v int, c varchar(10))
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]function: bk0=create_bookmark("${db[0]}", "pk_nc", "pknc")
+INSERT INTO pk_nc VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
+-- result:
+-- !result
+[UC]function: bk1=create_bookmark("${db[0]}", "pk_nc", "pknc")
+UPDATE pk_nc SET v = 200 WHERE k = 2;
+-- result:
+-- !result
+[UC]function: bk2=create_bookmark("${db[0]}", "pk_nc", "pknc")
+UPDATE pk_nc SET v = 201 WHERE k = 2;
+-- result:
+-- !result
+DELETE FROM pk_nc WHERE k = 3;
+-- result:
+-- !result
+[UC]function: bk3=create_bookmark("${db[0]}", "pk_nc", "pknc")
+INSERT INTO pk_nc VALUES (4, 40, 'd');
+-- result:
+-- !result
+UPDATE pk_nc SET v = 11 WHERE k = 1;
+-- result:
+-- !result
+[UC]function: bk4=create_bookmark("${db[0]}", "pk_nc", "pknc")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk0}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk1}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk2}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk3}, "pknc")
+    function: release_bookmark("${db[0]}", "pk_nc", ${bk4}, "pknc")
+} END CLEANUP
+
+SELECT __CHANGE_TYPE__, count(*) FROM pk_nc [_CHANGES_${bk0}_${bk4}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+-- result:
+0	7
+1	4
+-- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk0}_${bk4}_] ORDER BY k;
+-- result:
+1	11	a	0
+2	201	b	0
+4	40	d	0
+-- !result
+SELECT __CHANGE_TYPE__, count(*) FROM pk_nc [_CHANGES_${bk0}_${bk4}_]
+GROUP BY __CHANGE_TYPE__ ORDER BY __CHANGE_TYPE__;
+-- result:
+0	3
+-- !result
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk4}_]
+ORDER BY k, __CHANGE_TYPE__ DESC;
+-- result:
+1	10	a	1
+1	11	a	0
+2	20	b	1
+2	201	b	0
+3	30	c	1
+4	40	d	0
+-- !result
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'SORT')
+-- result:
+None
+-- !result
+SET window_partition_mode = 2;
+-- result:
+-- !result
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'useHashBasedPartition')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'SORT')
+-- result:
+None
+-- !result
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk4}_]
+ORDER BY k, __CHANGE_TYPE__ DESC;
+-- result:
+1	10	a	1
+1	11	a	0
+2	20	b	1
+2	201	b	0
+3	30	c	1
+4	40	d	0
+-- !result
