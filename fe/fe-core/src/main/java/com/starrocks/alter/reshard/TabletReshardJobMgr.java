@@ -328,8 +328,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
                 continue;
             }
 
-            // Job is done, remove expired job
-            if (job.isExpired()) {
+            // Job is done, remove expired job once no automated cluster snapshot still covers the
+            // pre-reshard state it retains (the parent/source tablets). Keeping the job keeps
+            // isTableSafeToDeleteTablet() reporting the table's tablets as unsafe to reclaim.
+            if (job.isExpired() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .isDeletionSafeToExecute(job.getFinishedTimeMs())) {
                 iterator.remove();
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId());
                 LOG.info("Removed expired tablet reshard job. {}", job);

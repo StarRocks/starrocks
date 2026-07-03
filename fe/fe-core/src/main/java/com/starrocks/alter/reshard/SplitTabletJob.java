@@ -100,6 +100,7 @@ public class SplitTabletJob extends TabletReshardJob {
         return dbId;
     }
 
+    @Override
     public long getTableId() {
         return tableId;
     }
