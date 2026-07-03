@@ -15,6 +15,7 @@
 set(IO_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     array_input_stream_test.cpp
+    compressed_input_stream_test.cpp
     fd_input_stream_test.cpp
     fd_output_stream_test.cpp
     io_profiler_test.cpp

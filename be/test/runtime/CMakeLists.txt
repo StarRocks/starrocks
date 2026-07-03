@@ -21,13 +21,18 @@ set(RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     byte_buffer_test.cpp
     current_thread_core_test.cpp
+    descriptors_test.cpp
+    diagnose_daemon_test.cpp
+    exception_stack_test.cpp
     runtime_chunk_helper_test.cpp
     mem_tracker_test.cpp
     mem_pool_test.cpp
+    message_body_sink_test.cpp
     process_memory_metrics_test.cpp
     load_fail_point_test.cpp
     mysql_table_descriptor_core_test.cpp
     query_statistics_test.cpp
+    runtime_metrics_test.cpp
     # RuntimeEnv::init owns the process-global HLL registers allocator. Keep
     # this before serde_core_test, whose HLL tests exercise that allocator.
     runtime_env_test.cpp

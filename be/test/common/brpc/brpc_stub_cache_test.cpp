@@ -30,16 +30,23 @@ public:
     BrpcStubCacheTest() = default;
     ~BrpcStubCacheTest() override = default;
     void SetUp() override {
+        _saved_brpc_max_connections_per_server = config::brpc_max_connections_per_server;
+        _saved_brpc_stub_expire_s = config::brpc_stub_expire_s;
+        config::brpc_max_connections_per_server = 1;
+        config::brpc_stub_expire_s = 3600;
         _timer = std::make_unique<BthreadTimer>();
         ASSERT_OK(_timer->start());
     }
     void TearDown() override {
         _timer.reset();
-        config::brpc_stub_expire_s = 3600;
+        config::brpc_max_connections_per_server = _saved_brpc_max_connections_per_server;
+        config::brpc_stub_expire_s = _saved_brpc_stub_expire_s;
     }
 
 private:
     std::unique_ptr<BthreadTimer> _timer;
+    int32_t _saved_brpc_max_connections_per_server = 0;
+    int32_t _saved_brpc_stub_expire_s = 0;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {

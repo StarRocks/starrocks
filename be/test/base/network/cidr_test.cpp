@@ -19,14 +19,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
-
-#include "base/logging.h"
-#include "common/configbase.h"
-#include "common/system/cpu_info.h"
-
 namespace starrocks {
 
 TEST(CIDR, wrong_format) {

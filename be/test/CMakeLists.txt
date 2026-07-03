@@ -5,22 +5,6 @@ set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
-        ./column/array_column_test.cpp
-        ./column/column_view_test.cpp
-        ./column/column_hash_test.cpp
-        ./column/array_view_column_test.cpp
-        ./column/binary_column_test.cpp
-        ./column/chunk_test.cpp
-        ./column/column_helper_test.cpp
-        ./column/const_column_test.cpp
-        ./column/decimalv3_column_test.cpp
-        ./column/fixed_length_column_extended_test.cpp
-        ./column/json_column_test.cpp
-        ./column/map_column_test.cpp
-        ./column/struct_column_test.cpp
-        ./column/nullable_column_test.cpp
-        ./column/object_column_test.cpp
-        ./column/column_cow_test.cpp
         ./common/uri_test.cpp
         ./connector/file_scan_metrics_test.cpp
         ./connector/file_connector_rejected_record_test.cpp
@@ -200,23 +184,17 @@ set(EXEC_FILES
         ./formats/parquet/dict_encoding_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/handler_required_privilege_test.cpp
-        ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
-        ./io/compressed_input_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./exec/data_sinks/arrow_result_writer_test.cpp
-        ./runtime/descriptors_test.cpp
-        ./runtime/diagnose_daemon_test.cpp
         ./exec/data_sinks/http_result_writer_test.cpp
-        ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/pipeline_fragment_reporter_test.cpp
-        ./runtime/runtime_metrics_test.cpp
         ./compute_env/load/stream_load_metrics_test.cpp
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
@@ -232,21 +210,11 @@ set(EXEC_FILES
         ./runtime/exec_env_test.cpp
         ./exec/jdbc/type_checker_test.cpp
         ./exec/jdbc/type_checker_xml_loader_test.cpp
-        ./column/simd_selector_test.cpp
-        ./column/simd_mulselector_test.cpp
-        ./util/brpc_stub_cache_test.cpp
-        ./util/cidr_test.cpp
-        ./util/cpu_info_test.cpp
-        ./runtime/exception_stack_test.cpp
-        ./util/fail_point_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp
-        ./util/internal_service_recoverable_stub_test.cpp
-        ./util/internal_service_recoverable_stub_parallel_test.cpp
-        ./util/simdjson_util_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
@@ -256,7 +224,6 @@ set(EXEC_FILES
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
-        ./util/network_util_test.cpp
         )
 
 if (NOT APPLE)
@@ -264,10 +231,6 @@ if (NOT APPLE)
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
     )
-endif ()
-
-if (USE_AVX2)
-    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
 endif ()
 
 if (STARROCKS_JIT_ENABLE)
