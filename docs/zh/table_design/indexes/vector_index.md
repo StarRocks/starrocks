@@ -134,6 +134,12 @@ ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
 - **必需**: 否
 - **描述**: 向量是否已归一化。有效值为`true`和`false`。仅当`metric_type`为`cosine_similarity`时生效。如果向量已归一化，计算出的距离值将在[-1, 1]之间。向量必须满足平方和为`1`，否则返回错误。
 
+##### index_build_threshold
+
+- **默认值**: 10000（由 BE 配置项 `config_vector_index_default_build_threshold` 决定）
+- **必需**: 否
+- **描述**: 触发向量索引构建的行数阈值。写入的数据行数低于该阈值时不构建索引，查询回退到暴力检索。取值必须为大于等于 `1` 的整数。对于 IVFPQ 索引，该值还必须大于等于 `nlist`，因为 IVFPQ 的 k-means 训练至少需要 `nlist` 条向量。违反该约束的 DDL 语句会被拒绝。
+
 ##### M
 
 - **默认值**: 16

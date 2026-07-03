@@ -134,6 +134,12 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Required**: No
 - **Description**: Whether the vectors are normalized. Valid values are `true` and `false`. It takes effect only when `metric_type` is `cosine_similarity`. If the vectors are normalized, the value of the calculated distances will be within [-1, 1]. The vectors must satisfy that the sum of the squares is `1`, otherwise an error is returned.
 
+##### index_build_threshold
+
+- **Default**: 10000 (determined by the BE configuration item `config_vector_index_default_build_threshold`)
+- **Required**: No
+- **Description**: Row-count threshold that triggers the vector index build. If the number of rows written is smaller than this threshold, the vector index is not built and searches fall back to brute-force scan. It must be an integer greater than or equal to `1`. For IVFPQ indexes, the value must also be greater than or equal to `nlist`, because IVFPQ k-means training requires at least `nlist` vectors. DDL statements that violate this constraint are rejected.
+
 ##### M
 
 - **Default**: 16
