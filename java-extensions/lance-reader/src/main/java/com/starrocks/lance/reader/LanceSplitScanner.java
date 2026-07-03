@@ -14,10 +14,6 @@
 
 package com.starrocks.lance.reader;
 
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.ReadOptions;
-import com.lancedb.lance.ipc.LanceScanner;
-import com.lancedb.lance.ipc.ScanOptions;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -32,6 +28,10 @@ import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lance.Dataset;
+import org.lance.ReadOptions;
+import org.lance.ipc.LanceScanner;
+import org.lance.ipc.ScanOptions;
 
 import java.io.IOException;
 import java.util.Arrays;

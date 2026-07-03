@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -24,10 +25,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLanceScanOperator;
 
 public class PhysicalLanceScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     public PhysicalLanceScanOperator(LogicalLanceScanOperator scan) {
         super(OperatorType.PHYSICAL_LANCE_SCAN, scan);
         this.predicates = scan.getScanOperatorPredicates();
+        this.vectorSearchOptions = scan.getVectorSearchOptions().copy();
     }
 
     @Override
@@ -38,6 +41,10 @@ public class PhysicalLanceScanOperator extends PhysicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
     }
 
     @Override

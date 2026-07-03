@@ -1641,6 +1641,7 @@ public class PlanFragmentBuilder {
             LanceScanNode lanceScanNode =
                     new LanceScanNode(context.getNextNodeId(), tupleDescriptor, "LanceScanNode");
             lanceScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            lanceScanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             lanceScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(lanceScanNode, true);
             try {

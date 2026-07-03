@@ -15,8 +15,6 @@
 package com.starrocks.connector.lance;
 
 import com.google.common.collect.ImmutableList;
-import com.lancedb.lance.Dataset;
-import com.lancedb.lance.ReadOptions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
@@ -50,6 +48,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lance.Dataset;
+import org.lance.ReadOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;

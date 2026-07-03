@@ -17,7 +17,9 @@ package com.starrocks.common;
 import com.starrocks.thrift.TVectorSearchOptions;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class VectorSearchOptions {
     private static final int RESULT_ORDER_ASC = 0;
@@ -36,6 +38,21 @@ public class VectorSearchOptions {
 
     private double predicateRange = -1;
     private List<String> queryVector = new ArrayList<>();
+    private Map<String, String> queryParams = new HashMap<>();
+
+    public VectorSearchOptions copy() {
+        VectorSearchOptions copy = new VectorSearchOptions();
+        copy.enableUseANN = enableUseANN;
+        copy.refineDistance = refineDistance;
+        copy.distanceColumnName = distanceColumnName;
+        copy.distanceSlotId = distanceSlotId;
+        copy.limitK = limitK;
+        copy.resultOrder = resultOrder;
+        copy.predicateRange = predicateRange;
+        copy.queryVector = new ArrayList<>(queryVector);
+        copy.queryParams = new HashMap<>(queryParams);
+        return copy;
+    }
 
     public boolean isEnableUseANN() {
         return enableUseANN;
@@ -73,6 +90,22 @@ public class VectorSearchOptions {
         this.queryVector = queryVector;
     }
 
+    public List<String> getQueryVector() {
+        return queryVector;
+    }
+
+    public void setQueryParams(Map<String, String> queryParams) {
+        this.queryParams = queryParams == null ? new HashMap<>() : new HashMap<>(queryParams);
+    }
+
+    public Map<String, String> getQueryParams() {
+        return queryParams;
+    }
+
+    public long getLimitK() {
+        return limitK;
+    }
+
     public void setPredicateRange(double predicateRange) {
         this.predicateRange = predicateRange;
     }
@@ -88,6 +121,7 @@ public class VectorSearchOptions {
         opts.setVector_distance_column_name(distanceColumnName);
         opts.setVector_slot_id(distanceSlotId);
         opts.setQuery_vector(queryVector);
+        opts.setQuery_params(queryParams);
         opts.setVector_range(predicateRange);
         opts.setResult_order(resultOrder);
         opts.setRefine_distance(refineDistance);

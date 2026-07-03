@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -28,6 +29,7 @@ import java.util.Map;
 
 public class LogicalLanceScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     public LogicalLanceScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -58,6 +60,14 @@ public class LogicalLanceScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions == null ? new VectorSearchOptions() : vectorSearchOptions.copy();
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalLanceScanOperator, LogicalLanceScanOperator.Builder> {
         @Override
@@ -69,6 +79,7 @@ public class LogicalLanceScanOperator extends LogicalScanOperator {
         public LogicalLanceScanOperator.Builder withOperator(LogicalLanceScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates.clone();
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions.copy();
             return this;
         }
     }

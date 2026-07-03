@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <lance.version>0.35.0-ali-1.2</lance.version>
+        <lance.version>8.0.0</lance.version>
     </properties>
 
     <dependencies>
@@ -47,10 +47,9 @@
             <version>${arrow.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.lancedb</groupId>
+            <groupId>org.lance</groupId>
             <artifactId>lance-core</artifactId>
             <version>${lance.version}</version>
-            <classifier>linux</classifier>
         </dependency>
         <dependency>
             <groupId>org.questdb</groupId>
