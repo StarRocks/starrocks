@@ -143,7 +143,7 @@ void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
 }
 
 void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
-                                               const std::map<int, FileInfo>& replace_segments) {
+                                               const std::map<int, SegmentFileInfo>& replace_segments) {
     DCHECK(segment_idx < meta.segment_metas_size());
     uint32_t local_segment_id = get_segment_idx(meta, static_cast<int32_t>(segment_idx));
     if (replace_segments.count(segment_idx) > 0) {
@@ -322,7 +322,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const int64_t io_count_remote_before = state.stats().io_count_remote;
 
     std::vector<FileMetaPB> orphan_files;
-    std::map<int, FileInfo> replace_segments;
+    std::map<int, SegmentFileInfo> replace_segments;
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
     // Init update state.
@@ -390,7 +390,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (use_parallel_partial_update && batch_end - batch_start > 1) {
             TRACE_COUNTER_SCOPE_LATENCY_US("parallel_load_rewrite_seg_latency_us");
             uint32_t batch_count = batch_end - batch_start;
-            std::vector<std::map<int, FileInfo>> per_seg_replace(batch_count);
+            std::vector<std::map<int, SegmentFileInfo>> per_seg_replace(batch_count);
             std::vector<std::vector<FileMetaPB>> per_seg_orphans(batch_count);
 
             std::mutex status_mutex;

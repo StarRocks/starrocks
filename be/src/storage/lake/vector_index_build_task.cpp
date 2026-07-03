@@ -132,7 +132,8 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             }
 
             std::string seg_path = _tablet_mgr->segment_location(_tablet_id, seg_name);
-            FileInfo segment_file_info{.path = seg_path};
+            SegmentFileInfo segment_file_info;
+            segment_file_info.path = seg_path;
             if (segment_meta.has_size()) {
                 segment_file_info.size = segment_meta.size();
             }
@@ -232,7 +233,7 @@ Status VectorIndexBuildTask::execute(const BuildVectorIndexRequest& request, Bui
     return Status::OK();
 }
 
-Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const FileInfo& segment_file_info,
+Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const SegmentFileInfo& segment_file_info,
                                            const std::vector<int64_t>& index_ids,
                                            const TabletSchemaCSPtr& tablet_schema) {
     // Open the segment file (FileInfo carries size/encryption for proper access)

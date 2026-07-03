@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/segment_file_info.h"
 
 namespace starrocks {
 
@@ -56,7 +57,7 @@ public:
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
@@ -80,9 +81,9 @@ public:
     void apply_drop_index(const TxnLogPB_OpDropIndex& op);
 
     // batch processing functions for merging multiple opwrites into one rowset
-    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
-    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, SegmentFileInfo>& replace_segments,
                     const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
     Status set_final_rowset();
 
@@ -137,7 +138,7 @@ private:
 private:
     struct PendingRowsetData {
         RowsetMetadataPB rowset_pb;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         // Per-del metadata: name + shared + encryption_meta carried together so the
         // parallel-array invariant between filename / shared / encryption can't drift.

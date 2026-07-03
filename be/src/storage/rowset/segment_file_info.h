@@ -40,8 +40,11 @@ struct SegmentFileInfo : public FileInfo {
     std::vector<VariantTuple> sort_key_samples;
     int64_t sort_key_sample_row_interval = 0;
     int64_t num_rows = 0;
-    // IDs of vector indexes configured for this segment (one .vi file per id).
+    // IDs of vector indexes whose .vi file belongs to this segment (one .vi file per id).
     std::vector<int64_t> vector_index_ids;
+    // Owner tablet id embedded in this segment's .vi filenames; stable across tablet split
+    // (see SegmentMetadataPB::vector_index_tablet_id). -1 when no vector index.
+    int64_t vector_index_tablet_id = -1;
 
     // Serialize this segment's full per-segment metadata into |segment_meta|: the file attributes
     // (filename, size, encryption_meta, bundle_file_offset), the sort-key fields, num_rows,

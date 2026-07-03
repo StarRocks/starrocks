@@ -375,7 +375,7 @@ TEST_F(MetaFileTest, test_dcg) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -565,7 +565,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("aaa.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -585,7 +585,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         delfile.set_name("bbb2.del");
         rowset_metadata.add_del_files()->CopyFrom(delfile);
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -627,7 +627,7 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         RowsetMetadataPB rowset_metadata;
         rowset_metadata.add_segment_metas()->set_filename("ddd.dat");
         TxnLogPB_OpWrite op_write;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
         op_write.mutable_rowset()->CopyFrom(rowset_metadata);
         builder.apply_opwrite(op_write, replace_segments, orphan_files);
@@ -899,12 +899,16 @@ TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
         untouched->set_vector_index_tablet_id(9999);
     }
 
-    std::map<int, FileInfo> replace_segments;
-    FileInfo rewrite0{.path = "rewrite0.dat", .size = 1024};
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite0;
+    rewrite0.path = "rewrite0.dat";
+    rewrite0.size = 1024;
     rewrite0.vector_index_ids.push_back(100);
     rewrite0.vector_index_tablet_id = tablet_id;
     replace_segments[0] = rewrite0;
-    FileInfo rewrite1{.path = "rewrite1.dat", .size = 2048}; // no ids, no owner
+    SegmentFileInfo rewrite1; // no ids, no owner
+    rewrite1.path = "rewrite1.dat";
+    rewrite1.size = 2048;
     replace_segments[1] = rewrite1;
 
     builder.apply_opwrite(op_write, replace_segments, {});
@@ -1916,8 +1920,8 @@ TEST_F(MetaFileTest, test_apply_opwrite_clears_shared_segments_for_rewrite) {
     }
 
     // Partial update: segment 0 is rewritten into a new private file.
-    std::map<int, FileInfo> replace_segments;
-    FileInfo rewrite_info;
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite_info;
     rewrite_info.path = "rewrite0.dat";
     rewrite_info.size = 1500;
     replace_segments[0] = rewrite_info;
@@ -1959,8 +1963,8 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
         sm1->set_shared(true);
     }
 
-    std::map<int, FileInfo> replace_segments;
-    FileInfo rewrite_info;
+    std::map<int, SegmentFileInfo> replace_segments;
+    SegmentFileInfo rewrite_info;
     rewrite_info.path = "rewrite0.dat";
     rewrite_info.size = 1500;
     replace_segments[0] = rewrite_info;
