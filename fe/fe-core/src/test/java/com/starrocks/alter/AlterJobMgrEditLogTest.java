@@ -314,6 +314,142 @@ public class AlterJobMgrEditLogTest {
     }
 
     @Test
+    public void testAlterViewUpdateSecurityAppliedOnReplay() throws Exception {
+        // CREATE OR REPLACE VIEW resolves a SQL SECURITY characteristic and persists it atomically with the
+        // redefined view through OP_MODIFY_VIEW_DEF. Both the master WAL applier and the follower replay must
+        // honor the updateSecurity/security fields.
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        // The view starts out non-secure.
+        Assertions.assertFalse(view.isSecurity());
+        db.registerTableUnlocked(view);
+
+        String originalViewDef = view.getInlineViewDef();
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        newColumns.add(new Column("c1", IntegerType.INT));
+
+        AlterViewInfo alterViewInfo =
+                new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment", newViewDef);
+        // Simulate CREATE OR REPLACE VIEW ... SECURITY INVOKER (non-secure -> secure).
+        alterViewInfo.setUpdateSecurity(true);
+        alterViewInfo.setSecurity(true);
+
+        alterJobMgr.alterView(alterViewInfo);
+
+        // Master state: the definition changed and the view is now secure.
+        View updatedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(updatedView);
+        Assertions.assertEquals(newViewDef, updatedView.getInlineViewDef());
+        Assertions.assertTrue(updatedView.isSecurity());
+
+        // The journal must round-trip both the updateSecurity flag and the security value.
+        AlterViewInfo replayInfo = (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MODIFY_VIEW_DEF);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertTrue(replayInfo.isUpdateSecurity());
+        Assertions.assertTrue(replayInfo.getSecurity());
+
+        // Follower starts from the old, non-secure state and applies the replay.
+        MockedLocalMetaStore followerMetastore = new MockedLocalMetaStore(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "test_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        List<Column> followerColumns = new ArrayList<>();
+        followerColumns.add(new Column("c1", IntegerType.INT));
+        View followerView = new View(view.getId(), "test_view", followerColumns);
+        followerView.setInlineViewDefWithSqlMode(originalViewDef, 0L);
+        followerView.setSecurity(false);
+        followerDb.registerTableUnlocked(followerView);
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replayAlterView(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        View replayedView = (View) followerDb.getTable(view.getId());
+        Assertions.assertNotNull(replayedView);
+        Assertions.assertEquals(newViewDef, replayedView.getInlineViewDef());
+        Assertions.assertTrue(replayedView.isSecurity());
+    }
+
+    @Test
+    public void testAlterViewReplayLeavesSecurityUnchangedWhenNotUpdated() throws Exception {
+        // A plain ALTER VIEW ... AS (no SECURITY clause) leaves updateSecurity=false, so neither the master WAL
+        // applier nor the follower replay may touch the view's existing SQL SECURITY characteristic.
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        // The view is already secure before the alter.
+        view.setSecurity(true);
+        db.registerTableUnlocked(view);
+
+        String originalViewDef = view.getInlineViewDef();
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        newColumns.add(new Column("c1", IntegerType.INT));
+
+        // The definition-only constructor leaves updateSecurity/security at their defaults (false).
+        AlterViewInfo alterViewInfo =
+                new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment", newViewDef);
+        Assertions.assertFalse(alterViewInfo.isUpdateSecurity());
+
+        alterJobMgr.alterView(alterViewInfo);
+
+        // Master: the definition changed, but the pre-existing security characteristic is preserved.
+        View updatedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(updatedView);
+        Assertions.assertEquals(newViewDef, updatedView.getInlineViewDef());
+        Assertions.assertTrue(updatedView.isSecurity());
+
+        AlterViewInfo replayInfo = (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MODIFY_VIEW_DEF);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertFalse(replayInfo.isUpdateSecurity());
+
+        // Follower is already secure; replaying a non-security alter must not clobber it back to non-secure.
+        MockedLocalMetaStore followerMetastore = new MockedLocalMetaStore(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "test_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        List<Column> followerColumns = new ArrayList<>();
+        followerColumns.add(new Column("c1", IntegerType.INT));
+        View followerView = new View(view.getId(), "test_view", followerColumns);
+        followerView.setInlineViewDefWithSqlMode(originalViewDef, 0L);
+        followerView.setSecurity(true);
+        followerDb.registerTableUnlocked(followerView);
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replayAlterView(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        View replayedView = (View) followerDb.getTable(view.getId());
+        Assertions.assertNotNull(replayedView);
+        Assertions.assertEquals(newViewDef, replayedView.getInlineViewDef());
+        Assertions.assertTrue(replayedView.isSecurity());
+    }
+
+    @Test
     public void testSwapTableNormalCase() throws Exception {
         localMetastore.createDb("swap_db");
         Database db = localMetastore.getDb("swap_db");
