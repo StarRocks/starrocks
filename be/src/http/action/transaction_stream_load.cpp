@@ -29,6 +29,7 @@
 
 #include "base/auth/auth_info.h"
 #include "base/json/json_util.h"
+#include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
@@ -253,7 +254,15 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
 
     StreamLoadContext* ctx = nullptr;
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
-        int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
+        const auto& value = req->header(HTTP_CHANNEL_ID);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        // string_to_int rejects non-numeric, trailing-garbage (e.g. "0abc"), and out-of-range
+        // values; std::stoi would silently parse the numeric prefix and attach to the wrong channel.
+        int channel_id = StringParser::string_to_int<int32_t>(value.c_str(), value.length(), &parse_result);
+        if (parse_result != StringParser::PARSE_SUCCESS) {
+            _send_error_reply(req, Status::InvalidArgument(fmt::format("Invalid channel id {}", value)));
+            return -1;
+        }
         ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, channel_id);
     } else {
         ctx = _exec_env->stream_context_mgr()->get(label);
@@ -319,7 +328,16 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     // check content length
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
-        ctx->body_bytes += std::stol(http_req->header(HttpHeaders::CONTENT_LENGTH));
+        const auto& content_length = http_req->header(HttpHeaders::CONTENT_LENGTH);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto content_length_value =
+                StringParser::string_to_int<int64_t>(content_length.c_str(), content_length.length(), &parse_result);
+        // Reject negative values: this accumulates across the transaction's requests, so a
+        // negative length would silently shrink the accumulated body size under the cap.
+        if (parse_result != StringParser::PARSE_SUCCESS || content_length_value < 0) {
+            return Status::InvalidArgument(fmt::format("Invalid content length: {}", content_length));
+        }
+        ctx->body_bytes += content_length_value;
         if (ctx->body_bytes > max_body_bytes) {
             std::stringstream ss;
             ss << "body size " << ctx->body_bytes << " exceed limit: " << max_body_bytes << ", " << ctx->brief()
@@ -433,15 +451,16 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_timezone(http_req->header(HTTP_TIMEZONE));
     }
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
-        try {
-            auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            if (load_mem_limit < 0) {
-                return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
-            }
-            request.__set_loadMemLimit(load_mem_limit);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_LOAD_MEM_LIMIT);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto load_mem_limit = StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (parse_result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument("Invalid load mem limit format");
         }
+        if (load_mem_limit < 0) {
+            return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
+        }
+        request.__set_loadMemLimit(load_mem_limit);
     }
     if (!http_req->header(HTTP_JSONPATHS).empty()) {
         request.__set_jsonpaths(http_req->header(HTTP_JSONPATHS));
@@ -487,12 +506,15 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
-        try {
-            auto parallel_request_num = std::stoll(http_req->header(HTTP_LOAD_DOP));
-            request.__set_load_dop(parallel_request_num);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_LOAD_DOP);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        // load_dop is an i32 in TStreamLoadPutRequest, so parse as int32_t to reject values
+        // beyond the field's range instead of silently truncating them.
+        auto parallel_request_num = StringParser::string_to_int<int32_t>(value.c_str(), value.length(), &parse_result);
+        if (parse_result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument("Invalid load_dop format");
         }
+        request.__set_load_dop(parallel_request_num);
     }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
@@ -571,7 +593,12 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
 
     if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
-        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        const auto& value = http_req->header(HTTP_EXEC_MEM_LIMIT);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto exec_mem_limit = StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (parse_result != StringParser::PARSE_SUCCESS) {
+            return Status::InvalidArgument("Invalid exec_mem_limit format");
+        }
         if (exec_mem_limit <= 0) {
             return Status::InvalidArgument("exec_mem_limit must be greater than 0");
         }
