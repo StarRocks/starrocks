@@ -558,6 +558,7 @@ ifNotExists:
 createTableAsSelectStatement
     : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        engineDesc?
         keyDesc?
         comment?
         partitionDesc?

@@ -602,4 +602,34 @@ public class CreateTableAnalyzerTest {
             Config.enable_range_distribution = oldEnableRangeDistribution;
         }
     }
+
+    @Test
+    public void testAnalyzeEngineNameUnifiedCatalogRequiresEngine() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withCatalog("create external catalog test_unified_requires_engine properties (" +
+                "\"type\"=\"unified\", \"unified.metastore.type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")");
+
+        String sql = "CREATE TABLE test_unified_requires_engine.db.t (a INT)";
+        Throwable exception = assertThrows(SemanticException.class, () -> {
+            CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                    .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+            CreateTableAnalyzer.analyzeEngineName(createTableStmt, "test_unified_requires_engine");
+        });
+        assertThat(exception.getMessage(), containsString("requires engine clause"));
+    }
+
+    @Test
+    public void testAnalyzeEngineNameUnifiedCatalogAcceptsExplicitEngine() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withCatalog("create external catalog test_unified_accepts_engine properties (" +
+                "\"type\"=\"unified\", \"unified.metastore.type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")");
+
+        String sql = "CREATE TABLE test_unified_accepts_engine.db.t (a INT) ENGINE=hive";
+        CreateTableStmt createTableStmt = (CreateTableStmt) com.starrocks.sql.parser.SqlParser
+                .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        CreateTableAnalyzer.analyzeEngineName(createTableStmt, "test_unified_accepts_engine");
+        Assertions.assertEquals("hive", createTableStmt.getEngineName());
+    }
 }
