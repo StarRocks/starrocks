@@ -25,11 +25,11 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "exec/exec_env.h"
 #include "exec/file_scanner/arrow_scanner.h"
 #include "exec/file_scanner/json_scanner.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"

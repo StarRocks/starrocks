@@ -37,6 +37,7 @@
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/binary_predicate.h"

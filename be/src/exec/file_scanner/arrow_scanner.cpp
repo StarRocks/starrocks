@@ -22,14 +22,14 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "compute_env/load_path/load_path_state_helper.h"
+#include "compute_env/load_path/rejected_record_writer.h"
+#include "exec/exec_env.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
-#include "runtime/rejected_record_writer.h"
+#include "platform/fs_broker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -108,9 +108,9 @@ ArrowScanner::ArrowScanner(RuntimeState* state, RuntimeProfile* profile, const T
         const std::string& col_name = ctx->current_column_name;
         std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", ctx->current_file,
                                                     col_name.empty() ? "null" : col_name, raw_data);
-        RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+        LoadPathStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
-        auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+        auto* writer = LoadPathStateHelper::rejected_record_writer(state);
         if (writer != nullptr) {
             const std::string key = col_name.empty() ? std::string("_raw") : col_name;
 
