@@ -1901,7 +1901,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         boolean isSecurity = false;
-        if (context.SECURITY() != null) {
+        boolean securityExplicit = context.SECURITY() != null;
+        if (securityExplicit) {
             if (context.NONE() != null) {
                 isSecurity = false;
             } else if (context.INVOKER() != null) {
@@ -1916,6 +1917,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
+                securityExplicit,
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())

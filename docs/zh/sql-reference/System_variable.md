@@ -429,6 +429,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **类型**: String
 * **引入版本**: v3.4.2, v3.5.0
 
+### default_view_sql_security
+
+* **描述**: 创建视图时，如果 `CREATE VIEW` 语句未显式指定 `SECURITY` 子句，则使用该变量作为默认的 SQL SECURITY 特性。`NONE`（等价于显式的 `SECURITY NONE` 子句）表示查询视图时只需要执行者拥有该视图本身的 `SELECT` 权限，不会针对执行者校验视图所引用的表的权限；`INVOKER`（等价于 `SECURITY INVOKER`）表示执行者还必须拥有视图所引用的表的 `SELECT` 权限。语句中显式指定的 `SECURITY NONE` 或 `SECURITY INVOKER` 子句始终优先于该变量。该变量仅影响 `CREATE VIEW`，不影响 `ALTER VIEW`。
+* **范围**: Session
+* **默认值**: `NONE`
+* **类型**: String
+* **取值范围**: `NONE`, `INVOKER`
+* **引入版本**: v4.1.1
+
 ### disable_colocate_join
 
 * 描述：控制是否启用 Colocate Join 功能。默认值为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
