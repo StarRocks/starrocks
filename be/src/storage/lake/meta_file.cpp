@@ -170,7 +170,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid] = new_dcg_ver;
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                    const std::map<int, SegmentFileInfo>& replace_segments,
                                     const std::vector<FileMetaPB>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
@@ -191,6 +192,12 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         segment_meta->clear_vector_index_ids();
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
+        }
+        // Refresh the owning tablet id wholesale like vector_index_ids: the replace FileInfo
+        // carries the authoritative owner for the rewritten segment.
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
         }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
@@ -1203,7 +1210,8 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
+                                 const std::map<int, SegmentFileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
@@ -1273,6 +1281,11 @@ Status MetaFileBuilder::set_final_rowset() {
         for (int64_t vi_id : replace_seg.second.vector_index_ids) {
             segment_meta->add_vector_index_ids(vi_id);
         }
+        // See apply_opwrite: refresh the owner from the replace FileInfo.
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
+        }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.
         if (segment_meta->has_shared()) {
@@ -1334,7 +1347,7 @@ Status MetaFileBuilder::set_final_rowset() {
 }
 
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
-                                          const std::map<int, FileInfo>& replace_segments,
+                                          const std::map<int, SegmentFileInfo>& replace_segments,
                                           const std::vector<FileMetaPB>& orphan_files) {
     // Each del already carries name + shared + encryption_meta together in its FileMetaPB.
     std::vector<FileMetaPB> dels;

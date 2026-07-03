@@ -283,16 +283,28 @@ static StatusOr<RewriteVectorIndexOptions> resolve_rewrite_vector_index_options(
 // mode has no src .vi to carry: the dest ids recorded by the rewrite already cover all indexes.
 static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& params,
                                                const SegmentMetadataPB& src_seg_meta, const std::string& src_path,
-                                               const std::string& dest_path, FileInfo* file_info) {
+                                               const std::string& dest_path, SegmentFileInfo* file_info) {
+    // The src .vi is named by the src segment's recorded owner; the dest is a brand-new segment
+    // written by this tablet, so its .vi is named by this tablet (owner recorded by the caller
+    // via stamp_rewrite_vector_index_owner).
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
-        auto src_vi =
-                params.tablet->segment_location(gen_vector_index_filename(src_path, params.tablet->id(), index_id));
+        auto src_vi = params.tablet->segment_location(
+                gen_vector_index_filename(src_path, resolve_segment_vector_index_uid(src_seg_meta), index_id));
         auto dest_vi =
                 params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
         file_info->vector_index_ids.push_back(index_id);
     }
     return Status::OK();
+}
+
+// The dest segment of a rewrite is a brand-new file written by this tablet, so whatever
+// vector_index_ids the rewrite recorded (built inline, scheduled async, or carried from the src)
+// have their .vi named under params.tablet->id(); record it as the owner for every rewrite path.
+static void stamp_rewrite_vector_index_owner(const RowsetUpdateStateParams& params, SegmentFileInfo* file_info) {
+    if (!file_info->vector_index_ids.empty()) {
+        file_info->segment_vector_index_uid = params.tablet->id();
+    }
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
@@ -469,7 +481,7 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
 }
 
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
-                                          std::map<int, FileInfo>* replace_segments,
+                                          std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
     CHECK_MEM_LIMIT("RowsetUpdateState::rewrite_segment");
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
@@ -534,22 +546,26 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
-        FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
+        SegmentFileInfo file_info;
+        file_info.path = params.tablet->segment_location(dest_path);
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids,
                 has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
-                params.tablet, std::move(vector_index_opts)));
+                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids));
         file_info.path = dest_path;
+        stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
     } else if (has_partial_update_state(params)) {
         const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
-        FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
+        SegmentFileInfo file_info;
+        file_info.path = params.tablet->segment_location(dest_path);
 
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
                 _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
-                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts)));
+                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
+                &file_info.vector_index_ids));
         file_info.path = dest_path;
 
         // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is
@@ -562,10 +578,12 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         if (!defer_vector_index_build) {
             RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
         } else if (unmodified_column_ids.empty()) {
+            // Copy-only async fast path (see the block comment above).
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 file_info.vector_index_ids.push_back(index_id);
             }
         }
+        stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
@@ -593,9 +611,15 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // unreachable after the replace (the dest segment has its own copy); orphan it too. In
         // async mode the src ids only marked a scheduled build — no .vi file ever existed.
         if (!defer_vector_index_build) {
+            // The replaced src .vi was named by the src segment's owner tablet id. Carry the src's
+            // shared flag (like the segment orphan above) so a split-shared .vi still referenced by
+            // sibling tablets is routed through the shared-file deleter and delayed, not deleted.
             for (int64_t index_id : src_seg_meta.vector_index_ids()) {
                 FileMetaPB vi_meta;
-                vi_meta.set_name(gen_vector_index_filename(src_seg_meta.filename(), params.tablet->id(), index_id));
+                vi_meta.set_name(gen_vector_index_filename_for_segment(src_seg_meta, index_id));
+                if (src_seg_meta.has_shared()) {
+                    vi_meta.set_shared(src_seg_meta.shared());
+                }
                 orphan_files->push_back(std::move(vi_meta));
             }
         }

@@ -175,7 +175,7 @@ static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileD
         const auto& segment_meta = rowset.segment_metas(i);
         const bool shared_file = is_shared_segment(rowset, i);
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_path = join_path(base_dir, gen_vector_index_filename(segment_meta.filename(), tablet_id, vi_id));
+            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
             if (shared_file && shared_file_deleter != nullptr) {
                 RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
             } else {
@@ -383,10 +383,12 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     if (is_shared_segment(rowset, i)) {
                         const auto& segment_meta = rowset.segment_metas(i);
                         RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, segment_meta.filename())));
-                        // A shared segment's per-segment .vi sidecars are shared too.
+                        // The segment's per-segment .vi sidecars follow the segment; they are named by
+                        // its recorded owner, so delay-delete them under that owner-based name (covers
+                        // both split-shared and bundled segments, matching is_shared_segment above).
                         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                            RETURN_IF_ERROR(deleter->delay_delete(join_path(
-                                    data_dir, gen_vector_index_filename(segment_meta.filename(), tablet_id, vi_id))));
+                            RETURN_IF_ERROR(deleter->delay_delete(
+                                    join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
                         }
                     }
                 }
@@ -1196,13 +1198,12 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
                             const auto& segment_meta = rowset.segment_metas(i);
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment_meta.filename())));
-                            // Delete the segment's per-segment .vi sidecars under the same shared
-                            // guard, so a shared segment's .vi is not removed while a sibling tablet
-                            // still references the segment.
+                            // Delete the segment's per-segment .vi sidecars under the same shared guard
+                            // (skipped while a sibling may still reference a shared segment), named by
+                            // the segment's recorded owner so the right file is removed after a split.
                             for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                                RETURN_IF_ERROR(deleter.delete_file(
-                                        join_path(data_dir, gen_vector_index_filename(segment_meta.filename(),
-                                                                                      latest_metadata->id(), vi_id))));
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(
+                                        data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
                             }
                         }
                     }
@@ -1475,10 +1476,11 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
-            // Protect associated .vi files using per-segment vector index metadata
+            // Protect associated .vi files, named by the segment's recorded owner (not
+            // check_meta->id(): split-shared segments must be protected under the writer's name).
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), check_meta->id(), vi_id);
+                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }

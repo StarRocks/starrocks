@@ -1422,9 +1422,11 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
     meta_seg1->set_filename("seg1.dat");
     meta_seg1->add_vector_index_ids(100);
     meta_seg1->add_vector_index_ids(200);
+    meta_seg1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
     meta_seg2->set_filename("seg2.dat");
     meta_seg2->add_vector_index_ids(100);
+    meta_seg2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1461,16 +1463,20 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
     auto* meta_a = output_rowset->add_segment_metas();
     meta_a->set_filename("reused_a.dat");
     meta_a->add_vector_index_ids(100);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_x = output_rowset->add_segment_metas();
     meta_x->set_filename("new_x.dat");
     meta_x->add_vector_index_ids(100);
     meta_x->add_vector_index_ids(200);
+    meta_x->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_y = output_rowset->add_segment_metas();
     meta_y->set_filename("new_y.dat");
     meta_y->add_vector_index_ids(100);
+    meta_y->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_b = output_rowset->add_segment_metas();
     meta_b->set_filename("reused_b.dat");
     meta_b->add_vector_index_ids(100);
+    meta_b->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1510,10 +1516,12 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
     auto* meta_sc1 = rowset->add_segment_metas();
     meta_sc1->set_filename("sc_seg1.dat");
     meta_sc1->add_vector_index_ids(300);
+    meta_sc1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_sc2 = rowset->add_segment_metas();
     meta_sc2->set_filename("sc_seg2.dat");
     meta_sc2->add_vector_index_ids(300);
     meta_sc2->add_vector_index_ids(400);
+    meta_sc2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1545,6 +1553,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
     auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
     meta_repl->set_filename("repl_seg1.dat");
     meta_repl->add_vector_index_ids(500);
+    meta_repl->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1595,6 +1604,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
     meta_a->set_filename("seg_a.dat");
     meta_a->add_vector_index_ids(100);
     meta_a->add_vector_index_ids(200);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
 
@@ -1639,6 +1649,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     auto* meta_reused = output_rowset->add_segment_metas();
     meta_reused->set_filename("reused.dat");
     meta_reused->add_vector_index_ids(100);
+    meta_reused->set_segment_vector_index_uid(_tablet_metadata->id());
     output_rowset->add_segment_metas()->set_filename("new_a.dat");
     output_rowset->add_segment_metas()->set_filename("new_b.dat");
 

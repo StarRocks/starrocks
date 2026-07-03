@@ -22,6 +22,7 @@
 #include "base/string/string_parser.hpp"
 #include "base/uid_util.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
+#include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
 #include "storage/primitive/lake_file_name.h"
 
@@ -138,6 +139,23 @@ inline std::string gen_vector_index_path_from_segment_path(std::string_view segm
         return vi_filename;
     }
     return fmt::format("{}/{}", dir, vi_filename);
+}
+
+// The per-segment unique id embedded in a persisted segment's .vi filenames
+// (segment_vector_index_uid): its value is the id of the tablet that WROTE the segment, used purely
+// as a unique key and carried verbatim across tablet split so every reader resolves the same .vi.
+// Every segment that records vector_index_ids also records this uid (stamped at write time by the
+// tablet writers / segment rewrite), so callers must only ask for it on a vector-indexed segment;
+// the DCHECK guards that invariant.
+inline int64_t resolve_segment_vector_index_uid(const SegmentMetadataPB& segment_meta) {
+    DCHECK(segment_meta.has_segment_vector_index_uid())
+            << "vector-indexed segment missing its recorded vector index uid: " << segment_meta.filename();
+    return segment_meta.segment_vector_index_uid();
+}
+
+// .vi filename for one index of a persisted (vector-indexed) segment, named by its recorded uid.
+inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB& segment_meta, int64_t index_id) {
+    return gen_vector_index_filename(segment_meta.filename(), resolve_segment_vector_index_uid(segment_meta), index_id);
 }
 
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration

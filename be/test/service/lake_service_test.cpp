@@ -6210,6 +6210,8 @@ protected:
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(seg_name);
             segment_meta->add_vector_index_ids(kIndexId);
+            // Record the .vi owner as the write path does; it names the built .vi file.
+            segment_meta->set_segment_vector_index_uid(kTabletId);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
