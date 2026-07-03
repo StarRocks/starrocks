@@ -489,9 +489,18 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             }
             if (async_compact_cb) {
                 TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
-                bool succ = true;
-                ASSIGN_OR_RETURN(succ, async_compact_cb->wait_for(1000 /* ms timeout */));
-                if (succ) {
+                // Early SST compaction is an opportunistic optimization that keeps the PK
+                // persistent-index LSM shallow. The SSTs are already ingested and valid, so a
+                // compaction failure (e.g. transient thread-pool exhaustion under a hot,
+                // single-node publish burst) must NOT fail publish -- leave the SSTs uncompacted
+                // for background compaction and continue. Otherwise the failed publish is retried
+                // by the FE, producing a large ingest tail latency.
+                auto succ_or = async_compact_cb->wait_for(1000 /* ms timeout */);
+                if (!succ_or.ok()) {
+                    LOG(WARNING) << "early sst compact failed, skip and continue publish. tablet " << tablet->id()
+                                 << ", txn " << txn_id << ": " << succ_or.status();
+                    async_compact_cb = nullptr;
+                } else if (succ_or.value()) {
                     LOG(INFO) << fmt::format("early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}",
                                              tablet->id(), txn_id,
                                              index.current_fileset_index() - current_fileset_start_idx,
@@ -514,7 +523,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     }     // end batch loop
     if (async_compact_cb) {
         TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
-        RETURN_IF_ERROR(async_compact_cb->wait_for());
+        // Non-fatal: see the note above -- a failed early SST compaction leaves valid,
+        // uncompacted SSTs for background compaction rather than failing (and retrying) publish.
+        auto st = async_compact_cb->wait_for();
+        if (!st.ok()) {
+            LOG(WARNING) << "early sst compact failed, skip and continue publish. tablet " << tablet->id() << ", txn "
+                         << txn_id << ": " << st.status();
+        }
+        async_compact_cb = nullptr;
     }
 
     // 3. Handle del files one by one.
