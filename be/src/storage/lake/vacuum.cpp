@@ -1202,8 +1202,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                             // (skipped while a sibling may still reference a shared segment), named by
                             // the segment's recorded owner so the right file is removed after a split.
                             for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                                RETURN_IF_ERROR(deleter.delete_file(
-                                        join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(
+                                        data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
                             }
                         }
                     }
