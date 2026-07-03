@@ -15,8 +15,12 @@
 package com.starrocks.service;
 
 import com.google.gson.Gson;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TAuthInfo;
@@ -179,6 +183,47 @@ public class LakeInformationSchemaDataSourceTest {
         Assertions.assertTrue(partitionMeta.getCompact_version() >= 0);
         // enable_datacache should be false
         Assertions.assertFalse(partitionMeta.isEnable_datacache());
+    }
+
+    /**
+     * partitions_meta must report each physical partition's own bucket count, not the table-level
+     * default. Add a physical partition whose bucket count differs from the table default and assert
+     * BUCKETS is per-physical (the default physical keeps the table default; the added one reports its own).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsPerPhysicalBucketNum() throws Exception {
+        starRocksAssert.withDatabase("db_pp_buckets").useDatabase("db_pp_buckets");
+        starRocksAssert.withTable("CREATE TABLE db_pp_buckets.t (k1 INT, v1 BIGINT) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        // Add a physical partition whose bucket count (5) differs from the table default (3).
+        metastore.addPhysicalPartition("db_pp_buckets", "t", null, 5);
+
+        OlapTable table = (OlapTable) metastore.getTable("db_pp_buckets", "t");
+        Partition partition = table.getPartitions().iterator().next();
+        long defaultPhysicalId = partition.getDefaultPhysicalPartition().getId();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_pp_buckets");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        Map<Long, Integer> bucketsByPartitionId = new HashMap<>();
+        for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+            if (meta.getTable_name().equals("t")) {
+                bucketsByPartitionId.put(meta.getPartition_id(), meta.getBuckets());
+            }
+        }
+        Assertions.assertEquals(2, bucketsByPartitionId.size());
+        Assertions.assertEquals(Integer.valueOf(3), bucketsByPartitionId.get(defaultPhysicalId));
+        Assertions.assertTrue(bucketsByPartitionId.containsValue(5),
+                "expected an added physical partition reporting 5 buckets, got: " + bucketsByPartitionId);
     }
 
     @Test
