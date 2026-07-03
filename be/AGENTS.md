@@ -114,7 +114,7 @@ Cache implementation module for DataCache facade, cache engines, scan read-buffe
 BE HTTP pages, admin actions, load actions, download helpers, and web handlers.
 - Targets: `HttpService`
 - Allowed internal include prefixes: `http/`, `cache/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `fs/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Storage`, `DataWorkflows`, `Orchestration`, `Runtime`, `ComputeEnv`, `Exec`, `ExecRuntime`, `Exprs`, `FileSystem`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Storage`, `DataWorkflows`, `Orchestration`, `Runtime`, `ComputeEnv`, `Exec`, `ExecRuntime`, `ExprCore`, `Exprs`, `FileSystem`, `IO`, `Platform`, `StoragePrimitive`, `Cache`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Remediation: Keep BE HTTP pages, actions, download helpers, and web handlers in HttpService; keep reusable lower-level helpers in their owning modules such as Platform and Runtime.
 
 ### IO (`io`)

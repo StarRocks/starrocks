@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -22,6 +23,10 @@
 
 #include "common/configbase.h"
 #include "common/system/cpu_info.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "common/system/mem_info.h"
+#include "runtime/runtime_env.h"
+#endif
 #include "types/time_types.h"
 
 namespace {
@@ -78,6 +83,20 @@ int main(int argc, char** argv) {
 
     ::testing::InitGoogleTest(&argc, argv);
     starrocks::CpuInfo::init();
+#ifdef STARROCKS_JIT_ENABLE
+    // JIT cache accounting uses RuntimeEnv-owned memory trackers. Keep this
+    // lightweight test binary explicit instead of changing production JIT code.
+    starrocks::MemInfo::init();
+    auto runtime_env_status = starrocks::RuntimeEnv::GetInstance()->init(nullptr);
+    if (!runtime_env_status.ok()) {
+        fprintf(stderr, "failed to initialize RuntimeEnv: %s\n", runtime_env_status.to_string().c_str());
+        return 1;
+    }
+#endif
     starrocks::date::init_date_cache();
-    return RUN_ALL_TESTS();
+    const int result = RUN_ALL_TESTS();
+#ifdef STARROCKS_JIT_ENABLE
+    starrocks::RuntimeEnv::GetInstance()->stop();
+#endif
+    return result;
 }

@@ -112,7 +112,11 @@ set(EXPR_CORE_FILES
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
       jit/ir_helper.cpp
-      jit/expr_jit_codegen.cpp)
+      jit/expr_jit_codegen.cpp
+      jit/expr_jit_rewriter.cpp
+      jit/expr_jit_pass.cpp
+      jit/jit_engine.cpp
+      jit/jit_expr.cpp)
 endif()
 
 ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
@@ -133,15 +137,6 @@ set(EXPR_FILES
   dict_query_expr.cpp
   dictionary_get_expr.cpp
 )
-
-if(STARROCKS_JIT_ENABLE)
-  set(EXPR_FILES ${EXPR_FILES}
-      jit/expr_jit_rewriter.cpp
-      jit/expr_jit_pass.cpp
-      jit/jit_engine.cpp
-      jit/jit_expr.cpp)
-
-endif()
 
 ADD_BE_LIB(Exprs ${EXPR_FILES})
 target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv Runtime)
