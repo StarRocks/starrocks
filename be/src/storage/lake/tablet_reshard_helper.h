@@ -166,12 +166,15 @@ void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t s
 //
 // Only output-side files are collected. Input rowsets/sstables are deliberately
 // excluded — they have been absorbed into the merged tablet by the preceding
-// merge publish and remain live; deleting them would corrupt data.
+// merge publish and remain live; deleting them would corrupt data. Output
+// sstables that alias an input sstable (persistent-index "full contain / only
+// do move" reuse, which keeps the same physical file and only re-stamps the
+// fileset_id) are likewise excluded, since they are the live input file itself.
 //
 // No dedup is performed — lake file names are UUID-based per tablet/txn, so
 // collisions are not expected in practice. Matches the no-dedup style of
 // transactions.cpp::collect_files_in_log.
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager);
+std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log, TabletManager* tablet_manager);
 
 // Allocate `total` across `out->size()` buckets in proportion to
 // weights[i] / Σweights using the largest-remainder (Hare-Niemeyer) method,
