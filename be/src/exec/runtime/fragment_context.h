@@ -165,10 +165,6 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
-    void init_jit_profile(bool jit_enabled);
-
-    void update_jit_profile(int64_t time_ns);
-
     void iterate_pipeline(const std::function<void(Pipeline*)>& call);
     Status iterate_pipeline(const std::function<Status(Pipeline*)>& call);
 
@@ -232,9 +228,6 @@ private:
     AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
-
-    RuntimeProfile::Counter* _jit_counter = nullptr;
-    RuntimeProfile::Counter* _jit_timer = nullptr;
 
     bool _report_when_finish{};
 };

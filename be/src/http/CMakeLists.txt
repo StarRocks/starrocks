@@ -54,3 +54,6 @@ endif()
 
 ADD_BE_LIB(HttpService ${HTTP_SERVICE_FILES})
 target_link_libraries(HttpService PUBLIC Platform PRIVATE Storage DataWorkflows Orchestration)
+if(STARROCKS_JIT_ENABLE)
+    target_link_libraries(HttpService PRIVATE ExprCore)
+endif()

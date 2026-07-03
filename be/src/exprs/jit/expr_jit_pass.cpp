@@ -14,15 +14,25 @@
 
 #include "exprs/jit/expr_jit_pass.h"
 
-#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/expr_jit_rewriter.h"
+#include "exprs/jit/jit_engine.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
+namespace {
+
+bool is_jit_enabled(const RuntimeState* state) {
+    return JITEngine::get_instance()->support_jit() && state->query_options().__isset.jit_level &&
+           state->query_options().jit_level != 0;
+}
+
+} // namespace
+
 Status ExprJITPass::rewrite_root(Expr** root, ObjectPool* pool, RuntimeState* state) {
-    if (state == nullptr || root == nullptr || *root == nullptr || !RuntimeStateHelper::is_jit_enabled(state)) {
+    if (state == nullptr || root == nullptr || *root == nullptr || !is_jit_enabled(state)) {
         return Status::OK();
     }
 
@@ -41,7 +51,7 @@ Status ExprJITPass::rewrite_context(ExprContext* context, ObjectPool* pool) {
     }
 
     auto* state = context->runtime_state();
-    if (state == nullptr || !RuntimeStateHelper::is_jit_enabled(state)) {
+    if (state == nullptr || !is_jit_enabled(state)) {
         return Status::OK();
     }
 

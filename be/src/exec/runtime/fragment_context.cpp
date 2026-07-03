@@ -399,22 +399,6 @@ TQueryType::type FragmentContext::query_type() const {
     return _runtime_state->query_options().query_type;
 }
 
-void FragmentContext::init_jit_profile(bool jit_enabled) {
-    if (runtime_state() && jit_enabled && runtime_state()->runtime_profile()) {
-        _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
-        _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
-    }
-}
-
-void FragmentContext::update_jit_profile(int64_t time_ns) {
-    if (_jit_counter != nullptr) {
-        COUNTER_UPDATE(_jit_counter, 1);
-    }
-
-    if (_jit_timer != nullptr) {
-        COUNTER_UPDATE(_jit_timer, time_ns);
-    }
-}
 void FragmentContext::iterate_pipeline(const std::function<void(Pipeline*)>& call) {
     for (auto& group : _execution_groups) {
         group->for_each_pipeline(call);

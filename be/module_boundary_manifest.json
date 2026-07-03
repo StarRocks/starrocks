@@ -107,7 +107,7 @@
       ],
       "forbidden_include_prefixes": ["service/", "service_be/", "agent/", "connector/"],
       "forbidden_includes": [],
-      "allowed_target_deps": ["Storage", "DataWorkflows", "Orchestration", "Runtime", "ComputeEnv", "Exec", "ExecRuntime", "Exprs", "FileSystem", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Storage", "DataWorkflows", "Orchestration", "Runtime", "ComputeEnv", "Exec", "ExecRuntime", "ExprCore", "Exprs", "FileSystem", "IO", "Platform", "StoragePrimitive", "Cache", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep BE HTTP pages, actions, download helpers, and web handlers in HttpService; keep reusable lower-level helpers in their owning modules such as Platform and Runtime."

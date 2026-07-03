@@ -310,7 +310,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 
