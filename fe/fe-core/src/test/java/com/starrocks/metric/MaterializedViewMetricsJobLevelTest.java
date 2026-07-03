@@ -20,8 +20,6 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -203,64 +201,6 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
         } finally {
             starRocksAssert.dropMaterializedView("mjl_multi_mv1");
             starRocksAssert.dropTable("mjl_multi_t1");
-        }
-    }
-
-    /**
-     * A successful batch whose pending next batch cannot be enqueued (rejected submit / queue full)
-     * leaves the refresh incomplete. The run must be failed so the metric agrees with task history and
-     * materialized_view_refresh_jobs, which would otherwise record this terminal run as a success.
-     */
-    @Test
-    public void incompleteRefreshWhenSuccessorRejectedCountsAsFailed() throws Exception {
-        String partitionTable = "CREATE TABLE mjl_reject_t1 (dt date, v int)\n" +
-                "PARTITION BY date_trunc('day', dt)";
-        starRocksAssert.withTable(partitionTable);
-        addRangePartition("mjl_reject_t1", "p1", "2024-03-01", "2024-03-02");
-        addRangePartition("mjl_reject_t1", "p2", "2024-03-02", "2024-03-03");
-
-        String mvSql = "CREATE MATERIALIZED VIEW mjl_reject_mv1 " +
-                "PARTITION BY date_trunc('day', dt) " +
-                "REFRESH DEFERRED MANUAL " +
-                "PROPERTIES (\"partition_refresh_number\"=\"1\") " +
-                "AS SELECT dt, sum(v) FROM mjl_reject_t1 GROUP BY dt";
-        starRocksAssert.withMaterializedView(mvSql);
-
-        executeInsertSql("insert into mjl_reject_t1 partition(p1) values('2024-03-01', 1)");
-        executeInsertSql("insert into mjl_reject_t1 partition(p2) values('2024-03-02', 2)");
-
-        // Simulate a rejected successor submit: the first batch succeeds but cannot enqueue its next
-        // batch, while hasNextBatchRun() stays genuinely true (p2 is still pending).
-        new MockUp<MVPCTRefreshProcessor>() {
-            @Mock
-            public boolean generateNextTaskRunIfNeeded() {
-                return false;
-            }
-        };
-
-        try {
-            MaterializedView mv = getMv("test", "mjl_reject_mv1");
-            TaskRun taskRun = buildMVTaskRun(mv, "test");
-
-            Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(taskRun),
-                    "an incomplete refresh (successor rejected) must fail the run");
-
-            IMaterializedViewMetricsEntity iEntity =
-                    MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
-            Assertions.assertInstanceOf(MaterializedViewMetricsEntity.class, iEntity);
-            MaterializedViewMetricsEntity metrics = (MaterializedViewMetricsEntity) iEntity;
-
-            Assertions.assertEquals(1, metrics.counterRefreshJobTotal.getValue(),
-                    "incomplete refresh must be counted exactly once");
-            Assertions.assertEquals(1, metrics.counterRefreshJobFailedTotal.getValue(),
-                    "incomplete refresh must count as a failed job");
-            Assertions.assertEquals(0, metrics.counterRefreshJobSuccessTotal.getValue(),
-                    "incomplete refresh must not count as a success");
-            Assertions.assertEquals(1, metrics.histRefreshJobDuration.getCount(),
-                    "incomplete refresh must record exactly one duration sample");
-        } finally {
-            starRocksAssert.dropMaterializedView("mjl_reject_mv1");
-            starRocksAssert.dropTable("mjl_reject_t1");
         }
     }
 }

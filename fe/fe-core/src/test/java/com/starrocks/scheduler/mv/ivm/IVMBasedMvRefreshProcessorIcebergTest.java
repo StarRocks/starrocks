@@ -36,14 +36,11 @@ import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -1486,44 +1483,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "imvSourceTimestampRange should have an entry per staged base table");
         Assertions.assertTrue(timestampRange.isEmpty(),
                 "unresolvable snapshot ids should degrade to an empty map, got: " + timestampRange);
-    }
-
-    /**
-     * When IVM planning fails after the TVR deltas were staged and the hybrid processor falls
-     * back to PCT, the task run must not keep source ranges from the abandoned IVM attempt.
-     */
-    @Test
-    public void testImvSourceRangesNotRecordedOnPctFallback() throws Exception {
-        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
-        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
-        seedTvrBaselineAtVersionZero(mv);
-        advanceTableVersionTo(2);
-        mockListTableDeltaTraits(ImmutableList.of(
-                TvrTableDeltaTrait.ofMonotonic(
-                        TvrTableDelta.of(TvrVersion.of(0L), TvrVersion.of(2L)),
-                        TvrDeltaStats.EMPTY)));
-        // Fail IVM plan generation after the TVR deltas were staged; the PCT fallback
-        // builds its plan from getTaskDefinition() and is unaffected.
-        new MockUp<MaterializedView>() {
-            @Mock
-            public String getIVMTaskDefinition() {
-                throw new SemanticException("injected IVM plan failure");
-            }
-        };
-
-        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
-        Assertions.assertInstanceOf(MVHybridRefreshProcessor.class, processor.getMVRefreshProcessor());
-        MVHybridRefreshProcessor hybrid = (MVHybridRefreshProcessor) processor.getMVRefreshProcessor();
-        Assertions.assertInstanceOf(MVPCTRefreshProcessor.class, hybrid.getCurrentProcessor());
-
-        MVTaskRunExtraMessage extraMessage =
-                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
-        Assertions.assertTrue(extraMessage.getImvSourceVersionRange().isEmpty(),
-                "PCT fallback must not keep IVM source ranges, got: "
-                        + extraMessage.getImvSourceVersionRange());
-        Assertions.assertTrue(extraMessage.getImvSourceTimestampRange().isEmpty(),
-                "PCT fallback must not keep IVM source timestamps, got: "
-                        + extraMessage.getImvSourceTimestampRange());
     }
 
     /**

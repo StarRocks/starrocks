@@ -180,7 +180,7 @@ public class ShowMaterializedViewTest {
         List<Column> schema = MaterializedViewsSystemTable.create().getBaseSchema();
         Assertions.assertTrue(schema.stream()
                 .anyMatch(c -> c.getName().equalsIgnoreCase("QUERY_REWRITE_STATUS_REASON")));
-        Assertions.assertEquals("QUERY_REWRITE_STATUS_REASON", schema.get(schema.size() - 1).getName());
+        Assertions.assertEquals("BASE_TABLE_REFRESH_VERSION_TIMES", schema.get(schema.size() - 1).getName());
     }
 
     @Test

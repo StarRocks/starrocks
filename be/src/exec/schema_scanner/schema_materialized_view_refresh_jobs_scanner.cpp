@@ -15,8 +15,8 @@
 #include "exec/schema_scanner/schema_materialized_view_refresh_jobs_scanner.h"
 
 #include "exec/schema_scanner/schema_helper.h"
+#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
