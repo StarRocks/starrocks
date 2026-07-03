@@ -175,4 +175,41 @@ public class SessionVariableTest {
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> sessionVariable.setBinaryEncodingLevel("invalid"));
     }
+
+    @Test
+    public void testReplayFromJsonWithAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertTrue(sessionVariable.isAllowLakeWithoutPartitionFilter());
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.ALLOW_HIVE_WITHOUT_PARTITION_FILTER + "\": false}");
+        Assertions.assertFalse(sessionVariable.isAllowLakeWithoutPartitionFilter());
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.ALLOW_LAKE_WITHOUT_PARTITION_FILTER + "\": true}");
+        Assertions.assertTrue(sessionVariable.isAllowLakeWithoutPartitionFilter());
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
+        Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
+        Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.ALLOW_LAKE_WITHOUT_PARTITION_FILTER + "\": false, \"" +
+                SessionVariable.ALLOW_HIVE_WITHOUT_PARTITION_FILTER + "\": true}");
+        Assertions.assertFalse(sessionVariable.isAllowLakeWithoutPartitionFilter());
+
+        sessionVariable.replayFromJson("{\"" +
+                SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
+                SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
+        Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
+    }
 }
