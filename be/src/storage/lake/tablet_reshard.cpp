@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "common/logging.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
@@ -342,6 +343,23 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     return Status::OK();
 }
 
+// Delete the output files of a compaction that is being dropped during a
+// split/merge cross-publish, logging what was removed. This is the only place
+// the reshard path deletes data files, and it is otherwise invisible
+// (delete_files_async only logs at VLOG level), so record it at INFO for
+// post-mortem traceability. Input sstables that the persistent-index compaction
+// reused verbatim as its output ("full contain / only do move") are already
+// excluded by collect_compaction_output_files, so this never deletes a
+// still-referenced file.
+void delete_dropped_compaction_output_files(const TxnLogPB& txn_log, const char* reshard_kind) {
+    auto output_files = tablet_reshard_helper::collect_compaction_output_files(
+            txn_log, ExecEnv::GetInstance()->lake_tablet_manager());
+    LOG(INFO) << "Drop pending compaction during " << reshard_kind << " cross-publish, tablet=" << txn_log.tablet_id()
+              << " txn=" << txn_log.txn_id() << ", delete " << output_files.size() << " compaction output file(s): ["
+              << JoinStrings(output_files, ", ") << "]";
+    delete_files_async(std::move(output_files));
+}
+
 // Transform |txn_log| (which still carries the old tablet id) for publish
 // on the merged tablet. Drops compaction as a no-op (background compaction
 // will rerun it on the merged tablet) and asynchronously deletes the output
@@ -351,8 +369,7 @@ Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
     if (!txn_log->has_op_compaction() && !txn_log->has_op_parallel_compaction()) {
         return Status::OK();
     }
-    delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-            *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+    delete_dropped_compaction_output_files(*txn_log, "merge");
     txn_log->clear_op_compaction();
     txn_log->clear_op_parallel_compaction();
     return Status::OK();
@@ -382,8 +399,7 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
                                      const PublishTabletInfo& publish_tablet_info) {
     if (txn_log->has_op_compaction() || txn_log->has_op_parallel_compaction()) {
         if (publish_tablet_info.get_split_index() == 0) {
-            delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
-                    *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+            delete_dropped_compaction_output_files(*txn_log, "split");
         }
         txn_log->clear_op_compaction();
         txn_log->clear_op_parallel_compaction();
