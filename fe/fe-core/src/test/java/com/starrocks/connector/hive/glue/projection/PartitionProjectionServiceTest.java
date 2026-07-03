@@ -467,7 +467,7 @@ public class PartitionProjectionServiceTest {
      * The single-arg overload drops them, so getTextFileFormatDesc must pass HIVE_TABLE_SERDE_LIB.
      */
     @Test
-    public void testProjectedPartitionCarriesOpenCSVSerdeQuoteEscape() {
+    void testProjectedPartitionCarriesOpenCSVSerdeQuoteEscape() {
         HiveTable table = mock(HiveTable.class);
         Map<String, String> properties = new HashMap<>(ImmutableMap.of(
                 "projection.enabled", "true",
@@ -476,7 +476,7 @@ public class PartitionProjectionServiceTest {
                 "storage.location.template", "s3://bucket/data/${region}/",
                 HiveTable.HIVE_TABLE_SERDE_LIB, "org.apache.hadoop.hive.serde2.OpenCSVSerde"));
         when(table.getProperties()).thenReturn(properties);
-        when(table.getPartitionColumnNames()).thenReturn(ImmutableList.of("region"));
+        when(table.getPartitionColumnNames()).thenReturn(List.of("region"));
         when(table.getTableLocation()).thenReturn("s3://bucket/data");
         when(table.getStorageFormat()).thenReturn(HiveStorageFormat.TEXTFILE);
         // Empty serde properties: OpenCSVSerde defaults ('"' / '\') must still apply.

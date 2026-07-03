@@ -80,7 +80,7 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
-    public void testToTextFileFormatDescForOpenCSVSerde() {
+    void testToTextFileFormatDescForOpenCSVSerde() {
         String openCSVSerde = "org.apache.hadoop.hive.serde2.OpenCSVSerde";
 
         // OpenCSVSerde applies separator/quote/escape defaults even when unset.
@@ -126,7 +126,7 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
-    public void testToTextFileFormatDescForLazySimpleEscape() {
+    void testToTextFileFormatDescForLazySimpleEscape() {
         // LazySimpleSerDe with ESCAPED BY (serde property 'escape.delim'): the escape
         // char must reach the BE so "a\,b" is one field, while enclose stays unset.
         Map<String, String> params = new HashMap<>();
