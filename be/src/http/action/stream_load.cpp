@@ -303,7 +303,16 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     ctx->body_bytes = 0;
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
-        ctx->body_bytes = std::stol(http_req->header(HttpHeaders::CONTENT_LENGTH));
+        const auto& content_length = http_req->header(HttpHeaders::CONTENT_LENGTH);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto content_length_value =
+                StringParser::string_to_int<int64_t>(content_length.c_str(), content_length.length(), &parse_result);
+        // Reject negative values before assigning to the unsigned body_bytes: a negative length
+        // would wrap and then fail the size-limit check with a misleading message.
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS || content_length_value < 0)) {
+            return Status::InvalidArgument(fmt::format("Invalid content length: {}", content_length));
+        }
+        ctx->body_bytes = content_length_value;
         if (ctx->body_bytes > max_body_bytes) {
             std::stringstream ss;
             ss << "body size " << ctx->body_bytes << " exceed limit: " << max_body_bytes << ", " << ctx->brief()
@@ -506,15 +515,16 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
     }
     if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
-        try {
-            auto skip_header = std::stoll(http_req->header(HTTP_SKIP_HEADER));
-            if (skip_header < 0) {
-                return Status::InvalidArgument("skip_header must be equal or greater than 0");
-            }
-            request.__set_skipHeader(skip_header);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_SKIP_HEADER);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto skip_header = StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid csv load skip_header format");
         }
+        if (skip_header < 0) {
+            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        }
+        request.__set_skipHeader(skip_header);
     }
     if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
         if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
@@ -563,15 +573,16 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_timezone(http_req->header(HTTP_TIMEZONE));
     }
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
-        try {
-            auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            if (load_mem_limit < 0) {
-                return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
-            }
-            request.__set_loadMemLimit(load_mem_limit);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_LOAD_MEM_LIMIT);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto load_mem_limit = StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid load mem limit format");
         }
+        if (load_mem_limit < 0) {
+            return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
+        }
+        request.__set_loadMemLimit(load_mem_limit);
     }
     if (!http_req->header(HTTP_JSONPATHS).empty()) {
         request.__set_jsonpaths(http_req->header(HTTP_JSONPATHS));
@@ -621,23 +632,28 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
-        try {
-            auto parallel_request_num = std::stoll(http_req->header(HTTP_LOAD_DOP));
-            request.__set_load_dop(parallel_request_num);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_LOAD_DOP);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        // load_dop is an i32 in TStreamLoadPutRequest, so parse as int32_t to reject values
+        // beyond the field's range instead of silently truncating them.
+        auto parallel_request_num = StringParser::string_to_int<int32_t>(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid load_dop format");
         }
+        request.__set_load_dop(parallel_request_num);
     }
     if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
-        try {
-            auto log_rejected_record_num = std::stoll(http_req->header(HTTP_LOG_REJECTED_RECORD_NUM));
-            if (log_rejected_record_num < -1) {
-                return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
-            }
-            request.__set_log_rejected_record_num(log_rejected_record_num);
-        } catch (const std::invalid_argument& e) {
+        const auto& value = http_req->header(HTTP_LOG_REJECTED_RECORD_NUM);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto log_rejected_record_num =
+                StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
             return Status::InvalidArgument("Invalid log_rejected_record_num format");
         }
+        if (log_rejected_record_num < -1) {
+            return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
+        }
+        request.__set_log_rejected_record_num(log_rejected_record_num);
     }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
@@ -681,7 +697,12 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     }
 
     if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
-        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        const auto& value = http_req->header(HTTP_EXEC_MEM_LIMIT);
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        auto exec_mem_limit = StringParser::string_to_int<int64_t>(value.c_str(), value.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+            return Status::InvalidArgument("Invalid exec_mem_limit format");
+        }
         if (exec_mem_limit <= 0) {
             return Status::InvalidArgument("exec_mem_limit must be greater than 0");
         }
