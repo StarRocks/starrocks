@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.rest;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.rest.auth.AuthProperties;
 import org.apache.iceberg.rest.auth.OAuth2Properties;
 
 import java.util.Map;
@@ -46,6 +47,11 @@ public class OAuth2SecurityProperties {
         } else if (securityConfig.getSecurity() == IcebergRESTCatalog.Security.JWT) {
             // for JWT disable the token-refresh
             propertiesBuilder.put(OAuth2Properties.TOKEN_REFRESH_ENABLED, "false");
+            // The JWT is supplied per session at request time (SessionContext credentials
+            // from IcebergRESTCatalog.buildContext), not as a static catalog token. Select
+            // the OAuth2 auth manager explicitly so those per-session credentials are sent
+            // as the bearer; otherwise the REST client uses no auth and drops the token.
+            propertiesBuilder.put(AuthProperties.AUTH_TYPE, AuthProperties.AUTH_TYPE_OAUTH2);
         }
 
         this.securityProperties = propertiesBuilder.buildOrThrow();
