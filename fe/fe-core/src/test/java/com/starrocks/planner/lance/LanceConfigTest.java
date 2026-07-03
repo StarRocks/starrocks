@@ -20,6 +20,7 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.SessionVariable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -73,5 +74,18 @@ public class LanceConfigTest {
         LanceScanNode scanNode = new LanceScanNode(new PlanNodeId(0), tupleDescriptor, "LanceScanNode");
 
         Assertions.assertTrue(scanNode.isConnectorScanNode());
+    }
+
+    @Test
+    public void testLanceReaderSessionSwitch() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        Assertions.assertTrue(LanceScanNode.useNativeReader(sessionVariable));
+
+        sessionVariable.setLanceForceJNIReader(true);
+        Assertions.assertFalse(LanceScanNode.useNativeReader(sessionVariable));
+
+        sessionVariable.setLanceForceNativeReader(true);
+        Assertions.assertFalse(LanceScanNode.useNativeReader(sessionVariable));
     }
 }

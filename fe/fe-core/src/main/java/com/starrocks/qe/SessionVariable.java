@@ -744,6 +744,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String LANCE_FORCE_JNI_READER = "lance_force_jni_reader";
+    public static final String LANCE_FORCE_NATIVE_READER = "lance_force_native_reader";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -2797,6 +2799,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = LANCE_FORCE_JNI_READER)
+    private boolean lanceForceJNIReader = false;
+
+    @VariableMgr.VarAttr(name = LANCE_FORCE_NATIVE_READER)
+    private boolean lanceForceNativeReader = false;
+
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3657,6 +3665,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
+    }
+
+    public boolean getLanceForceJNIReader() {
+        return lanceForceJNIReader;
+    }
+
+    public void setLanceForceJNIReader(boolean lanceForceJNIReader) {
+        this.lanceForceJNIReader = lanceForceJNIReader;
+    }
+
+    public boolean getLanceForceNativeReader() {
+        return lanceForceNativeReader;
+    }
+
+    public void setLanceForceNativeReader(boolean lanceForceNativeReader) {
+        this.lanceForceNativeReader = lanceForceNativeReader;
     }
 
     public boolean getAvroUseJNIReader() {
