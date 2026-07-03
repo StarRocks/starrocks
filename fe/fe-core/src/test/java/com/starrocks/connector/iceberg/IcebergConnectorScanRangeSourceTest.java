@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.planner.PartitionIdGenerator;
@@ -712,6 +713,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     @Test
     public void testPartitionNumLimitThrowsWhenExceeded() throws Exception {
         ConnectContext connectContext = new ConnectContext();
+        connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setThreadLocalInfo();
         connectContext.getSessionVariable().setScanLakePartitionNumLimit(1);
 
@@ -731,6 +733,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     @Test
     public void testPartitionNumLimitNotExceededWithinLimit() throws Exception {
         ConnectContext connectContext = new ConnectContext();
+        connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setThreadLocalInfo();
         connectContext.getSessionVariable().setScanLakePartitionNumLimit(2);
 
@@ -748,6 +751,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     @Test
     public void testPartitionNumLimitDisabledByDefault() throws Exception {
         ConnectContext connectContext = new ConnectContext();
+        connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setThreadLocalInfo();
         // 0 (the default) means unlimited.
         connectContext.getSessionVariable().setScanLakePartitionNumLimit(0);
