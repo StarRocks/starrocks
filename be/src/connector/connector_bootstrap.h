@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include <string>
+
 #include "common/status.h"
 
 namespace starrocks::connector {
 
 Status bootstrap_builtin_connectors();
+Status init_builtin_connector_runtime(const std::string& jdbc_driver_dir);
 
 } // namespace starrocks::connector

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/jdbc_scanner.h"
+#include "connector/jdbc/jdbc_scanner.h"
 
 #include <memory>
 
@@ -23,7 +23,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
-#include "exec/jdbc/type_checker_manager.h"
+#include "connector/jdbc/type_checker_manager.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"

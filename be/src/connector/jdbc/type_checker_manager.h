@@ -17,7 +17,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "exec/jdbc/type_checker.h"
+#include "connector/jdbc/type_checker.h"
 
 namespace starrocks {
 

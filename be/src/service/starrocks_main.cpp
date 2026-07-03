@@ -60,7 +60,6 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "exec/exec_env.h"
-#include "exec/jdbc/jdbc_driver_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"

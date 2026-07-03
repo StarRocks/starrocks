@@ -288,7 +288,6 @@
         "runtime/http_result_writer.h",
         "runtime/hive_table_sink.h",
         "runtime/iceberg_table_sink.h",
-        "exec/jdbc/jdbc_driver_manager.h",
         "runtime/lake_tablets_channel.h",
         "runtime/load_channel.h",
         "runtime/load_channel_mgr.h",
@@ -897,6 +896,38 @@
       "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectorjdbc",
+      "doc_label": "ConnectorJDBC",
+      "summary": "JDBC connector implementation, scanner, driver manager, and type checker above connector contracts without registry composition, storage, service, or full Exec coupling.",
+      "agents_path": "be/src/connector/jdbc/AGENTS.md",
+      "owned_targets": ["ConnectorJDBC"],
+      "allowed_include_prefixes": [
+        "connector/jdbc/",
+        "connector/connector.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "platform/",
+        "fs/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "storage/", "service/", "http/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "Platform", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_jdbc_test"],
+      "allowed_test_link_deps": ["ConnectorJDBC", "ConnectorPrimitive", "Platform", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorJDBC limited to JDBC read-side scan, driver management, and type checking; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+    },
+    {
       "id": "connectorelasticsearch",
       "doc_label": "ConnectorElasticsearch",
       "summary": "Elasticsearch connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.",
@@ -966,6 +997,7 @@
       "allowed_include_prefixes": [
         "connector/connector_bootstrap.h",
         "connector/benchmark/",
+        "connector/jdbc/",
         "connector/elasticsearch/",
         "connector/mysql/",
         "connector/connector.h",
@@ -980,7 +1012,7 @@
         "connector/builtin_connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
     },
     {

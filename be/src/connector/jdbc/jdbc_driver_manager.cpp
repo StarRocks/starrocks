@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/jdbc/jdbc_driver_manager.h"
+#include "connector/jdbc/jdbc_driver_manager.h"
 
 #include <atomic>
 #include <chrono>

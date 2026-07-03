@@ -24,6 +24,11 @@
 #include "connector/benchmark/benchmark_connector.h"
 #endif
 
+#ifdef STARROCKS_WITH_CONNECTOR_JDBC
+#include "connector/jdbc/jdbc_connector.h"
+#include "connector/jdbc/jdbc_driver_manager.h"
+#endif
+
 #ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
 #include "connector/elasticsearch/es_connector.h"
 #endif
@@ -51,6 +56,9 @@ Status bootstrap_builtin_connectors() {
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
     install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
 #endif
+#ifdef STARROCKS_WITH_CONNECTOR_JDBC
+    install_if_absent<JDBCConnector>(registry, Connector::JDBC);
+#endif
 #ifdef STARROCKS_WITH_CONNECTOR_ELASTICSEARCH
     install_if_absent<ESConnector>(registry, Connector::ES);
 #endif
@@ -58,6 +66,15 @@ Status bootstrap_builtin_connectors() {
     install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
 #endif
     return Status::OK();
+}
+
+Status init_builtin_connector_runtime(const std::string& jdbc_driver_dir) {
+#ifdef STARROCKS_WITH_CONNECTOR_JDBC
+    return JDBCDriverManager::getInstance()->init(jdbc_driver_dir);
+#else
+    (void)jdbc_driver_dir;
+    return Status::OK();
+#endif
 }
 
 } // namespace starrocks::connector
