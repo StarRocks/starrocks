@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer.mv;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
@@ -402,8 +403,18 @@ public class IVMAnalyzer {
             return false;
         }
 
+        // Select items that are exactly one aggregate call; only these can collapse (a wrapped
+        // aggregate like bitmap_count(bitmap_union(x)) still needs the hidden state column).
+        Set<Expr> bareAggregateItems = Sets.newHashSet();
+        for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+            if (item.getExpr() instanceof FunctionCallExpr) {
+                bareAggregateItems.add(item.getExpr());
+            }
+        }
+
         // getAggregate() is non-null post-analysis, so for no aggregates this loop just no-ops.
         List<IVMAggFunctionInfo> newAggFuncInfos = Lists.newArrayList();
+        Set<IVMAggFunctionInfo> collapsedInfos = Sets.newIdentityHashSet();
         ExprSubstitutionMap substitutionMap = new ExprSubstitutionMap();
         for (FunctionCallExpr aggFuncExpr : aggregateExprs) {
             // Distinct flag is dropped by the combinator rewrite below, so incremental
@@ -423,10 +434,17 @@ public class IVMAnalyzer {
 
             IVMAggFunctionInfo aggFunctionInfo = new IVMAggFunctionInfo(aggFuncExpr, aggFuncName,
                     intermediateAggFuncExpr, newAggFuncName);
-            Expr stateMergeFuncExpr = buildStateMergeFuncExpr(aggFunctionInfo);
-
             newAggFuncInfos.add(aggFunctionInfo);
-            substitutionMap.put(aggFuncExpr, stateMergeFuncExpr);
+
+            // A metric-state union's finalize is the identity (the merged state IS the result), so
+            // the select item itself becomes the state column — no separate hidden copy. The refresh
+            // side finds it via IvmRewriter.bindStateColumnsForAggregate.
+            if (isCollapsibleUnionAggregate(aggFuncExpr, bareAggregateItems)) {
+                collapsedInfos.add(aggFunctionInfo);
+                substitutionMap.put(aggFuncExpr, intermediateAggFuncExpr);
+            } else {
+                substitutionMap.put(aggFuncExpr, buildStateMergeFuncExpr(aggFunctionInfo));
+            }
         }
 
         List<FunctionCallExpr> newAggFuncs = newAggFuncInfos.stream()
@@ -454,8 +472,11 @@ public class IVMAnalyzer {
                     Expr newExpr = substituteWithMap(item.getExpr().clone(), substitutionMap);
                     newItems.add(new SelectListItem(newExpr, item.getAlias()));
                 });
-        // add agg state func expr
+        // add agg state func expr (collapsed unions already sit in the select items above)
         for (IVMAggFunctionInfo aggFunctionInfo : newAggFuncInfos) {
+            if (collapsedInfos.contains(aggFunctionInfo)) {
+                continue;
+            }
             newItems.add(new SelectListItem(aggFunctionInfo.newAggFunc, aggFunctionInfo.newAggFuncName));
         }
         selectList.setItems(newItems);
@@ -468,8 +489,9 @@ public class IVMAnalyzer {
                     Expr newExpr = substituteWithMap(expr.clone(), substitutionMap);
                     newOutputExpressions.add(newExpr);
                 });
-        // add extra exprs
+        // add extra exprs (collapsed unions already sit in the substituted outputs above)
         newAggFuncInfos.stream()
+                .filter(aggFunctionInfo -> !collapsedInfos.contains(aggFunctionInfo))
                 .forEach(aggFunctionInfo -> newOutputExpressions.add(aggFunctionInfo.newAggFunc));
         selectRelation.setOutputExpr(newOutputExpressions);
 
@@ -541,6 +563,18 @@ public class IVMAnalyzer {
         String aggStateFuncName = AggStateUtils.aggStateCombineFunctionName(aggFuncName);
         FunctionCallExpr aggStateFuncExpr = new FunctionCallExpr(aggStateFuncName, aggFuncExpr.getChildren());
         return aggStateFuncExpr;
+    }
+
+    /**
+     * True when the aggregate's state column can double as its visible output column. Requires
+     * both an identity finalize (bitmap_union/hll_union/percentile_union: the merged state IS the
+     * result value) and a select item that is exactly this aggregate (so that item can carry the
+     * state). A genuine agg-state union combinator (avg_union over an AGG_STATE_UNION column)
+     * satisfies the same identity property and should join this predicate when IVM supports it.
+     */
+    private static boolean isCollapsibleUnionAggregate(FunctionCallExpr aggFuncExpr, Set<Expr> bareAggregateItems) {
+        return AggStateUtils.METRIC_STATE_UNION_FUNCTIONS.contains(aggFuncExpr.getFunctionName())
+                && bareAggregateItems.contains(aggFuncExpr);
     }
 
     private Expr buildStateMergeFuncExpr(IVMAggFunctionInfo aggFunctionInfo) throws AnalysisException {
