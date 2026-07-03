@@ -576,4 +576,34 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     private void readUnlock() {
         lock.readLock().unlock();
     }
+<<<<<<< HEAD
+=======
+
+    public com.starrocks.catalog.Table getView(ConnectContext context, String dbName, String viewName) {
+        // Return a mock IcebergView for testing
+        if (dbName.equalsIgnoreCase("view_db") && viewName.equalsIgnoreCase("iceberg_view")) {
+            List<Column> schema = Lists.newArrayList(
+                    new Column("id", IntegerType.INT),
+                    new Column("data", VarcharType.VARCHAR),
+                    new Column("date", DateType.DATE)
+            );
+            return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
+                    "view_location", Maps.newHashMap());
+        }
+        // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
+        // connector-view detection. Each lookup mints a *fresh* id, mirroring
+        // IcebergApiConverter.toView (CONNECTOR_ID_GENERATOR.getNextId()), so the id can never be
+        // used to detect re-entry.
+        if (dbName.equalsIgnoreCase("view_db")
+                && (viewName.equalsIgnoreCase("cyc_a") || viewName.equalsIgnoreCase("cyc_b"))) {
+            List<Column> schema = Lists.newArrayList(new Column("id", IntegerType.INT));
+            String other = viewName.equalsIgnoreCase("cyc_a") ? "cyc_b" : "cyc_a";
+            String def = "SELECT id FROM " + MOCKED_ICEBERG_CATALOG_NAME + ".view_db." + other;
+            return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
+        }
+        return null;
+    }
+>>>>>>> bc38569b87 ([BugFix] Guard against cyclic view definitions to avoid StackOverflowError (#75033))
 }
