@@ -2052,9 +2052,9 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
         String sql = "select * from lineitem_partition limit 2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "     partitions=7/7\n" +
+        assertContains(plan, "     partitions=1/7\n" +
                 "     rollup: lineitem_partition\n" +
-                "     tabletRatio=1");
+                "     tabletRatio=1/48");
     }
 
     @Test
