@@ -3634,24 +3634,33 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 }
 
 // Helper function to extract whole match (group 0) using RE2::Match
-// This is shared by both overloaded extract_regex_matches functions
+// Shared by both overloaded extract_regex_matches functions.
+// Appends capture group `group` (0 = the whole match) of every non-overlapping match of
+// `regex` in `str_sp` to `str_col`. `matches` is a caller-provided buffer of at least
+// `max_matches` StringPieces used for RE2 submatches (index 0 = whole match).
+//
+// Advancing the cursor by the WHOLE match span (matches[0]) -- with a one-byte step after
+// any zero-length match -- is what keeps every capture group in lock-step with the group-0
+// path. Using RE2::FindAndConsumeN here instead would only expose the post-match cursor,
+// which cannot distinguish "skipped N bytes then matched 0" from a genuine advance, so a
+// zero-length match found past the cursor (e.g. "($)" against "abc") would be emitted twice
+// and zero-length matches at the cursor (e.g. "(a*)") would loop forever.
 template <typename IndexType>
-static void extract_whole_matches(const re2::StringPiece& str_sp, const re2::RE2& regex, BinaryColumn* str_col,
-                                  IndexType& index, int max_matches) {
+static void extract_group_matches(const re2::StringPiece& str_sp, const re2::RE2& regex, int group,
+                                  BinaryColumn* str_col, IndexType& index, re2::StringPiece* matches,
+                                  int max_matches) {
     re2::StringPiece input = str_sp;
-    std::vector<re2::StringPiece> matches(max_matches);
     size_t pos = 0;
 
     while (pos <= input.size()) {
         re2::StringPiece remaining = input.substr(pos);
-        if (regex.Match(remaining, 0, remaining.size(), RE2::UNANCHORED, &matches[0], max_matches)) {
-            // matches[0] contains the whole match (group 0)
-            str_col->append(Slice(matches[0].data(), matches[0].size()));
+        if (regex.Match(remaining, 0, remaining.size(), RE2::UNANCHORED, matches, max_matches)) {
+            str_col->append(Slice(matches[group].data(), matches[group].size()));
             index += 1;
-            // Move past this match
+            // Move past the whole match; step one byte after a zero-length match.
             pos = matches[0].data() - input.data() + matches[0].size();
             if (matches[0].size() == 0) {
-                pos++; // Avoid infinite loop on zero-length matches
+                pos++;
             }
         } else {
             break;
@@ -3664,43 +3673,15 @@ static void extract_whole_matches(const re2::StringPiece& str_sp, const re2::RE2
 static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex, int group, BinaryColumn* str_col,
                                   uint32_t& index, int max_matches) {
     re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
-
-    if (group == 0) {
-        // Extract the whole match (group 0)
-        extract_whole_matches(str_sp, regex, str_col, index, max_matches);
-    } else {
-        // Extract specific capture group
-        re2::StringPiece find[group];
-        const RE2::Arg* args[group];
-        RE2::Arg argv[group];
-
-        for (size_t i = 0; i < group; i++) {
-            argv[i] = &find[i];
-            args[i] = &argv[i];
-        }
-        while (re2::RE2::FindAndConsumeN(&str_sp, regex, args, group)) {
-            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
-            index += 1;
-        }
-    }
+    std::vector<re2::StringPiece> matches(max_matches);
+    extract_group_matches(str_sp, regex, group, str_col, index, matches.data(), max_matches);
 }
 
-// Overloaded version for pre-allocated arrays (used by regexp_extract_all_const)
+// Overloaded version for a pre-allocated submatch buffer (used by regexp_extract_all_const)
 static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex, int group, BinaryColumn* str_col,
-                                  uint64_t& index, const std::unique_ptr<re2::StringPiece[]>& find,
-                                  const std::unique_ptr<const RE2::Arg*[]>& args, int max_matches) {
+                                  uint64_t& index, const std::unique_ptr<re2::StringPiece[]>& matches, int max_matches) {
     re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
-
-    if (group == 0) {
-        // Extract the whole match (group 0) - reuse common logic
-        extract_whole_matches(str_sp, regex, str_col, index, max_matches);
-    } else {
-        // Extract specific capture group using pre-allocated arrays
-        while (re2::RE2::FindAndConsumeN(&str_sp, regex, args.get(), group)) {
-            str_col->append(Slice(find[group - 1].data(), find[group - 1].size()));
-            index += 1;
-        }
-    }
+    extract_group_matches(str_sp, regex, group, str_col, index, matches.get(), max_matches);
 }
 
 static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::Options* options,
@@ -3830,26 +3811,14 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
         return NullableColumn::create(std::move(array), std::move(nl_col));
     }
 
-    // Prepare arguments for FindAndConsumeN (only needed when group > 0)
-    std::unique_ptr<re2::StringPiece[]> find;
-    std::unique_ptr<const RE2::Arg*[]> args;
-    std::unique_ptr<RE2::Arg[]> argv;
-
-    if (group > 0) {
-        find = std::make_unique<re2::StringPiece[]>(group);
-        args = std::make_unique<const RE2::Arg*[]>(group);
-        argv = std::make_unique<RE2::Arg[]>(group);
-
-        for (size_t i = 0; i < group; i++) {
-            argv[i] = &find[i];
-            args[i] = &argv[i];
-        }
-    }
+    // Pre-allocate the RE2 submatch buffer once and reuse it across rows.
+    // max_matches >= 1 here (group has passed the [0, max_matches) range check above).
+    auto matches = std::make_unique<re2::StringPiece[]>(max_matches);
 
     // focuses only on iteration and offset management
     for (int row = 0; row < size; ++row) {
         if (!content_viewer.is_null(row)) {
-            extract_regex_matches(content_viewer.value(row), *const_re, group, str_col.get(), index, find, args,
+            extract_regex_matches(content_viewer.value(row), *const_re, group, str_col.get(), index, matches,
                                   max_matches);
         }
         offset_col->append(index);
