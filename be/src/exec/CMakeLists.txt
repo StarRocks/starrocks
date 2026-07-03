@@ -430,10 +430,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
-    jdbc_scanner.cpp
-    jdbc/type_checker.cpp
-    jdbc/type_checker_manager.cpp
-    jdbc/type_checker_xml_loader.cpp
     connector_scan_node.cpp
 )
 
@@ -474,7 +470,6 @@ set(EXEC_DATA_SINK_FILES
 set(EXEC_RUNTIME_COMPAT_FILES
     lookup_stream_mgr.cpp
     exec_env.cpp
-    jdbc/jdbc_driver_manager.cpp
     pipeline/pipeline_fragment_reporter.cpp
     runtime_compat/runtime_state_helper.cpp
     stream_load/transaction_mgr.cpp

@@ -43,7 +43,6 @@
 #include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "exec/exec_env.h"
-#include "exec/jdbc/jdbc_driver_manager.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
@@ -166,9 +165,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
 #ifndef __APPLE__
-    // init jdbc driver manager
-    EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
+    EXIT_IF_ERROR(
+            connector::init_builtin_connector_runtime(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": connector runtime init successfully";
 #endif
 
     // init network option

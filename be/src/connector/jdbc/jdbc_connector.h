@@ -15,8 +15,9 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "connector/connector.h"
-#include "exec/jdbc_scanner.h"
+
 namespace starrocks {
 
 class JDBCScanner;

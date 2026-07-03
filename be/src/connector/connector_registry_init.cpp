@@ -23,7 +23,6 @@
 #ifndef __APPLE__
 #include "connector/iceberg_connector.h"
 #endif
-#include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 
 namespace starrocks::connector {
@@ -42,7 +41,6 @@ void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
 Status install_builtin_connectors(ConnectorRegistry* registry) {
     DCHECK(registry != nullptr);
     install_if_absent<HiveConnector>(registry, Connector::HIVE);
-    install_if_absent<JDBCConnector>(registry, Connector::JDBC);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
     install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);

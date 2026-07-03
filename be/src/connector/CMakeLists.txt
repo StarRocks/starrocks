@@ -36,7 +36,6 @@ target_link_libraries(ConnectorPrimitive PUBLIC
 ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
-        jdbc_connector.cpp
         lake_connector.cpp
         cache_stats_connector.cpp
         file_connector.cpp
@@ -133,6 +132,36 @@ if (WITH_CONNECTOR_BENCHMARK)
     )
 endif()
 
+if (WITH_CONNECTOR_JDBC)
+    ADD_BE_LIB(ConnectorJDBC
+            jdbc/jdbc_connector.cpp
+            jdbc/jdbc_scanner.cpp
+            jdbc/jdbc_driver_manager.cpp
+            jdbc/type_checker.cpp
+            jdbc/type_checker_manager.cpp
+            jdbc/type_checker_xml_loader.cpp
+    )
+
+    target_link_libraries(ConnectorJDBC PUBLIC
+            ConnectorPrimitive
+            Expr
+            Runtime
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+
+    target_link_libraries(ConnectorJDBC PRIVATE
+            Platform
+            FileSystem
+            libxml2
+    )
+endif()
+
 ADD_BE_LIB(ConnectorBootstrap
         connector_bootstrap.cpp
 )
@@ -152,6 +181,13 @@ if (WITH_CONNECTOR_BENCHMARK)
     target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(ConnectorBootstrap PRIVATE
             ConnectorBenchmark
+    )
+endif()
+
+if (WITH_CONNECTOR_JDBC)
+    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_JDBC)
+    target_link_libraries(ConnectorBootstrap PRIVATE
+            ConnectorJDBC
     )
 endif()
 
