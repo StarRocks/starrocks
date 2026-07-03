@@ -222,16 +222,17 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
-    // Tablet id under which this segment's vector index (.vi) files were written. The .vi
-    // filename embeds it ("<segment_base>_<vector_index_tablet_id>_<index_id>.vi") so that
-    // bundle-file segments sharing one physical file across tablets still get distinct .vi
-    // files. It is RECORDED here (instead of using the reading tablet's id) so the name is
-    // stable and reader-agnostic: carried verbatim by CopyFrom across tablet SPLIT, letting
-    // every child that shares this segment resolve the same .vi. Always stamped by the writer in
-    // the same step that records vector_index_ids, so a segment carrying vector_index_ids always
-    // carries this owner too. Consumers (read / GC / async build) only read it for vector-indexed
-    // segments and DCHECK its presence -- there is no fall back to the reading tablet's id.
-    optional int64 vector_index_tablet_id = 13;
+    // Per-segment unique id embedded in this segment's vector index (.vi) filenames
+    // ("<segment_base>_<segment_vector_index_uid>_<index_id>.vi") so that bundle-file segments
+    // sharing one physical file across tablets still get distinct .vi files. Its VALUE is the id of
+    // the tablet that WROTE the segment, used purely as a unique key (do not treat it as a live
+    // tablet reference): it is RECORDED here, instead of using the reading tablet's id, so the name
+    // is stable and reader-agnostic -- carried verbatim by CopyFrom across tablet SPLIT so every
+    // child sharing this segment resolves the same .vi. Always stamped by the writer in the same
+    // step that records vector_index_ids, so a segment carrying vector_index_ids always carries this
+    // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
+    // DCHECK its presence -- there is no fall back to the reading tablet's id.
+    optional int64 segment_vector_index_uid = 13;
 }
 
 message RowsetMetadataPB {

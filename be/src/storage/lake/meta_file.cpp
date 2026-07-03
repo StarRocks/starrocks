@@ -195,9 +195,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         }
         // Refresh the owning tablet id wholesale like vector_index_ids: the replace FileInfo
         // carries the authoritative owner for the rewritten segment.
-        segment_meta->clear_vector_index_tablet_id();
-        if (replace_seg.second.vector_index_tablet_id >= 0) {
-            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
         }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
@@ -1282,9 +1282,9 @@ Status MetaFileBuilder::set_final_rowset() {
             segment_meta->add_vector_index_ids(vi_id);
         }
         // See apply_opwrite: refresh the owner from the replace FileInfo.
-        segment_meta->clear_vector_index_tablet_id();
-        if (replace_seg.second.vector_index_tablet_id >= 0) {
-            segment_meta->set_vector_index_tablet_id(replace_seg.second.vector_index_tablet_id);
+        segment_meta->clear_segment_vector_index_uid();
+        if (replace_seg.second.segment_vector_index_uid >= 0) {
+            segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
         }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.

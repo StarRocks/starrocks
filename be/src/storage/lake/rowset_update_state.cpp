@@ -289,7 +289,7 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
     // via stamp_rewrite_vector_index_owner).
     for (int64_t index_id : src_seg_meta.vector_index_ids()) {
         auto src_vi = params.tablet->segment_location(
-                gen_vector_index_filename(src_path, vector_index_owner_tablet_id(src_seg_meta), index_id));
+                gen_vector_index_filename(src_path, resolve_segment_vector_index_uid(src_seg_meta), index_id));
         auto dest_vi =
                 params.tablet->segment_location(gen_vector_index_filename(dest_path, params.tablet->id(), index_id));
         RETURN_IF_ERROR(fs::copy_file(src_vi, dest_vi).status());
@@ -303,7 +303,7 @@ static Status carry_src_segment_vector_indexes(const RowsetUpdateStateParams& pa
 // have their .vi named under params.tablet->id(); record it as the owner for every rewrite path.
 static void stamp_rewrite_vector_index_owner(const RowsetUpdateStateParams& params, SegmentFileInfo* file_info) {
     if (!file_info->vector_index_ids.empty()) {
-        file_info->vector_index_tablet_id = params.tablet->id();
+        file_info->segment_vector_index_uid = params.tablet->id();
     }
 }
 

@@ -1112,10 +1112,10 @@ Status SegmentIterator::_init_ann_reader() {
         if (_opts.belonged_to_cloud_native) {
             // Owner tablet id for the .vi name, filled from SegmentMetadataPB by lake Rowset::read()
             // (the only producer of belonged_to_cloud_native) for every vector-indexed segment.
-            DCHECK_GE(_opts.vector_index_tablet_id, 0)
+            DCHECK_GE(_opts.segment_vector_index_uid, 0)
                     << "cloud-native ANN read without a resolved .vi owner tablet id";
             index_path = lake::gen_vector_index_path_from_segment_path(
-                    _segment->file_name(), _opts.vector_index_tablet_id, tablet_index_meta->index_id());
+                    _segment->file_name(), _opts.segment_vector_index_uid, tablet_index_meta->index_id());
         } else {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());

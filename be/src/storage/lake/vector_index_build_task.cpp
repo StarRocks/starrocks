@@ -112,7 +112,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
             const auto& seg_name = segment_meta.filename();
             // Name .vi files by the segment's recorded owner tablet id so a segment shared across
             // tablets after a split builds/reads the same .vi.
-            const int64_t vi_tablet_id = vector_index_owner_tablet_id(segment_meta);
+            const int64_t vi_tablet_id = resolve_segment_vector_index_uid(segment_meta);
             std::vector<int64_t> index_ids;
             for (int64_t idx_id : segment_meta.vector_index_ids()) {
                 // Skip indexes whose .vi file already exists (partial retry recovery).
@@ -144,7 +144,7 @@ Status VectorIndexBuildTask::prepare(const BuildVectorIndexRequest& request) {
                 segment_file_info.encryption_meta = segment_meta.encryption_meta();
             }
             // index_ids is non-empty here; pair the owner with it (see FileInfo's field comment).
-            segment_file_info.vector_index_tablet_id = vi_tablet_id;
+            segment_file_info.segment_vector_index_uid = vi_tablet_id;
 
             _work_items.push_back({cand.version, std::move(segment_file_info), std::move(index_ids)});
         }
@@ -297,7 +297,7 @@ Status VectorIndexBuildTask::build_segment(int64_t tablet_id, const SegmentFileI
             seg_basename = seg_basename.substr(pos + 1);
         }
         std::string vi_name =
-                gen_vector_index_filename(seg_basename, segment_file_info.vector_index_tablet_id, index_id);
+                gen_vector_index_filename(seg_basename, segment_file_info.segment_vector_index_uid, index_id);
         std::string vi_path = _tablet_mgr->segment_location(tablet_id, vi_name);
 
         ASSIGN_OR_RETURN(auto builder_type,

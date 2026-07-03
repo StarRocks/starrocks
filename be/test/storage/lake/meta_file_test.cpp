@@ -868,7 +868,7 @@ TEST_F(MetaFileTest, test_apply_opwrite_del_op_offset_uses_max_segment_id) {
     EXPECT_EQ(118, metadata->next_rowset_id());
 }
 
-// The partial-update replace path refreshes vector_index_tablet_id wholesale from the replace
+// The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
 // FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
 // carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
 TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
@@ -891,12 +891,12 @@ TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
         auto* stale_owner = rowset->add_segment_metas();
         stale_owner->set_filename("partial1.dat");
         stale_owner->add_vector_index_ids(100);
-        stale_owner->set_vector_index_tablet_id(7777);
+        stale_owner->set_segment_vector_index_uid(7777);
         // Not replaced: carried verbatim.
         auto* untouched = rowset->add_segment_metas();
         untouched->set_filename("untouched.dat");
         untouched->add_vector_index_ids(100);
-        untouched->set_vector_index_tablet_id(9999);
+        untouched->set_segment_vector_index_uid(9999);
     }
 
     std::map<int, SegmentFileInfo> replace_segments;
@@ -904,7 +904,7 @@ TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
     rewrite0.path = "rewrite0.dat";
     rewrite0.size = 1024;
     rewrite0.vector_index_ids.push_back(100);
-    rewrite0.vector_index_tablet_id = tablet_id;
+    rewrite0.segment_vector_index_uid = tablet_id;
     replace_segments[0] = rewrite0;
     SegmentFileInfo rewrite1; // no ids, no owner
     rewrite1.path = "rewrite1.dat";
@@ -917,13 +917,13 @@ TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
     const auto& written = metadata->rowsets(0);
     ASSERT_EQ(3, written.segment_metas_size());
     EXPECT_EQ("rewrite0.dat", written.segment_metas(0).filename());
-    ASSERT_TRUE(written.segment_metas(0).has_vector_index_tablet_id());
-    EXPECT_EQ(tablet_id, written.segment_metas(0).vector_index_tablet_id());
+    ASSERT_TRUE(written.segment_metas(0).has_segment_vector_index_uid());
+    EXPECT_EQ(tablet_id, written.segment_metas(0).segment_vector_index_uid());
     EXPECT_EQ("rewrite1.dat", written.segment_metas(1).filename());
     EXPECT_EQ(0, written.segment_metas(1).vector_index_ids_size());
-    EXPECT_FALSE(written.segment_metas(1).has_vector_index_tablet_id());
-    ASSERT_TRUE(written.segment_metas(2).has_vector_index_tablet_id());
-    EXPECT_EQ(9999, written.segment_metas(2).vector_index_tablet_id());
+    EXPECT_FALSE(written.segment_metas(1).has_segment_vector_index_uid());
+    ASSERT_TRUE(written.segment_metas(2).has_segment_vector_index_uid());
+    EXPECT_EQ(9999, written.segment_metas(2).segment_vector_index_uid());
 }
 
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {

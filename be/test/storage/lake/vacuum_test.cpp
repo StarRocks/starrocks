@@ -2002,7 +2002,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_vector_index_files) {
                             "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
                             "shared": true,
                             "vector_index_ids": [100],
-                            "vector_index_tablet_id": 710
+                            "segment_vector_index_uid": 710
                         }
                     ]
                 }
@@ -2021,7 +2021,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_vector_index_files) {
                             "filename": "0000000000f159e5_22222222-2222-2222-2222-2222222222b1.dat",
                             "shared": true,
                             "vector_index_ids": [100],
-                            "vector_index_tablet_id": 710
+                            "segment_vector_index_uid": 710
                         }
                     ]
                 }
@@ -3119,14 +3119,14 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                                 100,
                                 200
                             ],
-                            "vector_index_tablet_id": 5000
+                            "segment_vector_index_uid": 5000
                         },
                         {
                             "filename": "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5000
+                            "segment_vector_index_uid": 5000
                         }
                     ]
                 }
@@ -3149,7 +3149,7 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5000
+                            "segment_vector_index_uid": 5000
                         }
                     ]
                 }
@@ -3164,14 +3164,14 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
                                 100,
                                 200
                             ],
-                            "vector_index_tablet_id": 5000
+                            "segment_vector_index_uid": 5000
                         },
                         {
                             "filename": "00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5000
+                            "segment_vector_index_uid": 5000
                         }
                     ]
                 }
@@ -3208,7 +3208,7 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
     }
 }
 
-// Test: vacuum names .vi files by the segment's recorded vector_index_tablet_id (the owning tablet),
+// Test: vacuum names .vi files by the segment's recorded segment_vector_index_uid (the owning tablet),
 // not the tablet running the vacuum. This is what lets a segment shared across tablets after a split
 // resolve/GC the same .vi. Here the recorded owner (9999) differs from the vacuumed tablet (6000):
 // only the owner-named .vi must be deleted; a decoy named with the local tablet id must survive.
@@ -3232,7 +3232,7 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_use_recorded_owner_tablet_id) {
                         {
                             "filename": "00000000000c59f0_dddd0001-0001-0001-0001-000000000001.dat",
                             "vector_index_ids": [100],
-                            "vector_index_tablet_id": 9999
+                            "segment_vector_index_uid": 9999
                         }
                     ]
                 }
@@ -3262,7 +3262,7 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_use_recorded_owner_tablet_id) {
                         {
                             "filename": "00000000000c59f0_dddd0001-0001-0001-0001-000000000001.dat",
                             "vector_index_ids": [100],
-                            "vector_index_tablet_id": 9999
+                            "segment_vector_index_uid": 9999
                         }
                     ]
                 }
@@ -3413,28 +3413,28 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         }
                     ]
                 }
@@ -3461,21 +3461,21 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         }
                     ]
                 }
@@ -3490,14 +3490,14 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat",
                             "vector_index_ids": [
                                 100
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         }
                     ]
                 }
@@ -3566,7 +3566,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
                             "vector_index_ids": [
                                 300
                             ],
-                            "vector_index_tablet_id": 5200
+                            "segment_vector_index_uid": 5200
                         },
                         {
                             "filename": "00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat",
@@ -3574,7 +3574,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
                                 300,
                                 400
                             ],
-                            "vector_index_tablet_id": 5200
+                            "segment_vector_index_uid": 5200
                         }
                     ]
                 }
@@ -3588,7 +3588,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
                             "vector_index_ids": [
                                 300
                             ],
-                            "vector_index_tablet_id": 5200
+                            "segment_vector_index_uid": 5200
                         }
                     ]
                 }
@@ -3642,7 +3642,7 @@ TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
                             "vector_index_ids": [
                                 500
                             ],
-                            "vector_index_tablet_id": 5300
+                            "segment_vector_index_uid": 5300
                         }
                     ]
                 }
@@ -3703,7 +3703,7 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
                             "vector_index_ids": [
                                 700
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"
@@ -3738,7 +3738,7 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
                             "vector_index_ids": [
                                 700
                             ],
-                            "vector_index_tablet_id": 5400
+                            "segment_vector_index_uid": 5400
                         },
                         {
                             "filename": "00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"

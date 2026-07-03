@@ -381,12 +381,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             seg_options.tablet_range = *shared_segment_range;
         }
         // Owner tablet id for .vi naming: a segment shared across tablets after a split must
-        // resolve the same .vi from every reader (see vector_index_owner_tablet_id). Set only for
+        // resolve the same .vi from every reader (see resolve_segment_vector_index_uid). Set only for
         // vector-indexed segments; read() is the sole entry point that sets belonged_to_cloud_native,
         // so only its iterators reach the ANN-reader path that consumes this.
         if (meta_pos < _metadata->segment_metas_size() &&
             _metadata->segment_metas(meta_pos).vector_index_ids_size() > 0) {
-            seg_options.vector_index_tablet_id = vector_index_owner_tablet_id(_metadata->segment_metas(meta_pos));
+            seg_options.segment_vector_index_uid = resolve_segment_vector_index_uid(_metadata->segment_metas(meta_pos));
         }
 
         if (options.rowid_range_option != nullptr) { // physical split.

@@ -39,7 +39,7 @@ class VectorIndexBuildTask {
 public:
     struct SegmentWork {
         int64_t rowset_version;
-        // Carries the owner tablet id for this segment's .vi filenames in vector_index_tablet_id
+        // Carries this segment's vector index uid for its .vi filenames (segment_vector_index_uid)
         // (resolved from the segment meta in prepare()).
         SegmentFileInfo segment_file_info;
         std::vector<int64_t> index_ids;
