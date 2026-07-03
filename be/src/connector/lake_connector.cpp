@@ -1778,14 +1778,17 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     // upper bound lower to cut big tablets into finer morsels that fill more otherwise-idle drivers.
     // std::min keeps it never coarser than the shared default (an over-large config just degrades to the
     // default); the min_splitted_scan_rows clamp below still guarantees >= one pipeline chunk per morsel.
-    int64_t max_splitted_scan_rows = config::tablet_internal_parallel_max_splitted_scan_rows;
-    if (_enable_lake_prepared_physical_split_scan) {
-        max_splitted_scan_rows = std::min(max_splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows);
-    }
+    // Start at the coarse (shared default) split granularity. The prepared-physical-split FINE cap is applied
+    // only when a skewed big tablet is detected below (see has_skewed_big_tablet). Rationale: on balanced data
+    // the ~4x finer morsels the fine cap produces are pure overhead on a saturated pipeline -- more, smaller
+    // morsels multiply per-morsel scheduling/IO-task churn (the extra "PrepareChunkSourceTime" is dominated by
+    // driver preemption from the higher morsel count, not by real prepare work) with no straggler to break up,
+    // so they only lengthen makespan. The finer granularity pays off solely in the skew case it was built for.
     *splitted_scan_rows =
             config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
-    *splitted_scan_rows = std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
-                                   std::min(*splitted_scan_rows, max_splitted_scan_rows));
+    *splitted_scan_rows =
+            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
 
     // Skew detection (only meaningful under prepared-physical-split, see the gate above). A tablet is a
     // straggler worth splitting when it is BOTH (a) big enough that TabletReader::open will actually split
@@ -1800,6 +1803,14 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
             _enable_lake_prepared_physical_split_scan &&
             max_tablet_rows >= *splitted_scan_rows * config::lake_tablet_rows_splitted_ratio &&
             max_tablet_rows > ideal_share_rows * _runtime_state->lake_tablet_internal_parallel_skew_split_ratio();
+
+    // Only a detected skewed big tablet justifies the finer prepared-split granularity; apply the fine cap
+    // here (after skew is decided against the coarse granularity) so balanced scans keep coarse morsels.
+    if (has_skewed_big_tablet) {
+        *splitted_scan_rows =
+                std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                         std::min(*splitted_scan_rows, config::lake_prepared_split_max_splitted_scan_rows));
+    }
 
     // Count-based gate, now overridable by a skewed big tablet.
     if (!force_split && num_total_scan_ranges >= pipeline_dop && !has_skewed_big_tablet) {
