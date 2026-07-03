@@ -164,6 +164,7 @@ protected:
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(seg_name);
             segment_meta->add_vector_index_ids(kIndexId);
+            segment_meta->set_segment_vector_index_uid(kTabletId);
         }
 
         if (built_version > 0) {
@@ -439,6 +440,7 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
         auto* segment_meta = rs->add_segment_metas();
         segment_meta->set_filename(seg_ok);
         segment_meta->add_vector_index_ids(kIndexId);
+        segment_meta->set_segment_vector_index_uid(kTabletId);
     }
     {
         auto* rs = metadata->add_rowsets();
@@ -449,6 +451,7 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
         auto* segment_meta = rs->add_segment_metas();
         segment_meta->set_filename(seg_bad);
         segment_meta->add_vector_index_ids(kIndexId);
+        segment_meta->set_segment_vector_index_uid(kTabletId);
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
@@ -492,6 +495,7 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     segment_meta->set_size(2048);          // exercises has_size branch
     segment_meta->set_encryption_meta(""); // exercises has_encryption_meta branch (empty meta is fine)
     segment_meta->add_vector_index_ids(kIndexId);
+    segment_meta->set_segment_vector_index_uid(kTabletId);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
     BuildVectorIndexRequest request;

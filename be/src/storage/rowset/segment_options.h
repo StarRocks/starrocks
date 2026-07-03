@@ -69,6 +69,10 @@ public:
     std::shared_ptr<DelvecLoader> delvec_loader;
     bool is_primary_keys = false;
     uint64_t tablet_id = 0;
+    // Per-segment vector index uid for this segment's .vi path (see SegmentMetadataPB.segment_vector_index_uid);
+    // filled by lake Rowset::read() for vector-indexed segments. -1 = unset (non-lake or no vector
+    // index); the cloud-native ANN read path requires it set.
+    int64_t segment_vector_index_uid = -1;
     // rowset base segment id
     uint32_t rowset_id = 0;
     uint32_t dynamic_rss_id_base = 0;

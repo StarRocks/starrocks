@@ -24,6 +24,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/primitive/primary_key_encoding_types.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -124,7 +125,7 @@ public:
     // Thread-safe for concurrent calls with DIFFERENT segment_id values,
     // provided each call uses its own replace_segments/orphan_files containers.
     Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
-                           std::map<int, FileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
+                           std::map<int, SegmentFileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
 
     // Release `segment_id`-th segment file's state (upserts + partial state).
     void release_segment(uint32_t segment_id);

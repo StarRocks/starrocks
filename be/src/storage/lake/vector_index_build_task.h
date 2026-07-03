@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/lake_service.pb.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -38,7 +39,9 @@ class VectorIndexBuildTask {
 public:
     struct SegmentWork {
         int64_t rowset_version;
-        FileInfo segment_file_info;
+        // Carries this segment's vector index uid for its .vi filenames (segment_vector_index_uid)
+        // (resolved from the segment meta in prepare()).
+        SegmentFileInfo segment_file_info;
         std::vector<int64_t> index_ids;
     };
 
@@ -68,8 +71,8 @@ public:
     Status execute(const BuildVectorIndexRequest& request, BuildVectorIndexResponse* response);
 
 private:
-    Status build_segment(int64_t tablet_id, const FileInfo& segment_file_info, const std::vector<int64_t>& index_ids,
-                         const TabletSchemaCSPtr& tablet_schema);
+    Status build_segment(int64_t tablet_id, const SegmentFileInfo& segment_file_info,
+                         const std::vector<int64_t>& index_ids, const TabletSchemaCSPtr& tablet_schema);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id = 0;
