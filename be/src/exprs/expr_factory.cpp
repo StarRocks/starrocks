@@ -27,6 +27,7 @@
 #include "exprs/array_expr.h"
 #include "exprs/array_map_expr.h"
 #include "exprs/array_sort_lambda_expr.h"
+#include "exprs/arrow_function_call.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/case_expr.h"
 #include "exprs/cast_expr.h"
@@ -40,6 +41,10 @@
 #include "exprs/in_predicate.h"
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
+#include "exprs/java_function_call_expr.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_pass.h"
+#endif
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -55,27 +60,9 @@ namespace starrocks {
 
 namespace {
 
-ExprFactory::ExprCreateHook& non_core_create_pre_hook() {
-    static ExprFactory::ExprCreateHook hook = nullptr;
-    return hook;
-}
-
 ExprFactory::ExprCreateHook& non_core_create_post_hook() {
     static ExprFactory::ExprCreateHook hook = nullptr;
     return hook;
-}
-
-ExprFactory::ExprJitRewriteHook& jit_rewrite_hook() {
-    static ExprFactory::ExprJitRewriteHook hook = nullptr;
-    return hook;
-}
-
-Status try_non_core_create_pre_hook(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
-    auto hook = non_core_create_pre_hook();
-    if (hook == nullptr) {
-        return Status::OK();
-    }
-    return hook(pool, texpr_node, expr, state);
 }
 
 Status try_non_core_create_post_hook(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
@@ -140,13 +127,17 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     }
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
-        RETURN_IF_ERROR(try_non_core_create_pre_hook(pool, texpr_node, expr, state));
+        if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
+            *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+        } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
+            *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
+        }
         if (*expr != nullptr) {
             break;
         }
 
         // Preserve the historical FUNCTION_CALL dispatch order:
-        // 1) non-core pre hook (SRJAR/PYTHON), 2) core special exprs, 3) non-core post hook, 4) core fallback.
+        // 1) SRJAR/PYTHON calls, 2) core special exprs, 3) non-core post hook, 4) core fallback.
         if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
@@ -291,26 +282,17 @@ Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExp
         return status;
     }
 
-    auto hook = jit_rewrite_hook();
-    if (hook != nullptr) {
-        RETURN_IF_ERROR(hook(root_expr, pool, state));
-    }
+#ifdef STARROCKS_JIT_ENABLE
+    RETURN_IF_ERROR(ExprJITPass::rewrite_root(root_expr, pool, state));
+#endif
 
     return status;
 }
 
 } // namespace
 
-void ExprFactory::set_non_core_create_pre_hook(ExprCreateHook hook) {
-    non_core_create_pre_hook() = hook;
-}
-
 void ExprFactory::set_non_core_create_post_hook(ExprCreateHook hook) {
     non_core_create_post_hook() = hook;
-}
-
-void ExprFactory::set_jit_rewrite_hook(ExprJitRewriteHook hook) {
-    jit_rewrite_hook() = hook;
 }
 
 Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, Expr** root_expr, RuntimeState* state,

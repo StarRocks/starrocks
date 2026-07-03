@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf.h"
 
 #include <memory>
 #include <string>
@@ -22,15 +22,15 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_reflection.h"
+#include "exprs/udf/java/type_traits.h"
 #include "fmt/core.h"
 #include "jni.h"
 #include "runtime/java/native_method_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "udf/java/java_udf_context.h"
-#include "udf/java/java_udf_reflection.h"
-#include "udf/java/type_traits.h"
 
 // find a jclass and return a global jclass ref
 #define JNI_FIND_CLASS(clazz_name)                                                                 \

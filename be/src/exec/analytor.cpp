@@ -40,7 +40,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
 
 // This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc

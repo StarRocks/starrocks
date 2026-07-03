@@ -148,7 +148,7 @@
       "owned_targets": ["HdfsFileSystem"],
       "owned_roots": ["be/src/fs_ext/hdfs"],
       "allowed_include_prefixes": ["fs_ext/hdfs/", "fs/", "io/", "runtime/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "formats/", "http/", "module/", "platform/", "service/", "storage/", "tools/", "types/", "udf/"],
+      "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "formats/", "http/", "module/", "platform/", "service/", "storage/", "tools/", "types/"],
       "allowed_target_deps": ["FileSystem", "Runtime", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["hdfs_filesystem_test"],
       "allowed_test_link_deps": ["HdfsFileSystem", "FileSystem", "Runtime", "IO", "Common", "Base", "Gutil", "StarRocksGen"],
@@ -271,8 +271,7 @@
         "exec/",
         "storage/",
         "service/",
-        "connector/",
-        "udf/"
+        "connector/"
       ],
       "forbidden_includes": [
         "runtime/arrow_result_writer.h",
@@ -542,7 +541,6 @@
         "platform/http/",
         "connector/",
         "formats/",
-        "udf/",
         "script/",
         "tools/"
       ],
@@ -593,8 +591,7 @@
         "connector/",
         "http/",
         "script/",
-        "tools/",
-        "udf/"
+        "tools/"
       ],
       "allowed_target_deps": [
         "Storage",
@@ -647,41 +644,24 @@
     {
       "id": "exprcore",
       "doc_label": "ExprCore",
-      "summary": "Core expression infrastructure, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.",
+      "summary": "Core expression infrastructure, UDF runtime helpers, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.",
       "owned_targets": ["ExprCore"],
       "additional_owned_globs": [
-        "be/src/exprs/table_function/table_function.h"
+        "be/src/exprs/table_function/table_function.h",
+        "be/src/exprs/udf/**"
       ],
       "allowed_include_prefixes": ["exprs/", "platform/", "geo/", "runtime/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "forbidden_include_prefixes": ["exprs/agg/java_"],
+      "forbidden_include_prefixes": [],
       "forbidden_includes": [
-        "exprs/agg/aggregate_factory_exprs_extension.h",
-        "exprs/agg/java_udaf_function.h",
-        "exprs/agg/java_window_function.h",
-        "exprs/arrow_function_call.h",
         "exprs/dictionary_get_expr.h",
         "exprs/dictmapping_expr.h",
         "exprs/dict_query_expr.h",
-        "exprs/expr_factory_exprs_extension.h",
-        "exprs/java_function_call_expr.h",
         "exprs/utility_functions.h"
       ],
       "allowed_target_deps": ["Platform", "Geo", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["expr_core_test"],
       "allowed_test_link_deps": ["ExprCore", "Platform", "Geo", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ExprCore limited to core expression infrastructure, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers; keep Java aggregate extensions in Exprs."
-    },
-    {
-      "id": "udf",
-      "doc_label": "Udf",
-      "summary": "Java and Python UDF runtime helpers, call stubs, type conversion, and worker management above ExprCore, Runtime, and Platform.",
-      "owned_targets": ["Udf"],
-      "owned_roots": ["be/src/udf"],
-      "allowed_include_prefixes": ["udf/", "exprs/", "runtime/", "platform/", "fs/", "io/", "column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
-      "allowed_target_deps": ["ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "allowed_test_targets": ["udf_test"],
-      "allowed_test_link_deps": ["Udf", "ExprCore", "Runtime", "Platform", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep UDF runtime helpers limited to expression-facing UDF execution, Java/Python conversion, worker management, and the ExprCore/Runtime/Platform dependency closure; move broader execution, storage, service, or connector orchestration upward."
+      "remediation": "Keep ExprCore limited to core expression infrastructure, UDF runtime helpers, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers."
     },
     {
       "id": "execprimitive",
@@ -1097,8 +1077,7 @@
         "platform/",
         "runtime/",
         "storage/",
-        "types/",
-        "udf/"
+        "types/"
       ],
       "forbidden_include_prefixes": [
         "service/",
@@ -1148,7 +1127,6 @@
         "ConnectorBootstrap",
         "ConnectorBuiltinRegistry",
         "Orchestration",
-        "Udf",
         "Geo",
         "StarRocksGen"
       ],
@@ -1183,8 +1161,7 @@
         "orchestration/",
         "runtime/",
         "storage/",
-        "types/",
-        "udf/"
+        "types/"
       ],
       "forbidden_include_prefixes": ["service/service_be/", "service_be/"],
       "allowed_target_deps": [
@@ -1217,7 +1194,6 @@
         "FormatCore",
         "Formats",
         "FormatOrc",
-        "Udf",
         "ChunkCore",
         "ColumnCore",
         "Types"

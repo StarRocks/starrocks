@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/udf_call_stub.h"
+#include "exprs/udf/udf_call_stub.h"
 
 #include <arrow/memory_pool.h>
 #include <fmt/format.h>

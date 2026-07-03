@@ -35,6 +35,7 @@ set(EXPR_CORE_TEST_FILES
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
+    agg/aggregate_factory_extension_test.cpp
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
@@ -73,7 +74,16 @@ set(EXPR_CORE_TEST_FILES
     string_fn_url_extract_parameter_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
+    udf/python/env_test.cpp
     vectorized_literal_test.cpp
+)
+
+set(EXPR_CORE_JAVA_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    # These tests require java-extensions/udf-extensions artifacts on the runtime classpath.
+    # Keep them out of expr_core_test so --without-java-ext remains a valid fast loop.
+    udf/java/java_data_converter_test.cpp
+    udf/java/java_udf_test.cpp
 )
 
 set(EXPR_CORE_TEST_LINK_LIBS
@@ -89,6 +99,8 @@ set(EXPR_CORE_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
+    hdfs
+    jvm
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -113,3 +125,11 @@ endif()
 
 add_executable(expr_core_test expr_core_test_main.cpp ${EXPR_CORE_TEST_OBJECTS})
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS})
+
+add_library(starrocks_expr_core_java_test_objs OBJECT ${EXPR_CORE_JAVA_TEST_FILES})
+target_link_libraries(starrocks_expr_core_java_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_core_java_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+
+add_executable(expr_core_java_test expr_core_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_core_java_test_objs>)
+target_link_libraries(expr_core_java_test ${EXPR_CORE_TEST_LINK_LIBS})

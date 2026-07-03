@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_context.h"
 
 #include <fmt/core.h>
 
 #include "base/utility/defer_op.h"
-#include "udf/java/java_udf.h"
-#include "udf/java/java_udf_reflection.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 

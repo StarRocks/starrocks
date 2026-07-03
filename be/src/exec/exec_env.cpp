@@ -59,12 +59,12 @@
 #include "exec/runtime/query_context_manager.h"
 #include "exec/stream_load/stream_load_executor.h"
 #include "exec/stream_load/transaction_mgr.h"
+#include "exprs/udf/python/env.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
-#include "udf/python/env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"

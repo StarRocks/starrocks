@@ -20,11 +20,11 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/type_traits.h"
 #include "jni.h"
 #include "runtime/java/jvm_class.h"
 #include "runtime/java/jvm_helper.h"
 #include "types/logical_type.h"
-#include "udf/java/type_traits.h"
 
 namespace starrocks {
 class DirectByteBuffer;

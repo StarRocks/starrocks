@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_data_converter.h"
 
 #include <gtest/gtest.h>
 
@@ -30,12 +30,12 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exprs/udf/java/java_udf.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 // `assign_jvalue` is a free function defined in java_data_converter.cpp and only
