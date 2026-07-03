@@ -43,6 +43,7 @@
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/storage_define.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
@@ -66,7 +67,6 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/storage_define.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {

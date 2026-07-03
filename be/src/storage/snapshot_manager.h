@@ -45,10 +45,10 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/snapshot_meta.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"

@@ -16,8 +16,8 @@
 
 #include <memory>
 
+#include "common/storage_define.h"
 #include "storage/compaction_manager.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {

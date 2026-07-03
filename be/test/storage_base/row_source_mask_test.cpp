@@ -18,8 +18,8 @@
 
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_path_constants.h"
 #include "fs/fs_util.h"
-#include "storage/primitive/storage_path_constants.h"
 
 namespace starrocks {
 
