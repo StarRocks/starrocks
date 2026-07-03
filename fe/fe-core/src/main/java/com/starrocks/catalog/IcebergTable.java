@@ -468,6 +468,12 @@ public class IcebergTable extends Table {
         return readSchema != null ? readSchema : getNativeTable().schema();
     }
 
+    // True when a time-travel read has pinned an explicit snapshot schema via withReadSchema. Lets
+    // callers tell a time-travel read (keep the snapshot schema) from an ordinary read.
+    public boolean hasReadSchema() {
+        return readSchema != null;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);

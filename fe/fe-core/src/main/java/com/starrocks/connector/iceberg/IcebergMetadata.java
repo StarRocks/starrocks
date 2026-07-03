@@ -1520,6 +1520,17 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
+        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
+        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadSchema);
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
+        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
+        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (icebergTable.hasReadSchema()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(nativeTbl.schema());
+        }
         Scan scan;
         IcebergMetricsReporter metricsReporter = icebergTable.getIcebergMetricsReporter();
         if (metricsReporter == null) {

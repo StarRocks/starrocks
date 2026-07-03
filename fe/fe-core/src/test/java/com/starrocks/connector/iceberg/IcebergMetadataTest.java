@@ -115,6 +115,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -4450,6 +4451,36 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(3, res.stream()
                 .map(f -> (IcebergRemoteFileInfo) f)
                 .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+    }
+
+    @Test
+    public void testCurrentReadHonorsSchemaAfterMetadataOnlyAddColumn() {
+        // ADD COLUMN is a metadata-only commit: it advances the schema without a new snapshot, so the
+        // current snapshot still references the pre-evolution schema (no k3). An ordinary current read
+        // must resolve the new column against the current table schema (backfilled NULL) instead of the
+        // stale snapshot schema, so a filter on k3 binds instead of failing with "Cannot find field".
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableC.updateSchema().addColumn("k3", Types.IntegerType.get()).commit();
+        mockedNativeTableC.refresh();
+        long currentSnapshotId = mockedNativeTableC.currentSnapshot().snapshotId();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableC.schema(), mockedNativeTableC),
+                mockedNativeTableC, Maps.newHashMap());
+        // Ordinary read: no time-travel read schema, so getReadSchema() is the current schema (has k3).
+        Assertions.assertFalse(icebergTable.hasReadSchema());
+        Assertions.assertNotNull(icebergTable.getReadSchema().findField("k3"));
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        ScalarOperator predicate = new IsNullPredicateOperator(false,
+                new ColumnRefOperator(3, INT, "k3", true));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(currentSnapshotId)))
+                        .setPredicate(predicate).setFieldNames(Lists.newArrayList("k1", "k3")).setLimit(10).build());
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
     }
 
     @Test

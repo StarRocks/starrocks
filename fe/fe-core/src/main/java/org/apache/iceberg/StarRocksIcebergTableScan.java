@@ -144,6 +144,21 @@ public class StarRocksIcebergTableScan
     }
 
     @Override
+    public TableScan useSnapshot(long scanSnapshotId) {
+        // Delegate to the parent (inheriting its validation and context assembly), which binds the scan
+        // to the target snapshot's recorded schema (DataScan#useSnapshotSchema). When a read schema was
+        // resolved for this query, rebind to it so the scan uses the same schema the query bound its
+        // predicates and descriptor against: the current table schema for an ordinary read (making a
+        // metadata-only ADD COLUMN visible), or the targeted snapshot's schema for a time-travel read.
+        TableScan scan = super.useSnapshot(scanSnapshotId);
+        Schema readSchema = scanContext.getReadSchema();
+        if (readSchema != null && useSnapshotSchema()) {
+            return newRefinedScan(table(), readSchema, ((StarRocksIcebergTableScan) scan).context());
+        }
+        return scan;
+    }
+
+    @Override
     protected ManifestGroup newManifestGroup(List<ManifestFile> dataManifests,
                                              List<ManifestFile> deleteManifests,
                                              boolean withColumnStats) {
