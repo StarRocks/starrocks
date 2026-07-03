@@ -17,7 +17,7 @@ if (APPLE)
     list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
 endif()
 
-set(EXPR_CORE_TEST_FILES
+set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
     ai_functions_test.cpp
@@ -27,7 +27,7 @@ set(EXPR_CORE_TEST_FILES
     case_expr_test.cpp
     cast_expr_core_test.cpp
     function_context_core_test.cpp
-    expr_core_test.cpp
+    expr_test.cpp
     expr_factory_core_test.cpp
     expr_context_core_test.cpp
     binary_functions_test.cpp
@@ -78,16 +78,16 @@ set(EXPR_CORE_TEST_FILES
     vectorized_literal_test.cpp
 )
 
-set(EXPR_CORE_JAVA_TEST_FILES
+set(EXPR_JAVA_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     # These tests require java-extensions/udf-extensions artifacts on the runtime classpath.
-    # Keep them out of expr_core_test so --without-java-ext remains a valid fast loop.
+    # Keep them out of expr_test so --without-java-ext remains a valid fast loop.
     udf/java/java_data_converter_test.cpp
     udf/java/java_udf_test.cpp
 )
 
-set(EXPR_CORE_TEST_LINK_LIBS
-    ExprCore
+set(EXPR_TEST_LINK_LIBS
+    Expr
     Platform
     Geo
     Runtime
@@ -110,26 +110,26 @@ set(EXPR_CORE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_expr_core_test_objs OBJECT ${EXPR_CORE_TEST_FILES})
-target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_core_test_objs PROPERTIES
-    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+add_library(starrocks_expr_test_objs OBJECT ${EXPR_TEST_FILES})
+target_link_libraries(starrocks_expr_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
 
-set(EXPR_CORE_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
+set(EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_test_objs>)
 if (STARROCKS_JIT_ENABLE)
-    add_library(starrocks_expr_core_jit_test_objs OBJECT jit_cache_test.cpp)
-    target_link_libraries(starrocks_expr_core_jit_test_objs PRIVATE StarRocksPCH)
-    set_target_properties(starrocks_expr_core_jit_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    list(APPEND EXPR_CORE_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_core_jit_test_objs>)
+    add_library(starrocks_expr_jit_test_objs OBJECT jit_cache_test.cpp)
+    target_link_libraries(starrocks_expr_jit_test_objs PRIVATE StarRocksPCH)
+    set_target_properties(starrocks_expr_jit_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+    list(APPEND EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_jit_test_objs>)
 endif()
 
-add_executable(expr_core_test expr_core_test_main.cpp ${EXPR_CORE_TEST_OBJECTS})
-target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS})
+add_executable(expr_test expr_test_main.cpp ${EXPR_TEST_OBJECTS})
+target_link_libraries(expr_test ${EXPR_TEST_LINK_LIBS})
 
-add_library(starrocks_expr_core_java_test_objs OBJECT ${EXPR_CORE_JAVA_TEST_FILES})
-target_link_libraries(starrocks_expr_core_java_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_core_java_test_objs PROPERTIES
-    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+add_library(starrocks_expr_java_test_objs OBJECT ${EXPR_JAVA_TEST_FILES})
+target_link_libraries(starrocks_expr_java_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_java_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
 
-add_executable(expr_core_java_test expr_core_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_core_java_test_objs>)
-target_link_libraries(expr_core_java_test ${EXPR_CORE_TEST_LINK_LIBS})
+add_executable(expr_java_test expr_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_java_test_objs>)
+target_link_libraries(expr_java_test ${EXPR_TEST_LINK_LIBS})

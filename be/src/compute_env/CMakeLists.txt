@@ -140,7 +140,7 @@ target_link_libraries(ComputeEnv PUBLIC
     Cache
     StoragePrimitive
     ExecPrimitive
-    ExprCore
+    Expr
     Runtime
     Platform
     FileSystem

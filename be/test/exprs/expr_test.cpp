@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exprs/expr.h"
+
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
 #include "common/object_pool.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 
@@ -51,7 +52,7 @@ private:
 
 } // namespace
 
-TEST(ExprCoreTest, CopyDeepCopiesChildren) {
+TEST(ExprTest, CopyDeepCopiesChildren) {
     ObjectPool pool;
     auto* root = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
     auto* child = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
@@ -71,7 +72,7 @@ TEST(ExprCoreTest, CopyDeepCopiesChildren) {
     EXPECT_NE(grandchild, copied_grandchild);
 }
 
-TEST(ExprCoreTest, TypeWithoutCastSkipsCastOpcode) {
+TEST(ExprTest, TypeWithoutCastSkipsCastOpcode) {
     SimpleExpr child(TypeDescriptor(TYPE_INT), TExprNodeType::INT_LITERAL, TExprOpcode::INVALID_OPCODE);
     SimpleExpr cast(TypeDescriptor(TYPE_INT), TExprNodeType::CAST_EXPR, TExprOpcode::CAST);
     cast.add_child(&child);
@@ -80,7 +81,7 @@ TEST(ExprCoreTest, TypeWithoutCastSkipsCastOpcode) {
     EXPECT_EQ(&child, Expr::expr_without_cast(&cast));
 }
 
-TEST(ExprCoreTest, EvaluateConstCachesResult) {
+TEST(ExprTest, EvaluateConstCachesResult) {
     SimpleExpr expr{TypeDescriptor(TYPE_INT)};
     RuntimeState state;
     ExprContext context(&expr);

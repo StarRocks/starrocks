@@ -29,7 +29,7 @@ ADD_BE_LIB(FormatCore
 target_link_libraries(FormatCore PUBLIC
         ComputeEnv
         ExecPrimitive
-        ExprCore
+        Expr
         Runtime
         FileSystem
         ChunkCore

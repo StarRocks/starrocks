@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/dictionary_get_expr.h"
+#include "exprs_ext/dict/dictionary_get_expr.h"
 
 #include <fmt/format.h>
 

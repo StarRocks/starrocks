@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/dictmapping_expr.h"
+#include "exprs_ext/dict/dictmapping_expr.h"
 
 #include "column/chunk.h"
 #include "column/column_helper.h"

@@ -33,7 +33,7 @@ namespace {
 
 bool init_config() {
     const auto test_dir =
-            std::filesystem::temp_directory_path() / ("starrocks_expr_core_test_" + std::to_string(::getpid()));
+            std::filesystem::temp_directory_path() / ("starrocks_expr_test_" + std::to_string(::getpid()));
     std::filesystem::remove_all(test_dir);
     std::filesystem::create_directories(test_dir);
 

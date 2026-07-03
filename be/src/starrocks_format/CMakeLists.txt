@@ -28,8 +28,8 @@ set(STARROCKS_LIBS
     ColumnCore
     Connector
     Exec
-    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
-    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} Expr ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
     Gutil

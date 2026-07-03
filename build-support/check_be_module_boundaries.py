@@ -37,6 +37,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "data_workflows",
     "exec",
     "exprs",
+    "exprs_ext",
     "formats",
     "fs",
     "fs_ext",

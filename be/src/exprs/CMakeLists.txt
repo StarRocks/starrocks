@@ -19,7 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(EXPR_CORE_FILES
+set(EXPR_FILES
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
   agg/combinator/agg_state_utils.cpp
@@ -125,7 +125,7 @@ set(EXPR_CORE_FILES
 )
 
 if(STARROCKS_JIT_ENABLE)
-  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
+  set(EXPR_FILES ${EXPR_FILES}
       jit/ir_helper.cpp
       jit/expr_jit_codegen.cpp
       jit/expr_jit_rewriter.cpp
@@ -134,19 +134,5 @@ if(STARROCKS_JIT_ENABLE)
       jit/jit_expr.cpp)
 endif()
 
-ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore Platform Geo)
-
-set(EXPR_FILES
-  expr_factory_dict_exprs_extension.cpp
-  table_function/list_rowsets_factory_extension.cpp
-  table_function/list_rowsets.cpp
-  dictmapping_expr.cpp
-  utility_functions.cpp
-  dict_query_expr.cpp
-  dictionary_get_expr.cpp
-)
-
-ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv Runtime)
-target_link_libraries(Exprs PRIVATE Platform StoragePrimitive)
+ADD_BE_LIB(Expr ${EXPR_FILES})
+target_link_libraries(Expr PUBLIC Runtime ColumnSortCore Platform Geo)

@@ -51,7 +51,7 @@ ADD_BE_LIB(StoragePrimitive
 )
 
 target_link_libraries(StoragePrimitive PUBLIC
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore

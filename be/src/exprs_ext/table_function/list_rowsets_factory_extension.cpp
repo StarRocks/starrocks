@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/table_function/list_rowsets.h"
 #include "exprs/table_function/table_function_factory.h"
+#include "exprs_ext/table_function/list_rowsets.h"
 
 namespace starrocks {
 
