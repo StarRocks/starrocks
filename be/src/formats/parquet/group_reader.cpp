@@ -40,6 +40,7 @@
 #include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/reserved_columns.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -52,16 +53,6 @@ namespace starrocks::parquet {
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                          int64_t row_group_first_row)
         : _row_group_first_row(row_group_first_row), _skip_rows_ctx(std::move(skip_rows_ctx)), _param(param) {
-    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
-    _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
-}
-
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
-                         int64_t row_group_first_row, int64_t row_group_first_row_id)
-        : _row_group_first_row(row_group_first_row),
-          _row_group_first_row_id(row_group_first_row_id),
-          _skip_rows_ctx(std::move(skip_rows_ctx)),
-          _param(param) {
     _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
     _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
 }
@@ -437,12 +428,20 @@ Status GroupReader::_create_column_readers() {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
                 ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
-                std::optional<int64_t> first_row_id =
-                        _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
-                                ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
+                                 _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
+                std::optional<int64_t> first_row_id = std::nullopt;
+                if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
+                    // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
+                    // index (it already includes the row-group start), so the base must be the
+                    // file-level first_row_id. A row-group-level base double-counts the row-group
+                    // start and shifts the emitted _row_id for every row group after the first,
+                    // diverging from the physical _row_id column of compacted files. The file-level
+                    // base also keeps the reader's zone-map filters (base + rg_first_row) correct.
+                    first_row_id = std::optional<int64_t>(_param.scan_range->first_row_id);
+                } else if (use_legacy_lookup_row_id) {
+                    // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
+                    first_row_id = std::optional<int64_t>(0);
+                }
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
