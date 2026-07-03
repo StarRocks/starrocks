@@ -1081,6 +1081,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // ann params like: nprobe
     public static final String ANN_PARAMS = "ann_params";
+    public static final String TOP_INDEX_LOCAL_ROWS = "top_index_local_rows";
+    public static final String TOP_INDEX_LOCAL_ROWS_MULTIPLIER = "top_index_local_rows_multiplier";
 
     public static final String PQ_REFINE_FACTOR = "pq_refine_factor";
 
@@ -3171,6 +3173,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ANN_PARAMS)
     private String annParams = "";
 
+    // Per-segment candidate count for ANN scans. A positive value is an explicit override;
+    // zero derives the count from LIMIT and topIndexLocalRowsMultiplier.
+    @VarAttr(name = TOP_INDEX_LOCAL_ROWS)
+    private int topIndexLocalRows = 300;
+
+    @VarAttr(name = TOP_INDEX_LOCAL_ROWS_MULTIPLIER)
+    private int topIndexLocalRowsMultiplier = 1;
+
     @VarAttr(name = PQ_REFINE_FACTOR)
     private double pqRefineFactor = 1;
 
@@ -3218,6 +3228,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         Type type = new com.google.gson.reflect.TypeToken<Map<String, String>>() {
         }.getType();
         return GsonUtils.GSON.fromJson(annParams, type);
+    }
+
+    public int getTopIndexLocalRows() {
+        return topIndexLocalRows;
+    }
+
+    public void setTopIndexLocalRows(int topIndexLocalRows) {
+        this.topIndexLocalRows = topIndexLocalRows;
+    }
+
+    public int getTopIndexLocalRowsMultiplier() {
+        return topIndexLocalRowsMultiplier;
+    }
+
+    public void setTopIndexLocalRowsMultiplier(int topIndexLocalRowsMultiplier) {
+        if (topIndexLocalRowsMultiplier < 1) {
+            throw new IllegalArgumentException(
+                    "top_index_local_rows_multiplier must be >= 1, but got " + topIndexLocalRowsMultiplier);
+        }
+        this.topIndexLocalRowsMultiplier = topIndexLocalRowsMultiplier;
     }
 
     public String getHiveTempStagingDir() {

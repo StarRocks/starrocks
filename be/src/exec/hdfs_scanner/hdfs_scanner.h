@@ -268,6 +268,9 @@ struct TableSpecificData {
     std::string lance_dataset_uri;
     int32_t lance_fragment_id = 0;
     std::map<std::string, std::string> lance_storage_options;
+    bool use_lance_vector_search = false;
+    TVectorSearchOptions lance_vector_search_options;
+    std::vector<std::string> lance_index_segment_uuids;
 };
 
 struct HdfsScannerParams {

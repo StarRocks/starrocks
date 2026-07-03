@@ -19,12 +19,14 @@ use std::slice;
 use std::sync::OnceLock;
 
 use arrow_array::ffi::FFI_ArrowArray;
-use arrow_array::{Array, RecordBatch, StructArray};
+use arrow_array::{Array, Float32Array, RecordBatch, StructArray};
 use arrow_schema::ffi::FFI_ArrowSchema;
 use futures::stream::StreamExt;
 use lance::dataset::builder::DatasetBuilder;
 use lance::dataset::scanner::DatasetRecordBatchStream;
+use lance_linalg::distance::MetricType;
 use tokio::runtime::{Builder, Runtime};
+use uuid::Uuid;
 
 const SR_LANCE_NEXT_EOF: c_int = 0;
 const SR_LANCE_NEXT_BATCH: c_int = 1;
@@ -44,8 +46,33 @@ pub struct SrLanceStringPair {
     value: SrLanceString,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SrLanceVectorOptions {
+    vector_column: SrLanceString,
+    query_vector: *const SrLanceString,
+    query_vector_len: usize,
+    limit_k: i64,
+    index_segment_uuids: *const SrLanceString,
+    index_segment_uuid_count: usize,
+    nprobes: i32,
+    refine_factor: i32,
+    ef: i32,
+    use_index: i32,
+}
+
 pub struct SrLanceReader {
     stream: DatasetRecordBatchStream,
+}
+
+struct VectorOptions {
+    vector_column: String,
+    query_vector: Vec<f32>,
+    limit_k: usize,
+    index_segment_uuids: Vec<Uuid>,
+    nprobes: Option<usize>,
+    refine_factor: Option<u32>,
+    ef: Option<usize>,
 }
 
 fn runtime() -> &'static Runtime {
@@ -100,6 +127,82 @@ unsafe fn storage_options_from_raw(
     Ok(options)
 }
 
+fn parse_query_vector(values: Vec<String>) -> Result<Vec<f32>, String> {
+    values
+        .into_iter()
+        .map(|value| {
+            let parsed = value
+                .parse::<f32>()
+                .map_err(|e| format!("invalid Lance query vector element '{value}': {e}"))?;
+            if !parsed.is_finite() {
+                return Err(format!(
+                    "invalid Lance query vector element '{value}': must be finite"
+                ));
+            }
+            Ok(parsed)
+        })
+        .collect()
+}
+
+unsafe fn vector_options_from_raw(
+    value: *const SrLanceVectorOptions,
+) -> Result<Option<VectorOptions>, String> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    let value = *value;
+    let vector_column = string_from_raw(value.vector_column)?;
+    if vector_column.is_empty() {
+        return Err("Lance vector column must not be empty".to_string());
+    }
+    if value.limit_k <= 0 {
+        return Err(format!(
+            "invalid Lance vector search limit {}",
+            value.limit_k
+        ));
+    }
+    if value.use_index == 0 {
+        return Err("Lance segment vector search requires use_index=true".to_string());
+    }
+
+    let query_vector = strings_from_raw(value.query_vector, value.query_vector_len)?;
+    if query_vector.is_empty() {
+        return Err("Lance query vector must not be empty".to_string());
+    }
+    let query_vector = parse_query_vector(query_vector)?;
+
+    let index_segment_uuids =
+        strings_from_raw(value.index_segment_uuids, value.index_segment_uuid_count)?;
+    if index_segment_uuids.is_empty() {
+        return Err("Lance vector search requires at least one index segment".to_string());
+    }
+    let index_segment_uuids = index_segment_uuids
+        .into_iter()
+        .map(|value| {
+            Uuid::parse_str(&value)
+                .map_err(|e| format!("invalid Lance index segment UUID '{value}': {e}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Some(VectorOptions {
+        vector_column,
+        query_vector,
+        limit_k: value.limit_k as usize,
+        index_segment_uuids,
+        nprobes: positive_option(value.nprobes).map(|v| v as usize),
+        refine_factor: positive_option(value.refine_factor).map(|v| v as u32),
+        ef: positive_option(value.ef).map(|v| v as usize),
+    }))
+}
+
+fn positive_option(value: i32) -> Option<i32> {
+    if value > 0 {
+        Some(value)
+    } else {
+        None
+    }
+}
+
 fn set_error(error: *mut *mut c_char, message: impl Into<String>) {
     if error.is_null() {
         return;
@@ -118,15 +221,60 @@ async fn open_reader(
     columns: Vec<String>,
     batch_size: i32,
     storage_options: HashMap<String, String>,
+    vector_options: Option<VectorOptions>,
 ) -> Result<SrLanceReader, String> {
-    if fragment_id < 0 {
-        return Err(format!("invalid negative Lance fragment id {fragment_id}"));
-    }
     let dataset = DatasetBuilder::from_uri(&dataset_uri)
         .with_storage_options(storage_options)
         .load()
         .await
         .map_err(|e| format!("failed to open Lance dataset {dataset_uri}: {e}"))?;
+    if let Some(vector_options) = vector_options {
+        let query_vector = Float32Array::from(vector_options.query_vector);
+        let mut scanner = dataset.scan();
+        scanner
+            .nearest(
+                &vector_options.vector_column,
+                &query_vector,
+                vector_options.limit_k,
+            )
+            .map_err(|e| format!("failed to set Lance vector search: {e}"))?;
+        scanner.distance_metric(MetricType::L2);
+        scanner.use_index(true);
+        if let Some(nprobes) = vector_options.nprobes {
+            scanner.nprobes(nprobes);
+        }
+        if let Some(refine_factor) = vector_options.refine_factor {
+            scanner.refine(refine_factor);
+        }
+        if let Some(ef) = vector_options.ef {
+            scanner.ef(ef);
+        }
+        scanner
+            .with_index_segments(vector_options.index_segment_uuids)
+            .map_err(|e| format!("failed to set Lance vector index segments: {e}"))?;
+        let mut projected_columns = columns;
+        if !projected_columns.iter().any(|column| column == "_distance") {
+            projected_columns.push("_distance".to_string());
+        }
+        scanner.project(&projected_columns).map_err(|e| {
+            format!(
+                "failed to project Lance columns {:?}: {e}",
+                projected_columns
+            )
+        })?;
+        if batch_size > 0 {
+            scanner.batch_size(batch_size as usize);
+        }
+        let stream = scanner
+            .try_into_stream()
+            .await
+            .map_err(|e| format!("failed to create Lance vector scan stream: {e}"))?;
+        return Ok(SrLanceReader { stream });
+    }
+
+    if fragment_id < 0 {
+        return Err(format!("invalid negative Lance fragment id {fragment_id}"));
+    }
     let fragment = dataset.get_fragment(fragment_id as usize).ok_or_else(|| {
         format!("Lance fragment {fragment_id} not found in dataset {dataset_uri}")
     })?;
@@ -159,6 +307,7 @@ pub unsafe extern "C" fn sr_lance_reader_open(
     batch_size: i32,
     storage_options: *const SrLanceStringPair,
     storage_option_count: usize,
+    vector_options: *const SrLanceVectorOptions,
     out_reader: *mut *mut SrLanceReader,
     error: *mut *mut c_char,
 ) -> c_int {
@@ -172,12 +321,14 @@ pub unsafe extern "C" fn sr_lance_reader_open(
         let dataset_uri = string_from_raw(dataset_uri)?;
         let columns = strings_from_raw(columns, column_count)?;
         let storage_options = storage_options_from_raw(storage_options, storage_option_count)?;
+        let vector_options = vector_options_from_raw(vector_options)?;
         let reader = runtime().block_on(open_reader(
             dataset_uri,
             fragment_id,
             columns,
             batch_size,
             storage_options,
+            vector_options,
         ))?;
         Ok(Box::into_raw(Box::new(reader)))
     })();

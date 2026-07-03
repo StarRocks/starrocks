@@ -873,6 +873,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         if (scan_range.__isset.lance_storage_options) {
             scanner_params.table_specific.lance_storage_options = scan_range.lance_storage_options;
         }
+        if (scan_range.__isset.lance_vector_search_options) {
+            scanner_params.table_specific.use_lance_vector_search =
+                    scan_range.lance_vector_search_options.enable_use_ann;
+            scanner_params.table_specific.lance_vector_search_options = scan_range.lance_vector_search_options;
+        }
+        if (scan_range.__isset.lance_index_segment_uuids) {
+            scanner_params.table_specific.lance_index_segment_uuids = scan_range.lance_index_segment_uuids;
+        }
     }
     if (scan_range.__isset.use_lance_native_reader) {
         use_lance_native_reader = scan_range.use_lance_native_reader;

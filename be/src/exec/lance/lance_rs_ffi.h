@@ -35,9 +35,23 @@ typedef struct SrLanceStringPair {
     SrLanceString value;
 } SrLanceStringPair;
 
+typedef struct SrLanceVectorOptions {
+    SrLanceString vector_column;
+    const SrLanceString* query_vector;
+    size_t query_vector_len;
+    int64_t limit_k;
+    const SrLanceString* index_segment_uuids;
+    size_t index_segment_uuid_count;
+    int32_t nprobes;
+    int32_t refine_factor;
+    int32_t ef;
+    int32_t use_index;
+} SrLanceVectorOptions;
+
 int sr_lance_reader_open(SrLanceString dataset_uri, int32_t fragment_id, const SrLanceString* columns,
                          size_t column_count, int32_t batch_size, const SrLanceStringPair* storage_options,
-                         size_t storage_option_count, SrLanceReader** out_reader, char** error);
+                         size_t storage_option_count, const SrLanceVectorOptions* vector_options,
+                         SrLanceReader** out_reader, char** error);
 
 int sr_lance_reader_next(SrLanceReader* reader, struct ArrowArray* out_array, struct ArrowSchema* out_schema,
                          int64_t* out_rows, char** error);

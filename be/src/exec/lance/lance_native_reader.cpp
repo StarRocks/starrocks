@@ -16,6 +16,10 @@
 
 #include <fmt/format.h>
 
+#include <charconv>
+#include <system_error>
+
+#include "arrow/array.h"
 #include "arrow/c/abi.h"
 #include "arrow/c/bridge.h"
 #include "column/chunk.h"
@@ -32,6 +36,12 @@ namespace {
 constexpr int SR_LANCE_NEXT_EOF = 0;
 constexpr int SR_LANCE_NEXT_BATCH = 1;
 constexpr int SR_LANCE_ERROR = -1;
+constexpr const char* LANCE_DISTANCE_COLUMN = "_distance";
+constexpr const char* LANCE_VECTOR_COLUMN_PARAM = "lance.vector_column";
+constexpr const char* LANCE_NPROBES_PARAM = "lance.nprobes";
+constexpr const char* LANCE_REFINE_FACTOR_PARAM = "lance.refine_factor";
+constexpr const char* LANCE_EF_PARAM = "lance.ef";
+constexpr const char* LANCE_USE_INDEX_PARAM = "lance.use_index";
 
 SrLanceString to_lance_string(const std::string& value) {
     return SrLanceString{value.data(), value.size()};
@@ -43,6 +53,57 @@ Status lance_error_status(const std::string& prefix, char* error) {
         sr_lance_free_error(error);
     }
     return Status::InternalError(fmt::format("{}: {}", prefix, message));
+}
+
+bool is_lance_vector_distance_column(const HdfsScannerParams& params, const std::string& column_name) {
+    return params.table_specific.use_lance_vector_search &&
+           column_name == params.table_specific.lance_vector_search_options.vector_distance_column_name;
+}
+
+std::shared_ptr<arrow::Array> get_lance_arrow_array(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                    const HdfsScannerParams& params, const std::string& column_name) {
+    if (is_lance_vector_distance_column(params, column_name)) {
+        return batch->GetColumnByName(LANCE_DISTANCE_COLUMN);
+    }
+    return batch->GetColumnByName(column_name);
+}
+
+StatusOr<std::string> get_required_query_param(const TVectorSearchOptions& options, const std::string& key) {
+    auto it = options.query_params.find(key);
+    if (it == options.query_params.end() || it->second.empty()) {
+        return Status::InternalError(fmt::format("Missing Lance vector search query parameter {}", key));
+    }
+    return it->second;
+}
+
+StatusOr<int32_t> parse_optional_positive_i32_param(const TVectorSearchOptions& options, const std::string& key) {
+    auto it = options.query_params.find(key);
+    if (it == options.query_params.end() || it->second.empty()) {
+        return -1;
+    }
+    int32_t value = -1;
+    const auto& raw = it->second;
+    auto result = std::from_chars(raw.data(), raw.data() + raw.size(), value);
+    if (result.ec != std::errc() || result.ptr != raw.data() + raw.size() || value <= 0) {
+        return Status::InternalError(
+                fmt::format("Invalid positive integer value for Lance vector parameter {}: {}", key, raw));
+    }
+    return value;
+}
+
+StatusOr<int32_t> parse_optional_bool_param(const TVectorSearchOptions& options, const std::string& key) {
+    auto it = options.query_params.find(key);
+    if (it == options.query_params.end() || it->second.empty()) {
+        return -1;
+    }
+    const auto& raw = it->second;
+    if (raw == "true" || raw == "1") {
+        return 1;
+    }
+    if (raw == "false" || raw == "0") {
+        return 0;
+    }
+    return Status::InternalError(fmt::format("Invalid boolean value for Lance vector parameter {}: {}", key, raw));
 }
 
 } // namespace
@@ -78,7 +139,15 @@ Status LanceNativeReader::open() {
 Status LanceNativeReader::_open_reader() {
     std::vector<SrLanceString> fields;
     fields.reserve(_field_names.size());
+    std::vector<std::string> projected_field_names;
+    projected_field_names.reserve(_field_names.size());
     for (const auto& name : _field_names) {
+        if (is_lance_vector_distance_column(_scanner_params, name)) {
+            continue;
+        }
+        projected_field_names.emplace_back(name);
+    }
+    for (const auto& name : projected_field_names) {
         fields.emplace_back(to_lance_string(name));
     }
 
@@ -88,14 +157,71 @@ Status LanceNativeReader::_open_reader() {
         storage_options.push_back({to_lance_string(key), to_lance_string(value)});
     }
 
+    SrLanceVectorOptions vector_options;
+    const SrLanceVectorOptions* vector_options_ptr = nullptr;
+    std::string vector_column;
+    std::vector<SrLanceString> query_vector;
+    std::vector<SrLanceString> index_segment_uuids;
+    if (_scanner_params.table_specific.use_lance_vector_search) {
+        if (_scanner_params.table_specific.lance_vector_search_options.vector_limit_k <= 0) {
+            return Status::InternalError("Invalid Lance vector search limit");
+        }
+        if (_scanner_params.table_specific.lance_vector_search_options.query_vector.empty()) {
+            return Status::InternalError("Lance vector search query vector must not be empty");
+        }
+        if (_scanner_params.table_specific.lance_index_segment_uuids.empty()) {
+            return Status::InternalError("Lance vector search requires at least one index segment");
+        }
+
+        ASSIGN_OR_RETURN(vector_column,
+                         get_required_query_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                  LANCE_VECTOR_COLUMN_PARAM));
+        query_vector.reserve(_scanner_params.table_specific.lance_vector_search_options.query_vector.size());
+        for (const auto& value : _scanner_params.table_specific.lance_vector_search_options.query_vector) {
+            query_vector.emplace_back(to_lance_string(value));
+        }
+        index_segment_uuids.reserve(_scanner_params.table_specific.lance_index_segment_uuids.size());
+        for (const auto& value : _scanner_params.table_specific.lance_index_segment_uuids) {
+            index_segment_uuids.emplace_back(to_lance_string(value));
+        }
+
+        ASSIGN_OR_RETURN(int32_t nprobes,
+                         parse_optional_positive_i32_param(
+                                 _scanner_params.table_specific.lance_vector_search_options, LANCE_NPROBES_PARAM));
+        ASSIGN_OR_RETURN(int32_t refine_factor,
+                         parse_optional_positive_i32_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                           LANCE_REFINE_FACTOR_PARAM));
+        ASSIGN_OR_RETURN(int32_t ef,
+                         parse_optional_positive_i32_param(
+                                 _scanner_params.table_specific.lance_vector_search_options, LANCE_EF_PARAM));
+        ASSIGN_OR_RETURN(int32_t use_index,
+                         parse_optional_bool_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                   LANCE_USE_INDEX_PARAM));
+
+        vector_options = SrLanceVectorOptions{to_lance_string(vector_column),
+                                              query_vector.data(),
+                                              query_vector.size(),
+                                              _scanner_params.table_specific.lance_vector_search_options.vector_limit_k,
+                                              index_segment_uuids.data(),
+                                              index_segment_uuids.size(),
+                                              nprobes,
+                                              refine_factor,
+                                              ef,
+                                              use_index};
+        vector_options_ptr = &vector_options;
+    }
+
     char* error = nullptr;
-    int result = sr_lance_reader_open(to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
-                                      _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(),
-                                      _max_chunk_size, storage_options.data(), storage_options.size(), &_reader, &error);
+    int result =
+            sr_lance_reader_open(to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
+                                 _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(),
+                                 _max_chunk_size, storage_options.data(), storage_options.size(), vector_options_ptr,
+                                 &_reader, &error);
     if (result == SR_LANCE_ERROR || _reader == nullptr) {
-        return lance_error_status(fmt::format("Failed to open Lance native reader for {}",
-                                              _scanner_params.table_specific.lance_dataset_uri),
-                                  error);
+        return lance_error_status(
+                fmt::format("Failed to open Lance native reader for {}",
+                            _scanner_params.table_specific.lance_dataset_uri),
+                error);
     }
     return Status::OK();
 }
@@ -162,9 +288,10 @@ Status LanceNativeReader::_next_batch() {
         return Status::EndOfFile("no data");
     }
     if (result == SR_LANCE_ERROR) {
-        return lance_error_status(fmt::format("Failed to read next Lance batch from {}",
-                                              _scanner_params.table_specific.lance_dataset_uri),
-                                  error);
+        return lance_error_status(
+                fmt::format("Failed to read next Lance batch from {}",
+                            _scanner_params.table_specific.lance_dataset_uri),
+                error);
     }
     if (result != SR_LANCE_NEXT_BATCH) {
         return Status::InternalError(fmt::format("Unexpected Lance native reader result code {}", result));
@@ -192,7 +319,7 @@ Status LanceNativeReader::_ensure_read_chunk() {
         if (slot_desc == nullptr) {
             continue;
         }
-        auto array = _arrow_batch->GetColumnByName(slot_desc->col_name());
+        auto array = get_lance_arrow_array(_arrow_batch, _scanner_params, slot_desc->col_name());
         if (array == nullptr) {
             return Status::InternalError(
                     fmt::format("Cannot find Lance column {} in Arrow batch", slot_desc->col_name()));
@@ -219,7 +346,7 @@ Status LanceNativeReader::_append_batch_to_read_chunk() {
             continue;
         }
         _conv_ctx.current_slot = slot_desc;
-        auto array = _arrow_batch->GetColumnByName(slot_desc->col_name());
+        auto array = get_lance_arrow_array(_arrow_batch, _scanner_params, slot_desc->col_name());
         if (array == nullptr) {
             return Status::InternalError(
                     fmt::format("Cannot find Lance column {} in Arrow batch", slot_desc->col_name()));

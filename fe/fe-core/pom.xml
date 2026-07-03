@@ -41,7 +41,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
-        <lance.version>0.35.0-ali-1.2</lance.version>
+        <lance.version>8.0.0</lance.version>
         <python>python</python>
         
         <!-- async-profiler in UT -->
@@ -670,10 +670,9 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>com.lancedb</groupId>
+            <groupId>org.lance</groupId>
             <artifactId>lance-core</artifactId>
             <version>${lance.version}</version>
-            <classifier>linux</classifier>
         </dependency>
 
         <dependency>

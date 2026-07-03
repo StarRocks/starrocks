@@ -350,6 +350,23 @@ struct TDeletionVectorDescriptor {
   5: optional i64 cardinality
 }
 
+struct TVectorSearchOptions {
+  1: optional bool enable_use_ann;
+  2: optional i64 vector_limit_k;
+  3: optional string vector_distance_column_name;
+  4: optional list<string> query_vector;
+  5: optional map<string, string> query_params;
+  6: optional double vector_range;
+  7: optional i32 result_order;
+  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
+  9: optional double pq_refine_factor;
+  10: optional double k_factor;
+  11: optional i32 vector_slot_id;
+  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
+  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
+  12: optional bool refine_distance;
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -475,6 +492,11 @@ struct THdfsScanRange {
 
     // whether to use the BE native Lance reader instead of the Java JNI reader.
     43: optional bool use_lance_native_reader
+
+    // Lance vector search. When set, this scan range reads the listed vector
+    // index segments with the native Lance reader instead of a data fragment.
+    44: optional TVectorSearchOptions lance_vector_search_options
+    45: optional list<string> lance_index_segment_uuids
 }
 
 struct TBinlogScanRange {
@@ -623,23 +645,6 @@ struct TColumnAccessPath {
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
     6: optional bool extended
-}
-
-struct TVectorSearchOptions {
-  1: optional bool enable_use_ann;
-  2: optional i64 vector_limit_k;
-  3: optional string vector_distance_column_name;
-  4: optional list<string> query_vector;
-  5: optional map<string, string> query_params;
-  6: optional double vector_range;
-  7: optional i32 result_order;
-  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
-  9: optional double pq_refine_factor;
-  10: optional double k_factor;
-  11: optional i32 vector_slot_id;
-  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
-  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
-  12: optional bool refine_distance;
 }
 
 enum SampleMethod {
