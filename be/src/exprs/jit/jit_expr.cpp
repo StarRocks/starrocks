@@ -19,6 +19,7 @@
 #include <chrono>
 #include <vector>
 
+#include "base/time/time.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"

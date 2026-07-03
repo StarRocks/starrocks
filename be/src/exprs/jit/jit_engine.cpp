@@ -64,6 +64,7 @@
 #include "exprs/expr.h"
 #include "exprs/jit/expr_jit_codegen.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
