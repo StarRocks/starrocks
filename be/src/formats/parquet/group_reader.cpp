@@ -440,15 +440,7 @@ Status GroupReader::_create_column_readers() {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
                 ASSIGN_OR_RETURN(auto reader,
-<<<<<<< HEAD
-                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::ICEBERG_ROW_ID_COLUMN_ID));
-                std::optional<int64_t> first_row_id =
-                        _param.scan_range != nullptr && _param.scan_range->__isset.first_row_id
-                                ? std::optional<int64_t>(_row_group_first_row_id)
-                                : use_legacy_lookup_row_id ? std::optional<int64_t>(_row_group_first_row_id)
-                                                           : std::nullopt;
-=======
-                                 _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
+                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::kIcebergRowIdColumnId));
                 std::optional<int64_t> first_row_id = std::nullopt;
                 if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
                     // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
@@ -462,7 +454,6 @@ Status GroupReader::_create_column_readers() {
                     // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
                     first_row_id = std::optional<int64_t>(0);
                 }
->>>>>>> d139404a3d ([BugFix] Iceberg _row_id: use the file-level first_row_id as the reader base (#75758))
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)
                                           : std::make_unique<IcebergRowIdReader>(first_row_id);
