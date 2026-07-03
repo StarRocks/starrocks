@@ -491,10 +491,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         const auto call_id = closure->cntl.call_id();
         {
             std::lock_guard cids_guard(context.in_flight_rpc_cids_mutex);
-            // If a cancellation raced ahead of this registration, cancel this RPC directly instead of adding it.
-            if (_is_finishing) {
-                brpc::StartCancel(call_id);
-            } else {
+            // Do not cancel eos request, because eos request is the last request to be sent, and it must be sent to the destination.
+            if (!request.params->eos()) {
                 bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
             }
         }
