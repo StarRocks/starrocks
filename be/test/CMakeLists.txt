@@ -111,34 +111,12 @@ set(EXEC_FILES
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
-        ./exprs/agg/aggregate_traits_test.cpp
-        ./exprs/arithmetic_operation_test.cpp
-        ./exprs/decimal_binary_function_test.cpp
-        ./exprs/binary_function_test.cpp
-        ./exprs/binary_predicate_test.cpp
-        ./exprs/bitmap_functions_test.cpp
-        ./exprs/cast_expr_test.cpp
-        ./exprs/unary_function_test.cpp
-        ./exprs/decimal_cast_expr_decimal_test.cpp
-        ./exprs/decimal_cast_expr_integer_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
-        ./exprs/decimal_cast_expr_time_test.cpp
-        ./exprs/decimal_cast_expr_decimalv2_test.cpp
-        ./exprs/coalesce_expr_test.cpp
-        ./exprs/compound_predicate_test.cpp
-        ./exprs/condition_expr_test.cpp
-        ./exprs/encryption_functions_test.cpp
-        ./exprs/function_call_expr_test.cpp
-        ./exprs/if_expr_test.cpp
         ./exprs/flat_json_functions_test.cpp
-        ./exprs/like_test.cpp
-        ./exprs/math_functions_test.cpp
-        ./exprs/null_if_expr_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/variant_functions_test.cpp
-        ./exprs/min_max_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
         ./formats/json/binary_column_test.cpp

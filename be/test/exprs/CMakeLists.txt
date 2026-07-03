@@ -22,20 +22,26 @@ set(EXPR_TEST_FILES
     agg/aggregate_factory_core_test.cpp
     ai_functions_test.cpp
     arithmetic_expr_test.cpp
+    arithmetic_operation_test.cpp
     array_functions_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_expr_test.cpp
     function_context_core_test.cpp
     expr_test.cpp
     expr_factory_core_test.cpp
     expr_context_core_test.cpp
+    binary_function_test.cpp
     binary_functions_test.cpp
+    binary_predicate_test.cpp
+    bitmap_functions_test.cpp
     geography_functions_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
     agg/aggregate_factory_extension_test.cpp
+    agg/aggregate_traits_test.cpp
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
@@ -53,8 +59,23 @@ set(EXPR_TEST_FILES
     ngram_search_test.cpp
     percentile_functions_test.cpp
     condition_expr_core_test.cpp
+    condition_expr_test.cpp
     compound_predicate_core_test.cpp
+    compound_predicate_test.cpp
+    coalesce_expr_test.cpp
+    decimal_binary_function_test.cpp
+    decimal_cast_expr_decimal_test.cpp
+    decimal_cast_expr_decimalv2_test.cpp
+    decimal_cast_expr_integer_test.cpp
+    decimal_cast_expr_time_test.cpp
+    encryption_functions_test.cpp
+    function_call_expr_test.cpp
+    if_expr_test.cpp
     json_each_core_test.cpp
+    like_test.cpp
+    math_functions_test.cpp
+    min_max_predicate_test.cpp
+    null_if_expr_test.cpp
     string_fn_blake3_test.cpp
     string_fn_concat_test.cpp
     string_fn_field.cpp
@@ -75,6 +96,7 @@ set(EXPR_TEST_FILES
     struct_functions_test.cpp
     subfield_expr_test.cpp
     udf/python/env_test.cpp
+    unary_function_test.cpp
     vectorized_literal_test.cpp
 )
 
