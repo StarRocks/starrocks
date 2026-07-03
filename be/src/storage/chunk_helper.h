@@ -53,29 +53,6 @@ public:
     static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
 };
 
-// Accumulate small chunk into desired size
-class ChunkAccumulator {
-public:
-    // Avoid accumulate too many chunks in case that chunks' selectivity is very low
-    static inline size_t kAccumulateLimit = 64;
-
-    ChunkAccumulator() = default;
-    ChunkAccumulator(size_t desired_size);
-    void set_desired_size(size_t desired_size);
-    void reset();
-    void finalize();
-    bool empty() const;
-    bool reach_limit() const;
-    Status push(ChunkPtr&& chunk);
-    ChunkPtr pull();
-
-private:
-    size_t _desired_size;
-    ChunkPtr _tmp_chunk;
-    std::deque<ChunkPtr> _output;
-    size_t _accumulate_count = 0;
-};
-
 class ChunkPipelineAccumulator {
 public:
     ChunkPipelineAccumulator() = default;

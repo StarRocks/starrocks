@@ -24,16 +24,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/object_pool.h"
 #include "gtest/gtest.h"
-#include "runtime/chunk_helper.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
 #include "storage/primitive/schema_helper.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -95,132 +87,7 @@ void expect_padded_char_column(const BinaryColumn& column, const std::vector<std
 
 } // namespace
 
-class ChunkHelperTest : public ::testing::Test {
-protected:
-    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
-                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
-                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
-
-    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
-    TupleDescriptor* _create_tuple_desc();
-
-    // A tuple with one column
-    TupleDescriptor* _create_simple_desc() {
-        TDescriptorTableBuilder table_builder;
-        TTupleDescriptorBuilder tuple_builder;
-
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
-        tuple_builder.build(&table_builder);
-
-        std::vector<TTupleId> row_tuples{0};
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
-
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-        return tuple_desc;
-    }
-
-    // A tuple with two column
-    TupleDescriptor* _create_simple_desc2() {
-        TDescriptorTableBuilder table_builder;
-        TTupleDescriptorBuilder tuple_builder;
-
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_VARCHAR, "c1", 1));
-        tuple_builder.build(&table_builder);
-
-        std::vector<TTupleId> row_tuples{0};
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
-
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-        return tuple_desc;
-    }
-
-    RuntimeState _runtime_state;
-    ObjectPool _pool;
-};
-
-TSlotDescriptor ChunkHelperTest::_create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
-    TSlotDescriptorBuilder builder;
-
-    if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
-        return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
-    } else {
-        return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
-    }
-}
-
-TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
-    TDescriptorTableBuilder table_builder;
-    TTupleDescriptorBuilder tuple_builder;
-
-    for (size_t i = 0; i < 9; i++) {
-        tuple_builder.add_slot(_create_slot_desc(_primitive_type[i], "c" + std::to_string(i), 0));
-    }
-
-    tuple_builder.build(&table_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                  .ok());
-
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-    auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-    return tuple_desc;
-}
-
-TEST_F(ChunkHelperTest, Accumulator) {
-    constexpr size_t kDesiredSize = 4096;
-    auto* tuple_desc = _create_simple_desc();
-    ChunkAccumulator accumulator(kDesiredSize);
-    size_t input_rows = 0;
-    size_t output_rows = 0;
-    // push small chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1025);
-        chunk->get_column_raw_ptr_by_index(0)->append_default(1025);
-        input_rows += 1025;
-
-        static_cast<void>(accumulator.push(std::move(chunk)));
-        if (ChunkPtr output = accumulator.pull()) {
-            output_rows += output->num_rows();
-            EXPECT_EQ(kDesiredSize, output->num_rows());
-        }
-    }
-    // push large chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 8888);
-        chunk->get_column_raw_ptr_by_index(0)->append_default(8888);
-        input_rows += 8888;
-        static_cast<void>(accumulator.push(std::move(chunk)));
-    }
-
-    accumulator.finalize();
-    while (ChunkPtr output = accumulator.pull()) {
-        EXPECT_LE(output->num_rows(), kDesiredSize);
-        output_rows += output->num_rows();
-    }
-    EXPECT_EQ(input_rows, output_rows);
-
-    // push empty chunks
-    for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
-        static_cast<void>(accumulator.push(std::move(chunk)));
-    }
-    EXPECT_TRUE(accumulator.reach_limit());
-    auto output = accumulator.pull();
-    EXPECT_EQ(nullptr, output);
-    EXPECT_TRUE(accumulator.reach_limit());
-}
+class ChunkHelperTest : public ::testing::Test {};
 
 TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense) {
     auto tablet_schema = create_char_tablet_schema(4);

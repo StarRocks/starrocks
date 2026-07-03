@@ -25,6 +25,8 @@
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
+#include "exprs/array_map_expr.h"
+#include "exprs/array_sort_lambda_expr.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/case_expr.h"
 #include "exprs/cast_expr.h"
@@ -34,11 +36,13 @@
 #include "exprs/condition_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/in_predicate.h"
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
+#include "exprs/map_apply_expr.h"
 #include "exprs/map_element_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/match_expr.h"
@@ -142,7 +146,7 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
         }
 
         // Preserve the historical FUNCTION_CALL dispatch order:
-        // 1) non-core pre hook (SRJAR/PYTHON), 2) core condition exprs, 3) non-core fallback hook.
+        // 1) non-core pre hook (SRJAR/PYTHON), 2) core special exprs, 3) non-core post hook, 4) core fallback.
         if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
@@ -154,10 +158,19 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_map") {
+            *expr = pool->add(new ArrayMapExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_sort_lambda") {
+            *expr = pool->add(new ArraySortLambdaExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "map_apply") {
+            *expr = pool->add(new MapApplyExpr(texpr_node));
         }
 
         if (*expr == nullptr) {
             RETURN_IF_ERROR(try_non_core_create_post_hook(pool, texpr_node, expr, state));
+        }
+        if (*expr == nullptr) {
+            *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
         }
         break;
     }
