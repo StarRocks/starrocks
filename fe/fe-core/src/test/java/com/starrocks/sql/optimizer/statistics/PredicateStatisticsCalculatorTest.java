@@ -715,5 +715,29 @@ public class PredicateStatisticsCalculatorTest {
         //   => 100 + 100 - 50 = 150 null rows
         double nullRows = afterOr.getColumnStatistic(aColumn).getNullsFraction() * afterOr.getOutputRowCount();
         Assertions.assertEquals(150, nullRows, 0.001);
+
+        // WHEN
+        // The two arms are complementary on the same column: a IS NOT NULL OR a IS NULL.
+        // All 200 null rows should survive.
+        final var isNotNull = new IsNullPredicateOperator(true, aColumn);
+        final var isNull = new IsNullPredicateOperator(false, aColumn);
+
+        // WHEN
+        final var notNullOrNull = PredicateStatisticsCalculator.statisticsCalculate(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, isNotNull, isNull), statistics);
+        double notNullOrNullNulls =
+                notNullOrNull.getColumnStatistic(aColumn).getNullsFraction() * notNullOrNull.getOutputRowCount();
+
+        // THEN
+        Assertions.assertEquals(200, notNullOrNullNulls, 0.001);
+
+        // WHEN
+        final var nullOrNotNull = PredicateStatisticsCalculator.statisticsCalculate(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, isNull, isNotNull), statistics);
+        double nullOrNotNullNulls =
+                nullOrNotNull.getColumnStatistic(aColumn).getNullsFraction() * nullOrNotNull.getOutputRowCount();
+
+        // THEN
+        Assertions.assertEquals(200, nullOrNotNullNulls, 0.001);
     }
 }

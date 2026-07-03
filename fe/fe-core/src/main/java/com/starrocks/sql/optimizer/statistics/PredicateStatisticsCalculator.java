@@ -425,9 +425,11 @@ public class PredicateStatisticsCalculator {
                 // null fraction is inflated.
                 double intersectionNulls = andStatistics == null ? 0.0 : andStatistics.getOutputRowCount() *
                         andStatistics.getColumnStatistic(columnRefOperator).getNullsFraction();
-                double unionNulls = Math.min(Math.max(0.0, leftNulls + rightNulls - intersectionNulls),
-                        Math.min(origNulls, rowCount));
-                double nullsFraction = rowCount > 0 ? Math.min(1.0, unionNulls / rowCount) : 0.0;
+                // The intersection can't hold more null rows than either arm
+                double cappedIntersectionNulls = Math.min(intersectionNulls, Math.min(leftNulls, rightNulls));
+                double unionNulls = Math.max(0.0, leftNulls + rightNulls - cappedIntersectionNulls);
+                double cappedUnionNulls = Math.min(unionNulls, Math.min(origNulls, rowCount));
+                double nullsFraction = rowCount > 0 ? Math.min(1.0, cappedUnionNulls / rowCount) : 0.0;
                 columnBuilder.setNullsFraction(nullsFraction);
 
                 builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
