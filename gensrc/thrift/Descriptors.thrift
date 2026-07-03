@@ -39,7 +39,7 @@ include "Types.thrift"
 include "Exprs.thrift"
 
 enum TRowPositionType {
-    ICEBERG_V3_ROW_POSITION,
+    ICEBERG_ROW_POSITION,
     OLAP_ROW_POSITION,
     LAKE_ROW_POSITION,
 }

@@ -46,6 +46,9 @@ namespace starrocks {
 class HiveTableDescriptor;
 class RuntimeFilterProbeCollector;
 
+template <typename T>
+class SparseRange;
+
 struct HdfsScannerProfile {
     RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
@@ -127,6 +130,10 @@ struct HdfsScannerContext {
     // ===== per-range fields =====
     const THdfsScanRange* scan_range = nullptr;
     int32_t scan_range_id = -1;
+    // Iceberg GLM lookup: restrict the scan to these file-local row positions so the reader
+    // skips non-matching row groups and pages natively, instead of evaluating a row-id predicate.
+    // Not owned; the pointee must outlive the scan (set via HiveDataSource::set_row_id_ranges).
+    const SparseRange<uint64_t>* row_id_ranges = nullptr;
     FileSystem* fs = nullptr;
     std::string file_path;
     int64_t file_size = -1;

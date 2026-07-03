@@ -217,7 +217,7 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
     task_ctx->scan_node_id = row_pos_desc->get_scan_node_id();
 
     switch (row_position_type) {
-    case RowPositionDescriptor::ICEBERG_V3: {
+    case RowPositionDescriptor::ICEBERG: {
         return std::make_shared<FetchTask>(std::move(task_ctx));
     }
     case RowPositionDescriptor::OLAP_SCAN: {

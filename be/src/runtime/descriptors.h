@@ -278,7 +278,7 @@ private:
 // used to describe row position, only used in global late materialization
 class RowPositionDescriptor {
 public:
-    enum Type : uint8_t { ICEBERG_V3 = 0, OLAP_SCAN = 1, LAKE_SCAN = 2 };
+    enum Type : uint8_t { ICEBERG = 0, OLAP_SCAN = 1, LAKE_SCAN = 2 };
     RowPositionDescriptor(Type type, int64_t scan_node_id, SlotId row_source_slot_id,
                           std::vector<SlotId> fetch_ref_slot_ids, std::vector<SlotId> lookup_ref_slot_ids)
             : _type(type),

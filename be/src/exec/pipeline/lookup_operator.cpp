@@ -109,8 +109,8 @@ StatusOr<LookUpTaskPtr> LookUpProcessor::_create_task(const LookUpTaskContextPtr
     auto row_pos_desc = _parent->_row_pos_descs.at(tuple_id);
     auto row_pos_type = row_pos_desc->type();
     switch (row_pos_type) {
-    case RowPositionDescriptor::Type::ICEBERG_V3:
-        return std::make_shared<IcebergV3LookUpTask>(ctx);
+    case RowPositionDescriptor::Type::ICEBERG:
+        return std::make_shared<IcebergLookUpTask>(ctx);
     case RowPositionDescriptor::Type::LAKE_SCAN:
     case RowPositionDescriptor::Type::OLAP_SCAN: {
         ASSIGN_OR_RETURN(auto adaptor, create_look_up_tablet_adaptor(row_pos_type));

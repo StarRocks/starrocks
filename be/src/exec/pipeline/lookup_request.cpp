@@ -34,8 +34,6 @@
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
-#include "exprs/expr_executor.h"
-#include "exprs/expr_factory.h"
 #include "runtime/chunk_accumulator.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -133,7 +131,7 @@ StatusOr<ChunkPtr> LookUpTask::_sort_chunk(RuntimeState* state, const ChunkPtr& 
 
 // Derives row-id ranges for the incoming batch and records duplicates so
 // downstream data can be replicated to match request cardinality.
-StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
+StatusOr<ChunkPtr> LookUpTask::_calculate_row_id_range(
         RuntimeState* state, const ChunkPtr& request_chunk,
         phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>* row_id_ranges,
         Buffer<uint32_t>* replicated_offsets) {
@@ -220,305 +218,34 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_calculate_row_id_range(
     return sorted_chunk;
 }
 
-TExpr create_between_expr(int32_t slot_id, int64_t start, int64_t end) {
-    TExpr expr;
-    std::vector<TExprNode>& nodes = expr.nodes;
-
-    // Root node: COMPOUND_AND (slot_id >= start AND slot_id < end)
-    TExprNode and_node;
-    and_node.node_type = TExprNodeType::COMPOUND_PRED;
-    and_node.opcode = TExprOpcode::COMPOUND_AND;
-    and_node.__isset.opcode = true;
-    and_node.num_children = 2;
-    and_node.is_nullable = true;
-
-    TTypeDesc bool_type;
-    TTypeNode bool_type_node;
-    bool_type_node.type = TTypeNodeType::SCALAR;
-    bool_type_node.__isset.scalar_type = true;
-    bool_type_node.scalar_type.type = TPrimitiveType::BOOLEAN;
-    bool_type.types.push_back(bool_type_node);
-    and_node.type = bool_type;
-
-    nodes.push_back(and_node);
-
-    // Left child: slot_id >= start
-    TExprNode ge_node;
-    ge_node.node_type = TExprNodeType::BINARY_PRED;
-    ge_node.opcode = TExprOpcode::GE;
-    ge_node.__isset.opcode = true;
-    ge_node.num_children = 2;
-    ge_node.is_nullable = true;
-    ge_node.child_type = TPrimitiveType::BIGINT;
-    ge_node.__isset.child_type = true;
-    ge_node.type = bool_type;
-
-    nodes.push_back(ge_node);
-
-    // SlotRef for GE left operand
-    TExprNode slot_ref_1;
-    slot_ref_1.node_type = TExprNodeType::SLOT_REF;
-    slot_ref_1.num_children = 0;
-    slot_ref_1.is_nullable = true;
-
-    TTypeDesc bigint_type;
-    TTypeNode bigint_type_node;
-    bigint_type_node.type = TTypeNodeType::SCALAR;
-    bigint_type_node.__isset.scalar_type = true;
-    bigint_type_node.scalar_type.type = TPrimitiveType::BIGINT;
-    bigint_type.types.push_back(bigint_type_node);
-    slot_ref_1.type = bigint_type;
-
-    TSlotRef slot_ref_info_1;
-    slot_ref_info_1.slot_id = slot_id;
-    slot_ref_info_1.tuple_id = 0;
-    slot_ref_1.slot_ref = slot_ref_info_1;
-    slot_ref_1.__isset.slot_ref = true;
-
-    nodes.push_back(slot_ref_1);
-
-    // Literal for start value
-    TExprNode literal_1;
-    literal_1.node_type = TExprNodeType::INT_LITERAL;
-    literal_1.num_children = 0;
-    literal_1.is_nullable = false;
-    literal_1.type = bigint_type;
-
-    TIntLiteral int_literal_1;
-    int_literal_1.value = start;
-    literal_1.int_literal = int_literal_1;
-    literal_1.__isset.int_literal = true;
-
-    nodes.push_back(literal_1);
-
-    // Right child: slot_id < end
-    TExprNode le_node;
-    le_node.node_type = TExprNodeType::BINARY_PRED;
-    le_node.opcode = TExprOpcode::LT;
-    le_node.__isset.opcode = true;
-    le_node.num_children = 2;
-    le_node.is_nullable = true;
-    le_node.child_type = TPrimitiveType::BIGINT;
-    le_node.__isset.child_type = true;
-    le_node.type = bool_type;
-
-    nodes.push_back(le_node);
-
-    // SlotRef for LT left operand
-    TExprNode slot_ref_2;
-    slot_ref_2.node_type = TExprNodeType::SLOT_REF;
-    slot_ref_2.num_children = 0;
-    slot_ref_2.is_nullable = true;
-    slot_ref_2.type = bigint_type;
-
-    TSlotRef slot_ref_info_2;
-    slot_ref_info_2.slot_id = slot_id;
-    slot_ref_info_2.tuple_id = 0;
-    slot_ref_2.slot_ref = slot_ref_info_2;
-    slot_ref_2.__isset.slot_ref = true;
-
-    nodes.push_back(slot_ref_2);
-
-    // Literal for end value
-    TExprNode literal_10;
-    literal_10.node_type = TExprNodeType::INT_LITERAL;
-    literal_10.num_children = 0;
-    literal_10.is_nullable = false;
-    literal_10.type = bigint_type;
-
-    TIntLiteral int_literal_10;
-    int_literal_10.value = end;
-    literal_10.int_literal = int_literal_10;
-    literal_10.__isset.int_literal = true;
-
-    nodes.push_back(literal_10);
-
-    return expr;
-}
-
-TExpr IcebergV3LookUpTask::create_row_id_filter_expr(SlotId slot_id, const SparseRange<int64_t>& row_id_range) {
-    SCOPED_TIMER(_ctx->parent->_build_row_id_filter_timer);
-    TExpr expr;
-    std::vector<TExprNode>& nodes = expr.nodes;
-
-    if (row_id_range.empty()) {
-        // Return a false literal if no ranges
-        TExprNode false_node;
-        false_node.node_type = TExprNodeType::BOOL_LITERAL;
-        false_node.num_children = 0;
-        false_node.is_nullable = false;
-
-        TTypeDesc bool_type;
-        TTypeNode bool_type_node;
-        bool_type_node.type = TTypeNodeType::SCALAR;
-        bool_type_node.__isset.scalar_type = true;
-        bool_type_node.scalar_type.type = TPrimitiveType::BOOLEAN;
-        bool_type.types.push_back(bool_type_node);
-        false_node.type = bool_type;
-
-        TBoolLiteral bool_literal;
-        bool_literal.value = false;
-        false_node.bool_literal = bool_literal;
-        false_node.__isset.bool_literal = true;
-
-        nodes.push_back(false_node);
-        return expr;
-    }
-
-    if (row_id_range.size() == 1) {
-        return create_between_expr(slot_id, row_id_range[0].begin(), row_id_range[0].end());
-    }
-
-    TTypeDesc bool_type;
-    TTypeNode bool_type_node;
-    bool_type_node.type = TTypeNodeType::SCALAR;
-    bool_type_node.__isset.scalar_type = true;
-    bool_type_node.scalar_type.type = TPrimitiveType::BOOLEAN;
-    bool_type.types.push_back(bool_type_node);
-
-    TTypeDesc bigint_type;
-    TTypeNode bigint_type_node;
-    bigint_type_node.type = TTypeNodeType::SCALAR;
-    bigint_type_node.__isset.scalar_type = true;
-    bigint_type_node.scalar_type.type = TPrimitiveType::BIGINT;
-    bigint_type.types.push_back(bigint_type_node);
-
-    auto emit_between = [&](const Range<int64_t>& range) {
-        // AND node for this range
-        TExprNode and_node;
-        and_node.node_type = TExprNodeType::COMPOUND_PRED;
-        and_node.opcode = TExprOpcode::COMPOUND_AND;
-        and_node.__isset.opcode = true;
-        and_node.num_children = 2;
-        and_node.is_nullable = true;
-        and_node.type = bool_type;
-        nodes.push_back(and_node);
-
-        // GE node: slot_id >= range.begin
-        TExprNode ge_node;
-        ge_node.node_type = TExprNodeType::BINARY_PRED;
-        ge_node.opcode = TExprOpcode::GE;
-        ge_node.__isset.opcode = true;
-        ge_node.num_children = 2;
-        ge_node.is_nullable = true;
-        ge_node.child_type = TPrimitiveType::BIGINT;
-        ge_node.__isset.child_type = true;
-        ge_node.type = bool_type;
-        nodes.push_back(ge_node);
-
-        // SlotRef for GE
-        TExprNode slot_ref_ge;
-        slot_ref_ge.node_type = TExprNodeType::SLOT_REF;
-        slot_ref_ge.num_children = 0;
-        slot_ref_ge.is_nullable = true;
-        slot_ref_ge.type = bigint_type;
-
-        TSlotRef slot_ref_info_ge;
-        slot_ref_info_ge.slot_id = slot_id;
-        slot_ref_info_ge.tuple_id = 0;
-        slot_ref_ge.slot_ref = slot_ref_info_ge;
-        slot_ref_ge.__isset.slot_ref = true;
-        nodes.push_back(slot_ref_ge);
-
-        // Literal for range.begin
-        TExprNode literal_begin;
-        literal_begin.node_type = TExprNodeType::INT_LITERAL;
-        literal_begin.num_children = 0;
-        literal_begin.is_nullable = false;
-        literal_begin.type = bigint_type;
-
-        TIntLiteral int_literal_begin;
-        int_literal_begin.value = range.begin();
-        literal_begin.int_literal = int_literal_begin;
-        literal_begin.__isset.int_literal = true;
-        nodes.push_back(literal_begin);
-
-        // LT node: slot_id < range.end
-        TExprNode lt_node;
-        lt_node.node_type = TExprNodeType::BINARY_PRED;
-        lt_node.opcode = TExprOpcode::LT;
-        lt_node.__isset.opcode = true;
-        lt_node.num_children = 2;
-        lt_node.is_nullable = true;
-        lt_node.child_type = TPrimitiveType::BIGINT;
-        lt_node.__isset.child_type = true;
-        lt_node.type = bool_type;
-        nodes.push_back(lt_node);
-
-        // SlotRef for LT
-        TExprNode slot_ref_lt;
-        slot_ref_lt.node_type = TExprNodeType::SLOT_REF;
-        slot_ref_lt.num_children = 0;
-        slot_ref_lt.is_nullable = true;
-        slot_ref_lt.type = bigint_type;
-
-        TSlotRef slot_ref_info_lt;
-        slot_ref_info_lt.slot_id = slot_id;
-        slot_ref_info_lt.tuple_id = 0;
-        slot_ref_lt.slot_ref = slot_ref_info_lt;
-        slot_ref_lt.__isset.slot_ref = true;
-        nodes.push_back(slot_ref_lt);
-
-        // Literal for range.end
-        TExprNode literal_end;
-        literal_end.node_type = TExprNodeType::INT_LITERAL;
-        literal_end.num_children = 0;
-        literal_end.is_nullable = false;
-        literal_end.type = bigint_type;
-
-        TIntLiteral int_literal_end;
-        int_literal_end.value = range.end();
-        literal_end.int_literal = int_literal_end;
-        literal_end.__isset.int_literal = true;
-        nodes.push_back(literal_end);
-    };
-
-    auto build_or = [&](auto&& self, size_t left, size_t right) -> void {
-        if (left == right) {
-            emit_between(row_id_range[left]);
-            return;
-        }
-
-        TExprNode or_node;
-        or_node.node_type = TExprNodeType::COMPOUND_PRED;
-        or_node.opcode = TExprOpcode::COMPOUND_OR;
-        or_node.__isset.opcode = true;
-        or_node.num_children = 2;
-        or_node.is_nullable = true;
-        or_node.type = bool_type;
-        nodes.push_back(or_node);
-
-        size_t mid = left + (right - left) / 2;
-        self(self, left, mid);
-        self(self, mid + 1, right);
-    };
-
-    build_or(build_or, 0, row_id_range.size() - 1);
-
-    return expr;
-}
-
-// Scans the Iceberg storage engine for the calculated row-id ranges and
-// accumulates the resulting columns.
-StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
-        RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
+// Reads the fetched columns for the calculated row-position ranges. Hands the file-local
+// row positions to the scan natively (set_row_id_ranges) so the reader skips non-matching
+// row groups and pages instead of evaluating a row-id predicate.
+StatusOr<ChunkPtr> IcebergLookUpTask::_get_data_from_storage(
+        RuntimeState* state,
         const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges) {
     SCOPED_TIMER(_ctx->parent->_get_data_from_storage_timer);
     ChunkPtr result_chunk;
-    for (const auto& [scan_range_id, row_id_range] : row_id_ranges) {
-        ObjectPool obj_pool;
+    // Iterate scan ranges in ascending scan_range_id order so the accumulated rows match the
+    // (scan_range_id, row_id)-sorted request chunk. The hash-map's arbitrary iteration order would
+    // misalign the SORT_ORDINAL position column appended in process() and the replicated_offsets,
+    // attaching fetched payloads to the wrong request rows.
+    std::vector<int32_t> ordered_scan_range_ids;
+    ordered_scan_range_ids.reserve(row_id_ranges.size());
+    for (const auto& [scan_range_id, _] : row_id_ranges) {
+        ordered_scan_range_ids.push_back(scan_range_id);
+    }
+    std::sort(ordered_scan_range_ids.begin(), ordered_scan_range_ids.end());
+    for (int32_t scan_range_id : ordered_scan_range_ids) {
+        const auto& row_id_range = row_id_ranges.at(scan_range_id);
+        // The reader works in unsigned file-local positions; these are non-negative row ids.
+        // `native_range` must outlive the data source below (it is read during open/get_next).
+        SparseRange<uint64_t> native_range;
+        for (size_t i = 0; i < row_id_range->size(); i++) {
+            const Range<int64_t>& r = (*row_id_range)[i];
+            native_range.add(Range<uint64_t>(static_cast<uint64_t>(r.begin()), static_cast<uint64_t>(r.end())));
+        }
 
-        // Create filter expression for row_id column
-        TExpr expr = create_row_id_filter_expr(_ctx->lookup_ref_slot_ids[1], *row_id_range);
-
-        ExprContext* expr_ctx = nullptr;
-        RETURN_IF_ERROR(ExprFactory::create_expr_tree(&obj_pool, expr, &expr_ctx, state, false));
-        std::vector<ExprContext*> conjunct_ctxs{expr_ctx};
-
-        RETURN_IF_ERROR(ExprExecutor::prepare(conjunct_ctxs, state));
-        RETURN_IF_ERROR(ExprExecutor::open(conjunct_ctxs, state));
-
-        // Build HiveDataSource for this scan range
         auto glm_ctx = down_cast<IcebergGlobalLateMaterilizationContext*>(
                 state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
         if (glm_ctx == nullptr) {
@@ -532,7 +259,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
         const auto& scan_range = glm_ctx->get_hdfs_scan_range(scan_range_id);
         auto data_source = std::make_shared<connector::HiveDataSource>(provider.get(), scan_range);
         data_source->set_runtime_profile(_ctx->profile);
-        data_source->set_predicates(conjunct_ctxs);
+        data_source->set_row_id_ranges(&native_range);
 
         RETURN_IF_ERROR(data_source->open(state));
         do {
@@ -543,7 +270,10 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
             }
             RETURN_IF_ERROR(status);
             if (chunk->num_rows() == 0) {
-                break;
+                // An empty chunk is not end-of-stream for a restricted (sparse) read: a page/range
+                // can yield no surviving rows while later ranges still have data. Keep reading until
+                // EOF, otherwise we stop short and return fewer rows than requested positions.
+                continue;
             }
 
             // Accumulate data from multiple chunks, excluding row_id columns
@@ -572,20 +302,24 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
     return result_chunk;
 }
 
-// Executes the Iceberg lookup: build row-id ranges, fetch data, reorder to the
-// original request layout, and feed responses back to each waiting context.
-Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
-    VLOG_FILE << "IcebergV3LookUpTask process, request_ctxs size: " << _ctx->request_ctxs.size();
+// Executes the Iceberg lookup: build row-id ranges, fetch data natively by position, reorder to
+// the original request layout, and feed responses back to each waiting context.
+Status IcebergLookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {
     if (_ctx->request_ctxs.empty()) {
         return Status::OK();
     }
 
-    // Calculate row_id ranges and fetch data from storage
     phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>> row_id_ranges;
     Buffer<uint32_t> replicated_offsets;
     ASSIGN_OR_RETURN(auto sorted_chunk,
                      _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
-    ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, {}, row_id_ranges));
+    ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, row_id_ranges));
+
+    if (result_chunk == nullptr) {
+        // A non-empty request must fetch at least one row; returning OK here would leave
+        // response_columns empty and crash FetchProcessor::_build_output_chunk. Fail soft instead.
+        return Status::InternalError("Iceberg lookup fetched no rows for a non-empty request");
+    }
 
     {
         auto unordered_position_column = sorted_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
@@ -598,17 +332,21 @@ Status IcebergV3LookUpTask::process(RuntimeState* state, const ChunkPtr& request
             }
             result_chunk->check_or_die();
         }
+        // The fetched payload must have exactly one row per requested position; otherwise the
+        // position-column pairing below is misaligned. check_or_die() is a no-op in release builds,
+        // so guard explicitly to fail soft instead of overrunning the permutation in _sort_chunk.
+        if (result_chunk->num_rows() != unordered_position_column->size()) {
+            return Status::InternalError(fmt::format("Iceberg lookup fetched {} rows but {} positions were requested",
+                                                     result_chunk->num_rows(), unordered_position_column->size()));
+        }
         result_chunk->append_column(unordered_position_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
         result_chunk->check_or_die();
         ASSIGN_OR_RETURN(auto sorted_result_chunk, _sort_chunk(state, result_chunk, {unordered_position_column}));
         result_chunk = sorted_result_chunk;
     }
-    VLOG_FILE << "IcebergV3LookUpTask fill response, result_chunk: " << result_chunk->debug_columns();
 
-    // Collect slots to fill response, excluding lookup ref columns
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
     std::vector<SlotDescriptor*> slots;
-
     for (const auto& slot : tuple_desc->slots()) {
         if (slot->id() == _ctx->lookup_ref_slot_ids[0] || slot->id() == _ctx->lookup_ref_slot_ids[1]) {
             continue;

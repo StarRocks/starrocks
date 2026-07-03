@@ -34,7 +34,7 @@ import java.util.List;
  */
 public class RowPositionDescriptor {
     public enum Type {
-        ICEBERG_V3,
+        ICEBERG,
         OLAP_SCAN,
         LAKE_SCAN
     }
@@ -96,8 +96,8 @@ public class RowPositionDescriptor {
     public TRowPositionDescriptor toThrift() {
         TRowPositionDescriptor msg = new TRowPositionDescriptor();
         switch (type) {
-            case ICEBERG_V3:
-                msg.setRow_position_type(TRowPositionType.ICEBERG_V3_ROW_POSITION);
+            case ICEBERG:
+                msg.setRow_position_type(TRowPositionType.ICEBERG_ROW_POSITION);
                 break;
             case OLAP_SCAN:
                 msg.setRow_position_type(TRowPositionType.OLAP_ROW_POSITION);

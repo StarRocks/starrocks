@@ -94,6 +94,11 @@ Status GroupReader::init() {
     RETURN_IF_ERROR(_create_column_readers());
     _process_columns_and_conjunct_ctxs();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
+    // Iceberg GLM lookup: restrict to the requested file-local positions so select_offset_index
+    // (triggered in prepare() once _range is a strict subset) reads only the pages that hold them.
+    if (_param.row_id_ranges != nullptr) {
+        _range &= *_param.row_id_ranges;
+    }
     return Status::OK();
 }
 
@@ -505,11 +510,6 @@ Status GroupReader::_create_column_readers() {
 
     const auto& reserved_slots = _param.scanner_ctx->reserved_field_slots;
     if (!reserved_slots.empty()) {
-        bool use_legacy_lookup_row_id =
-                std::any_of(reserved_slots.begin(), reserved_slots.end(), [](const SlotDescriptor* slot) {
-                    return slot->col_name() == formats::kRowSourceIdColumnName ||
-                           slot->col_name() == formats::kScanRangeIdColumnName;
-                });
         for (const auto* slot : reserved_slots) {
             if (slot->col_name() == formats::kIcebergRowIdColumnName) {
                 ASSIGN_OR_RETURN(auto reader,
@@ -523,9 +523,6 @@ Status GroupReader::_create_column_readers() {
                     // diverging from the physical _row_id column of compacted files. The file-level
                     // base also keeps the reader's zone-map filters (base + rg_first_row) correct.
                     first_row_id = std::optional<int64_t>(_param.scan_range->first_row_id);
-                } else if (use_legacy_lookup_row_id) {
-                    // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
-                    first_row_id = std::optional<int64_t>(0);
                 }
                 ColumnReaderPtr row_id_reader =
                         reader != nullptr ? std::make_unique<IcebergRowIdReader>(std::move(reader), first_row_id)

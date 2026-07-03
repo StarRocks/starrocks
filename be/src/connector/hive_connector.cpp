@@ -825,6 +825,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     _scanner_ctx.obj_pool = &_pool;
 
     _scanner_ctx.scan_range = &scan_range;
+    _scanner_ctx.row_id_ranges = _row_id_ranges;
     _scanner_ctx.fs = _pool.add(fs.release());
     _scanner_ctx.file_path = native_file_path;
     _scanner_ctx.file_size = _scan_range.file_length;
