@@ -61,6 +61,16 @@ public class StreamMetaFunctionTest {
         Assertions.assertNull(metaKeySpecOf("KAFKA", "MESSAGE_ID"));
         Assertions.assertNull(metaKeySpecOf("KAFKA", "BOGUS"));
         Assertions.assertNull(metaKeySpecOf("ROCKETMQ", "TOPIC"));
+        // null source or key -> null.
+        Assertions.assertNull(metaKeySpecOf(null, "TOPIC"));
+        Assertions.assertNull(metaKeySpecOf("KAFKA", null));
+    }
+
+    @Test
+    public void testValidateAliasRequired() {
+        // an empty alias is rejected.
+        Assertions.assertThrows(DdlException.class,
+                () -> validateIncludeMetadata(meta("TOPIC", ""), null, "KAFKA", "json"));
     }
 
     @Test
