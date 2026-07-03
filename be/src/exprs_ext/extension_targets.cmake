@@ -12,19 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(SCRIPT_TEST_FILES
-    ../base/cxa_throw_wrap.cpp
-    command_executor_test.cpp
-    key_cache_script_test.cpp
-    runtime_env_script_test.cpp
+set(EXPR_EXTENSION_LIBS
+    ExprDict
+    ExprTableFunction
+    ExprUtility
 )
 
-set(SCRIPT_TEST_LINK_LIBS
-    Script
-    ${TEST_LINK_LIBS}
-)
-
-add_executable(script_test ${SCRIPT_TEST_FILES})
-target_link_libraries(script_test ${SCRIPT_TEST_LINK_LIBS} gtest_main)
-STARROCKS_FORCE_LOAD_LIBS(script_test ${EXPR_FORCE_LOAD_LIBS})
-set_target_properties(script_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+set(EXPR_FORCE_LOAD_LIBS ${EXPR_EXTENSION_LIBS} Expr)

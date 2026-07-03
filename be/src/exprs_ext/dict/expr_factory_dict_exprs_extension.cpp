@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "common/object_pool.h"
-#include "exprs/dict_query_expr.h"
-#include "exprs/dictionary_get_expr.h"
-#include "exprs/dictmapping_expr.h"
 #include "exprs/expr_factory.h"
+#include "exprs_ext/dict/dict_query_expr.h"
+#include "exprs_ext/dict/dictionary_get_expr.h"
+#include "exprs_ext/dict/dictmapping_expr.h"
 
 namespace starrocks {
 

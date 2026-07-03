@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/dict_query_expr.h"
+#include "exprs_ext/dict/dict_query_expr.h"
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"

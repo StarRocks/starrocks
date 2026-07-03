@@ -31,7 +31,7 @@ set(EXEC_PRIMITIVE_TEST_FILES
 
 set(EXEC_PRIMITIVE_TEST_LINK_LIBS
     ExecPrimitive
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore
@@ -72,7 +72,7 @@ set(EXEC_RUNTIME_TEST_LINK_LIBS
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    ExprCore
+    Expr
     Runtime
     Platform
     FileSystem
@@ -106,7 +106,7 @@ set(SCHEMA_SCANNER_CORE_TEST_FILES
 
 set(SCHEMA_SCANNER_CORE_TEST_LINK_LIBS
     ExecSchemaScannerCore
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore
@@ -169,7 +169,7 @@ set(JOIN_CORE_TEST_FILES
 set(JOIN_CORE_TEST_LINK_LIBS
     ExecJoinCore
     ComputeEnv
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore

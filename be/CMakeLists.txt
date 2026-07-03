@@ -537,6 +537,8 @@ else()
     set(WL_WHOLE_ARCHIVE_SUFFIX "-Wl,--no-whole-archive")
 endif()
 
+include(${SRC_DIR}/exprs_ext/extension_targets.cmake)
+
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     HttpService
@@ -550,7 +552,7 @@ set(STARROCKS_LINK_LIBS
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry
     Exec
-    ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     Formats
     Orchestration
     DataWorkflows
@@ -565,7 +567,7 @@ set(STARROCKS_LINK_LIBS
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:Expr> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
     $<TARGET_FILE:HdfsFileSystem>
     Runtime
@@ -933,7 +935,7 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 
     ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} gtest_main)
-    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${TEST_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
     SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
     if (NOT "${TEST_DIR_NAME}" STREQUAL "")
         SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
@@ -954,7 +956,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} benchmark benchmark_main ${BENCH_LINK_LIBS})
-    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(${BENCH_FILE_NAME} ${EXPR_FORCE_LOAD_LIBS})
 
     SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control ${CXX_FLAGS_RELEASE}")
     if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
@@ -986,6 +988,7 @@ add_subdirectory(${SRC_DIR}/retrieval)
 add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/cache)
 add_subdirectory(${SRC_DIR}/compute_env)
+add_subdirectory(${SRC_DIR}/exprs_ext)
 add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)

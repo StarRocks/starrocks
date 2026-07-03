@@ -276,14 +276,14 @@ endif ()
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 if (NOT STARROCKS_JIT_ENABLE)
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
 else()
     SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
+STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 SET(DW_TEST_FILES
@@ -483,7 +483,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
+STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 # =================================================

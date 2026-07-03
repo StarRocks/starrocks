@@ -20,7 +20,7 @@ endif()
 set(CONNECTOR_PRIMITIVE_TEST_LINK_LIBS
     ConnectorPrimitive
     ExecPrimitive
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore

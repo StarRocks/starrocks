@@ -59,7 +59,7 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
         Service
         ${STARROCKS_LINK_LIBS}
         )
-    STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(starrocks_be ${EXPR_FORCE_LOAD_LIBS})
     install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
 
     install(TARGETS starrocks_be
