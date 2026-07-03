@@ -108,6 +108,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -1394,6 +1395,32 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(
                 "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
                 filter.toString());
+    }
+
+    @Test
+    public void testGetRemoteFileWithPredicateOnColumnAddedAfterSnapshot() throws IOException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT),
+                new Column("k3", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, mockedNativeTableC, Maps.newHashMap());
+
+        mockedNativeTableC.newAppend().appendFile(FILE_B_1).commit();
+        // ADD COLUMN commits new metadata without a new snapshot: the current snapshot still
+        // references the pre-evolution schema id.
+        mockedNativeTableC.updateSchema().addColumn("k3", Types.IntegerType.get()).commit();
+        mockedNativeTableC.refresh();
+
+        long snapshotId = mockedNativeTableC.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new IsNullPredicateOperator(false,
+                new ColumnRefOperator(3, INT, "k3", true));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                        .setPredicate(predicate).setFieldNames(Lists.newArrayList("k1", "k3")).setLimit(10).build());
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
     }
 
     @Test

@@ -165,3 +165,70 @@ set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result
+
+-- name: test_iceberg_read_new_column_after_add_column
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table evo_read (id int, data string);
+-- result:
+-- !result
+insert into evo_read values (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+alter table evo_read add column extra string;
+-- result:
+-- !result
+select count(*) from evo_read where extra is null;
+-- result:
+3
+-- !result
+select id, extra from evo_read where extra is not null order by id;
+-- result:
+-- !result
+select id from evo_read where extra = 'x' order by id;
+-- result:
+-- !result
+select id, extra from evo_read order by id;
+-- result:
+1	None
+2	None
+3	None
+-- !result
+insert into evo_read values (4, 'd', 'x');
+-- result:
+-- !result
+select count(*) from evo_read where extra is null;
+-- result:
+3
+-- !result
+select id, extra from evo_read where extra is not null order by id;
+-- result:
+4	x
+-- !result
+select id, extra from evo_read order by id;
+-- result:
+1	None
+2	None
+3	None
+4	x
+-- !result
+drop table evo_read force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

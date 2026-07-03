@@ -138,6 +138,21 @@ public class StarRocksIcebergTableScan
     }
 
     @Override
+    public TableScan useSnapshot(long scanSnapshotId) {
+        // The parent binds the scan to the target snapshot's recorded schema (DataScan#useSnapshotSchema).
+        // A metadata-only ADD COLUMN advances the schema without a new snapshot, so a current-snapshot
+        // read would miss the new column and a filter on it fails with "Cannot find field". Delegate to
+        // the parent (inheriting its validation and context assembly), then rebind only the schema: the
+        // current snapshot uses the current table schema; older snapshots keep theirs for time travel.
+        TableScan scan = super.useSnapshot(scanSnapshotId);
+        Snapshot currentSnapshot = table().currentSnapshot();
+        if (useSnapshotSchema() && currentSnapshot != null && currentSnapshot.snapshotId() == scanSnapshotId) {
+            return newRefinedScan(table(), tableSchema(), ((StarRocksIcebergTableScan) scan).context());
+        }
+        return scan;
+    }
+
+    @Override
     public TableScan metricsReporter(MetricsReporter reporter) {
         if (reporter instanceof IcebergMetricsReporter) {
             this.metricsReporter = (IcebergMetricsReporter) reporter;
