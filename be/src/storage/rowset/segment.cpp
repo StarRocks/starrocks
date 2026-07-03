@@ -594,7 +594,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
         std::string_view leaf = paths.back();
         may_contains = column_reader->get_remain_filter()->test_bytes(leaf.data(), leaf.size());
     }
-    if (column_reader->is_flat_json() && !may_contains) {
+    // An intermediate node (e.g. "o") whose descendants are stored as flattened sub-columns
+    // (e.g. "o.inner") is present in this segment even though no sub-column is named exactly
+    // "o". Such a node must be reconstructed by the JsonExtractIterator below, not reported as
+    // absent -- otherwise extracting an intermediate JSON object through a json-path-rewrite
+    // extended column (e.g. get_json_string(j, '$.o')) wrongly returns NULL.
+    bool has_flatten_descendant = false;
+    if (sub_readers) {
+        const std::string prefix = std::string(field_name) + ".";
+        for (auto& sub_reader : *sub_readers) {
+            if (std::string_view(sub_reader->name()).starts_with(prefix)) {
+                has_flatten_descendant = true;
+                break;
+            }
+        }
+    }
+    if (column_reader->is_flat_json() && !may_contains && !has_flatten_descendant) {
         // create an iterator always return NULL for fields that don't exist in this segment
         auto default_null_iter = std::make_unique<DefaultValueColumnIterator>(false, "", true, get_type_info(column),
                                                                               column.length(), num_rows());
