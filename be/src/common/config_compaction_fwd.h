@@ -77,6 +77,14 @@ CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 // This config defines the maximum percentage of data allowed per compaction
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
+// Absolute upper bound (bytes) on the input size picked for a single lake primary-key
+// compaction. 0 = disabled (legacy behavior: cap =
+// max(update_compaction_result_bytes, tablet_data_size * update_compaction_ratio_threshold)).
+// When > 0 the effective per-compaction result-bytes cap is clamped to this value so that a
+// single large compaction on a hot PK tablet cannot produce a multi-second synchronous publish
+// that stalls the tablet's serialized ingest version chain (realtime-ingest tail latency).
+CONF_mInt64(lake_pk_compaction_max_result_bytes, "0");
+
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
 // if compaction of a tablet failed, this tablet should not be chosen to

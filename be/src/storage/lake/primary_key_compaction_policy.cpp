@@ -332,6 +332,18 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     std::vector<RowsetCandidate> rowset_vec;
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+    // Effective per-compaction input-bytes cap. Legacy behavior is
+    // max(update_compaction_result_bytes, data_size * ratio); on a large hot PK tablet that lets a
+    // single compaction grow to multiple GB, whose synchronous publish (compact_mapper read +
+    // index apply) stalls the tablet's serialized ingest version chain and drives the realtime
+    // ingest tail. When lake_pk_compaction_max_result_bytes > 0 we clamp the cap to it so each
+    // compaction stays small and its publish cannot block queued ingest publishes.
+    int64_t per_compaction_result_bytes_cap =
+            std::max(config::update_compaction_result_bytes, compaction_data_size_threshold);
+    if (config::lake_pk_compaction_max_result_bytes > 0) {
+        per_compaction_result_bytes_cap =
+                std::min(per_compaction_result_bytes_cap, config::lake_pk_compaction_max_result_bytes);
+    }
     // 1. generate rowset candidate vector
     for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
         const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
@@ -367,8 +379,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
 
-        if (cur_compaction_result_bytes >
-            std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+        if (cur_compaction_result_bytes > per_compaction_result_bytes_cap) {
             reach_max_input_per_compaction = true;
             break;
         }
@@ -387,8 +398,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
                 has_dels->push_back(rowset_candidate.delete_bytes() > 0);
             }
 
-            if (cur_compaction_result_bytes >
-                std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+            if (cur_compaction_result_bytes > per_compaction_result_bytes_cap) {
                 break;
             }
             if (rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {

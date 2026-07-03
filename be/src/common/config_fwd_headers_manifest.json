@@ -689,6 +689,7 @@
         "update_compaction_result_bytes",
         "update_compaction_delvec_file_io_amp_ratio",
         "update_compaction_ratio_threshold",
+        "lake_pk_compaction_max_result_bytes",
         "repair_compaction_interval_seconds",
         "min_compaction_failure_interval_sec",
         "min_cumulative_compaction_failure_interval_sec",
