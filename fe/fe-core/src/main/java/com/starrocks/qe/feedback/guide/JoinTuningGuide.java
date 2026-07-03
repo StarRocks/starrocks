@@ -42,7 +42,7 @@ public abstract class JoinTuningGuide implements TuningGuide {
         if (needCommute) {
             joinType = JOIN_COMMUTATIVITY_MAP.get(joinOperator.getJoinType());
         }
-        return new PhysicalHashJoinOperator(
+        PhysicalHashJoinOperator newJoinOperator = new PhysicalHashJoinOperator(
                 joinType,
                 joinOperator.getOnPredicate(),
                 joinOperator.getJoinHint(),
@@ -51,6 +51,12 @@ public abstract class JoinTuningGuide implements TuningGuide {
                 joinOperator.getProjection(),
                 joinOperator.getSkewColumn(),
                 joinOperator.getSkewValues());
+        // The predicate may reference common sub-expression columns produced by ScalarOperatorsReuseRule
+        // (see predicateCommonOperators). Those columns are only defined in predicateCommonOperators, so it
+        // must be carried over together with the predicate. Otherwise the rebuilt join keeps a predicate that
+        // references undefined columns and the plan fails InputDependenciesChecker.
+        newJoinOperator.setPredicateCommonOperators(joinOperator.getPredicateCommonOperators());
+        return newJoinOperator;
     }
 
     protected boolean isColocateJoin(OptExpression optExpression) {
