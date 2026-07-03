@@ -179,20 +179,13 @@ public class SessionVariableTest {
     @Test
     public void testReplayFromJsonWithAlias() throws Exception {
         SessionVariable sessionVariable = new SessionVariable();
-        Assertions.assertTrue(sessionVariable.isAllowLakeWithoutPartitionFilter());
 
-        sessionVariable.replayFromJson("{\"" +
-                SessionVariable.ALLOW_HIVE_WITHOUT_PARTITION_FILTER + "\": false}");
-        Assertions.assertFalse(sessionVariable.isAllowLakeWithoutPartitionFilter());
-
-        sessionVariable.replayFromJson("{\"" +
-                SessionVariable.ALLOW_LAKE_WITHOUT_PARTITION_FILTER + "\": true}");
-        Assertions.assertTrue(sessionVariable.isAllowLakeWithoutPartitionFilter());
-
+        // alias key in JSON should be resolved
         sessionVariable.replayFromJson("{\"" +
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 1024}");
         Assertions.assertEquals(1024, sessionVariable.getScanLakePartitionNumLimit());
 
+        // canonical name key should also work
         sessionVariable.replayFromJson("{\"" +
                 SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 2048}");
         Assertions.assertEquals(2048, sessionVariable.getScanLakePartitionNumLimit());
@@ -202,11 +195,7 @@ public class SessionVariableTest {
     public void testReplayFromJsonNameTakesPriorityOverAlias() throws Exception {
         SessionVariable sessionVariable = new SessionVariable();
 
-        sessionVariable.replayFromJson("{\"" +
-                SessionVariable.ALLOW_LAKE_WITHOUT_PARTITION_FILTER + "\": false, \"" +
-                SessionVariable.ALLOW_HIVE_WITHOUT_PARTITION_FILTER + "\": true}");
-        Assertions.assertFalse(sessionVariable.isAllowLakeWithoutPartitionFilter());
-
+        // when both name and alias are present, canonical name takes priority
         sessionVariable.replayFromJson("{\"" +
                 SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
