@@ -165,6 +165,16 @@ public class LoadTest {
                 result = columns.get(0);
                 table.getColumn("payload");
                 result = columns.get(1);
+                // Metadata aliases are not table columns; return null explicitly (a mocked getColumn
+                // otherwise cascades to a non-null stub and trips the alias/table-column collision check).
+                table.getColumn("mt_topic");
+                result = null;
+                table.getColumn("mt_part");
+                result = null;
+                table.getColumn("mt_off");
+                result = null;
+                table.getColumn("mt_hdr");
+                result = null;
             }
         };
 
