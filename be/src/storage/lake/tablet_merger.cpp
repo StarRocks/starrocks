@@ -1329,6 +1329,156 @@ Status merge_dcg_meta(TabletManager* tablet_manager, const std::vector<TabletMer
     return Status::OK();
 }
 
+// Pack (col_uid, index_type) into a 64-bit key, mirroring index_delta_group_loader.cpp,
+// so tombstone-set membership can be tested cheaply.
+inline uint64_t idg_pack_key(int32_t col_uid, IndexType type) {
+    return (static_cast<uint64_t>(static_cast<uint32_t>(col_uid)) << 32) | static_cast<uint32_t>(type);
+}
+
+// Union |from|'s dropped_keys tombstones into |into| (dedup by packed key). Used when the
+// same physical .idx appears under one target from multiple split-family siblings whose
+// DROP INDEX history diverged: a key dropped in ANY sibling must stay dropped (DROP INDEX
+// is table-wide and monotonic), so first-wins cannot be allowed to resurrect it.
+void union_idg_dropped_keys(IndexDeltaGroupEntryPB* into, const IndexDeltaGroupEntryPB& from) {
+    std::unordered_set<uint64_t> present;
+    for (const auto& dk : into->dropped_keys()) present.insert(idg_pack_key(dk.col_unique_id(), dk.index_type()));
+    for (const auto& dk : from.dropped_keys()) {
+        if (present.insert(idg_pack_key(dk.col_unique_id(), dk.index_type())).second) {
+            *into->add_dropped_keys() = dk;
+        }
+    }
+}
+
+// True iff |e| still has at least one active (non-tombstoned) key. Mirrors the read-path
+// loader's active-key computation (index_delta_group_loader.cpp). A fully-tombstoned entry
+// is logically dead: the loader skips it, AND vacuum relies on the invariant that idg_meta
+// never holds a fully-tombstoned entry (vacuum.cpp: normally apply_drop_index moves such
+// .idx to orphan_files). Merge must not install one or the .idx would look live forever.
+bool idg_entry_has_active_key(const IndexDeltaGroupEntryPB& e) {
+    std::unordered_set<uint64_t> dropped;
+    for (const auto& dk : e.dropped_keys()) dropped.insert(idg_pack_key(dk.col_unique_id(), dk.index_type()));
+    for (const auto& k : e.keys()) {
+        if (dropped.find(idg_pack_key(k.col_unique_id(), k.index_type())) == dropped.end()) return true;
+    }
+    return false;
+}
+
+// merge_idg_meta: remap each source tablet's IDG (.idx) entries into the merged tablet's
+// rssid space, dedup by .idx filename per target segment, and keep them newest-version
+// first. Unlike merge_dcg_meta there is no rebuild-on-conflict path: an .idx indexes
+// unchanging shared segment data, so every source's entry for a given target rssid is built
+// over the same physical segment and is interchangeable; the read-path loader picks the
+// newest visible version per key and honors tombstones.
+//
+// An entry is kept only if BOTH its segment_id is a live segment in its OWN source tablet
+// (source-live) AND its remapped target is a live segment in the merged tablet (target-live).
+// map_rssid falls back to rssid+offset for anything not in shared_rssid_map (it only errors
+// on overflow), so it is not a "segment survived" test: a stale idg entry (segment pruned or
+// compacted out of that source but the entry not cleaned) could otherwise remap -- e.g. the
+// canonical child's stale rssid R maps via R+0 onto a target R that is live only because a
+// sibling supplies that segment -- and mis-apply / dangle a .idx that source no longer owns.
+// Stale entries are dropped; their .idx becomes an orphan reclaimed by the shared-file
+// cleanup once the source tablets are dropped. Writes no new files, so there is no
+// partial-write cleanup to do.
+Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
+    // Every segment present after merge_rowsets, mapped to its shared flag. An IDG entry is
+    // kept only if its remapped target is here (target-live), and its .idx shared_file is
+    // DERIVED from the target segment's shared flag (see the emit loop) rather than preserved
+    // from the source: an .idx is shared iff the segment it indexes is shared, so the two must
+    // agree. Preserving a source flag would carry a stale value (e.g. a tablet split before
+    // this fix has segment.shared=true but idg.shared_file=false, because the old split marked
+    // segments shared but not idg) and later mis-route the .idx at vacuum time.
+    std::unordered_map<uint32_t, bool> target_rssid_shared;
+    for (const auto& rowset : new_metadata->rowsets()) {
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            target_rssid_shared[get_rssid(rowset, i)] = rowset.segment_metas(i).shared();
+        }
+    }
+
+    std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
+    // target rssid -> (.idx filename -> index into work_by_target[target]).
+    std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
+
+    for (const auto& context : merge_contexts) {
+        if (!context.metadata()->has_idg_meta()) continue;
+        // Live source segments in THIS context.
+        std::unordered_set<uint32_t> source_live_rssids;
+        for (const auto& rowset : context.metadata()->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                source_live_rssids.insert(get_rssid(rowset, i));
+            }
+        }
+        for (const auto& [segment_id, idg_ver] : context.metadata()->idg_meta().idgs()) {
+            if (source_live_rssids.find(segment_id) == source_live_rssids.end()) {
+                continue; // stale idg entry: segment no longer in this source's rowsets
+            }
+            ASSIGN_OR_RETURN(uint32_t target_rssid, context.map_rssid(segment_id));
+            if (target_rssid_shared.find(target_rssid) == target_rssid_shared.end()) {
+                continue; // defensive: target not a live merged segment
+            }
+            auto& entries = work_by_target[target_rssid];
+            auto& seen = seen_files_by_target[target_rssid];
+            for (const auto& entry : idg_ver.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                auto seen_it = seen.find(entry.index_file());
+                if (seen_it != seen.end()) {
+                    union_idg_dropped_keys(&entries[seen_it->second], entry); // same physical .idx
+                    continue;
+                }
+                // shared_file is derived from the target segment's ownership in the emit loop.
+                seen[entry.index_file()] = entries.size();
+                entries.push_back(entry);
+            }
+        }
+    }
+
+    if (work_by_target.empty()) return Status::OK();
+
+    auto* merged_idgs = new_metadata->mutable_idg_meta()->mutable_idgs();
+    // Fully-tombstoned entries' .idx files are orphan candidates. Collect them first and only
+    // orphan a file that NO surviving entry (under ANY target) still references: vacuum deletes
+    // orphan_files without consulting live idg_meta, so orphaning a still-referenced file would
+    // delete an active index. (.idx names are uuid-unique so a name maps to one target in
+    // practice, but resolving against the full surviving set keeps the orphan set provably safe.)
+    std::unordered_set<std::string> surviving_files;
+    std::map<std::string, FileMetaPB> orphan_candidates;
+    for (auto& [target_rssid, entries] : work_by_target) {
+        // Derive the .idx shared flag from the merged segment's ownership: an .idx is shared
+        // iff the segment it indexes is shared. This corrects a stale source flag (e.g. from a
+        // tablet split before this fix) instead of preserving it, and matches how vacuum treats
+        // the segment/.cols for the same rssid.
+        auto shared_it = target_rssid_shared.find(target_rssid);
+        const bool tgt_shared = shared_it != target_rssid_shared.end() && shared_it->second;
+        std::sort(entries.begin(), entries.end(), [](const IndexDeltaGroupEntryPB& a, const IndexDeltaGroupEntryPB& b) {
+            return a.version() > b.version();
+        });
+        // Drop fully-tombstoned entries (all keys dropped after union): keeping one would
+        // violate vacuum's no-fully-tombstoned-entry invariant.
+        IndexDeltaGroupVerPB ver;
+        for (auto& e : entries) {
+            if (idg_entry_has_active_key(e)) {
+                e.set_shared_file(tgt_shared);
+                surviving_files.insert(e.index_file());
+                *ver.add_entries() = std::move(e);
+            } else if (e.has_index_file() && !e.index_file().empty()) {
+                auto& fm = orphan_candidates[e.index_file()];
+                fm.set_name(e.index_file());
+                if (e.has_file_size()) fm.set_size(e.file_size());
+                if (tgt_shared) fm.set_shared(true);
+            }
+        }
+        if (ver.entries_size() == 0) continue;
+        (*merged_idgs)[target_rssid] = std::move(ver);
+    }
+    // Orphan each dead .idx so vacuum reclaims it, mirroring MetaFileBuilder::apply_drop_index.
+    for (auto& [file, fm] : orphan_candidates) {
+        if (surviving_files.find(file) == surviving_files.end()) {
+            *new_metadata->add_orphan_files() = std::move(fm);
+        }
+    }
+    return Status::OK();
+}
+
 // Phase 0: for every PK canonical rowset that owns at least one shared
 // segment, mask the rowids whose key falls outside ⋃ contributors but inside
 // the merged tablet range.
@@ -2762,6 +2912,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_delvec_meta();
     new_tablet_metadata->clear_sstable_meta();
     new_tablet_metadata->clear_dcg_meta();
+    new_tablet_metadata->clear_idg_meta();
     new_tablet_metadata->clear_rowset_to_schema();
     new_tablet_metadata->clear_compaction_inputs();
     new_tablet_metadata->clear_orphan_files();
@@ -2816,6 +2967,10 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // Phase 3: Projections (map_rssid uses shared_rssid_map + rssid_offset)
     RETURN_IF_ERROR(merge_dcg_meta(tablet_manager, merge_contexts, merging_tablet.new_tablet_id(), new_version,
                                    txn_info.txn_id(), gap_specs, new_tablet_metadata.get()));
+
+    // Remap the lake ADD INDEX fast-path IDG (.idx) entries into the merged rssid space,
+    // mirroring merge_dcg_meta. Metadata-only (no segment rebuild); see merge_idg_meta.
+    RETURN_IF_ERROR(merge_idg_meta(merge_contexts, new_tablet_metadata.get()));
 
     if (is_primary_key(*new_tablet_metadata)) {
         RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, gap_specs, new_version, txn_info.txn_id(),
