@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/utility_functions.h"
+#include "exprs_ext/utility/utility_functions.h"
 
 #include <cctz/civil_time.h>
 #include <glog/logging.h>

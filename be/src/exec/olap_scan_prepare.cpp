@@ -30,7 +30,7 @@
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
-#include "exprs/dictmapping_expr.h"
+#include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -208,7 +208,7 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
 }
 
 static Expr* get_root_expr(Expr* root) {
-    if (dynamic_cast<DictMappingExpr*>(root)) {
+    if (dynamic_cast<DictMappingExprInterface*>(root)) {
         return root->get_child(1);
     }
     return root;

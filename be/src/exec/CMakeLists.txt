@@ -48,7 +48,7 @@ ADD_BE_LIB(ExecPrimitive
 )
 
 target_link_libraries(ExecPrimitive PUBLIC
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore
@@ -69,7 +69,7 @@ ADD_BE_LIB(ExecSchemaScannerCore
 )
 
 target_link_libraries(ExecSchemaScannerCore PUBLIC
-    ExprCore
+    Expr
     Runtime
     ChunkCore
     ColumnCore
@@ -126,7 +126,7 @@ ADD_BE_LIB(ExecJoinCore
 
 target_link_libraries(ExecJoinCore PUBLIC
     ComputeEnv
-    ExprCore
+    Expr
     Runtime
     ColumnSortCore
     ChunkCore
@@ -535,7 +535,7 @@ target_link_libraries(ExecRuntime PUBLIC
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    ExprCore
+    Expr
     Runtime
     Platform
     FileSystem
