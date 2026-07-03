@@ -205,8 +205,6 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/exec_env_test.cpp
-        ./exec/jdbc/type_checker_test.cpp
-        ./exec/jdbc/type_checker_xml_loader_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp

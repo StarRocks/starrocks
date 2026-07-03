@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/jdbc_connector.h"
+#include "connector/jdbc/jdbc_connector.h"
 
 #include <sstream>
 
 #include "base/string/slice.h"
-#include "exec/jdbc/jdbc_driver_manager.h"
-#include "exec/jdbc_scanner.h"
+#include "connector/jdbc/jdbc_driver_manager.h"
+#include "connector/jdbc/jdbc_scanner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
 
