@@ -564,7 +564,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                 src, &file_info, params.tablet_schema, unmodified_column_ids,
                 _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
-                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts), &file_info.vector_index_ids));
+                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
+                &file_info.vector_index_ids));
         file_info.path = dest_path;
 
         // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is

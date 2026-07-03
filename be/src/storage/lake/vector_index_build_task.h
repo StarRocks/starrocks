@@ -71,8 +71,8 @@ public:
     Status execute(const BuildVectorIndexRequest& request, BuildVectorIndexResponse* response);
 
 private:
-    Status build_segment(int64_t tablet_id, const SegmentFileInfo& segment_file_info, const std::vector<int64_t>& index_ids,
-                         const TabletSchemaCSPtr& tablet_schema);
+    Status build_segment(int64_t tablet_id, const SegmentFileInfo& segment_file_info,
+                         const std::vector<int64_t>& index_ids, const TabletSchemaCSPtr& tablet_schema);
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id = 0;

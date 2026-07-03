@@ -170,7 +170,8 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid] = new_dcg_ver;
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
+                                    const std::map<int, SegmentFileInfo>& replace_segments,
                                     const std::vector<FileMetaPB>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
@@ -1209,7 +1210,8 @@ bool is_primary_key(const TabletMetadata& metadata) {
     return metadata.schema().keys_type() == KeysType::PRIMARY_KEYS;
 }
 
-void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, SegmentFileInfo>& replace_segments,
+void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
+                                 const std::map<int, SegmentFileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
