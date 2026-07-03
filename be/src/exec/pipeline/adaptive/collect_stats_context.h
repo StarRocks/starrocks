@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
