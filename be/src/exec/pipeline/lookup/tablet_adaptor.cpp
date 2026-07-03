@@ -20,6 +20,7 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
@@ -369,6 +370,19 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     }
 
     const auto* segment = segments[target_segment_idx].get();
+    // A GLM point-lookup must return exactly the rows at the requested locators: the consumer accumulates
+    // the fetched rows and materializes them by a permutation built over the full locator set. Yielding no
+    // row would leave the accumulated chunk shorter than the permutation (silent wrong rows, or a
+    // null-chunk deref when every locator is lost). So a null segment -- which, unlike a scan, this path
+    // cannot tolerate -- must fail cleanly here whether or not experimental_lake_ignore_lost_segment is on.
+    if (segment == nullptr) {
+        return Status::InternalError(fmt::format(
+                "null segment (index:{}) for lake rssid:{}{}", target_segment_idx, rssid,
+                config::experimental_lake_ignore_lost_segment
+                        ? " (a segment lost + tolerated by experimental_lake_ignore_lost_segment; a point lookup "
+                          "cannot locate rows in it)"
+                        : " (unexpected: experimental_lake_ignore_lost_segment is off)"));
+    }
     rs_opts.rowid_range_option->add(target.get(), segment, rowid_range, true);
 
     ASSIGN_OR_RETURN(auto iters, target->read(_read_schema, rs_opts));

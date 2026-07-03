@@ -143,6 +143,13 @@ Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& ta
     RETURN_IF_ERROR(_get_segments(tablet, &segments, &options_list));
     for (int i = 0; i < segments.size(); ++i) {
         auto& segment = segments[i];
+        // A null placeholder slot means a segment was dropped (e.g. a lost segment via
+        // experimental_lake_ignore_lost_segment); skip it whatever the cause. segments and options_list
+        // are built index-aligned in _get_segments(), so skipping the pair keeps every other segment at
+        // its correct position.
+        if (segment == nullptr) {
+            continue;
+        }
         auto& options = options_list[i];
         auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 

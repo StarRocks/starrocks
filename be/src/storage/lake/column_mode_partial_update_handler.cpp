@@ -243,6 +243,16 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
+        // A nullptr iterator is a lost update-file segment ignored via
+        // experimental_lake_ignore_lost_segment. A lost upt segment produces no rowid pairs, so this
+        // upt_id should not appear here; guard anyway so read_chunk_from_update_file never dereferences
+        // a null iterator (mirrors the close() guard below).
+        if (segment_iters[upt_id] == nullptr) {
+            LOG(WARNING) << "column-mode partial update skips a null update-file segment iterator, tablet: "
+                         << _rowset_ptr->tablet_id() << ", upt_id: " << upt_id
+                         << " (a lost segment via experimental_lake_ignore_lost_segment, or an unexpected empty slot)";
+            continue;
+        }
         // 1. get chunk from upt file
         ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
         DeferOp iter_defer([&]() {
