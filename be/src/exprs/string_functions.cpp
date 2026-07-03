@@ -3647,8 +3647,7 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, co
 // and zero-length matches at the cursor (e.g. "(a*)") would loop forever.
 template <typename IndexType>
 static void extract_group_matches(const re2::StringPiece& str_sp, const re2::RE2& regex, int group,
-                                  BinaryColumn* str_col, IndexType& index, re2::StringPiece* matches,
-                                  int max_matches) {
+                                  BinaryColumn* str_col, IndexType& index, re2::StringPiece* matches, int max_matches) {
     re2::StringPiece input = str_sp;
     size_t pos = 0;
 
@@ -3679,7 +3678,8 @@ static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex,
 
 // Overloaded version for a pre-allocated submatch buffer (used by regexp_extract_all_const)
 static void extract_regex_matches(const Slice& str_value, const re2::RE2& regex, int group, BinaryColumn* str_col,
-                                  uint64_t& index, const std::unique_ptr<re2::StringPiece[]>& matches, int max_matches) {
+                                  uint64_t& index, const std::unique_ptr<re2::StringPiece[]>& matches,
+                                  int max_matches) {
     re2::StringPiece str_sp(str_value.get_data(), str_value.get_size());
     extract_group_matches(str_sp, regex, group, str_col, index, matches.get(), max_matches);
 }
