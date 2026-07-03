@@ -114,7 +114,7 @@ public class HiveMetastoreApiConverter {
     private static final Set<String> STATS_PROPERTIES = ImmutableSet.of(ROW_COUNT, TOTAL_SIZE, NUM_FILES);
     private static final ImmutableList<String> SERDE_PROPERTY_KEYS = ImmutableList.of(
             serdeConstants.FIELD_DELIM, serdeConstants.LINE_DELIM,
-            serdeConstants.COLLECTION_DELIM, serdeConstants.MAPKEY_DELIM,
+            serdeConstants.COLLECTION_DELIM, serdeConstants.MAPKEY_DELIM, serdeConstants.ESCAPE_CHAR,
             OpenCSVSerde.SEPARATORCHAR, OpenCSVSerde.QUOTECHAR, OpenCSVSerde.ESCAPECHAR,
             serdeConstants.HEADER_COUNT,
             serdeConstants.SERIALIZATION_FORMAT, HIVE2_COLLECTION_DELIM);

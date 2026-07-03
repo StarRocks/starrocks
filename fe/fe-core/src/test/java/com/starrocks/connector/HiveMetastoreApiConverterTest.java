@@ -342,14 +342,19 @@ public class HiveMetastoreApiConverterTest {
         properties.put("collection.delim", "|");
         properties.put("mapkey.delim", ":");
         properties.put("line.delim", "\n");
+        // escape.delim (ESCAPED BY) must survive CREATE TABLE and reach HMS SerDeInfo,
+        // or a table created through StarRocks silently loses its escape setting and
+        // later scans (by StarRocks or by Hive itself) fall back to unescaped splitting.
+        properties.put("escape.delim", "\\");
         properties.put("some_other_prop", "value");
 
         Map<String, String> serdeProps = HiveMetastoreApiConverter.extractSerdeProperties(properties);
-        Assertions.assertEquals(4, serdeProps.size());
+        Assertions.assertEquals(5, serdeProps.size());
         Assertions.assertEquals(",", serdeProps.get("field.delim"));
         Assertions.assertEquals("|", serdeProps.get("collection.delim"));
         Assertions.assertEquals(":", serdeProps.get("mapkey.delim"));
         Assertions.assertEquals("\n", serdeProps.get("line.delim"));
+        Assertions.assertEquals("\\", serdeProps.get("escape.delim"));
         Assertions.assertFalse(serdeProps.containsKey("file_format"));
         Assertions.assertFalse(serdeProps.containsKey("some_other_prop"));
     }
