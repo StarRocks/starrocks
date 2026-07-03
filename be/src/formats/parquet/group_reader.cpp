@@ -40,6 +40,7 @@
 #include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/reserved_columns.h"
 #include "gen_cpp/Exprs_types.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -56,19 +57,6 @@ GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRows
     _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
 }
 
-<<<<<<< HEAD
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
-                         int64_t row_group_first_row, int64_t row_group_first_row_id)
-        : _row_group_first_row(row_group_first_row),
-          _row_group_first_row_id(row_group_first_row_id),
-          _skip_rows_ctx(std::move(skip_rows_ctx)),
-          _param(param) {
-    _row_group_metadata = &_param.file_metadata->t_metadata().row_groups[row_group_number];
-    _column_materializer = std::make_unique<ColumnMaterializer>(_param, &_column_readers);
-}
-
-=======
->>>>>>> d139404a3d ([BugFix] Iceberg _row_id: use the file-level first_row_id as the reader base (#75758))
 GroupReader::~GroupReader() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
@@ -440,7 +428,7 @@ Status GroupReader::_create_column_readers() {
                 // Iceberg v3 row lineage: try physical column first (post-compaction files),
                 // fall back to computed row_id (firstRowId + position) for non-compacted files.
                 ASSIGN_OR_RETURN(auto reader,
-                                 _create_reserved_iceberg_column_reader(slot, HdfsScanner::kIcebergRowIdColumnId));
+                                 _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
                 std::optional<int64_t> first_row_id = std::nullopt;
                 if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
                     // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
