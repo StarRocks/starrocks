@@ -232,6 +232,31 @@ PROPERTIES
 SELECT count(*) FROM lance_hdfs.`default`.my_table;
 ```
 
+## Reader Selection
+
+By default, BE/CN nodes use the Lance native reader to read data. The native reader calls the Lance Rust SDK through Rust FFI, so the data scan path does not use the Java JNI reader.
+
+To diagnose native reader issues or temporarily fall back to the Lance Java SDK reader, force the JNI reader at the session level:
+
+```SQL
+SET lance_force_jni_reader = true;
+SELECT * FROM lance_oss.`default`.smoke LIMIT 10;
+```
+
+To restore the default native reader:
+
+```SQL
+SET lance_force_jni_reader = false;
+```
+
+You can also explicitly force the native reader:
+
+```SQL
+SET lance_force_native_reader = true;
+```
+
+If both `lance_force_jni_reader=true` and `lance_force_native_reader=true` are set, `lance_force_jni_reader` takes precedence and the query uses the Java SDK reader.
+
 ## How it works
 
 The Lance catalog read path consists of metadata discovery, query planning, and BE/CN scanning.
@@ -273,6 +298,8 @@ The Lance scan node uses the connector scan scheduler, and StarRocks assigns the
 
 ### BE/CN scanning
 
-After a BE/CN receives a scan range, it enables the Lance native reader. The native reader calls the Lance Rust SDK through Rust FFI and passes the dataset URI, fragment ID, selected columns, and storage options to the Rust-side reader. The Rust-side reader opens the dataset again, reads Arrow batches for the requested fragment and columns, and returns the batches to C++ through the Arrow C Data Interface. The BE/CN then reuses StarRocks' Arrow-to-Column conversion path, writes the values into StarRocks columns, and returns the data to the execution engine.
+After a BE/CN receives a scan range, it enables the Lance native reader by default. The native reader calls the Lance Rust SDK through Rust FFI and passes the dataset URI, fragment ID, selected columns, and storage options to the Rust-side reader. The Rust-side reader opens the dataset again, reads Arrow batches for the requested fragment and columns, and returns the batches to C++ through the Arrow C Data Interface. The BE/CN then reuses StarRocks' Arrow-to-Column conversion path, writes the values into StarRocks columns, and returns the data to the execution engine.
+
+When the session variable `lance_force_jni_reader` is set to `true`, the BE/CN uses the Lance Java SDK reader instead. This mode is mainly intended for compatibility verification and native reader troubleshooting.
 
 The current implementation is a read-only scan path. It does not write Lance datasets, run Lance vector index search, or accelerate KNN queries.

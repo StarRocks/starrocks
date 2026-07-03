@@ -462,7 +462,8 @@ struct THdfsScanRange {
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
 
-    // whether to use JNI scanner to read data of lance table
+    // whether this scan range belongs to a Lance table. Kept for compatibility
+    // with older FE/BE versions that used it to select the Lance JNI reader.
     39: optional bool use_lance_jni_reader
 
     // Lance dataset URI and fragment id.
@@ -471,6 +472,9 @@ struct THdfsScanRange {
 
     // Storage options passed to Lance SDK.
     42: optional map<string, string> lance_storage_options
+
+    // whether to use the BE native Lance reader instead of the Java JNI reader.
+    43: optional bool use_lance_native_reader
 }
 
 struct TBinlogScanRange {

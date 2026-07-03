@@ -232,6 +232,31 @@ PROPERTIES
 SELECT count(*) FROM lance_hdfs.`default`.my_table;
 ```
 
+## Reader 选择
+
+默认情况下，BE/CN 使用 Lance native reader 读取数据。Native reader 通过 Rust FFI 调用 Lance Rust SDK，避免数据扫描阶段走 Java JNI reader。
+
+如需诊断 native reader 问题，或临时回退到 Lance Java SDK reader，可以在会话级别强制使用 JNI reader：
+
+```SQL
+SET lance_force_jni_reader = true;
+SELECT * FROM lance_oss.`default`.smoke LIMIT 10;
+```
+
+恢复默认 native reader：
+
+```SQL
+SET lance_force_jni_reader = false;
+```
+
+也可以显式设置 native reader：
+
+```SQL
+SET lance_force_native_reader = true;
+```
+
+如果同时设置 `lance_force_jni_reader=true` 和 `lance_force_native_reader=true`，`lance_force_jni_reader` 优先，查询会走 Java SDK reader。
+
 ## 实现原理
 
 Lance catalog 的读路径分为元数据发现、查询规划和 BE/CN 扫描三个阶段。
@@ -273,6 +298,8 @@ Lance scan node 会走 connector scan scheduler，由 StarRocks 将 scan range �
 
 ### BE/CN 扫描
 
-BE/CN 收到 scan range 后，会启用 Lance native reader。Native reader 通过 Rust FFI 调用 Lance Rust SDK，并将 dataset URI、fragment ID、列裁剪结果和 storage options 传给 Rust 侧 reader。Rust 侧 reader 再次打开 dataset，按 fragment 和所需列读取 Arrow batch，并通过 Arrow C Data Interface 将 batch 传回 C++。BE/CN 随后复用 StarRocks 的 Arrow 到 Column 转换逻辑，把数据写入 StarRocks column，最终返回给执行引擎。
+BE/CN 收到 scan range 后，默认启用 Lance native reader。Native reader 通过 Rust FFI 调用 Lance Rust SDK，并将 dataset URI、fragment ID、列裁剪结果和 storage options 传给 Rust 侧 reader。Rust 侧 reader 再次打开 dataset，按 fragment 和所需列读取 Arrow batch，并通过 Arrow C Data Interface 将 batch 传回 C++。BE/CN 随后复用 StarRocks 的 Arrow 到 Column 转换逻辑，把数据写入 StarRocks column，最终返回给执行引擎。
+
+当会话变量 `lance_force_jni_reader` 设置为 `true` 时，BE/CN 会改用 Lance Java SDK reader。该模式主要用于兼容性验证和 native reader 问题排查。
 
 当前实现是只读扫描链路，不涉及 Lance 写入、向量索引检索或 KNN 加速。

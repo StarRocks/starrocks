@@ -23,6 +23,8 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
@@ -86,7 +88,10 @@ public class LanceScanNode extends ScanNode {
                                                      Map<String, String> storageOptions) {
         int rowCount = Math.max(fragment.countRows(), 1);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
+        boolean useNativeReader = useNativeReader(ConnectContext.getSessionVariableOrDefault());
+        // Keep use_lance_jni_reader as the Lance range marker for FE/BE compatibility.
         hdfsScanRange.setUse_lance_jni_reader(true);
+        hdfsScanRange.setUse_lance_native_reader(useNativeReader);
         hdfsScanRange.setDataset_uri(datasetUri);
         hdfsScanRange.setFragment_id(fragment.getId());
         hdfsScanRange.setOffset(0);
@@ -105,6 +110,16 @@ public class LanceScanNode extends ScanNode {
         scanRangeLocations.setScan_range(scanRange);
         scanRangeLocations.setLocations(new ArrayList<TScanRangeLocation>());
         return scanRangeLocations;
+    }
+
+    static boolean useNativeReader(SessionVariable sessionVariable) {
+        if (sessionVariable.getLanceForceJNIReader()) {
+            return false;
+        }
+        if (sessionVariable.getLanceForceNativeReader()) {
+            return true;
+        }
+        return true;
     }
 
     @Override
