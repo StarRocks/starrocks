@@ -23,7 +23,11 @@
 #include <unordered_set>
 #include <vector>
 
+#include "column/column.h"
+#include "column/column_access_path.h"
+#include "column/global_dict/types.h"
 #include "common/global_types.h"
+#include "compute_env/query/file_scan_split_context.h"
 #include "formats/deletion_bitmap.h"
 #include "runtime/descriptors.h"
 
@@ -163,12 +167,6 @@ struct FormatScannerOptions {
     int64_t connector_max_split_size = 0;
 };
 
-struct FormatScanContext {
-    FormatScannerOptions options;
-    FormatScannerStats* stats = nullptr;
-    const FileScanSplitContext* split_context = nullptr;
-};
-
 // All conjunct contexts and slot metadata derived from the scan plan node.
 struct FormatScannerConjuncts {
     // Clone of min_max_ctxs plus scan conjuncts, used to build the
@@ -208,6 +206,39 @@ struct FormatColumnInfo {
     std::string_view col_physical_name() const { return slot_desc->col_physical_name(); }
     const SlotId slot_id() const { return slot_desc->id(); }
     const TypeDescriptor& slot_type() const { return slot_desc->type(); }
+};
+
+struct FormatScanContext {
+    FormatScannerOptions options;
+    FormatScannerStats* stats = nullptr;
+    const FileScanSplitContext* split_context = nullptr;
+
+    // Materialized columns read from the data file.
+    std::vector<FormatColumnInfo> materialized_columns;
+
+    // Partition column metadata and pre-evaluated constant values.
+    std::vector<FormatColumnInfo> partition_columns;
+    Columns partition_values;
+
+    // Columns requested by the query but absent from the data file.
+    std::vector<SlotDescriptor*> not_existed_slots;
+
+    // Reserved/system fields such as Iceberg row lineage columns.
+    std::vector<SlotDescriptor*> reserved_field_slots;
+
+    // Table column access paths for complex/variant projection.
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+
+    // FE-provided global dictionary maps, if any.
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    std::string timezone;
+
+    struct SplitState {
+        std::vector<FileScanSplitContextPtr> split_tasks;
+        bool has_split_tasks = false;
+        size_t estimated_mem_usage_per_split_task = 0;
+    } split;
 };
 
 } // namespace starrocks

@@ -327,8 +327,8 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
                         {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
-    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
-    ctx.not_existed_slots.push_back(tuple_desc->slots()[1]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[1]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
@@ -342,7 +342,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
-    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
@@ -356,7 +356,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
     auto* tuple_desc = _create_tuple_desc_with_nullable(descs, false);
     HdfsScannerContext ctx;
-    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
@@ -369,7 +369,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
-    ctx.not_existed_slots.push_back(tuple_desc->slots()[0]);
+    ctx.format_scan_context.not_existed_slots.push_back(tuple_desc->slots()[0]);
     ctx.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
