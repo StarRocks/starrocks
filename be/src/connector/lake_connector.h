@@ -250,8 +250,22 @@ private:
     RuntimeProfile::Counter* _lake_reusable_segment_iter_created_counter = nullptr;
     RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
     RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
-    // Number of pre-refinement coarse split morsels this scan consumed; emitted per morsel, reset on reuse.
+    RuntimeProfile::Counter* _lake_prepared_seed_timer = nullptr;
+    RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
+    RuntimeProfile::Counter* _lake_refined_counter = nullptr;
+    // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
+    RuntimeProfile::Counter* _lake_seed_io_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_io_count_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_segment_init_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_zonemap_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_zonemap_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_bf_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_bf_filtered_counter = nullptr;
+    // Per-source prepared-split morsel counts this scan consumed; emitted per morsel, reset on reuse.
+    // MorselsCount (scan-operator level) == initial-coarse + pre-refinement-coarse + refined in the prepared path.
     int64_t _lake_prerefinement_coarse_splits = 0;
+    int64_t _lake_initial_coarse_splits = 0;
+    int64_t _lake_refined_splits = 0;
 
     // Page count
     RuntimeProfile::Counter* _pages_count_memory_counter = nullptr;

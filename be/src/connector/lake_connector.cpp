@@ -283,6 +283,8 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
     _bytes_read = 0;
     _cpu_time_spent_ns = 0;
     _lake_prerefinement_coarse_splits = 0;
+    _lake_initial_coarse_splits = 0;
+    _lake_refined_splits = 0;
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -695,6 +697,10 @@ void LakeDataSource::apply_child_split_context(const pipeline::LakeSplitContext&
                                                bool use_prepared_state) {
     if (is_pre_refinement_coarse_split(split_context)) {
         ++_lake_prerefinement_coarse_splits;
+    } else if (is_initial_coarse_split(split_context)) {
+        ++_lake_initial_coarse_splits;
+    } else if (split_context.rowid_range_source == pipeline::LakeSplitContext::RowidRangeSource::REFINED) {
+        ++_lake_refined_splits;
     }
     _params.refine_initial_coarse_split_and_append_refined_tasks = false;
     if (_provider->could_split_physically()) {
@@ -1342,6 +1348,20 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ReusableSegmentIterReused", TUnit::UNIT, prepared_split_name);
     _lake_late_rf_reinit_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "LateRuntimeFilterReinit", TUnit::UNIT, prepared_split_name);
+    _lake_prepared_seed_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedPrepareTime", prepared_split_name);
+    _lake_initial_coarse_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "InitialCoarseMorsels", TUnit::UNIT, prepared_split_name);
+    _lake_refined_counter = ADD_CHILD_COUNTER(_runtime_profile, "RefinedMorsels", TUnit::UNIT, prepared_split_name);
+    // Breakdown of SeedPrepareTime: where the seed's one-time per-segment prune spends its time / IO.
+    _lake_seed_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedIOTime", "SeedPrepareTime");
+    _lake_seed_io_count_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedIOCount", TUnit::UNIT, "SeedPrepareTime");
+    _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
+    _lake_seed_zonemap_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedZoneMapFilterTime", "SeedPrepareTime");
+    _lake_seed_zonemap_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SeedZoneMapFilteredRows", TUnit::UNIT, "SeedPrepareTime");
+    _lake_seed_bf_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedBloomFilterTime", "SeedPrepareTime");
+    _lake_seed_bf_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SeedBloomFilteredRows", TUnit::UNIT, "SeedPrepareTime");
 
     // IO statistics
     // IOTime
@@ -1451,8 +1471,18 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_prepared_scan_rows_counter, _reader->stats().lake_prepared_scan_rows);
     COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, _reader->stats().lake_prepared_scan_ranges);
     COUNTER_UPDATE(_lake_prerefinement_coarse_counter, _lake_prerefinement_coarse_splits);
+    COUNTER_UPDATE(_lake_initial_coarse_counter, _lake_initial_coarse_splits);
+    COUNTER_UPDATE(_lake_refined_counter, _lake_refined_splits);
     COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, _reader->stats().lake_reusable_segment_iter_created);
     COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, _reader->stats().lake_reusable_segment_iter_reused);
+    COUNTER_UPDATE(_lake_prepared_seed_timer, _reader->stats().lake_prepared_seed_ns);
+    COUNTER_UPDATE(_lake_seed_io_timer, _reader->stats().lake_prepared_seed_io_ns);
+    COUNTER_UPDATE(_lake_seed_io_count_counter, _reader->stats().lake_prepared_seed_io_count);
+    COUNTER_UPDATE(_lake_seed_segment_init_timer, _reader->stats().lake_prepared_seed_segment_init_ns);
+    COUNTER_UPDATE(_lake_seed_zonemap_timer, _reader->stats().lake_prepared_seed_zonemap_ns);
+    COUNTER_UPDATE(_lake_seed_zonemap_filtered_counter, _reader->stats().lake_prepared_seed_zonemap_filtered_rows);
+    COUNTER_UPDATE(_lake_seed_bf_timer, _reader->stats().lake_prepared_seed_bf_ns);
+    COUNTER_UPDATE(_lake_seed_bf_filtered_counter, _reader->stats().lake_prepared_seed_bf_filtered_rows);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);

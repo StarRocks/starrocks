@@ -803,14 +803,31 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 
     OlapReaderStatistics prepare_stats;
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
-    auto st = prepare_segment_pruned_scan_range_for_split(rowset, segment_idx, segment, segment_state, schema(),
-                                                          rowset_read_options, lake_io_opts, shared_segment_range,
-                                                          &prepare_stats);
+    Status st;
+    {
+        // Time the seed-only prepared-scan-range preparation (zonemap/bloom page-filter folding + seek-range
+        // resolution). This otherwise hides inside IOTaskExecTime with no dedicated counter; for highly
+        // selective scans over a big tablet it can dominate the whole scan.
+        SCOPED_RAW_TIMER(&_stats.lake_prepared_seed_ns);
+        st = prepare_segment_pruned_scan_range_for_split(rowset, segment_idx, segment, segment_state, schema(),
+                                                         rowset_read_options, lake_io_opts, shared_segment_range,
+                                                         &prepare_stats);
+    }
     {
         std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
         segment_state->coarse_split_allocation_closed = true;
     }
     RETURN_IF_ERROR(st);
+
+    // Fold the seed prepare's otherwise-discarded sub-metrics into the reader stats so the SeedPrepareTime
+    // breakdown (IO / segment-init / zonemap / bloom) is visible in the profile. Accumulated across segments.
+    _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
+    _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
+    _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+    _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
+    _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
+    _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
+    _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
 
     SparseRange<> pruned_scan_range;
     if (segment_state->pruned_scan_range != nullptr) {

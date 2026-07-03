@@ -154,6 +154,18 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_scan_ranges = 0;
     int64_t lake_reusable_segment_iter_created = 0;
     int64_t lake_reusable_segment_iter_reused = 0;
+    // Time (ns) spent in the seed morsel's prepared-scan-range preparation (zonemap/bloom page-filter folding
+    // + seek-range resolution). Only the seed pays this; refined children reuse the published range.
+    int64_t lake_prepared_seed_ns = 0;
+    // Breakdown of the seed prepare above, accumulated from the otherwise-discarded prepare-only
+    // OlapReaderStatistics: where the seed's one-time per-segment prune spends its time / IO.
+    int64_t lake_prepared_seed_io_ns = 0;
+    int64_t lake_prepared_seed_io_count = 0;
+    int64_t lake_prepared_seed_segment_init_ns = 0;
+    int64_t lake_prepared_seed_zonemap_ns = 0;
+    int64_t lake_prepared_seed_zonemap_filtered_rows = 0;
+    int64_t lake_prepared_seed_bf_ns = 0;
+    int64_t lake_prepared_seed_bf_filtered_rows = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------
