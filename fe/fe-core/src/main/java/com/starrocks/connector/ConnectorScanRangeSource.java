@@ -14,11 +14,19 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public abstract class ConnectorScanRangeSource implements AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(ConnectorScanRangeSource.class);
+
     RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy();
 
     protected abstract List<TScanRangeLocations> getSourceOutputs(int maxSize);
@@ -47,5 +55,25 @@ public abstract class ConnectorScanRangeSource implements AutoCloseable {
     @Override
     public void close() throws Exception {
         // default no-op
+    }
+
+    // Enforces scan_lake_partition_num_limit incrementally as new partitions are discovered during scan-range
+    // dispatch.
+    protected static void checkPartitionNumLimit(Table table, int selectedPartitionCount) throws AnalysisException {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return;
+        }
+        int limit = connectContext.getSessionVariable().getScanLakePartitionNumLimit();
+        if (limit <= 0 || selectedPartitionCount <= limit) {
+            return;
+        }
+        String msg = "Exceeded the limit of number of " + table.getCatalogName() + "." + table.getCatalogDBName()
+                + "." + table.getCatalogTableName() + " partitions to be scanned. "
+                + "Number of partitions allowed: " + limit + ", number of partitions to be scanned: "
+                + selectedPartitionCount + ". Please adjust the SQL or change the limit by set variable "
+                + "scan_lake_partition_num_limit.";
+        LOG.warn("{} queryId: {}", msg, DebugUtil.printId(connectContext.getQueryId()));
+        throw new AnalysisException(msg);
     }
 }

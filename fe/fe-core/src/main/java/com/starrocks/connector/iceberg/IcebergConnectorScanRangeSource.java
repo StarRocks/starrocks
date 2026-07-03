@@ -224,6 +224,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    // Note: unlike getSourceOutputs(), this path does not call addPartition(), so scan_lake_partition_num_limit is
+    // never enforced here. This is intentional - it's only used by compaction (OPTIMIZE TABLE), not by user SELECTs.
     public List<FileScanTask> getSourceFileScanOutputs(int maxSize, long fileSizeThreshold, boolean allFiles) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<FileScanTask> res = new ArrayList<>();
@@ -514,6 +516,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         partitionKeyToId.put(partition, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
+        checkPartitionNumLimit(table, partitionKeyToId.size());
         return partitionId;
     }
 

@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -243,6 +244,24 @@ public class OptExternalPartitionPruner {
         return false;
     }
 
+    // Shared by Hive/Hudi/ODPS (HMS), Iceberg and Delta Lake: reject the query if it doesn't carry a usable
+    // partition predicate, when allow_lake_without_partition_filter is disabled.
+    private static void checkPartitionFilterRequired(LogicalScanOperator operator, OptimizerContext context,
+                                                      Table table, List<Column> partitionColumns) throws AnalysisException {
+        if (context.getSessionVariable().isAllowLakeWithoutPartitionFilter()) {
+            return;
+        }
+        if (!checkPartitionPredicates(operator, partitionColumns)) {
+            LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
+            throw new AnalysisException("Partition pruning is invalid, please check: "
+                    + "1. The partition predicate must be included. "
+                    + "2. The left and right children of the partition predicate cannot be function parameters. "
+                    + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                    + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                    + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
+        }
+    }
+
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
                                                                                 List<Column> partitionColumns,
@@ -309,16 +328,7 @@ public class OptExternalPartitionPruner {
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
             if (!table.isUnPartitioned()) {
-                if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
-                        && !checkPartitionPredicates(operator, partitionColumns)) {
-                    LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
-                    throw new AnalysisException("Partition pruning is invalid, please check: "
-                            + "1. The partition predicate must be included. "
-                            + "2. The left and right children of the partition predicate cannot be function parameters. "
-                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
-                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
-                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
-                }
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
 
                 // get partition names
                 List<String> partitionNames;
@@ -382,6 +392,16 @@ public class OptExternalPartitionPruner {
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
                 columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
+            }
+            if (!deltaLakeTable.isUnPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, partitionColumns);
+            }
+        } else if (table instanceof IcebergTable) {
+            // Iceberg splits are enumerated incrementally during scan-range dispatch (not upfront here), so only
+            // the partition-filter-required check (a pure predicate-shape check) can run at optimize time.
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (icebergTable.isPartitioned()) {
+                checkPartitionFilterRequired(operator, context, table, icebergTable.getPartitionColumns());
             }
         }
         LOG.debug("Table: {}, partition values map: {}, null partition map: {}", table.getName(),

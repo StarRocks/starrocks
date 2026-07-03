@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.planner.PartitionIdGenerator;
@@ -25,6 +26,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsScanRange;
 import org.apache.iceberg.FileScanTask;
@@ -694,5 +696,69 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
 
         THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
         Assertions.assertFalse(hdfsScanRange.isSetFirst_row_id());
+    }
+
+    private IcebergConnectorScanRangeSource newScanRangeSourceForTableC() {
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableC, Maps.newHashMap());
+        return new IcebergConnectorScanRangeSource(icebergTable, RemoteFileInfoDefaultSource.EMPTY,
+                IcebergMORParams.EMPTY, tupleDescriptor, Optional.empty(), PartitionIdGenerator.of(), false, false);
+    }
+
+    @Test
+    public void testPartitionNumLimitThrowsWhenExceeded() throws Exception {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(1);
+
+        // FILE_B_1 is in partition k2=2, FILE_B_2 is in a different partition k2=3 - two distinct partitions.
+        mockedNativeTableC.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        IcebergConnectorScanRangeSource scanRangeSource = newScanRangeSourceForTableC();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableC.newScan().planFiles());
+        Assertions.assertEquals(2, fileScanTasks.size());
+
+        Assertions.assertThrows(AnalysisException.class, () -> {
+            for (FileScanTask task : fileScanTasks) {
+                scanRangeSource.addPartition(task);
+            }
+        });
+    }
+
+    @Test
+    public void testPartitionNumLimitNotExceededWithinLimit() throws Exception {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(2);
+
+        mockedNativeTableC.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        IcebergConnectorScanRangeSource scanRangeSource = newScanRangeSourceForTableC();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableC.newScan().planFiles());
+        Assertions.assertEquals(2, fileScanTasks.size());
+
+        for (FileScanTask task : fileScanTasks) {
+            scanRangeSource.addPartition(task);
+        }
+        Assertions.assertEquals(2, scanRangeSource.selectedPartitionCount());
+    }
+
+    @Test
+    public void testPartitionNumLimitDisabledByDefault() throws Exception {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setThreadLocalInfo();
+        // 0 (the default) means unlimited.
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(0);
+
+        mockedNativeTableC.newFastAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        IcebergConnectorScanRangeSource scanRangeSource = newScanRangeSourceForTableC();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableC.newScan().planFiles());
+
+        for (FileScanTask task : fileScanTasks) {
+            scanRangeSource.addPartition(task);
+        }
+        Assertions.assertEquals(2, scanRangeSource.selectedPartitionCount());
     }
 }
