@@ -113,25 +113,24 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Preconditions.checkState(rowIdColumn != null, "__ROW_ID__ column must exist in MV");
         int encodeRowIdVersion = mv.getEncodeRowIdVersion();
 
-        List<Column> aggStateColumns = mv.getFullSchema().stream()
-                .filter(col -> col.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX))
-                .collect(Collectors.toList());
-
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
                 mv, columnRefFactory, PCellSortedSet.of(), true);
         ColumnRefOperator mvRowIdRef = mvScan.getColumnMetaToColRefMap().get(rowIdColumn);
         Map<Column, ColumnRefOperator> mvColMetaToRefMap = mvScan.getColumnMetaToColRefMap();
-        List<ColumnRefOperator> mvAggStateRefs = aggStateColumns.stream()
-                .map(mvColMetaToRefMap::get)
-                .collect(Collectors.toList());
 
-        // Step 3: Collect input aggregate info
+        // Step 3: Collect input aggregate info and the aggregate -> state-column binding
+        // (built by IvmRewriter.bindStateColumnsForAggregate; keyed by ref id so the pairing
+        // holds for any column layout).
         List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
         Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
-        Preconditions.checkState(aggStateColumns.size() == inputAggMap.size(),
-                "MV __AGG_STATE__ columns size %s must match aggregate map size %s",
-                aggStateColumns.size(), inputAggMap.size());
+        Map<Integer, String> stateColumnByAggRefId =
+                context.getTvrOptContext().getIvmStateColumnNameByAggRefId();
+        Preconditions.checkState(stateColumnByAggRefId != null,
+                "IVM aggregate state-column binding is missing for MV %s", mv.getName());
+        Preconditions.checkState(stateColumnByAggRefId.size() == inputAggMap.size(),
+                "state-column binding size %s must match aggregate map size %s",
+                stateColumnByAggRefId.size(), inputAggMap.size());
 
         // Step 4: Build intermediate aggregate operator (same _combine funcs, new ColumnRefs)
         Map<ScalarOperator, ColumnRefOperator> oldToNewRefMap = Maps.newHashMap();
@@ -161,19 +160,27 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
         }
 
+        // Iteration is id-sorted only to keep plans deterministic; the pairing itself is by ref id.
         List<ColumnRefOperator> inputAggCallRefs = inputAggMap.keySet().stream()
                 .sorted(Comparator.comparingInt(ColumnRefOperator::getId))
                 .collect(Collectors.toList());
-        Preconditions.checkState(inputAggCallRefs.size() == mvAggStateRefs.size(),
-                "Input agg call refs size %s must match MV agg state refs size %s",
-                inputAggCallRefs.size(), mvAggStateRefs.size());
-        for (int i = 0; i < inputAggCallRefs.size(); i++) {
-            ColumnRefOperator origRef = inputAggCallRefs.get(i);
+        for (ColumnRefOperator origRef : inputAggCallRefs) {
             CallOperator origCall = inputAggMap.get(origRef);
             ColumnRefOperator intermediateRef = oldToNewRefMap.get(origCall);
             Preconditions.checkState(intermediateRef != null,
                     "Intermediate ref should not be null for: %s", origCall);
-            ColumnRefOperator mvStateRef = mvAggStateRefs.get(i);
+            String stateColumnName = stateColumnByAggRefId.get(origRef.getId());
+            Preconditions.checkState(stateColumnName != null,
+                    "no MV state column bound for aggregate %s (%s)", origCall, origRef);
+            Column stateColumn = mv.getColumn(stateColumnName);
+            Preconditions.checkState(stateColumn != null,
+                    "MV %s has no column '%s' bound for aggregate %s", mv.getName(), stateColumnName, origCall);
+            ColumnRefOperator mvStateRef = mvColMetaToRefMap.get(stateColumn);
+            Preconditions.checkState(mvStateRef != null,
+                    "MV scan lost column '%s' of MV %s", stateColumnName, mv.getName());
+            Preconditions.checkState(stateColumn.getType().matchesType(origRef.getType()),
+                    "state column '%s' type %s does not match aggregate %s output type %s",
+                    stateColumnName, stateColumn.getType(), origCall, origRef.getType());
             ScalarOperator stateUnion = IvmOpUtils.buildStateUnionScalarOperator(
                     origCall, intermediateRef, mvStateRef);
             projMap.put(origRef, stateUnion);
