@@ -33,6 +33,7 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/expr_executor.h"
@@ -41,12 +42,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/java/java_env.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -212,11 +213,9 @@ void AggregatorParams::init() {
         const TExpr& desc = aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
 
-        if (AggStateUtils::is_count_function(fn.name.function_name) &&
-            fn.name.function_name != FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
-            // count family output is always non-nullable BIGINT. count_combine is the
-            // exception: it needs the real input nullability so the nested lookup picks
-            // the NULL-skipping CountNullableAggregateFunction (else it counts NULLs too).
+        if (AggStateUtils::is_count_function(fn.name.function_name)) {
+            // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
+            // re-derived from the real input nullability in _is_agg_result_nullable, not here.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
@@ -301,7 +300,7 @@ Status Aggregator::open(RuntimeState* state) {
     if (_has_udaf) {
         auto& opts = state->query_options();
         bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
-        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
@@ -410,7 +409,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(call_agg_create());
 #else
         if (_has_udaf) {
-            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
@@ -594,8 +593,10 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
 
 bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type) {
     const TFunction& fn = desc.nodes[0].fn;
-    // NOTE: For count, we cannot use agg_func_type since it's only mocked values.
-    if (fn.name.function_name == FUNCTION_COUNT) {
+    // NOTE: count and count_combine carry mocked agg_func_type values (non-nullable fast-path), so
+    // their NULL-skipping choice must come from the real input nullability on the plan node.
+    if (fn.name.function_name == FUNCTION_COUNT ||
+        fn.name.function_name == FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
         if (fn.arg_types.empty()) {
             return false;
         }
@@ -810,7 +811,7 @@ void Aggregator::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();

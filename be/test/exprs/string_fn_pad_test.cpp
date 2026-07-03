@@ -20,9 +20,9 @@
 
 #include "base/testutil/assert.h"
 #include "butil/time.h"
+#include "common/storage_define.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
 

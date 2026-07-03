@@ -22,6 +22,8 @@
 #include "base/simd/simd.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/global_dict/config.h"
+#include "column/global_dict/miscs.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -30,12 +32,10 @@
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gutil/casts.h"
-#include "runtime/global_dict/config.h"
-#include "runtime/global_dict/miscs.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_expr_predicate.h"
-#include "storage/column_predicate.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 #include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -214,11 +214,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             return RewriteStatus::ALWAYS_FALSE;
         }
@@ -234,11 +230,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     if (PredicateType::kNotInList == pred->type()) {
         std::vector<Datum> values = pred->values();
         std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
+        _column_iterators[cid]->dict_lookup_batch(values, &codewords);
         if (codewords.empty()) {
             if (!field->is_nullable()) {
                 return RewriteStatus::ALWAYS_TRUE;

@@ -25,6 +25,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "exec/exec_env.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "fs/fs_util.h"
@@ -32,7 +33,6 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -44,6 +44,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake_meta_reader.h"
 #include "storage/meta_reader.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -53,7 +54,7 @@ public:
     LakeMetaScannerTest() : _tablet_id(next_id()) {
         // setup TabletManager
         _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
-        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         CHECK(FileSystem::Default()
                       ->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName))
@@ -105,7 +106,7 @@ public:
         fe.hostname = "127.0.0.1";
         fe.port = 9020;
         _fragment_ctx->set_fe_addr(fe);
-        _state->set_fragment_ctx(_fragment_ctx.get());
+        _state->set_fragment_ctx(_fragment_ctx.get(), &_fragment_ctx->fragment_runtime_state());
         _state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};

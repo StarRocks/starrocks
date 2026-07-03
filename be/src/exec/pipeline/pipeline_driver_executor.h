@@ -31,11 +31,6 @@
 #include "exec/pipeline/primitives/driver_state.h"
 #include "runtime/runtime_state_fwd.h"
 
-namespace starrocks {
-class ObjectPool;
-class RuntimeProfile;
-} // namespace starrocks
-
 namespace starrocks::pipeline {
 
 class AuditStatisticsReporter;
@@ -74,8 +69,6 @@ private:
     void _worker_thread();
     StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                                   ObjectPool* obj_pool);
 
 private:
     // The maximum duration that a driver could stay in local_driver_queue

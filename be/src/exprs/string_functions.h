@@ -624,6 +624,13 @@ public:
     DEFINE_VECTORIZED_FN(sm3);
 
     /**
+     * @param: [VARCHAR]
+     * @return: StringColumn
+     * Get the hexadecimal representation of BLAKE3 hash value
+     */
+    DEFINE_VECTORIZED_FN(blake3);
+
+    /**
      * Compare two strings. Returns 0 if lhs and rhs compare equal,
      * -1 if lhs appears before rhs in lexicographical order,
      * 1 if lhs appears after rhs in lexicographical order.
@@ -702,6 +709,7 @@ private:
         pattern do_pos_format() const override { return {{none, sign, none, value}}; }
         pattern do_neg_format() const override { return {{none, sign, none, value}}; }
         int do_frac_digits() const override { return 2; }
+        char_type do_decimal_point() const override { return '.'; }
         char_type do_thousands_sep() const override { return ','; }
         string_type do_grouping() const override { return "\003"; }
         string_type do_negative_sign() const override { return "-"; }

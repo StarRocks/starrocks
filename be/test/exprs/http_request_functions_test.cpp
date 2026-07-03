@@ -25,10 +25,10 @@
 #include "column/map_column.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "http/ev_http_server.h"
-#include "http/http_channel.h"
-#include "http/http_handler.h"
-#include "http/http_request.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_request.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -1358,6 +1358,7 @@ TEST_F(HttpRequestFunctionsTest, buildJsonErrorResponse_SpecialChars) {
 // Integration Test Handlers (EvHttpServer-based)
 //=============================================================================
 
+#ifndef __APPLE__
 class HttpRequestTestJsonHandler : public HttpHandler {
 public:
     void handle(HttpRequest* req) override {
@@ -1657,5 +1658,6 @@ TEST_F(HttpRequestIntegrationTest, RuntimeStateInit) {
     EXPECT_FALSE(state->ip_allowlist.empty());
     EXPECT_EQ("127.0.0.1", state->ip_allowlist[0]);
 }
+#endif
 
 } // namespace starrocks

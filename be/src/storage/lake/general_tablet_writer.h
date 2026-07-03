@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {

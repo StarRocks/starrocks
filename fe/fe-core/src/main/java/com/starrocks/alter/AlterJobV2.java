@@ -253,6 +253,17 @@ public abstract class AlterJobV2 implements Writable {
         return warehouseId;
     }
 
+    /**
+     * Whether this job tolerates partitions being created on the target table while
+     * the job is running. A job may return true only when it (a) never iterates the
+     * table's live partition list after its initial snapshot, (b) registers no
+     * table-level shadow meta before FINISHED, and (c) cancels without per-partition
+     * cleanup. Default false.
+     */
+    public boolean allowConcurrentPartitionCreation() {
+        return false;
+    }
+
     public abstract AlterJobV2 copyForPersist();
 
     protected void copyBaseFields(AlterJobV2 copy) {

@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "olap_common.h"
+#include "storage/primitive/tablet_column_util.h"
 
 namespace starrocks {
 
@@ -52,13 +53,5 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TCompression
 Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                                      TabletSchemaPB* out_schema, TCompressionType::type compression_type);
-
-void convert_to_new_version(TColumn* tcolumn);
-
-Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnPB* column_pb);
-
-StatusOr<std::string> convert_default_expr_to_json_string(const TExpr& t_expr);
-
-Status preprocess_default_expr_for_tcolumns(std::vector<TColumn>& columns);
 
 } // namespace starrocks

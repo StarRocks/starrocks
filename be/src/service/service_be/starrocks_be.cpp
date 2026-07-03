@@ -18,42 +18,52 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
+#include <algorithm>
+#include <utility>
+
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "backend_service.h"
 #include "base/brpc/brpc.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
-#include "common/config_object_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "compute_env/compute_env.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "connector/connector_bootstrap.h"
-#include "fs/s3/poco_common.h"
+#include "data_workflows/data_workflows_env.h"
+#include "exec/exec_env.h"
+#include "exec/jdbc/jdbc_driver_manager.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "orchestration/orchestration_env.h"
+#include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/jdbc_driver_manager.h"
 #include "service/daemon.h"
 #include "service/service.h"
 #include "service/service_be/arrow_flight_sql_service.h"
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
+#include "storage/storage_env.h"
 #ifndef __APPLE__
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
 #endif
-#include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
 #include "common/util/thrift_server.h"
-#include "platform/platform_env.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/storage_engine.h"
-#include "util/logging.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"
@@ -69,15 +79,15 @@ DECLARE_bool(socket_keepalive);
 
 namespace starrocks {
 
-StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn,
+StorageEngine* init_storage_engine(RuntimeEnv* runtime_env, std::vector<StorePath> paths, bool as_cn,
                                    TableMetricsManager* table_metrics_mgr) {
-    DCHECK(global_env != nullptr);
+    DCHECK(runtime_env != nullptr);
     // Init and open storage engine.
     EngineOptions options;
     options.store_paths = std::move(paths);
     options.backend_uid = UniqueId::gen_uid();
-    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
-    options.update_mem_tracker = global_env->update_mem_tracker();
+    options.compaction_mem_tracker = runtime_env->compaction_mem_tracker();
+    options.update_mem_tracker = runtime_env->update_mem_tracker();
     options.table_metrics_mgr = table_metrics_mgr;
     options.need_write_cluster_id = !as_cn;
     StorageEngine* engine = nullptr;
@@ -85,6 +95,61 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     EXIT_IF_ERROR(StorageEngine::open(options, &engine));
 
     return engine;
+}
+
+StorageEnvOptions make_storage_env_options(RuntimeEnv* runtime_env, PlatformEnv* platform_env) {
+    DCHECK(runtime_env != nullptr);
+    DCHECK(platform_env != nullptr);
+
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+#endif
+    return storage_env_options;
+}
+
+ComputeEnvOptions make_compute_env_options(RuntimeEnv* runtime_env, MetricRegistry* metrics,
+                                           const std::vector<StorePath>& paths, bool as_cn) {
+    DCHECK(runtime_env != nullptr);
+
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        compute_store_paths.emplace_back(path.path);
+    }
+
+    ComputeEnvOptions options;
+    options.runtime_env = runtime_env;
+    options.metrics = metrics;
+    options.store_paths = std::move(compute_store_paths);
+    options.as_cn = as_cn;
+    options.query_cache_capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    return options;
+}
+
+void register_pipeline_prepare_pool_metric_hook(RuntimeEnv* runtime_env) {
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([runtime_env] {
+        auto pool = runtime_env->pipeline_prepare_pool();
+        return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
+    });
+}
+
+Status init_storage_env(RuntimeEnv* runtime_env, PlatformEnv* platform_env, ComputeEnv* compute_env) {
+    DCHECK(compute_env != nullptr);
+
+    RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(make_storage_env_options(runtime_env, platform_env)),
+                              "init StorageEnv failed");
+    StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    return Status::OK();
 }
 
 extern void shutdown_tracer();
@@ -112,19 +177,23 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": backend network options init successfully";
 
-    // init global env
-    auto* global_env = GlobalEnv::GetInstance();
-    EXIT_IF_ERROR(global_env->init(process_metrics_registry->root_registry()));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
-
     auto* platform_env = PlatformEnv::GetInstance();
-    EXIT_IF_ERROR(platform_env->init(process_metrics_registry->root_registry()));
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    EXIT_IF_ERROR(platform_env->init(std::move(platform_env_options)));
     LOG(INFO) << process_name << " start step " << start_step++ << ": platform env init successfully";
+
+    // init runtime env
+    auto* runtime_env = RuntimeEnv::GetInstance();
+    EXIT_IF_ERROR(runtime_env->init(process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": runtime env init successfully";
 
     // cache env should be initialized before init_storage_engine,
     // because apply task is triggered in init_storage_engine and needs cache env.
-#ifndef __APPLE__
     auto* cache_env = DataCache::GetInstance();
+    cache_env->set_mem_trackers(runtime_env->datacache_mem_tracker(), runtime_env->page_cache_mem_tracker());
+#ifndef __APPLE__
     std::vector<std::string> cache_storage_root_paths;
     cache_storage_root_paths.reserve(paths.size());
     for (const auto& path : paths) {
@@ -133,8 +202,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     DataCacheInitOptions cache_init_options;
     cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
     cache_init_options.metrics = process_metrics_registry->root_registry();
-    cache_init_options.process_mem_limit = global_env->process_mem_limit();
-    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    cache_init_options.process_mem_limit = runtime_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = runtime_env->process_mem_tracker();
     EXIT_IF_ERROR(cache_env->init(cache_init_options));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
 #else
@@ -142,13 +211,55 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env disabled on macOS";
 #endif
 
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn, process_metrics_registry->table_metrics_mgr());
+    auto* storage_engine =
+            init_storage_engine(runtime_env, paths, as_cn, process_metrics_registry->table_metrics_mgr());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(connector::bootstrap_builtin_connectors());
-    EXIT_IF_ERROR(exec_env->init(paths, process_metrics_registry, global_env, as_cn));
+    auto* process_metrics = process_metrics_registry->root_registry();
+    EXIT_IF_ERROR(runtime_env->init_execution_thread_pools(process_metrics));
+    register_pipeline_prepare_pool_metric_hook(runtime_env);
+
+    auto compute_env = std::make_unique<ComputeEnv>();
+    EXIT_IF_ERROR(compute_env->init(make_compute_env_options(runtime_env, process_metrics, paths, as_cn)));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": compute env init successfully";
+
+    exec_env->set_compute_env(compute_env.get());
+    EXIT_IF_ERROR(runtime_env->init_lake_thread_pools(process_metrics));
+    EXIT_IF_ERROR(exec_env->init(process_metrics_registry, runtime_env));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec env init successfully";
+
+    EXIT_IF_ERROR(init_storage_env(runtime_env, platform_env, compute_env.get()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage env init successfully";
+
+    auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
+    DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.exec_env = exec_env;
+    data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    data_workflows_env_options.diagnose_daemon = runtime_env->diagnose_daemon();
+    data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
+    data_workflows_env_options.metrics = process_metrics_registry->root_registry();
+    data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    data_workflows_env_options.load_mem_tracker = runtime_env->load_mem_tracker();
+    EXIT_IF_ERROR(data_workflows_env->init(data_workflows_env_options));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": data workflows env init successfully";
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry()));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
+
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    // AgentServer::start() starts workers that can read ExecEnv::agent_server()
+    // immediately, so publish the pointer before starting those workers.
+    exec_env->set_agent_server(agent_server.get());
+    auto agent_status = agent_server->start();
+    if (!agent_status.ok()) {
+        exec_env->set_agent_server(nullptr);
+        LOG(ERROR) << agent_status.message();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": agent server start successfully";
 
 #if !defined(__APPLE__) && defined(WITH_STARCACHE)
     cache_env->attach_peer_cache_stub_cache(platform_env->brpc_stub_cache());
@@ -179,7 +290,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #endif
 #ifndef __APPLE__
     // Register datacache metrics
-    DataCacheMetrics::instance()->enable_update_hook(use_same_datacache_instance);
+    EXIT_IF_ERROR(cache_env->enable_metrics_update_hook(process_metrics_registry->root_registry(),
+                                                        use_same_datacache_instance));
 #endif
 
     // Start thrift server
@@ -188,7 +300,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         thrift_port = config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
-    auto thrift_server = BackendService::create(exec_env, process_metrics_registry->root_registry(), thrift_port);
+    auto thrift_server = BackendService::create(exec_env, orchestration_env.get(),
+                                                process_metrics_registry->root_registry(), thrift_port);
 
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
@@ -206,9 +319,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
 
-    BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+    auto* load_channel_mgr = data_workflows_env->load_channel_mgr();
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env, orchestration_env.get(), load_channel_mgr);
 #ifndef __APPLE__
-    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
+    LakeServiceImpl lake_service(exec_env, StorageEnv::GetInstance()->lake_tablet_manager(), load_channel_mgr);
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
@@ -264,12 +378,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start HTTP server
 #ifndef __APPLE__
-    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, *global_env, process_metrics_registry,
-                                                       config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(cache_env, exec_env, orchestration_env.get(), *runtime_env,
+                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
+                                                       config::be_http_num_workers);
 #else
     // On macOS, pass nullptr for cache_env
-    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, *global_env, process_metrics_registry,
-                                                       config::be_http_port, config::be_http_num_workers);
+    auto http_server = std::make_unique<HttpServiceBE>(nullptr, exec_env, orchestration_env.get(), *runtime_env,
+                                                       process_metrics_registry, load_channel_mgr, config::be_http_port,
+                                                       config::be_http_num_workers);
 #endif
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
@@ -317,7 +433,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     int exit_step = 1;
 
-    exec_env->wait_for_finish();
+    orchestration_env->wait_for_finish();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": wait exec engine tasks finish successfully";
 
     heartbeat_server->stop();
@@ -339,25 +455,39 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
 
+    // Keep AgentServer stop before StorageEngine stop: AgentServer pools may submit
+    // storage cleanup work, and StorageEngine::stop() drains the cleanup executor.
+    agent_server->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server stop successfully";
+
+    orchestration_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env stop successfully";
+
+    data_workflows_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env stop successfully";
+
+    StorageEnv::GetInstance()->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env stop successfully";
+
     exec_env->stop();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec engine destroy successfully";
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env stop successfully";
+
+    compute_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": compute env stop successfully";
+
+    exec_env->clear_query_contexts();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query contexts clear successfully";
+
+    runtime_env->shutdown_thread_pools();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": runtime env thread pools shutdown successfully";
 
     storage_engine->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage engine exit successfully";
 
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
     shutdown_staros_worker();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
-#endif
-
-#ifndef __APPLE__
-    if (config::enable_poco_client_for_aws_sdk) {
-        starrocks::poco::HTTPSessionPools::instance().shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
-    }
 #endif
 
     http_server->join();
@@ -372,18 +502,34 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     thrift_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
 
+    exec_env->set_agent_server(nullptr);
+    agent_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": agent server destroy successfully";
+
+    orchestration_env->destroy();
+    orchestration_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": orchestration env destroy successfully";
+
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
+
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
+
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
-    platform_env->destroy();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
+    compute_env->destroy();
+    compute_env.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": compute env destroy successfully";
 
     delete storage_engine;
 
-    // Tear down the SR-owned VectorIndexCache before global_env->stop()
+    // Tear down the StorageEnv-owned VectorIndexCache before runtime_env->stop()
     // destroys the MemTracker hierarchy the entry deleters consume against.
-    // See ExecEnv::destroy_vector_index_cache().
-    exec_env->destroy_vector_index_cache();
+    StorageEnv::GetInstance()->destroy_vector_index_cache();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": vector index cache destroy successfully";
 
 #ifndef __APPLE__
@@ -396,8 +542,11 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // Unbind with MemTracker
     tls_mem_tracker = nullptr;
 
-    global_env->stop();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": global env stop successfully";
+    runtime_env->stop();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": runtime env stop successfully";
+
+    platform_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": platform env destroy successfully";
 
     shutdown_tracer();
 

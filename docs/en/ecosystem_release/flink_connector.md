@@ -29,10 +29,10 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 > **NOTICE**
 >
@@ -41,6 +41,24 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 ## Release notes
 
 ### 1.2
+
+#### 1.2.15
+
+Release date: June 18, 2026
+
+##### Features
+
+- Added multi-table transaction Stream Load support. [#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### Improvements
+
+- Merge Commit supports logging data quality error messages. [#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### BugFix
+
+- Fix multi-table transaction concurrency: serialize per-table loads and align cross-table commits. [#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- Fallback to FE cancel API when rollback fails for PREPARE-state lingering transactions. [#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- Do not quote CURRENT_TIMESTAMP in the DEFAULT clause when building column statements. [#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
 
 #### 1.2.14
 

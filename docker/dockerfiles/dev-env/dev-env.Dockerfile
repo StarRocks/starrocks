@@ -8,8 +8,10 @@
 #  `distro` argument can be specified to build for a different linux distribution other than default `ubuntu`.
 #  For example, build centos7 dev-env with following commands
 #    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=centos7 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t dev-env-centos7:latest .
+#  Or build rocky9 dev-env with following commands
+#    DOCKER_BUILDKIT=1 docker build --rm=true --build-arg distro=rocky9 --build-arg starlet_tag=$STARLET_ARTIFACTS_TAG -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t dev-env-rocky9:latest .
 #
-#  Supported linux distribution are: centos7, ubuntu
+#  Supported linux distribution are: centos7, ubuntu, rocky9
 
 # whether prebuild starrocks maven project and cache the maven artifacts
 # value: true | false
@@ -22,15 +24,15 @@ ARG predownload_thirdparty=false
 ARG thirdparty_url=https://cdn-thirdparty.starrocks.com/starrocks-thirdparty-main-20260526.tar
 ARG commit_id
 # check thirdparty/starlet-artifacts-version.sh, to get the right tag
-ARG starlet_tag=v4.2-rc1
-# build for which linux distro: centos7|ubuntu
+ARG starlet_tag=v4.2-rc2
+# build for which linux distro: centos7|ubuntu|rocky9
 ARG distro=ubuntu
 # Token to access artifacts in private github repositories.
 ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
-FROM starrocks/toolchains-${distro}:main-20251029 as base
+FROM starrocks/toolchains-${distro}:main-20260616 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /
@@ -71,6 +73,9 @@ FROM build_prebuild_mvn_${prebuild_maven} as build_stage2
 
 FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
+# rocky9 (glibc 2.34) reuses the centos7 artifacts (glibc 2.17, forward-compatible);
+# the ubuntu22 artifacts (glibc 2.35) are too new to run on rocky9.
+FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-rocky9
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
 ARG BUILD_ROOT

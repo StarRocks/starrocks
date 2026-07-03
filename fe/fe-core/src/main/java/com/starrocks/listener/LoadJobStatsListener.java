@@ -17,7 +17,6 @@ package com.starrocks.listener;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.DmlType;
 import com.starrocks.server.GlobalStateMgr;
@@ -81,9 +80,6 @@ public class LoadJobStatsListener implements LoadJobListener {
     }
 
     private void onTransactionFinish(TransactionState transactionState, boolean sync) {
-        if (!Config.enable_statistic_collect_on_first_load) {
-            return;
-        }
         if (!needTrigger()) {
             return;
         }

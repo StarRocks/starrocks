@@ -621,13 +621,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: `enable_string_prefix_zonemap` が有効な場合に、文字列のZoneMapの最小/最大に使用されるプレフィックス長。
 - 導入バージョン: -
 
+### jvm_call_thread_pool_size
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: スレッド
+- 変更可能: いいえ
+- 説明: pthread上で実行する必要がある内部JNI処理（HDFS/libhdfsのcloseおよびstat操作、JNIグローバル参照の解放など）に使用されるJVM呼び出しPriorityThreadPoolのサイズを設定します。このプールは`udf_thread_pool_size`とは独立しており、一般的なJVM処理がJava UDFの実行と競合しないようにします。
+- 導入バージョン: -
+
 ### udf_thread_pool_size
 
 - デフォルト: 1
 - タイプ: Int
 - 単位: スレッド
 - 変更可能: いいえ
-- 説明: ExecEnvで作成されるUDF呼び出しPriorityThreadPoolのサイズを設定します（ユーザー定義関数/UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのUDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
+- 説明: JavaEnvが所有するJava UDF呼び出しPriorityThreadPoolのサイズを設定します（Java UDF関連タスクの実行に使用されます）。この値は、スレッドプール（PriorityThreadPool("udf", thread_num, queue_size)）を構築する際、プールスレッド数およびプールキュー容量として使用されます。より多くのJava UDF同時実行を許可するには増やし、過剰なCPUおよびメモリ競合を避けるには小さく保ちます。
 - 導入バージョン: v3.2.0
 
 ### update_memory_limit_percent
@@ -636,7 +645,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: パーセント
 - 変更可能: いいえ
-- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `GlobalEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = GlobalEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
+- 説明: BEプロセスメモリのうち、更新関連のメモリとキャッシュに予約される割合。起動時に `RuntimeEnv` は、更新用の `MemTracker` を process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100 として計算します。`UpdateManager` もこの割合を使用して、プライマリインデックス/インデックスキャッシュの容量を決定します（インデックスキャッシュ容量 = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100）。HTTP設定更新ロジックは、更新マネージャーで `update_primary_index_memory_limit` を呼び出すコールバックを登録するため、設定が変更された場合、更新サブシステムに変更が適用されます。この値を増やすと、更新/プライマリインデックスパスにより多くのメモリが割り当てられ（他のプールで利用可能なメモリが減少します）、減らすと更新メモリとキャッシュ容量が減少します。値は0〜100の範囲にクランプされます。
 - 導入バージョン: v3.2.0
 
 ### vector_chunk_size
@@ -703,6 +712,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ランダムバケットサイズチェック中にレイクメタデータキャッシュがミスした場合に、オブジェクトストレージのLISTフォールバックを許可するかどうかを制御します。`true`は、ベースサイズを計算するためにLISTメタデータファイルにフォールバックすることを意味します（従来の動作で、より正確なサイズ見積もり）。`false`はLISTをスキップし、`base_size = 0`を使用することを意味します。これにより、LISTオブジェクトのリクエストは減少しますが、サイズ見積もりの精度が低いため、不変マーキングが遅れる可能性があります。
 - 導入バージョン: 4.1.0, 4.0.7, 3.5.15
+
+### enable_spill_sort_events
+
+- デフォルト: false
+- タイプ: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: スピルするソートオペレーターを、ポーリングスピンの代わりにパイプラインイベントスケジューラーで駆動します。
+- 導入バージョン: -
 
 ### enable_stream_load_verbose_log
 

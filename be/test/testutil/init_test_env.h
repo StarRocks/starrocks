@@ -17,33 +17,48 @@
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
 
+#include <algorithm>
+#include <memory>
+
+#include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "compute_env/compute_env.h"
 #include "connector/connector_bootstrap.h"
+#include "data_workflows/data_workflows_env.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
+#include "module/fs_provider_bootstrap.h"
+#include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
+#include "platform/store_path.h"
 #include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "types/time_types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -90,12 +105,15 @@ int init_test_env(int argc, char** argv) {
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new ProcessMetricsRegistry("starrocks_be");
 
-    auto* global_env = GlobalEnv::GetInstance();
-    config::disable_storage_page_cache = true;
-    auto st = global_env->init(process_metrics_registry->root_registry());
-    CHECK(st.ok()) << st;
     auto* platform_env = PlatformEnv::GetInstance();
-    st = platform_env->init(process_metrics_registry->root_registry());
+    PlatformEnvOptions platform_env_options;
+    platform_env_options.metrics = process_metrics_registry->root_registry();
+    platform_env_options.store_paths = paths;
+    auto st = platform_env->init(std::move(platform_env_options));
+    CHECK(st.ok()) << st;
+    auto* runtime_env = RuntimeEnv::GetInstance();
+    config::disable_storage_page_cache = true;
+    st = runtime_env->init(process_metrics_registry->root_registry());
     CHECK(st.ok()) << st;
 
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
@@ -129,15 +147,81 @@ int init_test_env(int argc, char** argv) {
     DataCacheInitOptions cache_init_options;
     cache_init_options.storage_root_paths = std::move(cache_storage_root_paths);
     cache_init_options.metrics = process_metrics_registry->root_registry();
-    cache_init_options.process_mem_limit = global_env->process_mem_limit();
-    cache_init_options.process_mem_tracker = global_env->process_mem_tracker();
+    cache_init_options.process_mem_limit = runtime_env->process_mem_limit();
+    cache_init_options.process_mem_tracker = runtime_env->process_mem_tracker();
     st = cache_env->init(cache_init_options);
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
     st = connector::bootstrap_builtin_connectors();
     CHECK(st.ok()) << st;
-    st = exec_env->init(paths, process_metrics_registry, global_env);
+    auto* process_metrics = process_metrics_registry->root_registry();
+    st = runtime_env->init_execution_thread_pools(process_metrics);
+    CHECK(st.ok()) << st;
+    pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([runtime_env] {
+        auto pool = runtime_env->pipeline_prepare_pool();
+        return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
+    });
+
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        compute_store_paths.emplace_back(path.path);
+    }
+    ComputeEnvOptions compute_env_options;
+    compute_env_options.runtime_env = runtime_env;
+    compute_env_options.metrics = process_metrics;
+    compute_env_options.store_paths = std::move(compute_store_paths);
+    compute_env_options.query_cache_capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
+    compute_env_options.driver_queue_factory = pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = pipeline::create_workgroup_driver_executor;
+    auto compute_env = std::make_unique<ComputeEnv>();
+    st = compute_env->init(compute_env_options);
+    CHECK(st.ok()) << st;
+
+    exec_env->set_compute_env(compute_env.get());
+    st = runtime_env->init_lake_thread_pools(process_metrics);
+    CHECK(st.ok()) << st;
+    st = exec_env->init(process_metrics_registry, runtime_env);
+    CHECK(st.ok()) << st;
+
+    StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+#endif
+    st = StorageEnv::GetInstance()->init(storage_env_options);
+    CHECK(st.ok()) << st;
+    StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+
+    auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
+    DataWorkflowsEnvOptions data_workflows_env_options;
+    data_workflows_env_options.exec_env = exec_env;
+    data_workflows_env_options.lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+    data_workflows_env_options.diagnose_daemon = runtime_env->diagnose_daemon();
+    data_workflows_env_options.brpc_stub_cache = platform_env->brpc_stub_cache();
+    data_workflows_env_options.metrics = process_metrics_registry->root_registry();
+    data_workflows_env_options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
+    data_workflows_env_options.load_mem_tracker = runtime_env->load_mem_tracker();
+    st = data_workflows_env->init(data_workflows_env_options);
+    CHECK(st.ok()) << st;
+
+    auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
+    st = orchestration_env->init(exec_env, process_metrics_registry->root_registry());
+    CHECK(st.ok()) << st;
+
+    auto agent_server = std::make_unique<AgentServer>(exec_env, false);
+    exec_env->set_agent_server(agent_server.get());
+    st = agent_server->start();
+    if (!st.ok()) {
+        exec_env->set_agent_server(nullptr);
+    }
     CHECK(st.ok()) << st;
 
     int r = RUN_ALL_TESTS();
@@ -145,22 +229,36 @@ int init_test_env(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     CHECK(engine->tablet_manager()->start_trash_sweep().ok());
     (void)butil::DeleteFile(storage_root, true);
-    exec_env->wait_for_finish();
-    // delete engine
-    engine->stop();
-    // destroy exec env
+    orchestration_env->wait_for_finish();
     tls_thread_status.set_mem_tracker(nullptr);
+    // Stop AgentServer before StorageEngine drains storage cleanup work its pools may submit.
+    agent_server->stop();
+    exec_env->set_agent_server(nullptr);
+    orchestration_env->stop();
+    data_workflows_env->stop();
+    StorageEnv::GetInstance()->stop();
     exec_env->stop();
+    compute_env->stop();
+    exec_env->clear_query_contexts();
+    runtime_env->shutdown_thread_pools();
+    engine->stop();
 #ifdef USE_STAROS
-    if (exec_env->lake_tablet_manager() != nullptr) {
-        exec_env->lake_tablet_manager()->stop();
-    }
+    StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
+    orchestration_env->destroy();
+    orchestration_env.reset();
+    data_workflows_env->destroy();
+    data_workflows_env.reset();
     delete engine;
+    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
-    platform_env->destroy();
+    compute_env->destroy();
+    compute_env.reset();
+    agent_server.reset();
     cache_env->destroy();
-    global_env->stop();
+    runtime_env->stop();
+    platform_env->destroy();
 
     shutdown_tracer();
 

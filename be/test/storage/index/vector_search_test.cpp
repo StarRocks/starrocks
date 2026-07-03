@@ -34,28 +34,48 @@
 #include "column/nullable_column.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/object_pool.h"
+#include "compute_env/runtime_range_pruner.hpp"
+#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/casts.h"
 #include "gutil/walltime.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate_rewriter.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
+#include "storage/predicate_parser.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_predicate.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage/primitive/schema_helper.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/exprs_test_helper.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -194,6 +214,58 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
 
         st = ann_reader->search(query_view, kTopK, result_ids.data(),
                                 reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
+        CHECK_OK(st);
+        ASSERT_EQ(result_ids.size(), kTopK);
+    } catch (tenann::Error& e) {
+        LOG(WARNING) << e.what();
+    }
+#endif
+}
+
+// HNSW + sq8 quantizer: build a real quantized .vi and search it. The query path is the same as
+// the non-quantized index (the quantizer is a build/meta-time property); this pins that a quantized
+// HNSW index builds and is searchable. The lossy index distance it returns is what the FE refine
+// path (enable_vector_index_refine) re-ranks exactly on the full-precision vectors above the scan.
+TEST_F(VectorIndexSearchTest, test_search_hnsw_quantizer_sq8) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "sq8"); // non-flat -> quantized index
+    tablet_index->add_search_properties("efsearch", "40");
+
+    auto index_path = test_vector_index_dir + "/hnsw_sq8_index.vi";
+    write_vector_index(index_path, tablet_index);
+
+#ifdef WITH_TENANN
+    try {
+        const auto& empty_meta = std::map<std::string, std::string>{};
+        auto status = get_vector_meta(tablet_index, empty_meta);
+        CHECK_OK(status);
+        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
+
+        std::shared_ptr<VectorIndexReader> ann_reader;
+        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
+        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
+        ASSERT_TRUE(!init_status.is_not_supported());
+
+        constexpr int kTopK = 1;
+        std::vector<int64_t> result_ids(kTopK);
+        std::vector<float> result_distances(kTopK);
+        SparseRange<> scan_range;
+        DelIdFilter del_id_filter(scan_range);
+        std::vector<float> query_vector = {1.0f, 2.0f, 3.0f};
+        tenann::PrimitiveSeqView query_view =
+                tenann::PrimitiveSeqView{.data = reinterpret_cast<uint8_t*>(query_vector.data()),
+                                         .size = static_cast<uint32_t>(3),
+                                         .elem_type = tenann::PrimitiveType::kFloatType};
+
+        auto st = ann_reader->search(query_view, kTopK, result_ids.data(),
+                                     reinterpret_cast<uint8_t*>(result_distances.data()), &del_id_filter);
         CHECK_OK(st);
         ASSERT_EQ(result_ids.size(), kTopK);
     } catch (tenann::Error& e) {
@@ -516,7 +588,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     // vector_column_id will be set to num_columns (virtual column), matching the FE rewrite behavior
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 100; // arbitrary slot id
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     vector_search_opt->vector_range = -1.0;
     vector_search_opt->result_order = 0;
     vector_search_opt->pq_refine_factor = 1.0;
@@ -569,6 +641,70 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
     chunk_iter->close();
 }
 
+// Test: same missing-.vi segment as above, but refine_distance = true. The refine path recomputes
+// the exact distance from the full-precision vectors ABOVE the scan, so the segment iterator must
+// NOT set up the brute-force fallback. Contrast with test_brute_force_l2_distance_fallback (same
+// setup, refine_distance = false), which appends a [id, distance] output: here no distance column
+// is synthesized -- the iterator returns the raw read-schema rows for the upper layer to refine.
+TEST_F(BruteForceVectorFallbackTest, test_refine_distance_missing_vi_skips_brute_fallback) {
+    std::vector<int64_t> ids = {1, 2, 3};
+    std::vector<std::vector<float>> vectors = {
+            {1.0f, 2.0f, 3.0f},
+            {4.0f, 5.0f, 6.0f},
+            {0.0f, 0.0f, 0.0f},
+    };
+    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors));
+    ASSERT_FALSE(segment->skip_vector_index());
+
+    auto schema = build_read_schema_with_vector_index();
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = schema;
+
+    auto vector_search_opt = std::make_shared<VectorSearchOption>();
+    vector_search_opt->use_vector_index = true;
+    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->k = 3;
+    vector_search_opt->k_factor = 1.0;
+    vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
+    vector_search_opt->vector_column_id = schema->num_columns();
+    vector_search_opt->vector_slot_id = 100;
+    vector_search_opt->refine_distance = true; // refine path: no BE-produced distance column
+    vector_search_opt->vector_range = -1.0;
+    vector_search_opt->result_order = 0;
+    vector_search_opt->pq_refine_factor = 1.0;
+
+    seg_opts.use_vector_index = true;
+    seg_opts.vector_search_option = vector_search_opt;
+
+    // Read only the id column. On the trust path the brute fallback would still append a distance
+    // column; on the refine path it must not, so the output stays exactly the read schema.
+    Schema read_schema;
+    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    id_field->set_uid(0);
+    read_schema.append(id_field);
+
+    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
+    ASSERT_TRUE(chunk_iter != nullptr);
+    ASSERT_OK(chunk_iter->init_output_schema({}));
+
+    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
+    std::vector<uint32_t> rowids;
+    auto st = chunk_iter->get_next(chunk.get(), &rowids);
+    ASSERT_OK(st);
+    ASSERT_EQ(chunk->num_rows(), 3);
+
+    // No brute-force fallback was set up, so no distance column was appended: output is id only,
+    // and the distance slot is absent (the refine path produces no BE-side distance column).
+    ASSERT_EQ(chunk->num_columns(), 1);
+    ASSERT_FALSE(chunk->is_slot_exist(vector_search_opt->vector_slot_id));
+
+    chunk_iter->close();
+}
+
 // Test: when vector column is already in read schema (not pruned),
 // _setup_brute_force_fallback should find it without adding a duplicate.
 TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) {
@@ -595,7 +731,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 200;
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     vector_search_opt->vector_range = -1.0;
     vector_search_opt->result_order = 0;
     vector_search_opt->pq_refine_factor = 1.0;
@@ -610,7 +746,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
     read_schema.append(id_field);
 
     // Add vector column to schema (simulating the case where FE doesn't prune it)
-    auto vec_field = std::make_shared<Field>(ChunkHelper::convert_field(1, schema->column(1)));
+    auto vec_field = std::make_shared<Field>(StorageSchemaHelper::convert_field(1, schema->column(1)));
     read_schema.append(vec_field);
 
     auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
@@ -658,7 +794,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
     vector_search_opt->vector_column_id = schema->num_columns();
     vector_search_opt->vector_slot_id = 300;
-    vector_search_opt->use_ivfpq = false;
+    vector_search_opt->refine_distance = false;
     // Set vector_range = 3.0: only rows with L2 distance <= 3.0 should pass
     // Row 1 (dist=2): pass, Row 2 (dist=3): pass, Row 3 (dist=0): pass, Row 4 (dist=48): filtered
     vector_search_opt->vector_range = 3.0;
@@ -759,7 +895,7 @@ VectorSearchOptionPtr make_vector_search_opt(int slot_id, int num_columns, const
     opt->vector_distance_column_name = "__vector_approx_l2_distance";
     opt->vector_column_id = num_columns;
     opt->vector_slot_id = slot_id;
-    opt->use_ivfpq = false;
+    opt->refine_distance = false;
     opt->vector_range = -1.0;
     opt->result_order = 0;
     opt->pq_refine_factor = 1.0;
@@ -812,41 +948,6 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_cosine_similarity) {
     EXPECT_FLOAT_EQ(distances->get_data()[1], 0.0f);
     EXPECT_NEAR(distances->get_data()[2], 1.0f / std::sqrt(3.0f), 1e-6);
 
-    chunk_iter->close();
-}
-
-// Unsupported metric (inner_product, etc.) covers the LOG-and-disable branch in
-// _setup_brute_force_fallback. The iterator must not crash and must not append a
-// distance column, since use_brute_force is turned off.
-TEST_F(BruteForceVectorFallbackTest, test_brute_force_unsupported_metric_disables_fallback) {
-    std::vector<int64_t> ids = {1};
-    std::vector<std::vector<float>> vectors = {{1.0f, 2.0f, 3.0f}};
-    auto schema = build_read_schema_with_metric("inner_product");
-    ASSIGN_OR_ABORT(auto segment, write_segment(ids, vectors, schema));
-    OlapReaderStatistics stats;
-    SegmentReadOptions seg_opts;
-    seg_opts.fs = _fs;
-    seg_opts.stats = &stats;
-    seg_opts.tablet_schema = schema;
-    auto opt = make_vector_search_opt(/*slot_id=*/100, schema->num_columns(), {1.0f, 0.0f, 0.0f});
-    seg_opts.use_vector_index = true;
-    seg_opts.vector_search_option = opt;
-
-    Schema read_schema;
-    auto id_field = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
-    id_field->set_uid(0);
-    read_schema.append(id_field);
-
-    auto chunk_iter = new_segment_iterator(segment, read_schema, seg_opts);
-    ASSERT_OK(chunk_iter->init_output_schema({}));
-    auto chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), 1024);
-    std::vector<uint32_t> rowids;
-    auto st = chunk_iter->get_next(chunk.get(), &rowids);
-    // Distance column is intentionally NOT produced — fallback was disabled.
-    // The iterator should still process rows for the id column without
-    // crashing on missing distance.
-    ASSERT_TRUE(st.ok() || st.is_end_of_file());
-    EXPECT_FALSE(chunk->is_slot_exist(opt->vector_slot_id));
     chunk_iter->close();
 }
 
@@ -1027,5 +1128,1086 @@ TEST(ResolveBruteForceVectorColumnTest, internal_error_when_dict_chunk_is_null) 
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.status().is_internal_error());
 }
+
+static PredicateTree single_node_tree(ColumnPredicate* pred) {
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred));
+    return PredicateTree::create(std::move(root));
+}
+// Two-branch OR wrapped in the AND root (callers keep predicate ownership).
+static PredicateTree or_tree(ColumnPredicate* a, ColumnPredicate* b) {
+    PredicateOrNode or_node;
+    or_node.add_child(PredicateColumnNode(a));
+    or_node.add_child(PredicateColumnNode(b));
+    PredicateAndNode root;
+    root.add_child(std::move(or_node));
+    return PredicateTree::create(std::move(root));
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Direct unit tests for evaluate_pred_tree_to_bitmap (segment_iterator.h). No vector index involved;
+// runs without WITH_TENANN. The 100k-row segment matters: a full-range candidate spans 25 read
+// batches and several data pages -- coverage the one-batch 8-row ANN fixtures cannot provide.
+// ---------------------------------------------------------------------------------------------------
+class EvaluatePredTreeBitmapTest : public testing::Test {
+protected:
+    static constexpr uint32_t kRows = 100000;
+
+    void SetUp() override {
+        CHECK_OK(fs::remove_all(kDir));
+        CHECK_OK(fs::create_directories(kDir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kDir));
+
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_next_column_unique_id(4);
+        auto* c0 = pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("id");
+        c0->set_type("BIGINT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        c0->set_length(8);
+        c0->set_index_length(8);
+        c0->set_aggregation("NONE");
+        for (int i = 1; i <= 2; i++) {
+            auto* c = pb.add_column();
+            c->set_unique_id(i);
+            c->set_name(i == 1 ? "c1" : "c2");
+            c->set_type("INT");
+            c->set_is_key(false);
+            c->set_is_nullable(false);
+            c->set_length(4);
+            c->set_index_length(4);
+            c->set_aggregation("NONE");
+        }
+        auto* c3 = pb.add_column();
+        c3->set_unique_id(3);
+        c3->set_name("c3");
+        c3->set_type("VARCHAR");
+        c3->set_is_key(false);
+        c3->set_is_nullable(false);
+        c3->set_length(8);
+        c3->set_aggregation("NONE");
+        _tablet_schema = TabletSchema::create(pb);
+
+        // id = i, c1 = i (monotonic -> expected sets are exact ranges), c2 = i % 7,
+        // c3 = "w" + (i % 7) (low-cardinality string -> every page dict-encoded).
+        std::string seg_file = kDir + "/seg.dat";
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(seg_file));
+        SegmentWriterOptions wopts;
+        SegmentWriter writer(std::move(wfile), 0, _tablet_schema, wopts);
+        ASSERT_OK(writer.init());
+        for (uint32_t start = 0; start < kRows; start += 4096) {
+            const uint32_t n = std::min<uint32_t>(4096, kRows - start);
+            auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(_tablet_schema), n);
+            for (uint32_t i = start; i < start + n; i++) {
+                chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i)));
+                chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+                chunk->columns()[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i % 7)));
+                const std::string w = "w" + std::to_string(i % 7);
+                chunk->columns()[3]->as_mutable_ptr()->append_datum(Datum(Slice(w)));
+            }
+            ASSERT_OK(writer.append_chunk(*chunk));
+        }
+        uint64_t seg_sz = 0, idx_sz = 0, footer = 0;
+        ASSERT_OK(writer.finalize(&seg_sz, &idx_sz, &footer));
+        ASSIGN_OR_ABORT(_segment, Segment::open(_fs, FileInfo{seg_file}, 0, _tablet_schema));
+        ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(seg_file));
+
+        // Initialized column iterators for the predicate columns, indexed by cid; the id column
+        // entry stays null on purpose (non-predicate columns may be null per the contract). The
+        // string column checks dict encoding so all_page_dict_encoded()/dict_lookup() work.
+        _iters_by_cid.resize(4);
+        for (int cid = 1; cid <= 3; cid++) {
+            ASSIGN_OR_ABORT(auto it, _segment->new_column_iterator(_tablet_schema->column(cid), nullptr));
+            ColumnIteratorOptions iter_opts;
+            iter_opts.stats = &_stats;
+            iter_opts.read_file = _read_file.get();
+            iter_opts.use_page_cache = false;
+            iter_opts.check_dict_encoding = (cid == 3);
+            ASSERT_OK(it->init(iter_opts));
+            _iters_by_cid[cid] = std::move(it);
+        }
+        ASSERT_TRUE(_iters_by_cid[3]->all_page_dict_encoded());
+
+        // Schema holding ONLY the predicate columns (field->id() == cid) -- also verifies the
+        // function does not require non-predicate columns to be present.
+        auto f1 = std::make_shared<Field>(1, "c1", get_type_info(TYPE_INT), false);
+        f1->set_uid(1);
+        auto f2 = std::make_shared<Field>(2, "c2", get_type_info(TYPE_INT), false);
+        f2->set_uid(2);
+        auto f3 = std::make_shared<Field>(3, "c3", get_type_info(TYPE_VARCHAR), false);
+        f3->set_uid(3);
+        _schema.append(f1);
+        _schema.append(f2);
+        _schema.append(f3);
+    }
+    void TearDown() override { (void)fs::remove_all(kDir); }
+
+    static roaring::Roaring full_range() {
+        roaring::Roaring r;
+        r.addRange(0, kRows);
+        return r;
+    }
+
+    const std::string kDir = "evaluate_pred_tree_bitmap_test";
+    std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Segment> _segment;
+    std::unique_ptr<RandomAccessFile> _read_file;
+    OlapReaderStatistics _stats;
+    std::vector<std::unique_ptr<ColumnIterator>> _iters_by_cid;
+    Schema _schema;
+};
+
+TEST_F(EvaluatePredTreeBitmapTest, ge_predicate_across_batches) {
+    // Full-range candidate = 25 read+evaluate batches over several data pages; the tail-of-file
+    // predicate makes any per-batch seek/bookkeeping slip shift the result set -> exact-set compare.
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99000"));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                           nullptr, full_range()));
+    roaring::Roaring expect;
+    expect.addRange(99000, kRows);
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, or_tree_evaluated_whole) {
+    // An OR compound must be evaluated as a WHOLE tree (a per-column immediate map drops it). The two
+    // branches select the first and the last batch of the file.
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate(get_type_info(TYPE_INT), 1, "50"));
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99950"));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(or_tree(lt.get(), ge.get()), _schema, _iters_by_cid, nullptr,
+                                                           full_range()));
+    roaring::Roaring expect;
+    expect.addRange(0, 50);
+    expect.addRange(99950, kRows);
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, cross_column_and) {
+    // Two predicate columns read per batch into one cid-keyed chunk: c1 >= 50000 AND c2 == 3.
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "50000"));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "3"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq.get()));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(PredicateTree::create(std::move(root)), _schema,
+                                                           _iters_by_cid, nullptr, full_range()));
+    roaring::Roaring expect;
+    for (uint32_t i = 50000; i < kRows; i++) {
+        if (i % 7 == 3) {
+            expect.add(i);
+        }
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, scattered_candidate_ranges) {
+    // A discontiguous candidate becomes multiple SparseRange ranges, each with its own seek and a
+    // short (bn << 4096) read; the values straddle the batch size and page boundaries.
+    roaring::Roaring candidate;
+    for (uint32_t v : {7u, 4095u, 4096u, 4097u, 65535u, 65536u, 99999u}) {
+        candidate.add(v);
+    }
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "4096"));
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid,
+                                                           nullptr, candidate));
+    roaring::Roaring expect;
+    for (uint32_t v : {4096u, 4097u, 65535u, 65536u, 99999u}) {
+        expect.add(v);
+    }
+    EXPECT_EQ(expect.cardinality(), got.cardinality());
+    EXPECT_TRUE(expect == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, empty_tree_returns_candidate) {
+    roaring::Roaring candidate;
+    for (uint32_t v : {5u, 100u, 4242u}) {
+        candidate.add(v);
+    }
+    PredicateTree empty_tree;
+    ASSIGN_OR_ABORT(auto got, evaluate_pred_tree_to_bitmap(empty_tree, _schema, _iters_by_cid, nullptr, candidate));
+    EXPECT_TRUE(candidate == got);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, unreadable_predicate_column_is_error) {
+    // Exactness backstop: a predicate column the segment cannot read must be a hard error, never a
+    // silent skip (a skipped column widens the bitmap and a downstream k-limit under-returns).
+    // Arm 1: cid absent from BOTH the schema and the iterators.
+    std::unique_ptr<ColumnPredicate> p9(new_column_ge_predicate(get_type_info(TYPE_INT), 9, "1"));
+    auto st9 = evaluate_pred_tree_to_bitmap(single_node_tree(p9.get()), _schema, _iters_by_cid, nullptr, full_range());
+    ASSERT_FALSE(st9.ok());
+    EXPECT_TRUE(st9.status().is_internal_error());
+    EXPECT_NE(st9.status().to_string().find("not readable"), std::string::npos);
+
+    // Arm 2: cid present in the schema but with a null iterator (the id column, cid 0).
+    Schema schema_with_id = _schema;
+    auto f0 = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+    f0->set_uid(0);
+    schema_with_id.append(f0);
+    std::unique_ptr<ColumnPredicate> p0(new_column_ge_predicate(get_type_info(TYPE_BIGINT), 0, "1"));
+    auto st0 = evaluate_pred_tree_to_bitmap(single_node_tree(p0.get()), schema_with_id, _iters_by_cid, nullptr,
+                                            full_range());
+    ASSERT_FALSE(st0.ok());
+    EXPECT_TRUE(st0.status().is_internal_error());
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, fallback_rowids_published_per_batch) {
+    // The buffer inverted-index fallback predicates resolve chunk rows through: resized and filled
+    // with the batch's contiguous segment rowids before every evaluate call.
+    std::unique_ptr<ColumnPredicate> pred(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+
+    // Single batch: pre-filled garbage must be fully overwritten.
+    roaring::Roaring one_batch;
+    one_batch.addRange(2000, 2100);
+    std::vector<rowid_t> buf = {999, 999};
+    ASSIGN_OR_ABORT(auto got1, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid, &buf,
+                                                            one_batch));
+    EXPECT_EQ(100u, got1.cardinality());
+    ASSERT_EQ(100u, buf.size());
+    EXPECT_EQ(2000u, buf.front());
+    EXPECT_EQ(2099u, buf.back());
+
+    // Two batches (4096 + 10): the buffer reflects the LAST batch afterwards -- the per-batch
+    // overwrite contract the fallback depends on.
+    roaring::Roaring two_batches;
+    two_batches.addRange(0, 4106);
+    ASSIGN_OR_ABORT(auto got2, evaluate_pred_tree_to_bitmap(single_node_tree(pred.get()), _schema, _iters_by_cid, &buf,
+                                                            two_batches));
+    EXPECT_EQ(4106u, got2.cardinality());
+    ASSERT_EQ(10u, buf.size());
+    EXPECT_EQ(4096u, buf.front());
+    EXPECT_EQ(4105u, buf.back());
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, dict_code_predicate_equals_value_evaluation) {
+    // The ColumnPredicateRewriter turns a string predicate on an all-page-dict-encoded column into a
+    // dict-code predicate; evaluating the rewritten tree with the dict-code candidates flagged must
+    // select exactly the rows the original value predicate selects, across all 25 batches.
+    std::unique_ptr<ColumnPredicate> value_pred(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    ASSIGN_OR_ABORT(auto by_value, evaluate_pred_tree_to_bitmap(single_node_tree(value_pred.get()), _schema,
+                                                                _iters_by_cid, nullptr, full_range()));
+
+    std::unique_ptr<ColumnPredicate> to_rewrite(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    PredicateTree tree = single_node_tree(to_rewrite.get());
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&pool, tree));
+
+    ASSIGN_OR_ABORT(auto by_code,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    EXPECT_EQ(by_value.cardinality(), kRows / 7 + (3 < kRows % 7 ? 1 : 0));
+    EXPECT_TRUE(by_value == by_code);
+}
+
+TEST_F(EvaluatePredTreeBitmapTest, dict_code_mixed_with_plain_column) {
+    // A rewritten string column and a plain INT column in the same tree: only the flagged column
+    // switches to code reading; the INT predicate keeps the value path.
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "99990"));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, "w3"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(ge.get()));
+    root.add_child(PredicateColumnNode(eq.get()));
+    PredicateTree tree = PredicateTree::create(std::move(root));
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&pool, tree));
+
+    ASSIGN_OR_ABORT(auto got,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    roaring::Roaring expect;
+    for (uint32_t i = 99990; i < kRows; i++) {
+        if (i % 7 == 3) {
+            expect.add(i);
+        }
+    }
+    EXPECT_TRUE(expect == got);
+}
+
+// Repro for the index-only-expr / dict-code mismatch. AddIndexOnlyPredicateRule marks an
+// ngram_search call index_filter_only and adds it as a `<call> >= 0` expr predicate on the scan; the
+// ColumnPredicateRewriter deliberately leaves index_filter_only expr predicates in their original
+// (string) form (RewritePredicateTreeVisitor short-circuits on is_index_filter_only && expr). When
+// the same column is low-cardinality dict-encoded it is also flagged for dict-code reading
+// (need_rewrite[cid]=1), so evaluate_pred_tree_to_bitmap reads it as INT codes and hands those codes
+// to the string-typed expr -> a type mismatch.
+//
+// The read loop never hits this because _init_column_predicates strips index_filter_only predicates
+// (IndexOnlyPredicateChecker) -- but that runs AFTER the vector stage, so the residual bitmap sees
+// the full tree. Correct behavior: an index_filter_only predicate is already applied by the index
+// filter stage (its effect is in the candidate) and must NOT be re-evaluated here, so the residual
+// bitmap equals the candidate unchanged.
+TEST_F(EvaluatePredTreeBitmapTest, index_only_expr_predicate_not_evaluated_against_dict_codes) {
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    ObjectPool pool;
+
+    // A VARCHAR slot the expr's SLOT_REF binds to.
+    TDescriptorTableBuilder table_builder;
+    TTupleDescriptorBuilder tuple_builder;
+    TSlotDescriptorBuilder slot_builder;
+    tuple_builder.add_slot(slot_builder.string_type(8).column_name("c3").column_pos(0).nullable(false).build());
+    tuple_builder.build(&table_builder);
+    DescriptorTbl* tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(&state, &pool, table_builder.desc_tbl(), &tbl, /*chunk_size=*/4096));
+    TupleDescriptor* tuple_desc = tbl->get_tuple_descriptor(0);
+    SlotDescriptor* slot = tuple_desc->slots()[0];
+
+    // Expr tree for `c3 == 'w3'` in prefix order: BINARY_PRED(EQ) -> SLOT_REF(c3), STRING_LITERAL('w3').
+    std::vector<TExprNode> nodes;
+    nodes.emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, TExprOpcode::EQ));
+    TExprNode slot_ref;
+    slot_ref.node_type = TExprNodeType::SLOT_REF;
+    slot_ref.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    slot_ref.num_children = 0;
+    TSlotRef t_slot_ref;
+    t_slot_ref.slot_id = slot->id();
+    t_slot_ref.tuple_id = 0;
+    slot_ref.__set_slot_ref(t_slot_ref);
+    slot_ref.is_nullable = false;
+    nodes.emplace_back(slot_ref);
+    TExprNode literal;
+    literal.node_type = TExprNodeType::STRING_LITERAL;
+    literal.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    literal.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = "w3";
+    literal.__set_string_literal(string_literal);
+    literal.is_nullable = false;
+    nodes.emplace_back(literal);
+    TExpr t_expr;
+    t_expr.nodes = std::move(nodes);
+
+    std::vector<ExprContext*> ctxs;
+    ASSERT_OK(ExprFactory::create_expr_trees(&pool, std::vector<TExpr>{t_expr}, &ctxs, &state));
+    ASSERT_OK(ExprExecutor::prepare(ctxs, &state));
+    ASSERT_OK(ExprExecutor::open(ctxs, &state));
+
+    ASSIGN_OR_ABORT(ColumnExprPredicate * raw_expr_pred,
+                    ColumnExprPredicate::make_column_expr_predicate(get_type_info(TYPE_VARCHAR), /*column_id=*/3,
+                                                                    &state, ctxs[0], slot));
+    std::unique_ptr<ColumnPredicate> expr_pred(raw_expr_pred);
+    expr_pred->set_index_filter_only(true);
+    ASSERT_TRUE(expr_pred->is_expr_predicate());
+    ASSERT_TRUE(expr_pred->is_index_filter_only());
+
+    // Run the rewriter exactly as the segment iterator does: c3 is flagged, but an index_filter_only
+    // expr predicate is left UNCHANGED (still a string-typed expr).
+    PredicateTree tree = single_node_tree(expr_pred.get());
+    std::vector<uint8_t> need_rewrite(4, 0);
+    need_rewrite[3] = 1;
+    SparseRange<> scan_range(0, kRows);
+    ObjectPool rewrite_pool;
+    ColumnPredicateRewriter rewriter(_iters_by_cid, _schema, need_rewrite, /*column_size=*/3, scan_range);
+    ASSERT_OK(rewriter.rewrite_predicate(&rewrite_pool, tree));
+
+    // c3 is read as INT dict codes (need_rewrite[3]=1 && all_page_dict_encoded), then fed to the
+    // string-typed `c3 == 'w3'` expr. The index_filter_only predicate must be ignored, so the
+    // residual bitmap must equal the candidate (all rows).
+    ASSIGN_OR_ABORT(auto got,
+                    evaluate_pred_tree_to_bitmap(tree, _schema, _iters_by_cid, nullptr, full_range(), &need_rewrite));
+    EXPECT_EQ(got.cardinality(), kRows);
+}
+
+#ifdef WITH_TENANN
+// Validates the residual-predicate PRE-filter in SegmentIterator::_get_row_ranges_by_vector_index:
+// with a real HNSW .vi present (use_vector_index=true), a scalar predicate on a column WITHOUT an exact
+// index must be early-evaluated into the ANN candidate, so the returned top-k contains ONLY matching rows.
+// Data: 8 rows, vec_i=[i,0,0,0], filter_col=i, query=[0,0,0,0] (L2 dist = i^2), predicate filter_col>=4.
+//   - WITH pre-filter (this change): k=3 nearest among {4,5,6,7} = rows 4,5,6.
+//   - WITHOUT it (post-filter): ANN picks rows 0,1,2 (filter<4) -> filtered out -> 0 rows (the bug).
+class VectorResidualPrefilterTest : public testing::Test {
+protected:
+    void SetUp() override {
+        CHECK_OK(fs::remove_all(kDir));
+        CHECK_OK(fs::create_directories(kDir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(kDir));
+    }
+    void TearDown() override { (void)fs::remove_all(kDir); }
+
+    const std::string kDir = "vector_residual_prefilter_test";
+    static constexpr int64_t kIndexId = 100;
+    std::shared_ptr<FileSystem> _fs;
+
+    TabletSchemaPB base_schema_pb() {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_next_column_unique_id(5);
+        auto* c0 = pb.add_column();
+        c0->set_unique_id(0);
+        c0->set_name("id");
+        c0->set_type("BIGINT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        c0->set_length(8);
+        c0->set_index_length(8);
+        c0->set_aggregation("NONE");
+        auto* c1 = pb.add_column();
+        c1->set_unique_id(1);
+        c1->set_name("vector");
+        c1->set_type("ARRAY");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_length(24);
+        c1->set_aggregation("NONE");
+        auto* child = c1->add_children_columns();
+        child->set_unique_id(2);
+        child->set_name("element");
+        child->set_type("FLOAT");
+        child->set_is_key(false);
+        child->set_is_nullable(true);
+        child->set_length(4);
+        child->set_aggregation("NONE");
+        auto* c3 = pb.add_column();
+        c3->set_unique_id(3);
+        c3->set_name("filter_col");
+        c3->set_type("INT");
+        c3->set_is_key(false);
+        c3->set_is_nullable(false);
+        c3->set_length(4);
+        c3->set_index_length(4);
+        c3->set_aggregation("NONE");
+        auto* c4 = pb.add_column();
+        c4->set_unique_id(4);
+        c4->set_name("tag");
+        c4->set_type("VARCHAR");
+        c4->set_is_key(false);
+        c4->set_is_nullable(false);
+        c4->set_length(8);
+        c4->set_aggregation("NONE");
+        return pb;
+    }
+    std::shared_ptr<TabletSchema> write_schema() { return TabletSchema::create(base_schema_pb()); }
+    std::shared_ptr<TabletSchema> read_schema_with_index(const std::string& metric = "l2_distance") {
+        auto pb = base_schema_pb();
+        auto* idx = pb.add_table_indices();
+        idx->set_index_id(kIndexId);
+        idx->set_index_name("vector_index");
+        idx->set_index_type(IndexType::VECTOR);
+        idx->add_col_unique_id(1);
+        idx->set_index_properties(
+                R"({"common_properties":{"index_type":"hnsw","dim":"4","metric_type":")" + metric +
+                R"(","is_vector_normed":"false"},)"
+                R"("index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})");
+        return TabletSchema::create(pb);
+    }
+    ColumnPtr make_array_column(const std::vector<std::vector<float>>& vecs) {
+        auto elem = FixedLengthColumn<float>::create();
+        auto nulls = NullColumn::create();
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        uint32_t off = 0;
+        for (const auto& v : vecs) {
+            for (float f : v) {
+                elem->append(f);
+                nulls->append(0);
+            }
+            off += v.size();
+            offsets->append(off);
+        }
+        auto nullable = NullableColumn::create(std::move(elem), std::move(nulls));
+        return ArrayColumn::create(std::move(nullable), std::move(offsets));
+    }
+
+    // Optional knobs for run_residual_case; the defaults reproduce the original l2 fixture
+    // (vecs[i] = {i,0,0,0}, all-zero query).
+    struct ResidualCaseConfig {
+        std::string metric = "l2_distance";
+        std::vector<std::vector<float>> vecs; // empty -> default {i, 0, 0, 0}
+        std::vector<float> query = {0.f, 0.f, 0.f, 0.f};
+        double vector_range = -1.0;       // >= 0 makes it a range query (l2: keep dist <= range)
+        int result_order = 0;             // 0 = ascending (l2), 1 = descending (cosine)
+        int min_filter_col = 4;           // every returned row must satisfy filter_col >= this
+        bool build_vi = true;             // false: leave the .vi missing -> runtime brute-force fallback
+        bool with_tag_column = false;     // include the dict-encoded VARCHAR tag column in the read schema
+        bool with_runtime_filter = false; // register an (unarrived) pushdown RF -> must route to BRUTE
+    };
+
+    struct ResidualCaseResult {
+        std::vector<int64_t> ids;
+        std::vector<float> distances; // appended ANN distance column values, when present
+        int64_t search_ns = -1;
+        int64_t raw_rows_read = -1;
+    };
+
+    // L2 and cosine disagree on this data: row 6 is cosine-best (1.0) but l2-worst; row 7 ~0.707.
+    static ResidualCaseConfig cosine_disagreement_cfg() {
+        ResidualCaseConfig cfg;
+        cfg.metric = "cosine_similarity";
+        cfg.query = {1.f, 0.f, 0.f, 0.f};
+        cfg.vecs.resize(8);
+        for (int i = 0; i < 6; i++) {
+            cfg.vecs[i] = {1.f, static_cast<float>(i + 2), 0.f, 0.f}; // non-zero, pairwise-distinct angles
+        }
+        cfg.vecs[6] = {100.f, 0.f, 0.f, 0.f};
+        cfg.vecs[7] = {1.f, 1.f, 0.f, 0.f};
+        return cfg;
+    }
+
+    // Runs the residual-predicate ANN query and asserts the top-k contains only matching rows.
+    void run_residual_case(PredicateTree pred_tree, bool above_predicate, ResidualCaseResult* result,
+                           bool pred_col_late_mat = false, const ResidualCaseConfig* cfg_in = nullptr) {
+        const ResidualCaseConfig default_cfg;
+        const ResidualCaseConfig& cfg = cfg_in != nullptr ? *cfg_in : default_cfg;
+        const int N = 8;
+        std::vector<int64_t> ids(N);
+        std::vector<std::vector<float>> vecs(N);
+        std::vector<int32_t> filt(N);
+        for (int i = 0; i < N; i++) {
+            ids[i] = i;
+            vecs[i] = cfg.vecs.empty() ? std::vector<float>{static_cast<float>(i), 0.f, 0.f, 0.f} : cfg.vecs[i];
+            filt[i] = i;
+        }
+
+        // write segment (id, vector, filter_col)
+        auto wschema = write_schema();
+        std::string seg_file = kDir + "/seg.dat";
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(seg_file));
+        SegmentWriterOptions wopts;
+        SegmentWriter writer(std::move(wfile), 0, wschema, wopts);
+        auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(wschema), N);
+        for (int i = 0; i < N; i++) chunk->columns()[0]->as_mutable_ptr()->append_datum(Datum(ids[i]));
+        for (int i = 0; i < N; i++) {
+            DatumArray a;
+            for (float f : vecs[i]) a.emplace_back(Datum(f));
+            chunk->columns()[1]->as_mutable_ptr()->append_datum(Datum(a));
+        }
+        for (int i = 0; i < N; i++) chunk->columns()[2]->as_mutable_ptr()->append_datum(Datum(filt[i]));
+        // tag: low-cardinality dict-encoded VARCHAR; "red" for rows 0..3, "blue" for rows 4..7.
+        for (int i = 0; i < N; i++) {
+            const std::string tag = i < 4 ? "red" : "blue";
+            chunk->columns()[3]->as_mutable_ptr()->append_datum(Datum(Slice(tag)));
+        }
+        ASSERT_OK(writer.init());
+        ASSERT_OK(writer.append_chunk(*chunk));
+        uint64_t seg_sz = 0, idx_sz = 0, footer = 0;
+        ASSERT_OK(writer.finalize(&seg_sz, &idx_sz, &footer));
+        auto rschema = read_schema_with_index(cfg.metric);
+        ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{seg_file}, 0, rschema));
+
+        // Unique rowset id per test: the TenANN index cache is process-global and keyed by index
+        // path; a shared path would serve a stale cached index to later tests (even one whose .vi
+        // was deliberately not built).
+        static std::atomic<int64_t> rid_seq{2};
+        RowsetId rid;
+        rid.init(rid_seq.fetch_add(1));
+        std::string vi_path = IndexDescriptor::vector_index_file_path(kDir, rid.to_string(), 0, kIndexId);
+        if (cfg.build_vi) {
+            auto tablet_index = std::make_shared<TabletIndex>();
+            TabletIndexPB ipb;
+            ipb.set_index_id(kIndexId);
+            ipb.set_index_name("vector_index");
+            ipb.set_index_type(IndexType::VECTOR);
+            ipb.add_col_unique_id(1);
+            tablet_index->init_from_pb(ipb);
+            tablet_index->add_common_properties("index_type", "hnsw");
+            tablet_index->add_common_properties("dim", "4");
+            tablet_index->add_common_properties("is_vector_normed", "false");
+            tablet_index->add_common_properties("metric_type", cfg.metric);
+            tablet_index->add_common_properties("index_build_threshold", "0");
+            tablet_index->add_index_properties("efconstruction", "40");
+            tablet_index->add_index_properties("m", "16");
+            tablet_index->add_search_properties("efsearch", "40");
+            std::unique_ptr<VectorIndexWriter> viw;
+            VectorIndexWriter::create(tablet_index, vi_path, true, &viw);
+            ASSERT_OK(viw->init());
+            ASSERT_OK(viw->append(*make_array_column(vecs)));
+            uint64_t sz = 0;
+            ASSERT_OK(viw->finish(&sz));
+            ASSERT_GT(sz, 0);
+        }
+        ASSERT_EQ(cfg.build_vi, fs::path_exist(vi_path));
+
+        // run SegmentIterator: ANN query [0,0,0,0], k=3, residual predicate filter_col >= 4
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = rschema;
+        seg_opts.rowset_path = kDir;
+        seg_opts.rowsetid = rid;
+
+        auto vs = std::make_shared<VectorSearchOption>();
+        vs->use_vector_index = true;
+        vs->query_vector = cfg.query;
+        vs->k = 3;
+        vs->k_factor = 1.0;
+        vs->vector_distance_column_name = "__vector_approx_l2_distance";
+        vs->vector_column_id = rschema->num_columns();
+        vs->vector_slot_id = 100;
+        vs->refine_distance = false;
+        vs->vector_range = cfg.vector_range;
+        vs->result_order = cfg.result_order;
+        vs->pq_refine_factor = 1.0;
+        seg_opts.use_vector_index = true;
+        seg_opts.vector_search_option = vs;
+        seg_opts.has_predicate_above_iterator = above_predicate;
+        seg_opts.enable_predicate_col_late_materialize = pred_col_late_mat;
+        seg_opts.pred_tree = std::move(pred_tree);
+
+        // Optionally register an (unarrived) pushdown runtime filter. A runtime filter post-filters the
+        // top-k above the per-segment search, so PRE would under-return -- its presence must route AUTO
+        // to exact BRUTE. Unarrived means the read loop's update_range_if_arrived is a no-op, so this
+        // only flips the has_runtime_filters() signal. These locals outlive the iterator run below.
+        ObjectPool rf_pool;
+        RuntimeState rf_state;
+        OlapPredicateParser rf_parser(rschema);
+        SlotDescriptor rf_slot(0, "filter_col", TypeDescriptor(TYPE_INT));
+        std::shared_ptr<RuntimeFilterProbeDescriptor> rf_desc;
+        UnarrivedRuntimeFilterList rf_list;
+        RuntimeScanRangePruner rf_pruner;
+        if (cfg.with_runtime_filter) {
+            TRuntimeFilterDescription rfd;
+            rfd.__set_filter_id(1);
+            rfd.__set_has_remote_targets(false);
+            rfd.__set_build_plan_node_id(0);
+            rfd.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+            rfd.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+            TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(3, true);
+            rfd.__isset.plan_node_id_to_target_expr = true;
+            rfd.plan_node_id_to_target_expr.emplace(0, col_ref);
+            rf_desc = std::make_shared<RuntimeFilterProbeDescriptor>();
+            ASSERT_OK(rf_desc->init(&rf_pool, rfd, 0, &rf_state));
+            rf_list.add_unarrived_rf(rf_desc.get(), &rf_slot, 1);
+            rf_pruner = RuntimeScanRangePruner(&rf_parser, rf_list);
+            ASSERT_TRUE(rf_pruner.has_runtime_filters());
+            seg_opts.enable_join_runtime_filter_pushdown = true;
+            seg_opts.runtime_range_pruner = rf_pruner;
+        }
+
+        // output id + filter_col so we can assert the predicate held on every returned row
+        Schema read_schema;
+        auto idf = std::make_shared<Field>(0, "id", get_type_info(TYPE_BIGINT), false);
+        idf->set_uid(0);
+        read_schema.append(idf);
+        auto ff = std::make_shared<Field>(2, "filter_col", get_type_info(TYPE_INT), false);
+        ff->set_uid(3);
+        read_schema.append(ff);
+        if (cfg.with_tag_column) {
+            auto tf = std::make_shared<Field>(3, "tag", get_type_info(TYPE_VARCHAR), false);
+            tf->set_uid(4);
+            read_schema.append(tf);
+        }
+
+        auto it = new_segment_iterator(segment, read_schema, seg_opts);
+        ASSERT_TRUE(it != nullptr);
+        ASSERT_OK(it->init_output_schema({}));
+        auto out = ChunkFactory::new_chunk(it->output_schema(), 16);
+        auto st = it->get_next(out.get());
+        ASSERT_TRUE(st.ok() || st.is_end_of_file()) << "get_next status: " << st.to_string();
+
+        // Output-chunk integrity: every column must be exactly num_rows long. A short column is the
+        // chunk-level signature of the crash an upstream ProjectOperator would hit (ColumnRef on a
+        // shorter-than-num_rows column) -- e.g. the post-read ANN distance column appended out of sync
+        // with a residual-filtered, multi-output-column read.
+        for (size_t c = 0; c < out->num_columns(); c++) {
+            ASSERT_EQ(out->get_column_by_index(c)->size(), out->num_rows())
+                    << "output chunk column " << c << " size != num_rows (" << out->num_rows() << ")";
+        }
+
+        // Correctness (all paths): every returned row satisfies the residual predicate (filter_col>=4).
+        // Returns the returned ids (ascending -- rows are emitted in rowid order) so each test asserts the
+        // exact set. PRE returns the k=3 nearest matching {4,5,6}; brute (no upstream TopN in this UT)
+        // returns ALL matching {4,5,6,7}. Without the filter the ANN would pick rows 0,1,2 (filter_col<4).
+        const auto* idcol = down_cast<const Int64Column*>(out->get_column_by_index(0).get());
+        const auto* fcol = down_cast<const Int32Column*>(out->get_column_by_index(1).get());
+        std::vector<int64_t> got;
+        for (size_t i = 0; i < out->num_rows(); i++) {
+            EXPECT_GE(fcol->get_data()[i], cfg.min_filter_col) << "returned row violates the residual predicate";
+            got.push_back(idcol->get_data()[i]);
+        }
+        // The ANN distance column is appended to the output chunk after the declared output columns.
+        // Expose its values so metric regressions (cosine scored as L2) are visible: ids alone cannot
+        // catch them when every candidate is returned anyway.
+        if (out->num_columns() == read_schema.num_fields() + 1) {
+            const auto* dcol = down_cast<const FloatColumn*>(out->get_column_by_index(read_schema.num_fields()).get());
+            result->distances.assign(dcol->get_data().begin(), dcol->get_data().end());
+        }
+        it->close();
+        result->ids = got;
+        // vector_search_timer accumulates ONLY inside the ANN search block; it stays exactly 0 when the
+        // cardinality short-circuit skipped the search (a deterministic marker, not a timing assertion).
+        result->search_ns = stats.vector_search_timer;
+        // raw_rows_read accumulates ONLY in the read loop's _read (the residual-bitmap evaluation reads
+        // through raw column iterators and does not count) -- so it equals the number of rows the read
+        // loop actually fetched: the deterministic marker for brute pre-narrowing.
+        result->raw_rows_read = static_cast<int64_t>(stats.raw_rows_read);
+    }
+};
+
+// Builds an AND(pred_tree) holding a single column predicate `filter_col >= 4`. The caller owns
+// `pred` (the tree stores a raw pointer), so it must outlive the run_residual_case() call.
+static PredicateTree make_ge4_tree(std::unique_ptr<ColumnPredicate>& pred) {
+    pred.reset(new_column_ge_predicate(get_type_info(TYPE_INT), 2, "4"));
+    return single_node_tree(pred.get());
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_predicate_prefilters_ann) {
+    // filter_col >= 4 (single column, immediate). default config, no above-iterator predicate -> PRE
+    // (filtered ANN). Returns exactly the k=3 nearest matching rows; id 7 (matching but farther) is
+    // dropped by the segment-level k-limit.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_above_predicate_routes_to_brute) {
+    // A predicate is evaluated above the iterator -> the resolver must route to exact brute-force
+    // (completeness, design doc §2/§4): a segment-level ANN k-limit would under-return. Brute returns
+    // ALL matching rows {4,5,6,7}; PRE would return only {4,5,6}. Brute pre-narrowing must confine
+    // the read loop to the 4 surviving rows (raw_rows_read), not the full 8-row segment.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed to the residual survivors";
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_runtime_filter_routes_to_brute) {
+    // A runtime filter post-filters the top-k above the per-segment search, so even though
+    // `filter_col >= 4` is a plain in-iterator residual (which alone would PRE-filter), the presence of
+    // a runtime filter must route AUTO to exact BRUTE -- and brute must still pre-narrow the read loop by
+    // the residual. Markers: brute returns ALL matching rows {4,5,6,7} (PRE would return the k=3 nearest
+    // {4,5,6}), and the read loop touches only the 4 residual survivors, not the full 8-row segment.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    ResidualCaseConfig cfg;
+    cfg.with_runtime_filter = true;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7})) << "a runtime filter must route AUTO to BRUTE, not PRE";
+    EXPECT_EQ(res.raw_rows_read, 4) << "brute read loop was not narrowed by the residual under a runtime filter";
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_or_predicate_prefilters_ann) {
+    // filter_col = 4 OR filter_col = 6 -- an OR compound, NOT present in the immediate-column map.
+    // The whole-tree bitmap must evaluate it; the old immediate-map path ignores the OR, so the ANN
+    // top-k (rows 0,1,2) post-filters to nothing (the Gap2 under-return). Matching rows are {4,6};
+    // PRE returns both (k=3, only 2 match).
+    std::unique_ptr<ColumnPredicate> eq4(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "4"));
+    std::unique_ptr<ColumnPredicate> eq6(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "6"));
+    ResidualCaseResult res;
+    run_residual_case(or_tree(eq4.get(), eq6.get()), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 6}));
+}
+
+TEST_F(VectorResidualPrefilterTest, residual_with_predicate_col_late_materialize) {
+    // Reproduces the cluster SIGSEGV: a residual predicate + predicate-column late materialization
+    // (enable_predicate_col_late_materialize -- set from query_options on a real cluster, default-off in
+    // UTs, which is why earlier UTs missed this) + a multi-output-column read (id + filter_col). The ANN
+    // distance column is appended after the read; on this path the output chunk ends up mis-sized and an
+    // upstream ColumnRef dereferences a short column. Expect no crash, every column == num_rows, and the
+    // k=3 nearest matching rows {4,5,6}.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/true);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+}
+
+// `filter_col >= <value>` variant of make_ge4_tree, for the short-circuit cardinality cases.
+static PredicateTree make_ge_tree(std::unique_ptr<ColumnPredicate>& pred, const char* value) {
+    pred.reset(new_column_ge_predicate(get_type_info(TYPE_INT), 2, value));
+    return single_node_tree(pred.get());
+}
+
+// `tag = / != <value>` on the dict-encoded VARCHAR tag column (cid 3) -- the residual shape the
+// ColumnPredicateRewriter rewrites into a dict-code predicate before the vector stage.
+static PredicateTree make_tag_tree(std::unique_ptr<ColumnPredicate>& pred, bool eq, const char* value) {
+    pred.reset(eq ? new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 3, value)
+                  : new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 3, value));
+    return single_node_tree(pred.get());
+}
+
+TEST_F(VectorResidualPrefilterTest, cardinality_below_k_short_circuits_search) {
+    // filter_col >= 6 -> candidate bitmap {6,7}, cardinality 2 < k=3. A top-k over <= k candidates must
+    // return every candidate, so the filtered ANN search is a logical no-op: the short-circuit gate
+    // skips it and scores the candidates exactly. Expect all candidates and NO search issued
+    // (vector_search_timer accumulates only inside the search block -> exactly 0 when skipped).
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite cardinality < k";
+}
+
+TEST_F(VectorResidualPrefilterTest, cardinality_equal_k_short_circuits_search) {
+    // Boundary: filter_col >= 5 -> cardinality 3 == k=3. The gate is <=, so the search is still a no-op
+    // (all 3 candidates must be returned) and must be skipped.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{5, 6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite cardinality == k";
+}
+
+TEST_F(VectorResidualPrefilterTest, sparse_ratio_short_circuits_search) {
+    // Ratio leg: threshold 0.5 over the 8-row segment allows up to 4 candidates. filter_col >= 4 ->
+    // cardinality 4 > k=3 (the <=k leg does NOT fire) but 4 <= 0.5*8 -> the ratio leg skips the search.
+    // The short-circuit path has no segment-level k-limit, so ALL candidates {4,5,6,7} come back (the
+    // upstream TopN cuts k in a real query); the search path would return only {4,5,6}. Both are exact.
+    double saved = config::vector_index_brute_selectivity_threshold;
+    config::vector_index_brute_selectivity_threshold = 0.5;
+    DeferOp restore([&] { config::vector_index_brute_selectivity_threshold = saved; });
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "filtered ANN search ran despite ratio gate";
+}
+
+TEST_F(VectorResidualPrefilterTest, cosine_metric_survives_exact_rescan) {
+    // Regression for the PRE-path metric bug: is_cosine_similarity used to be initialized ONLY by
+    // _setup_brute_force_fallback (the BRUTE route), so the exact-rescan paths reached from PRE (the
+    // cardinality short-circuit and the under-return count gate) scored a cosine index as L2.
+    //
+    // The data makes L2 and cosine DISAGREE so the wrong metric cannot hide:
+    //   row 6 = [100,0,0,0]: huge-norm, parallel to the query -> cosine 1.0 (best), l2^2 9801 (worst)
+    //   row 7 = [1,1,0,0]:   cosine 1/sqrt(2) ~ 0.707, l2^2 1
+    // filter_col >= 6 -> bitmap {6,7}, cardinality 2 < k=3 -> short-circuit -> exact rescan. The
+    // appended distance column must carry cosine similarities; with the bug it carried 9801 and 1.
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
+
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2 9801";
+    EXPECT_NEAR(res.distances[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2 1";
+}
+
+TEST_F(VectorResidualPrefilterTest, above_gate_runs_search_path) {
+    // Anti-overfire regression: filter_col >= 4 -> cardinality 4 > k=3, and the default ratio threshold
+    // (0.01 -> 0.08 rows on this 8-row segment) cannot fire. The filtered ANN search must actually run
+    // (timer > 0) and keep the segment-level k-limit: the k=3 nearest matching rows, not all 4.
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.search_ns, 0) << "short-circuit gate fired above both thresholds";
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_applies_radius_cut) {
+    // Range query: bitmap {5,6,7} <= k short-circuits; the rescan itself must cut rows outside
+    // vector_range=36 (nothing downstream re-checks the radius): keep 5 (dist 25) and 6 (36,
+    // inclusive bound), drop 7 (49).
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 36.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "5"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{5, 6}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_FLOAT_EQ(res.distances[0], 25.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 36.0f);
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_cosine_keeps_ge_threshold) {
+    // Cosine range query: the radius semantics flip (descending keeps similarity >= range).
+    // filter_col >= 6 -> bitmap {6,7} -> short-circuit; vector_range=0.9 must keep only row 6.
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
+    cfg.vector_range = 0.9;
+    cfg.result_order = 1;
+
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 1u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4);
+}
+
+TEST_F(VectorResidualPrefilterTest, range_short_circuit_can_cut_all_candidates) {
+    // The radius can cut the whole candidate set: filter_col >= 6 -> bitmap {6,7} (dist 36, 49),
+    // vector_range=10 -> zero survivors. The empty publication must read back as zero rows, not an
+    // error (and not the uncut candidate set).
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 10.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_TRUE(res.ids.empty()) << "out-of-radius candidates leaked into the result";
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+}
+
+TEST_F(VectorResidualPrefilterTest, range_above_gates_runs_range_search) {
+    // Anti-overfire twin for range queries: filter_col >= 4 -> cardinality 4 > k=3 and the default
+    // ratio threshold cannot fire, so the real (filtered) RangeSearch must run and enforce the
+    // radius itself: candidates {4,5,6,7} with dist {16,25,36,49}, vector_range=36 -> {4,5,6}.
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 36.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "4"), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_GT(res.search_ns, 0) << "short-circuit gate fired above both thresholds";
+}
+
+TEST_F(VectorResidualPrefilterTest, scattered_candidates_rescan_exact_distances) {
+    // The rescan reads candidates per contiguous rowid range and must seek before every batch.
+    // filter_col < 2 OR filter_col >= 7 -> three discrete ranges {0,1} and {7}, cardinality 3 <= k=3
+    // -> short-circuit. A missing/wrong seek surfaces as a wrong distance value, so assert the exact
+    // distances (0, 1, 49), not just the id set.
+    std::unique_ptr<ColumnPredicate> lt2(new_column_lt_predicate(get_type_info(TYPE_INT), 2, "2"));
+    std::unique_ptr<ColumnPredicate> ge7(new_column_ge_predicate(get_type_info(TYPE_INT), 2, "7"));
+
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0; // rows 0 and 1 are legitimate matches of the OR residual
+    ResidualCaseResult res;
+    run_residual_case(or_tree(lt2.get(), ge7.get()), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false,
+                      &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 7}));
+    EXPECT_EQ(res.search_ns, 0) << "short-circuit did not fire";
+    ASSERT_EQ(res.distances.size(), 3u);
+    EXPECT_FLOAT_EQ(res.distances[0], 0.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 1.0f);
+    EXPECT_FLOAT_EQ(res.distances[2], 49.0f);
+}
+
+TEST_F(VectorResidualPrefilterTest, brute_narrow_or_residual_exact_distances) {
+    // OR compound residual under brute: pre-narrowing must evaluate the WHOLE tree (the immediate-
+    // column map cannot represent an OR) and the narrowed read spans two discrete rowid ranges, so
+    // assert the exact distances -- a wrong seek surfaces as a wrong value, not a wrong count.
+    std::unique_ptr<ColumnPredicate> eq4(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "4"));
+    std::unique_ptr<ColumnPredicate> eq6(new_column_eq_predicate(get_type_info(TYPE_INT), 2, "6"));
+    ResidualCaseResult res;
+    run_residual_case(or_tree(eq4.get(), eq6.get()), /*above_predicate=*/true, &res);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 6}));
+    EXPECT_EQ(res.raw_rows_read, 2) << "OR residual was not narrowed";
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_FLOAT_EQ(res.distances[0], 16.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 36.0f);
+}
+
+TEST_F(VectorResidualPrefilterTest, brute_narrow_empty_residual_returns_zero_rows) {
+    // Residual matches nothing -> the narrowed scan range is empty -> the read loop must perform
+    // ZERO row reads and the iterator must end cleanly (no error, no rows).
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "100"), /*above_predicate=*/true, &res);
+    EXPECT_TRUE(res.ids.empty());
+    EXPECT_EQ(res.raw_rows_read, 0) << "empty residual must short out the read loop entirely";
+}
+
+TEST_F(VectorResidualPrefilterTest, brute_narrow_full_match_residual) {
+    // Residual matches every row -> narrowing is a no-op and must not lose rows.
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "0"), /*above_predicate=*/true, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2, 3, 4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 8);
+}
+
+TEST_F(VectorResidualPrefilterTest, brute_narrow_with_vector_range) {
+    // Brute range query: pre-narrowing feeds the read loop only the residual survivors {4,5,6,7}
+    // (raw_rows_read == 4), then the chunk-level radius filter keeps dist <= 36 -> {4,5,6}.
+    ResidualCaseConfig cfg;
+    cfg.vector_range = 36.0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/true, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "radius filtering happens after the read; narrowing is by residual only";
+    ASSERT_EQ(res.distances.size(), 3u);
+    EXPECT_FLOAT_EQ(res.distances[0], 16.0f);
+    EXPECT_FLOAT_EQ(res.distances[1], 25.0f);
+    EXPECT_FLOAT_EQ(res.distances[2], 36.0f);
+}
+
+TEST_F(VectorResidualPrefilterTest, brute_narrow_cosine_metric) {
+    // Narrowed brute on a cosine index must still score with the cosine kernel (the metric is
+    // resolved by _setup_brute_force_fallback; narrowing must not bypass that initialization).
+    ResidualCaseConfig cfg = cosine_disagreement_cfg();
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge_tree(pred, "6"), /*above_predicate=*/true, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 2);
+    ASSERT_EQ(res.distances.size(), 2u);
+    EXPECT_NEAR(res.distances[0], 1.0f, 1e-4) << "row 6 must score cosine 1.0, not l2";
+    EXPECT_NEAR(res.distances[1], 1.0f / std::sqrt(2.0f), 1e-4) << "row 7 must score cosine ~0.707, not l2";
+}
+
+TEST_F(VectorResidualPrefilterTest, vi_missing_fallback_brute_narrows) {
+    // The runtime degradation path (.vi missing -> _setup_brute_force_fallback, no resolver involved)
+    // must narrow exactly like resolver-driven brute: only the residual survivors are read.
+    ResidualCaseConfig cfg;
+    cfg.build_vi = false;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_ge4_tree(pred), /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "fallback brute (.vi missing) was not narrowed";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_prefilters_ann) {
+    // tag is a low-cardinality dict-encoded VARCHAR, so the rewrite stage (ahead of the vector stage)
+    // turns tag='blue' into a dict-code predicate and the residual bitmap must read codes. A broken
+    // code path cannot hide: an int code predicate mis-evaluates against a value column.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "blue"), /*above_predicate=*/false, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6})); // PRE k-limit over matching rows {4..7}
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_brute_narrowed) {
+    // Brute (above-iterator predicate) with the dict-coded residual: pre-narrowing must evaluate the
+    // code predicate and confine the read loop to the 4 matching rows.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "blue"), /*above_predicate=*/true, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{4, 5, 6, 7}));
+    EXPECT_EQ(res.raw_rows_read, 4) << "dict-coded residual was not pre-narrowed";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_absent_word_collapses_to_empty) {
+    // The rewriter resolves tag='green' against the segment dict, finds no code, and collapses to
+    // ALWAYS_FALSE -- emptying the scan range before the vector stage even runs.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/true, "green"), /*above_predicate=*/false, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_TRUE(res.ids.empty());
+    EXPECT_EQ(res.raw_rows_read, 0);
+    EXPECT_EQ(res.search_ns, 0) << "ALWAYS_FALSE collapse must short out the ANN search";
+}
+
+TEST_F(VectorResidualPrefilterTest, dict_residual_ne_absent_word_collapses_to_match_all) {
+    // tag != 'green' on a non-nullable column with no such dict word -> ALWAYS_TRUE: the tree is
+    // emptied before the vector stage, leaving a plain ANN top-k.
+    ResidualCaseConfig cfg;
+    cfg.with_tag_column = true;
+    cfg.min_filter_col = 0;
+    std::unique_ptr<ColumnPredicate> pred;
+    ResidualCaseResult res;
+    run_residual_case(make_tag_tree(pred, /*eq=*/false, "green"), /*above_predicate=*/false, &res,
+                      /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+}
+
+#endif // WITH_TENANN
 
 } // namespace starrocks

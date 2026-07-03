@@ -40,22 +40,22 @@
 #include <sstream>
 #include <string>
 
+#include "base/json/json_util.h"
 #include "boost/lexical_cast.hpp"
+#include "exec/exec_env.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
-#include "http/http_status.h"
-#include "runtime/exec_env.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_response.h"
+#include "platform/http/http_status.h"
 #include "storage/data_dir.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
-#include "util/json_util.h"
 
 namespace starrocks {
 

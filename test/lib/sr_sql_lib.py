@@ -3172,9 +3172,20 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         """
         res = self.execute_sql("show backends;", ori=True)
         tools.assert_true(res["status"], res["msg"])
+        rows = list(res["result"])
+
+        # Shared-data clusters run compute nodes (possibly alongside backends);
+        # a config update must reach every worker, so take the union of both
+        # lists. On shared-nothing clusters the compute-node list is empty and
+        # behavior is unchanged.
+        res = self.execute_sql("show compute nodes;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+        rows.extend(res["result"])
+
+        tools.assert_true(len(rows) > 0, "no backends or compute nodes found")
 
         backends = []
-        for row in res["result"]:
+        for row in rows:
             backends.append(
                 {
                     "host": row[1],
@@ -3436,6 +3447,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 str(res["result"]).find(expect) > 0,
                 "assert expect %s is not found in plan:\n %s" % (expect, plan_string),
             )
+
+    def get_col_stats_from_explain_costs(self, query, col_name):
+        """
+        Run EXPLAIN COSTS and return the column statistics line for the given column.
+        The returned string (e.g. 'col_name-->[min, max, nullFrac, size, ndv] TYPE') is
+        captured by --record so it can be validated on future runs without hardcoding values.
+        """
+        sql = "explain costs %s" % query
+        res = self.execute_sql(sql, True)
+        plan_string = "\n".join(item[0] for item in res["result"])
+        for line in plan_string.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("* %s-->" % col_name):
+                return stripped.lstrip("* ")
+        return None
 
     def assert_show_stats_meta_contains(self, predicate, *expects):
         """

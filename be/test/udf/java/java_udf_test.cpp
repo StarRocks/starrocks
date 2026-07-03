@@ -22,9 +22,11 @@
 #include "column/nullable_column.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "runtime/java/jni_env.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
+#include "udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 class JavaUDFTest : public testing::Test {
@@ -35,6 +37,7 @@ public:
 protected:
     void _set_timezone(const std::string& timezone);
     jstring _get_timezone();
+    double _expected_time_seconds(jobject time_obj);
 
     JNIEnv* _env = nullptr;
     jstring _timezone;
@@ -94,6 +97,38 @@ void JavaUDFTest::_set_timezone(const std::string& timezone) {
     _env->DeleteLocalRef(tz_class);
 }
 
+double JavaUDFTest::_expected_time_seconds(jobject time_obj) {
+    jclass time_class = _env->FindClass("java/sql/Time");
+    EXPECT_TRUE(time_class != nullptr);
+    jmethodID get_time_mid = _env->GetMethodID(time_class, "getTime", "()J");
+    EXPECT_TRUE(get_time_mid != nullptr);
+    jlong millis = _env->CallLongMethod(time_obj, get_time_mid);
+
+    jclass helper_class = _env->FindClass("com/starrocks/udf/UDFHelper");
+    EXPECT_TRUE(helper_class != nullptr);
+    jfieldID time_zone_field = _env->GetStaticFieldID(helper_class, "timeZone", "Ljava/util/TimeZone;");
+    EXPECT_TRUE(time_zone_field != nullptr);
+    jobject time_zone = _env->GetStaticObjectField(helper_class, time_zone_field);
+    EXPECT_TRUE(time_zone != nullptr);
+    jclass time_zone_class = _env->FindClass("java/util/TimeZone");
+    EXPECT_TRUE(time_zone_class != nullptr);
+    jmethodID get_offset_mid = _env->GetMethodID(time_zone_class, "getOffset", "(J)I");
+    EXPECT_TRUE(get_offset_mid != nullptr);
+    jint offset = _env->CallIntMethod(time_zone, get_offset_mid, millis);
+
+    _env->DeleteLocalRef(time_zone_class);
+    _env->DeleteLocalRef(time_zone);
+    _env->DeleteLocalRef(helper_class);
+    _env->DeleteLocalRef(time_class);
+
+    int64_t seconds = (millis + offset) / 1000;
+    seconds %= 24 * 3600;
+    if (seconds < 0) {
+        seconds += 24 * 3600;
+    }
+    return static_cast<double>(seconds);
+}
+
 TEST_F(JavaUDFTest, test_time_convert) {
     jclass time_class = _env->FindClass("java/sql/Time");
     ASSERT_TRUE(time_class != NULL);
@@ -115,8 +150,9 @@ TEST_F(JavaUDFTest, test_time_convert) {
 
     auto& helper = JVMFunctionHelper::getInstance();
     ASSERT_OK(helper.get_result_from_boxed_array(TYPE_TIME, result_column.get(), time_array, 1));
-    // 1 * 3600 + 10 * 60 + 20 = 4220
-    ASSERT_EQ(result_column->debug_string(), "[4220]");
+    auto* nullable_column = down_cast<NullableColumn*>(result_column.get());
+    const auto* data_column = ColumnHelper::cast_to_raw<TYPE_TIME>(nullable_column->data_column_raw_ptr());
+    ASSERT_DOUBLE_EQ(_expected_time_seconds(time_obj), data_column->get_data()[0]);
 
     _env->DeleteLocalRef(time_obj);
     _env->DeleteLocalRef(time_array);
@@ -145,7 +181,7 @@ TEST_F(JavaUDFTest, local_date_helper_roundtrip) {
         ASSERT_NE(ld, nullptr);
         LOCAL_REF_GUARD(ld);
         EXPECT_EQ(v._julian, helper.valLocalDate(ld));
-        EXPECT_TRUE(_env->IsInstanceOf(ld, helper.local_date_class()));
+        EXPECT_TRUE(_env->IsInstanceOf(ld, JVMHelper::getInstance().local_date_class()));
     }
 }
 
@@ -165,7 +201,7 @@ TEST_F(JavaUDFTest, local_datetime_helper_roundtrip) {
         ASSERT_NE(ldt, nullptr);
         LOCAL_REF_GUARD(ldt);
         EXPECT_EQ(v.timestamp(), helper.valLocalDateTime(ldt));
-        EXPECT_TRUE(_env->IsInstanceOf(ldt, helper.local_datetime_class()));
+        EXPECT_TRUE(_env->IsInstanceOf(ldt, JVMHelper::getInstance().local_datetime_class()));
     }
 }
 
@@ -182,7 +218,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_date) {
     LOCAL_REF_GUARD(ld0);
     LOCAL_REF_GUARD(ld2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.local_date_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().local_date_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, ld0);
@@ -213,7 +249,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_datetime) {
     LOCAL_REF_GUARD(ldt0);
     LOCAL_REF_GUARD(ldt2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.local_datetime_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().local_datetime_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, ldt0);
@@ -238,12 +274,12 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_decimal_dispatch) {
     auto& helper = JVMFunctionHelper::getInstance();
 
     // BigDecimal[] { "12345.67", null, "0.00" } over DECIMAL64(9,2).
-    jobject bd0 = helper.newBigDecimal(static_cast<int64_t>(1234567), 2);
+    jobject bd0 = JVMHelper::getInstance().newBigDecimal(static_cast<int64_t>(1234567), 2);
     LOCAL_REF_GUARD(bd0);
-    jobject bd2 = helper.newBigDecimal(static_cast<int64_t>(0), 2);
+    jobject bd2 = JVMHelper::getInstance().newBigDecimal(static_cast<int64_t>(0), 2);
     LOCAL_REF_GUARD(bd2);
 
-    jobjectArray arr = _env->NewObjectArray(3, helper.big_decimal_class(), nullptr);
+    jobjectArray arr = _env->NewObjectArray(3, JVMHelper::getInstance().big_decimal_class(), nullptr);
     ASSERT_NE(arr, nullptr);
     LOCAL_REF_GUARD(arr);
     _env->SetObjectArrayElement(arr, 0, bd0);
@@ -273,7 +309,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
 
     // Integer[] { 1, 2, 3 } via valueOf.
-    jclass integer_cls = helper.int32_t_class();
+    jclass integer_cls = JVMHelper::getInstance().int32_t_class();
     jmethodID value_of = _env->GetStaticMethodID(integer_cls, "valueOf", "(I)Ljava/lang/Integer;");
     ASSERT_NE(value_of, nullptr);
     jobjectArray arr = _env->NewObjectArray(3, integer_cls, nullptr);
@@ -298,7 +334,7 @@ TEST_F(JavaUDFTest, get_result_from_boxed_array_with_function_context) {
 // jfieldIDs the BE input boxer relies on.
 TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
 
     ASSIGN_OR_ASSERT_FAIL(jobject desc,
                           helper.new_udf_type_desc(/*logicalType=*/TYPE_INT, /*children=*/nullptr,
@@ -321,7 +357,7 @@ TEST_F(JavaUDFTest, new_udf_type_desc_scalar_leaf) {
 // the cached field IDs.
 TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
     auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
 
     // DECIMAL64(18,4)
     {
@@ -368,36 +404,36 @@ TEST_F(JavaUDFTest, new_udf_type_desc_decimal_and_struct) {
 
 TEST(StripJniGenericTypesTest, NoGenerics) {
     std::string sign = "(Ljava/lang/String;I)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/lang/String;I)V");
 }
 
 TEST(StripJniGenericTypesTest, SimpleGeneric) {
     std::string sign = "(Ljava/util/List<Ljava/lang/String;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/util/List;)V");
 }
 
 TEST(StripJniGenericTypesTest, MultipleGenericParams) {
     std::string sign = "(Ljava/lang/String;Ljava/util/List<Ljava/lang/String;>;Ljava/util/List<Ljava/lang/Integer;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V");
 }
 
 TEST(StripJniGenericTypesTest, NestedGenerics) {
     std::string sign = "(Ljava/util/Map<Ljava/lang/String;Ljava/util/List<Ljava/lang/Integer;>;>;)V";
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "(Ljava/util/Map;)V");
 }
 
 TEST(StripJniGenericTypesTest, EmptyString) {
     std::string sign;
-    ClassAnalyzer::strip_jni_generic_types(&sign);
+    JavaUdfClassAnalyzer::strip_jni_generic_types(&sign);
     EXPECT_EQ(sign, "");
 }
 
 // ============================================================================
-// Tests for ClassAnalyzer::get_udaf_method_desc bug fixes:
+// Tests for JavaUdfClassAnalyzer::get_udaf_method_desc bug fixes:
 //   1. '[' branch missing continue — caused spurious method_desc entries
 //   2. List<> generic in signature — caused type matching failure
 //   3. Combined: UDTF with List params + String[] return — the crash scenario
@@ -407,8 +443,8 @@ TEST(StripJniGenericTypesTest, EmptyString) {
 // Before fix, processing "[Ljava/lang/String;" left i on ';', which fell through
 // to the else branch and added an extra {TYPE_UNKNOWN, false} entry.
 TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: process(String[] arr, int n) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("([Ljava/lang/String;I)V", &desc));
     // Must be exactly 3: [return=V, param1=[String, param2=I]
@@ -425,8 +461,8 @@ TEST(GetUdafMethodDescTest, ArrayBranchContinueFix) {
 // Before fix, generic signature "Ljava/util/List<java/lang/String>;" caused
 // type == "java/util/List<java/lang/String>" which didn't match "java/util/List".
 TEST(GetUdafMethodDescTest, ListTypeMatchAfterGenericStrip) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Clean signature (generics already stripped by get_signature)
     ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)V", &desc));
     ASSERT_EQ(desc.size(), 4);
@@ -440,8 +476,8 @@ TEST(GetUdafMethodDescTest, ListTypeMatchAfterGenericStrip) {
 // This is the exact signature pattern that caused the CN crash.
 // Verifies method_desc.size() == num_cols + 1 so process() won't OOB access.
 TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(Ljava/lang/String;Ljava/util/List;Ljava/util/List;)[Ljava/lang/String;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     // 1 return + 3 params = 4
@@ -455,8 +491,8 @@ TEST(GetUdafMethodDescTest, UDTFCrashScenarioSignature) {
 
 // Test: Primitive array parsing — [I, [J, etc. don't end with ';'.
 TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: process(int, int[]) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("(I[I)V", &desc));
     ASSERT_EQ(desc.size(), 3);
@@ -467,8 +503,8 @@ TEST(GetUdafMethodDescTest, PrimitiveIntArray) {
 
 // Test: Multi-dimensional primitive array — [[J (long[][])
 TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     ASSERT_OK(analyzer.get_udaf_method_desc("([[J)V", &desc));
     ASSERT_EQ(desc.size(), 2);
     EXPECT_EQ(desc[0].type, TYPE_UNKNOWN); // return V
@@ -479,8 +515,8 @@ TEST(GetUdafMethodDescTest, MultiDimensionalPrimitiveArray) {
 // Before the fix, the L-type parser silently skipped these classes, leaving
 // method_desc empty and producing a SIGSEGV at method_desc[0].is_box.
 TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // Signature: evaluate(LocalDate, LocalDateTime) -> LocalDateTime
     std::string sign = "(Ljava/time/LocalDate;Ljava/time/LocalDateTime;)Ljava/time/LocalDateTime;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
@@ -498,8 +534,8 @@ TEST(GetUdafMethodDescTest, LocalDateAndLocalDateTime) {
 // that records only appear in STRUCT slots, so the BE signature parser may
 // safely surface them as TYPE_STRUCT and accept the method.
 TEST(GetUdafMethodDescTest, UnknownObjectClassTreatedAsStruct) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     // process(String, com/example/Mystery) -> void
     ASSERT_OK(analyzer.get_udaf_method_desc("(Ljava/lang/String;Lcom/example/Mystery;)V", &desc));
     ASSERT_EQ(desc.size(), 3);
@@ -522,8 +558,8 @@ TEST(GetUdafMethodDescTest, UnknownObjectClassTreatedAsStruct) {
 // left-to-right then moves the last (return) entry to desc[0], so the final
 // layout is [return, param1, param2, ...].
 TEST(GetUdafMethodDescTest, RecordParamAndReturn) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(LStructA;)LStructA;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 2);
@@ -541,8 +577,8 @@ TEST(GetUdafMethodDescTest, RecordParamAndReturn) {
 // the L-class branch (which now emits TYPE_STRUCT for unknown classes) and
 // the existing primitive / known-class branches in the same parser pass.
 TEST(GetUdafMethodDescTest, RecordWithPrimitiveAndStringMix) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(LStructA;ILjava/lang/String;)LStructB;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 4);
@@ -560,8 +596,8 @@ TEST(GetUdafMethodDescTest, RecordWithPrimitiveAndStringMix) {
 // the parser should treat the whole `L<binary-name>;` as a single record
 // reference and emit TYPE_STRUCT regardless of the surface form.
 TEST(GetUdafMethodDescTest, RecordWithPackageAndInnerClass) {
-    ClassAnalyzer analyzer;
-    std::vector<MethodTypeDescriptor> desc;
+    JavaUdfClassAnalyzer analyzer;
+    std::vector<JavaUdfMethodTypeDescriptor> desc;
     std::string sign = "(Lcom/example/Outer$Inner;)Lcom/example/pkg/Result;";
     ASSERT_OK(analyzer.get_udaf_method_desc(sign, &desc));
     ASSERT_EQ(desc.size(), 2);

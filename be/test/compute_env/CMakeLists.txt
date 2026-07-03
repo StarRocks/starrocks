@@ -48,16 +48,42 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     spill/spill_test.cpp
 )
 
+set(COMPUTE_ENV_STAROS_TEST_FILES
+    staros/staros_worker_metrics_test.cpp
+)
+
+if (NOT APPLE)
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES ../base/cxa_throw_wrap.cpp)
+endif()
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/starlet_filesystem_test.cpp)
+    list(APPEND COMPUTE_ENV_STAROS_TEST_FILES staros/staros_worker_test.cpp)
+endif()
+
 add_executable(compute_env_test
         buffer_control_block_test.cpp
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
+        fragment_dict_state_test.cpp
+        load/load_stream_mgr_test.cpp
+        load/stream_load_context_test.cpp
+        load/stream_load_metrics_test.cpp
+        load/stream_load_pipe_test.cpp
+        load/time_bounded_stream_load_pipe_test.cpp
+        load_path_state_helper_test.cpp
+        load_path_mgr_test.cpp
         profile_report_worker_test.cpp
+        query/file_scan_split_context_test.cpp
+        query/query_scan_helpers_test.cpp
         query_cache_test.cpp
+        rejected_record_writer_test.cpp
         result_queue_mgr_test.cpp
+        runtime_range_pruner_test.cpp
         ${COMPUTE_ENV_WORKGROUP_TEST_FILES}
-        ${COMPUTE_ENV_SPILL_TEST_FILES})
+        ${COMPUTE_ENV_SPILL_TEST_FILES}
+        ${COMPUTE_ENV_STAROS_TEST_FILES})
 set_target_properties(compute_env_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 target_link_libraries(compute_env_test ${COMPUTE_ENV_TEST_LINK_LIBS})
 
@@ -70,7 +96,7 @@ set(COMPUTE_ENV_SORTING_TEST_FILES
 set(COMPUTE_ENV_SORTING_TEST_LINK_LIBS
     ComputeEnv
     ExprCore
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

@@ -50,11 +50,11 @@
 #include "common/config_path_fwd.h"
 #include "common/status.h"
 #include "common/tracer.h"
-#include "http/ev_http_server.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
 #include "io/io_profiler.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
 #include "runtime/prof/heap_prof.h"
 
 namespace starrocks {

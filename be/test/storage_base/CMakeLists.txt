@@ -28,10 +28,9 @@ set(STORAGE_BASE_TEST_LINK_LIBS
     StorageBase
     ComputeEnv
     StoragePrimitive
-    Serde
-    FSCore
+    FileSystem
     IO
-    RuntimeCore
+    Runtime
     ChunkCore
     ColumnCore
     Types

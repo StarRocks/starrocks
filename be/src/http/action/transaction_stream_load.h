@@ -18,7 +18,7 @@
 
 #include "common/util/thrift_client_cache.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/message_body_sink.h"
 
@@ -28,6 +28,10 @@ class ExecEnv;
 class Status;
 class StreamLoadContext;
 class TStreamLoadPutRequest;
+
+namespace orchestration {
+class StreamLoadOrchestrator;
+}
 
 class TransactionManagerAction : public HttpHandler {
 public:
@@ -50,7 +54,7 @@ private:
 
 class TransactionStreamLoadAction : public HttpHandler {
 public:
-    explicit TransactionStreamLoadAction(ExecEnv* exec_env);
+    TransactionStreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator);
     ~TransactionStreamLoadAction() override;
 
     void handle(HttpRequest* req) override;
@@ -77,6 +81,7 @@ private:
     Status _parse_request(HttpRequest* http_req, StreamLoadContext* ctx, TStreamLoadPutRequest& request);
 
     ExecEnv* _exec_env;
+    orchestration::StreamLoadOrchestrator* _stream_load_orchestrator;
 };
 
 } // namespace starrocks

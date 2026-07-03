@@ -24,8 +24,8 @@
 #include "compute_env/workgroup/scan_task_queue_factory.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "glog/logging.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::workgroup {
 
@@ -96,6 +96,27 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
           _connector_scan_sched_entity(this, &_connector_scan_sched_state) {}
 
 WorkGroup::~WorkGroup() = default;
+
+namespace {
+// Process-wide reserved default workgroup. Replaced only during WorkGroupManager init/teardown.
+// WorkGroupManager owns the group; this non-owning pointer only lets ComputeEnv-layer code
+// resolve a missing query workgroup while the owning manager is alive.
+std::weak_ptr<WorkGroup> g_default_workgroup;
+} // namespace
+
+WorkGroupPtr WorkGroup::default_workgroup() {
+    return g_default_workgroup.lock();
+}
+
+void WorkGroup::set_default_workgroup(WorkGroupPtr wg) {
+    g_default_workgroup = std::move(wg);
+}
+
+void WorkGroup::unset_default_workgroup(const WorkGroup* wg, WorkGroupPtr replacement) {
+    if (g_default_workgroup.lock().get() == wg) {
+        g_default_workgroup = std::move(replacement);
+    }
+}
 
 WorkGroup::WorkGroup(const TWorkGroup& twg)
         : _name(twg.name),
@@ -200,7 +221,7 @@ void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker, pipeline::
 
     _connector_scan_mem_tracker =
             std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, _memory_limit_bytes, _name + "/connector_scan",
-                                         GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker());
+                                         RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker());
 }
 
 std::string WorkGroup::to_string() const {

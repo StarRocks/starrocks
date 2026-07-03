@@ -89,7 +89,8 @@ enum TPlanNodeType {
   FETCH_NODE,
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE
+  LAKE_CACHE_STATS_SCAN_NODE,
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
 }
 
 // phases of an execution node
@@ -462,6 +463,11 @@ struct THdfsScanRange {
 
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
+
+    // whether to use JNI scanner to read data of lance table
+    39: optional bool use_lance_jni_reader
+    // lance split info (serialized fragment metadata)
+    40: optional binary lance_split_info
 }
 
 struct TBinlogScanRange {
@@ -477,6 +483,10 @@ struct TBinlogScanRange {
 struct TBenchmarkScanRange {
   1: optional i64 start_row
   2: optional i64 row_count
+}
+
+struct TChangesScanNode {
+    // no implementation, only used for placeholder in TPlanNode
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -560,6 +570,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
@@ -620,10 +631,16 @@ struct TVectorSearchOptions {
   5: optional map<string, string> query_params;
   6: optional double vector_range;
   7: optional i32 result_order;
-  8: optional bool use_ivfpq;
+  8: optional bool use_ivfpq; // DEPRECATED: superseded by refine_distance; ordinal kept reserved.
   9: optional double pq_refine_factor;
   10: optional double k_factor;
   11: optional i32 vector_slot_id;
+  // When true, the ANN result is refined: candidates are re-ranked by recomputing the exact distance
+  // on the full-precision vectors. Set by FE for a quantized index when enable_vector_index_refine is on.
+  12: optional bool refine_distance;
+  // 13: retired (was has_complex_residual). The BE now detects a row-filtering operator placed above
+  // the ANN scan directly from the execution tree (FragmentExecutor walk -> ScanNode), instead of an
+  // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
 }
 
 enum SampleMethod {
@@ -635,8 +652,8 @@ struct TTableSampleOptions {
   1: optional bool enable_sampling;
   2: optional SampleMethod sample_method;
   3: optional i64 random_seed;
-  4: optional i64 probability_percent;
-
+  4: optional i64 probability_percent;       // kept for backward compatibility with old BE/FE; integer percent in (0, 100)
+  5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -679,6 +696,10 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+  // Set by FE when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline
+  // breaker (blocking sort, analytic/window); suppresses TopN back-pressure on this scan (incl. the
+  // BE lake/connector self-enable path), since the RF cannot arrive while the scan is still reading.
+  58: optional bool topn_filter_back_pressure_disabled
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
@@ -726,6 +747,8 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+  // See TOlapScanNode.topn_filter_back_pressure_disabled.
+  61: optional bool topn_filter_back_pressure_disabled
 
   43: optional Descriptors.TTableSchemaKey schema_key
 
@@ -1258,6 +1281,13 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+struct TEnforceUniqueRowLocatorNode {
+    // Slot ids of the unique-key columns. The BE resolves the actual chunk
+    // columns through the chunk's slot-id map, so the FE does not need to
+    // predict the physical column order of the BE chunk.
+    1: optional list<Types.TSlotId> unique_key_slot_ids
+}
+
 struct THdfsScanNode {
     1: optional Types.TTupleId tuple_id
 
@@ -1562,6 +1592,11 @@ struct TPlanNode {
   84: optional TBenchmarkScanNode benchmark_scan_node;
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
+
+  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+
+  // just a placeholder
+  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

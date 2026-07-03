@@ -32,7 +32,6 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "platform/store_path.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -6188,7 +6187,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_splitting_op_write_preserved)
 // output_rowset carries only newly written segments, so the helper should
 // treat all of them as new rather than silently skipping them (which would
 // leak segment files).
-TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel_without_new_segment_count) {
+TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_parallel_without_new_segment_count) {
     const int64_t tablet_id = next_id();
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
@@ -6200,7 +6199,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel
     // Intentionally NOT setting new_segment_offset/new_segment_count to
     // reproduce the shape produced by the parallel-compaction manager.
 
-    auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
+    auto paths = lake::tablet_reshard_helper::collect_compaction_output_files(log, _tablet_manager.get());
     EXPECT_THAT(paths,
                 ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "parallel_new_0.dat"),
                                                 _tablet_manager->segment_location(tablet_id, "parallel_new_1.dat")));
@@ -6211,7 +6210,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel
 // (new_segment_offset / new_segment_count) should be queued for deletion.
 // Deleting reused segments would corrupt the merged tablet because those
 // segments are still live as input rowsets absorbed by the merge.
-TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_compaction) {
+TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_partial_compaction) {
     const int64_t tablet_id = next_id();
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
@@ -6225,7 +6224,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_
     op_compaction->set_new_segment_offset(2);
     op_compaction->set_new_segment_count(2);
 
-    auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
+    auto paths = lake::tablet_reshard_helper::collect_compaction_output_files(log, _tablet_manager.get());
     EXPECT_THAT(paths, ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "new_0.dat"),
                                                        _tablet_manager->segment_location(tablet_id, "new_1.dat")));
     EXPECT_THAT(paths,
@@ -6234,12 +6233,12 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_
                 ::testing::Not(::testing::Contains(_tablet_manager->segment_location(tablet_id, "reused_1.dat"))));
 }
 
-// Verifies that collect_compaction_output_file_paths() collects files of every
+// Verifies that collect_compaction_output_files() collects files of every
 // kind — segments (via output_rowset), ssts (compaction-ingested), output_sstable,
 // output_sstables, lcrm_file, plus op_parallel_compaction.output_sstable /
 // output_sstables / orphan_lcrm_files — so regressions don't silently reintroduce
 // leaks by dropping any one category.
-TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_all_kinds) {
+TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_covers_all_kinds) {
     const int64_t tablet_id = next_id();
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
@@ -6260,7 +6259,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
     op_parallel->add_output_sstables()->set_filename("parallel_out_multi.sst");
     op_parallel->add_orphan_lcrm_files()->set_name("parallel_orphan.crm");
 
-    auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
+    auto paths = lake::tablet_reshard_helper::collect_compaction_output_files(log, _tablet_manager.get());
     EXPECT_THAT(paths,
                 ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "out_seg.dat"),
                                                 _tablet_manager->sst_location(tablet_id, "compact_ingest.sst"),
@@ -6270,6 +6269,56 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
                                                 _tablet_manager->sst_location(tablet_id, "parallel_out.sst"),
                                                 _tablet_manager->sst_location(tablet_id, "parallel_out_multi.sst"),
                                                 _tablet_manager->lcrm_location(tablet_id, "parallel_orphan.crm")));
+}
+
+// Regression: the persistent-index compaction "full contain / only do move"
+// optimization re-emits an input sstable as its own output verbatim (same
+// filename, only the fileset_id changes). Such a file is still referenced by the
+// base metadata and every sibling tablet, so when a pending compaction is dropped
+// during a split/merge cross-publish it must NOT be queued for deletion. Deleting
+// it removed shared PK-index sstables in production and stalled publishes with
+// "load primary index failed: ... .sst does not exist".
+//
+// Covers both message shapes (op_compaction and op_parallel_compaction) and both
+// output fields. Production emits reused files into the plural output_sstables,
+// so each op reuses via output_sstables; the singular output_sstable is exercised
+// too (reused on op_compaction, genuinely new on op_parallel_compaction).
+TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_skips_passthrough_reused_sstables) {
+    const int64_t tablet_id = next_id();
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // op_compaction: "reused.sst" (plural) and "reused_single.sst" (singular) are
+    // pass-through outputs that alias inputs; "compact_new.sst" is genuinely new.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->add_input_sstables()->set_filename("reused.sst");
+    op_compaction->add_input_sstables()->set_filename("reused_single.sst");
+    op_compaction->mutable_output_sstable()->set_filename("reused_single.sst");
+    op_compaction->add_output_sstables()->set_filename("reused.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_new.sst");
+
+    // op_parallel_compaction: "parallel_reused.sst" is reused via the plural
+    // output_sstables (the shape production actually emits); the singular
+    // output_sstable and the other plural entry are genuinely new.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->add_input_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->mutable_output_sstable()->set_filename("parallel_single_new.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_new.sst");
+
+    auto paths = lake::tablet_reshard_helper::collect_compaction_output_files(log, _tablet_manager.get());
+    // Only the genuinely new outputs are collected for deletion.
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(_tablet_manager->sst_location(tablet_id, "compact_new.sst"),
+                                                _tablet_manager->sst_location(tablet_id, "parallel_single_new.sst"),
+                                                _tablet_manager->sst_location(tablet_id, "parallel_new.sst")));
+    // The pass-through reused (still-live) sstables are never queued for deletion,
+    // whether they came through the singular output_sstable or the plural list.
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(_tablet_manager->sst_location(tablet_id, "reused.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(_tablet_manager->sst_location(tablet_id, "reused_single.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(_tablet_manager->sst_location(tablet_id, "parallel_reused.sst"))));
 }
 
 // LakePersistentIndex::commit() and the size-tiered compaction strategy iterate
@@ -10375,6 +10424,32 @@ TEST(SplitFamilyInferenceTest, mix_orphan_and_family) {
     EXPECT_EQ(lake::detail::InferredSplitFamilies::kNoFamily, result.old_tablet_to_family[0]);
     EXPECT_EQ(0u, result.old_tablet_to_family[1]);
     EXPECT_EQ(0u, result.old_tablet_to_family[2]);
+}
+
+// Tests for convert_op_write_to_op_schema_change (SHADOW_REWRITE transform helper).
+// These use only scalar RowsetMetadataPB fields (id/num_rows/data_size) to stay
+// independent of segment file naming conventions.
+
+TEST(ShadowRewriteTransformTest, ShadowRewriteTransformMovesRowsetAndAnchors) {
+    TxnLogPB log;
+    auto* rs = log.mutable_op_write()->mutable_rowset();
+    rs->set_num_rows(7);
+    rs->set_data_size(123);
+    starrocks::lake::convert_op_write_to_op_schema_change(&log, /*alter_version=*/9);
+    ASSERT_FALSE(log.has_op_write());
+    ASSERT_TRUE(log.has_op_schema_change());
+    EXPECT_EQ(9, log.op_schema_change().alter_version());
+    ASSERT_EQ(1, log.op_schema_change().rowsets_size());
+    EXPECT_EQ(1, log.op_schema_change().rowsets(0).id());
+    EXPECT_EQ(7, log.op_schema_change().rowsets(0).num_rows());
+}
+
+TEST(ShadowRewriteTransformTest, ShadowRewriteTransformEmptyWhenNoRowset) {
+    TxnLogPB log; // no op_write
+    starrocks::lake::convert_op_write_to_op_schema_change(&log, /*alter_version=*/9);
+    ASSERT_TRUE(log.has_op_schema_change());
+    EXPECT_EQ(9, log.op_schema_change().alter_version());
+    EXPECT_EQ(0, log.op_schema_change().rowsets_size());
 }
 
 // =============================================================================

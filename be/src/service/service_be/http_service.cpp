@@ -57,6 +57,8 @@
 #include "http/action/jit_cache_action.h"
 #endif
 #include "common/metrics/process_metrics_registry.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/exec_env.h"
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/memory_metrics_action.h"
 #include "http/action/meta_action.h"
@@ -76,25 +78,28 @@
 #include "http/action/update_config_action.h"
 #include "http/default_path_handlers.h"
 #include "http/download_action.h"
-#include "http/ev_http_server.h"
-#include "http/http_method.h"
 #include "http/utils.h"
 #include "http/web_page_handler.h"
+#include "orchestration/orchestration_env.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_method.h"
 #include "platform/store_path.h"
-#include "runtime/base_load_path_mgr.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "service/service_be/http_auth_response.h"
 
 namespace starrocks {
 
-HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, const GlobalEnv& global_env,
-                             ProcessMetricsRegistry* process_metrics_registry, int port, int num_threads)
+HttpServiceBE::HttpServiceBE(DataCache* cache_env, ExecEnv* env, orchestration::OrchestrationEnv* orchestration_env,
+                             const RuntimeEnv& runtime_env, ProcessMetricsRegistry* process_metrics_registry,
+                             LoadChannelMgr* load_channel_mgr, int port, int num_threads)
         : _cache_env(cache_env),
           _env(env),
-          _global_env(global_env),
+          _orchestration_env(orchestration_env),
+          _runtime_env(runtime_env),
           _process_metrics_registry(process_metrics_registry),
+          _load_channel_mgr(load_channel_mgr),
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())),
           _http_concurrent_limiter(new ConcurrentLimiter(config::be_http_num_workers - 1)) {}
@@ -114,15 +119,19 @@ void HttpServiceBE::join() {
 }
 
 Status HttpServiceBE::start() {
-    register_config_update_hooks(_env, _global_env);
+    DCHECK(_orchestration_env != nullptr);
+    auto* stream_load_orchestrator = _orchestration_env->stream_load_orchestrator();
+    DCHECK(stream_load_orchestrator != nullptr);
+
+    register_config_update_hooks(_env, _runtime_env, _load_channel_mgr);
     ConfigUpdateRegistry::instance()->set_ready();
 
-    add_default_path_handlers(_web_page_handler.get(), _global_env);
+    add_default_path_handlers(_web_page_handler.get(), _runtime_env);
 
     _ev_http_server->set_auth_verifier(&verify_http_basic_auth);
 
     // register load
-    auto* stream_load_action = new StreamLoadAction(_env, _http_concurrent_limiter.get());
+    auto* stream_load_action = new StreamLoadAction(_env, stream_load_orchestrator, _http_concurrent_limiter.get());
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -142,26 +151,28 @@ Status HttpServiceBE::start() {
     _http_handlers.emplace_back(transaction_manager_action);
 
     // LoadData:            PUT /api/transaction/load
-    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
+    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env, stream_load_orchestrator);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
     _http_handlers.emplace_back(transaction_stream_load_action);
 
     // register download action
     std::vector<std::string> allow_paths;
-    for (auto& path : _env->store_paths()) {
-        allow_paths.emplace_back(path.path);
+    const auto* store_path_registry = _env->platform_services().store_path_registry;
+    if (store_path_registry != nullptr) {
+        const auto& store_path_roots = store_path_registry->store_path_roots();
+        allow_paths.assign(store_path_roots.begin(), store_path_roots.end());
     }
-    auto* download_action = new DownloadAction(_env, allow_paths);
+    auto* download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_download_load", download_action);
     _http_handlers.emplace_back(download_action);
 
-    auto* tablet_download_action = new DownloadAction(_env, allow_paths);
+    auto* tablet_download_action = new DownloadAction(allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_tablet/_download", tablet_download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_tablet/_download", tablet_download_action);
     _http_handlers.emplace_back(tablet_download_action);
 
-    auto* error_log_download_action = new DownloadAction(_env, _env->load_path_mgr()->get_load_error_file_dir());
+    auto* error_log_download_action = new DownloadAction(_env->load_path_mgr()->get_load_error_file_dir());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_load_error_log", error_log_download_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_load_error_log", error_log_download_action);
     _http_handlers.emplace_back(error_log_download_action);
@@ -222,7 +233,7 @@ Status HttpServiceBE::start() {
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics", action);
         _http_handlers.emplace_back(action);
 
-        auto memory_metric_action = new MemoryMetricsAction(_global_env);
+        auto memory_metric_action = new MemoryMetricsAction(_runtime_env);
         _ev_http_server->register_handler(HttpMethod::GET, "/metrics/memory", memory_metric_action);
         _http_handlers.emplace_back(memory_metric_action);
     }
@@ -233,7 +244,7 @@ Status HttpServiceBE::start() {
 
 #ifndef BE_TEST
     // Register BE checksum action
-    auto* checksum_action = new ChecksumAction(_global_env);
+    auto* checksum_action = new ChecksumAction(_runtime_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 

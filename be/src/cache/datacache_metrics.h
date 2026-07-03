@@ -14,11 +14,21 @@
 
 #pragma once
 
-#include <atomic>
+#include <cstdint>
 
 #include "base/metrics.h"
 
 namespace starrocks {
+
+struct DataCacheMetricsSnapshot {
+    int64_t mem_quota_bytes = 0;
+    int64_t mem_used_bytes = 0;
+    int64_t disk_quota_bytes = 0;
+    int64_t disk_used_bytes = 0;
+    int64_t meta_used_bytes = 0;
+    int64_t block_cache_hit_bytes = 0;
+    int64_t block_cache_miss_bytes = 0;
+};
 
 // Data Cache process-level metrics for memory, disk, metadata, and app-observed
 // block-cache hit bytes.
@@ -31,11 +41,7 @@ public:
     static DataCacheMetrics* instance();
 
     void install(MetricRegistry* registry);
-
-    // Register the runtime update hook after startup determines whether StarOS
-    // and DataCache share the same StarCache instance.
-    void enable_update_hook(bool use_same_instance);
-    void update();
+    void update(const DataCacheMetricsSnapshot& snapshot);
 
     METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);
@@ -47,7 +53,6 @@ public:
 
 private:
     MetricRegistry* _registry = nullptr;
-    std::atomic<bool> _use_same_instance{false};
 };
 
 } // namespace starrocks

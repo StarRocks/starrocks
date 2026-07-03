@@ -111,7 +111,10 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
   :::note
 
-  要通过 `file://` 协议访问 NFS 中的文件，您需要将 NAS 设备挂载为 NFS，并放置在每个 BE 或 CN 节点的相同目录下。
+  要通过 `file://` 协议访问 NFS(NAS)，请将同一 NAS 设备作为 NFS 挂载到需要访问该路径的节点上的相同目录下：
+
+  - 对于读写操作，需要挂载到每个 FE 节点以及每个 BE 或 CN 节点。FE 节点会列举文件并推断文件 Schema，BE/CN 节点会读取数据。
+  - 对于仅写操作，需要挂载到每个 BE 或 CN 节点。
 
   :::
 
@@ -136,6 +139,18 @@ Parquet 格式示例：
 "parquet.use_legacy_encoding" = "true",   -- 仅用于导出
 "parquet.version" = "2.6"                 -- 仅用于导出
 ```
+
+在读取 Parquet 文件时（例如使用 `FILES()` 或 Broker Load），StarRocks 会根据 Parquet TIMESTAMP 逻辑类型的 `isAdjustedToUTC` 属性将其映射为 DATETIME：
+
+- **即时语义**：如果 `isAdjustedToUTC` 为 `true`，该值标识时间轴上一个已归一化为 UTC 的时刻。StarRocks 会将其转换为当前会话时区下的本地时间。
+- **本地语义**：如果 `isAdjustedToUTC` 为 `false`，该值是一个不带时区的本地时间。StarRocks 按原样返回该值，不受会话时区影响。
+- 旧版 INT96 物理类型不携带 `isAdjustedToUTC` 属性。无论该 INT96 时间戳是顶层列还是嵌套在 STRUCT、ARRAY 或 MAP 中，StarRocks 都将其视为已归一化为 UTC 的时刻，并转换为会话时区下的本地时间。
+
+:::note
+
+**行为变更**：在早期版本中，StarRocks 在读取本地语义（`isAdjustedToUTC` 为 `false`）的时间戳时会按会话时区偏移量进行平移。当前版本会按写入的原值返回。如果会话时区不是 UTC，同一文件返回的值将与早期版本不同（当前行为符合 Parquet 规范）。
+
+:::
 
 ###### `parquet.use_legacy_encoding`
 

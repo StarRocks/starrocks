@@ -25,15 +25,15 @@
 #include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/query_cache/lane_arbiter.h"
-#include "exec/pipeline/group_execution/execution_group_builder.h"
-#include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/transform_operator.h"
+#include "exec/runtime/group_execution/execution_group_builder.h"
+#include "exec/runtime/group_execution/execution_group_fwd.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 
@@ -44,7 +44,9 @@ struct QueryCacheTest : public ::testing::Test {
     std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 
-    void SetUp() override { state.set_query_ctx(query_ctx.get()); }
+    void SetUp() override {
+        state.set_query_ctx(query_ctx.get(), &query_ctx->query_runtime_state(), query_ctx->object_pool());
+    }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {

@@ -28,11 +28,13 @@
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
+#include "runtime/java/java_env.h"
+#include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
-#include "udf/java/utils.h"
+#include "udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 const TableFunction* getJavaUDTFFunction() {
@@ -54,7 +56,7 @@ public:
     void close();
 
     const TypeDescriptor& type_desc() { return _ret_type; }
-    JavaMethodDescriptor* method_process() { return _process.get(); }
+    JavaUdfMethodDescriptor* method_process() { return _process.get(); }
     const std::vector<TypeDescriptor>& arg_type_descs() const { return _arg_type_descs; }
     jclass get_udtf_clazz() { return _udtf_class.clazz(); }
     jobject handle() { return _udtf_handle.handle(); }
@@ -74,11 +76,11 @@ private:
     std::string _libpath;
     std::string _symbol;
 
-    std::unique_ptr<ClassLoader> _class_loader;
-    std::unique_ptr<ClassAnalyzer> _analyzer;
+    std::unique_ptr<JavaUdfClassLoader> _class_loader;
+    std::unique_ptr<JavaUdfClassAnalyzer> _analyzer;
     JVMClass _udtf_class = nullptr;
     JavaGlobalRef _udtf_handle = nullptr;
-    std::unique_ptr<JavaMethodDescriptor> _process;
+    std::unique_ptr<JavaUdfMethodDescriptor> _process;
     std::vector<TypeDescriptor> _arg_type_descs;
     TypeDescriptor _ret_type;
     JavaUdfMethodTypeDescs _process_type_descs;
@@ -86,21 +88,21 @@ private:
 
 Status JavaUDTFState::open() {
     RETURN_IF_ERROR(detect_java_runtime());
-    _class_loader = std::make_unique<ClassLoader>(std::move(_libpath));
+    _class_loader = std::make_unique<JavaUdfClassLoader>(std::move(_libpath));
     RETURN_IF_ERROR(_class_loader->init());
-    _analyzer = std::make_unique<ClassAnalyzer>();
+    _analyzer = std::make_unique<JavaUdfClassAnalyzer>();
 
     ASSIGN_OR_RETURN(_udtf_class, _class_loader->getClass(_symbol));
     ASSIGN_OR_RETURN(_udtf_handle, _udtf_class.newInstance());
 
     auto* analyzer = _analyzer.get();
-    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaMethodDescriptor>* res) {
+    auto add_method = [&](const std::string& name, jclass clazz, std::unique_ptr<JavaUdfMethodDescriptor>* res) {
         std::string method_name = name;
         std::string signature;
-        std::vector<MethodTypeDescriptor> mtdesc;
+        std::vector<JavaUdfMethodTypeDescriptor> mtdesc;
         RETURN_IF_ERROR(analyzer->get_signature(clazz, method_name, &signature));
         RETURN_IF_ERROR(analyzer->get_udaf_method_desc(signature, &mtdesc));
-        *res = std::make_unique<JavaMethodDescriptor>();
+        *res = std::make_unique<JavaUdfMethodDescriptor>();
         (*res)->name = std::move(method_name);
         (*res)->signature = std::move(signature);
         (*res)->method_desc = std::move(mtdesc);
@@ -121,7 +123,7 @@ Status JavaUDTFState::open() {
     // per-row element type, so pass `unwrap_return_array_layer=true` to drop the array
     // layer off the reflective formal type before pairing it with `_ret_type`.
     {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         ASSIGN_OR_RETURN(_process_type_descs,
                          build_method_udf_type_descs(env, _process->method.handle(), _arg_type_descs, _ret_type,
                                                      /*state_offset=*/0, /*unwrap_return_array_layer=*/true));
@@ -155,13 +157,13 @@ Status JavaUDTFFunction::open(RuntimeState* runtime_state, TableFunctionState* s
         RETURN_IF_ERROR(down_cast<JavaUDTFState*>(state)->open());
         return Status::OK();
     };
-    auto promise = call_function_in_pthread(runtime_state, open_status);
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(runtime_state, open_status);
     RETURN_IF_ERROR(promise->get_future().get());
     return Status::OK();
 }
 
 Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* state) const {
-    auto promise = call_function_in_pthread(runtime_state, [state]() {
+    auto promise = JavaEnv::GetInstance()->submit_java_udf_call(runtime_state, [state]() {
         delete state;
         return Status::OK();
     });
@@ -175,8 +177,7 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);
 
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
 
     jmethodID methodID = env->GetMethodID(stateUDTF->get_udtf_clazz(), stateUDTF->method_process()->name.c_str(),
                                           stateUDTF->method_process()->signature.c_str());
@@ -227,10 +228,11 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
 
         rets[i] = env->CallObjectMethodA(stateUDTF->handle(), methodID, call_stack.data());
 
-        if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
-            std::string err = fmt::format("execute UDF Function meet Exception:{}", helper.dumpExceptionString(jthr));
+        if (auto jthr = env->ExceptionOccurred(); jthr != nullptr) {
+            std::string err = fmt::format("execute UDF Function meet Exception:{}",
+                                          JVMHelper::getInstance().dumpExceptionString(jthr));
             LOG(WARNING) << err;
-            helper.getEnv()->ExceptionClear();
+            env->ExceptionClear();
             state->set_status(Status::InternalError(err));
             return std::make_pair(Columns{}, nullptr);
         }
@@ -269,10 +271,11 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
     res.emplace_back(std::move(col));
 
     // TODO: add error msg to Function State
-    if (auto jthr = helper.getEnv()->ExceptionOccurred(); jthr != nullptr) {
-        std::string err = fmt::format("execute UDF Function meet Exception:{}", helper.dumpExceptionString(jthr));
+    if (auto jthr = env->ExceptionOccurred(); jthr != nullptr) {
+        std::string err = fmt::format("execute UDF Function meet Exception:{}",
+                                      JVMHelper::getInstance().dumpExceptionString(jthr));
         LOG(WARNING) << err;
-        helper.getEnv()->ExceptionClear();
+        env->ExceptionClear();
     }
 
     return std::make_pair(std::move(res), std::move(offsets_col));

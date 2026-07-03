@@ -22,8 +22,8 @@
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

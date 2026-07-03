@@ -116,6 +116,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     private List<Integer> currentKafkaPartitions = Lists.newArrayList();
     // optional, user want to set default offset when new partition add or offset not set.
     private Long kafkaDefaultOffSet = null;
+    // optional, when true the CREATE-time kafka_partitions/kafka_offsets only seed the starting
+    // offsets and the job keeps discovering new partitions from the broker. Derived from
+    // customProperties (property.kafka_partition_discovery) in convertCustomProperties, not persisted.
+    private boolean kafkaPartitionDiscovery = false;
     // kafka properties, property prefix will be mapped to kafka custom parameters, which can be extended in the future
     @SerializedName("cpr")
     private Map<String, String> customProperties = Maps.newHashMap();
@@ -233,7 +237,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     @Override
     public void prepare() throws StarRocksException {
         super.prepare();
-        checkCustomPartition(customKafkaPartitions);
+        checkCustomPartition(customKafkaPartitions, computeResource);
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.
         convertCustomProperties(true);
@@ -272,6 +276,11 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
+        }
+        if (convertedCustomProperties.containsKey(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY)) {
+            // StarRocks-specific knob; strip it so it is not passed to librdkafka.
+            kafkaPartitionDiscovery = Boolean.parseBoolean(
+                    convertedCustomProperties.remove(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY));
         }
     }
 
@@ -661,7 +670,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(summary);
     }
 
-    private List<Integer> getAllKafkaPartitions() throws StarRocksException {
+    private List<Integer> getAllKafkaPartitions(ComputeResource computeResource) throws StarRocksException {
         return KafkaUtil.getAllKafkaPartitions(brokerList, topic,
                 snapshotConvertedCustomProperties(), computeResource);
     }
@@ -713,15 +722,26 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
+        if (stmt.isKafkaPartitionDiscovery()) {
+            // the seed partitions are never pinned into customKafkaPartitions, so the
+            // prepare()-time check skips them; validate once against the broker here,
+            // otherwise a mistyped partition would silently discard its seeded offset.
+            // acquire a local compute resource so the validation RPC is routed to the job's
+            // warehouse (shared-data mode) without writing the not-yet-scheduled job's field
+            ComputeResource computeResource = kafkaRoutineLoadJob.acquireComputeResource();
+            kafkaRoutineLoadJob.checkCustomPartition(stmt.getKafkaPartitionOffsets().stream()
+                    .map(p -> p.first).collect(Collectors.toList()), computeResource);
+        }
 
         return kafkaRoutineLoadJob;
     }
 
-    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws StarRocksException {
+    private void checkCustomPartition(List<Integer> customKafkaPartitions, ComputeResource computeResource)
+            throws StarRocksException {
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
-        List<Integer> allKafkaPartitions = getAllKafkaPartitions();
+        List<Integer> allKafkaPartitions = getAllKafkaPartitions(computeResource);
         for (Integer customPartition : customKafkaPartitions) {
             if (!allKafkaPartitions.contains(customPartition)) {
                 throw new LoadException("there is an invalid custom partition: " + customPartition + " for topic: " + topic);
@@ -744,11 +764,24 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     private void updateNewPartitionProgress() {
+        // Snapshot before seeding anything: empty progress means this is the job's initial
+        // partition discovery rather than a partition added mid-flight.
+        boolean initialDiscovery = !((KafkaProgress) progress).hasPartition();
         // update the progress of new partitions
         for (Integer kafkaPartition : currentKafkaPartitions) {
             if (!((KafkaProgress) progress).containsPartition(kafkaPartition)) {
-                // if offset is not assigned, start from OFFSET_END
-                long beginOffSet = kafkaDefaultOffSet == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffSet;
+                long beginOffSet;
+                if (kafkaDefaultOffSet != null) {
+                    beginOffSet = kafkaDefaultOffSet;
+                } else if (initialDiscovery) {
+                    // if offset is not assigned, the job's first discovery starts from OFFSET_END
+                    beginOffSet = KafkaProgress.OFFSET_END_VAL;
+                } else {
+                    // a partition that shows up after the job already has progress was created
+                    // mid-flight; start from the beginning so messages produced before it is
+                    // discovered are not silently skipped
+                    beginOffSet = KafkaProgress.OFFSET_BEGINNING_VAL;
+                }
                 ((KafkaProgress) progress).addPartitionOffset(Pair.create(kafkaPartition, beginOffSet));
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
@@ -765,7 +798,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         super.setOptional(stmt);
 
         if (!stmt.getKafkaPartitionOffsets().isEmpty()) {
-            setCustomKafkaPartitions(stmt.getKafkaPartitionOffsets());
+            setCustomKafkaPartitions(stmt.getKafkaPartitionOffsets(), stmt.isKafkaPartitionDiscovery());
         }
         if (!stmt.getCustomKafkaProperties().isEmpty()) {
             setCustomKafkaProperties(stmt.getCustomKafkaProperties());
@@ -779,12 +812,18 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     // this is a unprotected method which is called in the initialization function
-    private void setCustomKafkaPartitions(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws LoadException {
+    private void setCustomKafkaPartitions(List<Pair<Integer, Long>> kafkaPartitionOffsets, boolean offsetSeedOnly)
+            throws LoadException {
         if (kafkaPartitionOffsets != null) {
             customeKafkaPartitionOffsets = kafkaPartitionOffsets;
         }
+        // with kafka_partition_discovery enabled (offsetSeedOnly) the user-specified partitions
+        // only seed the starting offsets; customKafkaPartitions stays empty so the scheduler
+        // keeps fetching the partition list from the broker (see takeFetchSnapshot)
         for (Pair<Integer, Long> partitionOffset : kafkaPartitionOffsets) {
-            this.customKafkaPartitions.add(partitionOffset.first);
+            if (!offsetSeedOnly) {
+                this.customKafkaPartitions.add(partitionOffset.first);
+            }
             ((KafkaProgress) progress).addPartitionOffset(partitionOffset);
         }
     }
@@ -945,26 +984,47 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             return;
         }
 
+        Map<String, String> changedProperties = dataSourceProperties.getCustomKafkaProperties();
+
+        // check kafka_partition_discovery: enabling it unpins a CREATE-time partition list and
+        // is one-way; pinning partitions back requires recreating the job
+        Boolean partitionDiscovery = dataSourceProperties.getKafkaPartitionDiscovery();
+        if (Boolean.FALSE.equals(partitionDiscovery)) {
+            throw new DdlException("property." + CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY
+                    + " can only be set to true in ALTER ROUTINE LOAD; recreate the job to pin partitions");
+        }
+        boolean enablePartitionDiscovery = Boolean.TRUE.equals(partitionDiscovery);
+
         // check kafka partition offsets
         // If customKafkaPartition is specified, only the specific partitions can be modified
         // otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
         List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
-        if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+        if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty() && !enablePartitionDiscovery) {
             for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
                 if (!customKafkaPartitions.contains(pair.first)) {
                     throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
                 }
             }
-        } else {
-            // check if partition is validate
+        } else if (!kafkaPartitionOffsets.isEmpty()) {
+            // check if partition is validated; an ALTER that touches no partition offsets has
+            // nothing to validate against the broker, so it must not require the warehouse
             try {
-                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+                // validation-only: acquire a local compute resource and route the broker RPC
+                // through it, without writing the shared computeResource field. This runs
+                // before the job write lock, so mutating the field would race the
+                // scheduler/refresh paths and could leak into a rejected ALTER; prepare()
+                // re-acquires the real field on the next scheduling.
+                ComputeResource computeResource = acquireComputeResource();
+                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()),
+                        computeResource);
             } catch (StarRocksException e) {
-                throw new DdlException("The specified partition is not in the consumed partitions ", e);
+                // surface the real cause (partition not in the topic, an unavailable
+                // warehouse, or a failed broker metadata RPC) instead of a generic
+                // "not in the consumed partitions" wrapper
+                throw new DdlException(e.getMessage(), e);
             }
         }
 
-        Map<String, String> changedProperties = dataSourceProperties.getCustomKafkaProperties();
         // check kafka default offsets
         if (changedProperties.containsKey(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS)) {
             try {
@@ -1013,6 +1073,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             synchronized (this) {
                 this.customProperties.putAll(customKafkaProperties);
                 convertCustomProperties(true);
+            }
+            // enabling kafka_partition_discovery unpins a CREATE-time partition list; progress
+            // keeps the already-seeded offsets and the next scheduler round refetches the
+            // partition set from the broker
+            if (kafkaPartitionDiscovery && !customKafkaPartitions.isEmpty()) {
+                customKafkaPartitions = Lists.newArrayList();
             }
         }
 

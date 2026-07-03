@@ -44,6 +44,7 @@
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -51,8 +52,6 @@ namespace starrocks {
 namespace pipeline {
 class MorselQueueBuilder;
 using MorselQueueBuilderPtr = std::unique_ptr<MorselQueueBuilder>;
-class MorselQueueFactory;
-using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 } // namespace pipeline
 
 class TScanRange;
@@ -148,6 +147,10 @@ public:
     void set_back_pressure_throttle_time_upper_bound(int64_t value) {
         this->_back_pressure_throttle_time_upper_bound = value;
     }
+    // True when FE detected a non-aggregation deterministic pipeline breaker between the TopN RF
+    // builder and this scan: suppress TopN back-pressure (incl. the lake/connector self-enable path).
+    bool is_topn_filter_back_pressure_disabled() const { return this->_topn_filter_back_pressure_disabled; }
+    void set_topn_filter_back_pressure_disabled(bool value) { this->_topn_filter_back_pressure_disabled = value; }
 
     void set_heavy_expr_slot_ids(std::vector<SlotId>&& slot_ids) { _heavy_expr_slot_ids = std::move(slot_ids); }
 
@@ -156,6 +159,13 @@ public:
     std::vector<SlotId>& get_heavy_expr_slot_ids() { return _heavy_expr_slot_ids; }
 
     std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
+
+    // Set once at fragment setup (FragmentExecutor tree walk): true when a row-reducing operator
+    // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
+    // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
+    // routes to the exact brute-force path -- a segment-level k-limit would otherwise under-return.
+    void set_filtered_above_iterator(bool v) { _filtered_above_iterator = v; }
+    bool is_filtered_above_iterator() const { return _filtered_above_iterator; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
@@ -172,16 +182,20 @@ protected:
     RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
+    bool _filtered_above_iterator = false;
     int64_t _mem_limit = 0;
     int32_t _io_tasks_per_scan_operator = 0;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     bool _enable_topn_filter_back_pressure = false;
+    // Defaults for the FE-driven olap path (upstream values). The lake/connector self-enabled path
+    // takes its throttle parameters from session variables (TQueryOptions) instead, see ScanOperator.
     int _back_pressure_max_rounds = 5;
     size_t _back_pressure_num_rows = 10240;
     int64_t _back_pressure_throttle_time = 500;
     int64_t _back_pressure_throttle_time_upper_bound = 5000;
+    bool _topn_filter_back_pressure_disabled = false;
 
     std::vector<SlotId> _heavy_expr_slot_ids;
     std::vector<ExprContext*> _heavy_expr_ctxs;

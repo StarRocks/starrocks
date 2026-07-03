@@ -108,6 +108,7 @@ jobs:
         uses: lycheeverse/lychee-action@v2.8.0
         with:
           fail: true
+          failIfEmpty: false
           args: >
             --config docs/lychee.toml
             --scheme https

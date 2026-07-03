@@ -17,13 +17,13 @@
 #include <memory>
 
 #include "compute_env/pipeline/driver_scan_operator.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
-#include "exec/pipeline/primitives/fragment_runtime_state.h"
-#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

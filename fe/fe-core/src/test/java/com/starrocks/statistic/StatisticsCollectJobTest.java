@@ -63,6 +63,25 @@ import java.util.stream.Collectors;
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
 
+    @Test
+    public void testHistogramFormatSamplePercent() {
+        // Sub-1% ratios on large tables previously truncated to "0", producing the illegal SAMPLE('percent'='0').
+        // They must now be rendered as their true percent value.
+        Assertions.assertEquals("0.5", HistogramStatisticsCollectJob.formatSamplePercent(0.005));
+        Assertions.assertEquals("0.1", HistogramStatisticsCollectJob.formatSamplePercent(0.001));
+        // 10M / 2B = 0.005 -> 0.5%
+        Assertions.assertEquals("0.5",
+                HistogramStatisticsCollectJob.formatSamplePercent(10_000_000.0 / 2_000_000_000.0));
+        // Integral percents stay clean, no trailing zeros, no scientific notation.
+        Assertions.assertEquals("50", HistogramStatisticsCollectJob.formatSamplePercent(0.5));
+        Assertions.assertEquals("1", HistogramStatisticsCollectJob.formatSamplePercent(0.01));
+        // Very small ratios must remain a positive decimal, never "0".
+        String tiny = HistogramStatisticsCollectJob.formatSamplePercent(0.0000001);
+        Assertions.assertNotEquals("0", tiny);
+        Assertions.assertFalse(tiny.contains("E"));
+        Assertions.assertFalse(tiny.contains("e"));
+    }
+
     private static LocalDateTime t0UpdateTime = LocalDateTime.of(2022, 1, 1, 1, 1, 1);
 
     @TempDir
@@ -1130,6 +1149,58 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         assertContains(collectSqlList.get(0).toString(), "`par_col` = '1' AND `par_date` IS NULL");
         assertContains(collectSqlList.get(0).toString(), "par_col=NULL/par_date=2020-01-03");
         assertContains(collectSqlList.get(0).toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
+    }
+
+    @Test
+    public void testExternalFullStatisticsCollectJobExtendedInfo() throws Exception {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("hive0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("r_regionkey", "r_name", "r_comment"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) {
+                // Skip the actual query execution, only exercise collect()'s bookkeeping logic.
+            }
+        };
+
+        // Existing (user-supplied) properties must be preserved alongside the merged-in collection metadata.
+        Map<String, String> initialProperties = Maps.newHashMap();
+        initialProperties.put("custom_key", "custom_value");
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "hive0", "tpch", "region",
+                table.getUUID(), Lists.newArrayList("r_regionkey", "r_name", "r_comment"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, initialProperties, LocalDateTime.now());
+        collectJob.collect(connectContext, analyzeStatus);
+
+        Map<String, String> properties = analyzeStatus.getProperties();
+        Assertions.assertEquals("custom_value", properties.get("custom_key"));
+        Assertions.assertEquals("hive", properties.get("table_format"));
+        Assertions.assertEquals("1", properties.get("partition_count"));
+        Assertions.assertEquals("3", properties.get("column_count"));
+
+        // The merge happens before the collection try-block runs, so the properties must still be
+        // populated on the AnalyzeStatus even when the collection itself fails.
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
+                    throws Exception {
+                throw new DdlException("mock collect failure");
+            }
+        };
+        ExternalAnalyzeStatus failedStatus = new ExternalAnalyzeStatus(2, "hive0", "tpch", "region",
+                table.getUUID(), Lists.newArrayList("r_regionkey", "r_name", "r_comment"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        Assertions.assertThrows(Exception.class, () -> collectJob.collect(connectContext, failedStatus));
+        Assertions.assertEquals("hive", failedStatus.getProperties().get("table_format"));
+        Assertions.assertEquals("3", failedStatus.getProperties().get("column_count"));
     }
 
     @Test

@@ -76,6 +76,11 @@ struct FileInfo {
     std::shared_ptr<FileSystem> fs;
     // It is used to store the file offset of the bundle file.
     std::optional<int64_t> bundle_file_offset;
+    // IDs of vector indexes whose .vi file belongs to this segment. Populated when a segment is
+    // produced outside the normal tablet-writer flush path (e.g. the partial-update segment
+    // rewrite), so the apply path can persist them into SegmentMetadataPB::vector_index_ids and
+    // keep async builds / vacuum / reads in sync. Empty for files with no vector index.
+    std::vector<int64_t> vector_index_ids;
 
     // Cache key uniquely identifying this FileInfo as a *slice* of a physical file. Caches keyed
     // on file identity (e.g. lake metacache for Segments) must use this rather than `path` so two
@@ -364,7 +369,7 @@ public:
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     std::string _name;
-    // for cachefs in fs_starlet
+    // for cachefs in starlet_filesystem
     bool _is_cache_hit{false};
     // Slice base offset within the underlying physical file when this RandomAccessFile wraps a
     // BundleSeekableInputStream; 0 otherwise. Used only by page_cache_key to keep slices distinct.

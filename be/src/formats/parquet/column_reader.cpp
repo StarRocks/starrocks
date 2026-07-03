@@ -25,13 +25,12 @@
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/column_or_predicate.h"
-#include "storage/column_predicate.h"
+#include "storage/primitive/column_or_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
 
 namespace starrocks::parquet {
 

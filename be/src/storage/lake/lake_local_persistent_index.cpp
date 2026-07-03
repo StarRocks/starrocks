@@ -19,7 +19,7 @@
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {

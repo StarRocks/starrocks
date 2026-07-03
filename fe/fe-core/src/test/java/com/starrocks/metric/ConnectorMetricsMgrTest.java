@@ -142,6 +142,48 @@ public class ConnectorMetricsMgrTest extends StarRocksTestBase {
         Assertions.assertTrue(fail.getValue() >= 1);
     }
 
+    // ======================= Merge Metrics =======================
+
+    @Test
+    public void testIcebergMergeMetrics() {
+        ConnectorMetricsMgr.increaseIcebergMergeTotalSuccess();
+        ConnectorMetricsMgr.increaseIcebergMergeDurationMs(700L);
+        ConnectorMetricsMgr.increaseIcebergMergeRows(120L, "position_delete");
+        ConnectorMetricsMgr.increaseIcebergMergeBytes(8192L, "data");
+        ConnectorMetricsMgr.increaseIcebergMergeFiles(4L, "data");
+
+        LongCounterMetric total = findCounter("iceberg_merge_total",
+                "status", "success", "reason", "none");
+        Assertions.assertNotNull(total);
+        Assertions.assertTrue(total.getValue() >= 1);
+
+        LongCounterMetric duration = findCounter("iceberg_merge_duration_ms_total");
+        Assertions.assertNotNull(duration);
+        Assertions.assertTrue(duration.getValue() >= 700);
+
+        LongCounterMetric rows = findCounter("iceberg_merge_rows", "file_type", "position_delete");
+        Assertions.assertNotNull(rows);
+        Assertions.assertTrue(rows.getValue() >= 120);
+
+        LongCounterMetric bytes = findCounter("iceberg_merge_bytes", "file_type", "data");
+        Assertions.assertNotNull(bytes);
+        Assertions.assertTrue(bytes.getValue() >= 8192);
+
+        LongCounterMetric files = findCounter("iceberg_merge_files", "file_type", "data");
+        Assertions.assertNotNull(files);
+        Assertions.assertTrue(files.getValue() >= 4);
+    }
+
+    @Test
+    public void testIcebergMergeFailMetrics() {
+        ConnectorMetricsMgr.increaseIcebergMergeTotalFail(new java.util.concurrent.TimeoutException());
+
+        LongCounterMetric fail = findCounter("iceberg_merge_total",
+                "status", "failed", "reason", "timeout");
+        Assertions.assertNotNull(fail);
+        Assertions.assertTrue(fail.getValue() >= 1);
+    }
+
     // ======================= Compaction Metrics =======================
 
     @Test

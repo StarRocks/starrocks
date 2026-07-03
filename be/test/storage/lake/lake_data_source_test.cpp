@@ -32,13 +32,13 @@
 #include "common/runtime_profile.h"
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
@@ -50,6 +50,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -60,7 +61,7 @@ using namespace starrocks;
 class LakeDataSourceTest : public ::testing::Test {
 public:
     LakeDataSourceTest()
-            : _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
+            : _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
               _location_provider(std::make_shared<FixedLocationProvider>(kRootLocation)) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -266,7 +267,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
     runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // Build a minimal descriptor table with required column names.
@@ -414,7 +415,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     TVectorSearchOptions vec_opts;
     vec_opts.__set_enable_use_ann(true);
-    vec_opts.__set_use_ivfpq(false);
+    vec_opts.__set_refine_distance(false);
     vec_opts.__set_vector_distance_column_name("vec_distance");
     // Use a slot id that does NOT match any tuple slot, so init_scanner_columns
     // exercises the else branch for every slot (regular column lookup) without
@@ -440,7 +441,7 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     fe.hostname = "127.0.0.1";
     fe.port = 9020;
     fragment_ctx.set_fe_addr(fe);
-    runtime_state->set_fragment_ctx(&fragment_ctx);
+    runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
     runtime_state->set_fragment_dict_state(fragment_ctx.dict_state());
 
     // 3) Desc table with two INT slots matching the schema we mock below.

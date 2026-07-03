@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "common/config_exec_fwd.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
@@ -59,10 +61,11 @@ public:
     }
 
     void init_hdfs_scanner_context(HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
+        ctx->materialized_columns.clear();
         const auto& slots = tuple_desc->slots();
         for (int i = 0; i < slots.size(); i++) {
             SlotDescriptor* slot = slots[i];
-            HdfsScannerContext::ColumnInfo info;
+            FormatColumnInfo info;
             info.idx_in_chunk = i;
             info.slot_desc = slot;
             ctx->materialized_columns.push_back(info);
@@ -115,6 +118,7 @@ public:
 
     ObjectPool _pool;
     RuntimeState* _runtime_state;
+    HdfsScannerContext _scanner_ctx;
 };
 
 static void print_jni_scanner_params(const std::map<std::string, std::string>& params) {
@@ -157,7 +161,8 @@ TEST_F(JniScannerTest, test_create_paimon_jni_scanner) {
 
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
-    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+    scanner->_scanner_ctx = &_scanner_ctx;
+    init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
     scanner->update_jni_scanner_params();
 
     // check parameters.
@@ -200,7 +205,8 @@ TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
 
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
-    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+    scanner->_scanner_ctx = &_scanner_ctx;
+    init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
     scanner->update_jni_scanner_params();
 
     // check parameters.
@@ -253,7 +259,8 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
         auto scanner = create_hive_jni_scanner(options);
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
-        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->_scanner_ctx = &_scanner_ctx;
+        init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
         scanner->update_jni_scanner_params();
 
         // check parameters.
@@ -291,7 +298,8 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner) {
 
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
-        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->_scanner_ctx = &_scanner_ctx;
+        init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
         scanner->update_jni_scanner_params();
 
         // check parameters.
@@ -342,7 +350,8 @@ TEST_F(JniScannerTest, test_create_hive_jni_scanner2) {
         auto scanner = create_hive_jni_scanner(options);
         // update columns.
         TupleDescriptor* tuple_desc = create_default_tuple_desc();
-        init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+        scanner->_scanner_ctx = &_scanner_ctx;
+        init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
         scanner->update_jni_scanner_params();
 
         // check parameters.
@@ -388,7 +397,8 @@ TEST_F(JniScannerTest, test_create_odps_jni_scanner) {
     auto scanner = create_odps_jni_scanner(options);
     // update columns.
     TupleDescriptor* tuple_desc = create_default_tuple_desc();
-    init_hdfs_scanner_context(&(scanner->_scanner_ctx), tuple_desc);
+    scanner->_scanner_ctx = &_scanner_ctx;
+    init_hdfs_scanner_context(&_scanner_ctx, tuple_desc);
     scanner->update_jni_scanner_params();
 
     // check parameters.

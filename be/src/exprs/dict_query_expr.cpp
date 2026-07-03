@@ -21,11 +21,11 @@
 #include "column/column_viewer.h"
 #include "common/system/master_info.h"
 #include "common/util/thrift_client_cache.h"
-#include "exec/tablet_info.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "platform/thrift_rpc_helper.h"
-#include "storage/chunk_helper.h"
+#include "storage/primitive/schema_helper.h"
+#include "storage/primitive/tablet_info.h"
 #include "storage/table_reader.h"
 
 namespace starrocks {
@@ -142,7 +142,7 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
     for (int i = 0; i < _dict_query_expr.key_fields.size(); ++i) {
         for (const auto& tcolumn : tcolumns) {
             if (tcolumn->name() == _dict_query_expr.key_fields[i]) {
-                auto f = std::make_shared<Field>(ChunkHelper::convert_field(i, *tcolumn));
+                auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(i, *tcolumn));
                 _key_schema.append(f);
             }
         }
@@ -150,7 +150,7 @@ Status DictQueryExpr::open(RuntimeState* state, ExprContext* context, FunctionCo
 
     for (const auto& tcolumn : tcolumns) {
         if (tcolumn->name() == _dict_query_expr.value_field) {
-            auto f = std::make_shared<Field>(ChunkHelper::convert_field(0, *tcolumn));
+            auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(0, *tcolumn));
             _value_schema.append(f);
             break; /* only single column */
         }

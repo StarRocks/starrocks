@@ -32,10 +32,11 @@
 #include "exec/pipeline/exchange/split_local_exchange.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_executor.h"
+#include "exec/pipeline/fragment_execution_params.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/sink/blackhole_table_sink_operator.h"
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
@@ -238,8 +239,8 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         // the desired_tablet_sink_dop set by FE is not same as the dop, and it needs to
         // add a local passthrough exchange here
         if (desired_tablet_sink_dop != dop) {
-            auto ops = context->maybe_interpolate_local_passthrough_exchange(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
+            auto ops = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                    context, runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, prev_operators,
                     desired_tablet_sink_dop);
             ops.emplace_back(std::move(tablet_sink_op));
             context->add_pipeline(ops);

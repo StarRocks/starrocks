@@ -55,11 +55,28 @@ public:
     void update_selectivity(double selectivity) { _current_selectivity = selectivity; }
     void inc_num_rows(size_t num_rows) { _current_num_rows += num_rows; }
 
+    // Latched once the TopN runtime filter has actually arrived at the scan. The sole purpose of
+    // throttling is to wait for that arrival; once the filter is present (and prunes at storage)
+    // there is nothing left to wait for, so release regardless of observed per-chunk selectivity --
+    // which goes stale when storage-level zonemap pruning makes the pulled chunks empty.
+    void notify_rf_arrived() { _rf_arrived = true; }
+
+    // Steady-clock deadline (ms since epoch) of the current throttle window while in PH_THROTTLE,
+    // or -1 otherwise. The scan operator arms an event-scheduler timer at this deadline so the driver
+    // is woken when the window ends, instead of relying on the fallback poller.
+    int64_t current_throttle_deadline() const { return _phase == PH_THROTTLE ? _current_throttle_deadline : -1; }
+
+    // True once back-pressure has permanently stopped throttling -- either the RF arrived or the
+    // round/time/row budget was exhausted without it ever arriving. Read-only: unlike
+    // should_throttle() it does not advance the state machine. Used to release the scan IO-task
+    // clamp when there is nothing left to wait for, even though no RF materialized.
+    bool is_pass_through() const { return _phase == PH_PASS_THROUGH; }
+
     bool should_throttle() {
         if (_phase == PH_PASS_THROUGH) {
             return false;
-        } else if (!_round_limiter.has_next() || !_throttle_time_limiter.has_next() || !_num_rows_limiter.has_next() ||
-                   _current_selectivity <= _selectivity_lower_bound ||
+        } else if (_rf_arrived || !_round_limiter.has_next() || !_throttle_time_limiter.has_next() ||
+                   !_num_rows_limiter.has_next() || _current_selectivity <= _selectivity_lower_bound ||
                    _current_total_throttle_time >= _throttle_time_upper_bound) {
             _phase = PH_PASS_THROUGH;
             return false;
@@ -93,7 +110,7 @@ public:
             : _selectivity_lower_bound(selectivity_lower_bound),
               _throttle_time_upper_bound(throttle_time_upper_bound),
               _round_limiter(0, 1, 1.0, [max_rounds](int r) { return r < max_rounds; }),
-              _throttle_time_limiter(throttle_time, 0, 1.0, [](int64_t) { return true; }),
+              _throttle_time_limiter(throttle_time, 0, 2.0, [](int64_t) { return true; }),
               _num_rows_limiter(num_rows, 0, 2.0, [](size_t n) { return n < std::numeric_limits<size_t>::max() / 2; }) {
     }
 
@@ -108,6 +125,7 @@ private:
     int64_t _current_total_throttle_time{0};
     size_t _current_num_rows{0};
     double _current_selectivity{1.0};
+    bool _rf_arrived{false};
 };
 
 } // namespace starrocks::pipeline

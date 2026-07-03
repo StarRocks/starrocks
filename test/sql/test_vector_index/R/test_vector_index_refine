@@ -1,0 +1,204 @@
+-- name: test_vector_index_refine @sequential @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+-- result:
+-- !result
+CREATE TABLE __refine_rows (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into __refine_rows select generate_series from TABLE(generate_series(0, 8192 - 1));
+-- result:
+-- !result
+CREATE TABLE t_ivfpq (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2",
+    "index_build_threshold" = "16")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_ivfpq select k1, [k1, k1, k1, k1] from __refine_rows;
+-- result:
+-- !result
+set enable_vector_index_refine = true;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_ivfpq order by dis, id limit 6;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_ivfpq
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+set enable_vector_index_refine = false;
+-- result:
+-- !result
+select id from t_ivfpq order by approx_l2_distance([100,100,100,100], v), id limit 1;
+-- result:
+100
+-- !result
+CREATE TABLE t_hnsw_sq8 (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40", "quantizer" = "sq8",
+    "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_hnsw_sq8 select k1, [k1, k1, k1, k1] from __refine_rows;
+-- result:
+-- !result
+set enable_vector_index_refine = true;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_sq8 order by dis, id limit 6;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_sq8
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+set enable_vector_index_refine = false;
+-- result:
+-- !result
+select id from t_hnsw_sq8 order by approx_l2_distance([100,100,100,100], v), id limit 1;
+-- result:
+100
+-- !result
+CREATE TABLE t_hnsw_flat (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "hnsw", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "M" = "16", "efconstruction" = "40",
+    "index_build_threshold" = "1")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_hnsw_flat select k1, [k1, k1, k1, k1] from __refine_rows;
+-- result:
+-- !result
+set enable_vector_index_refine = true;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_flat order by dis, id limit 6;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+set enable_vector_index_refine = false;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_hnsw_flat order by dis, id limit 6;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+CREATE TABLE t_novi (
+  id bigint NOT NULL,
+  v ARRAY<float> NOT NULL,
+  INDEX idx (v) USING VECTOR (
+    "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
+    "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_novi select k1, [k1, k1, k1, k1] from __refine_rows where k1 < 200;
+-- result:
+-- !result
+set enable_vector_index_refine = true;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_novi
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+set enable_vector_index_refine = false;
+-- result:
+-- !result
+select id, approx_l2_distance([0,0,0,0], v) as dis from t_novi
+  where approx_l2_distance([0,0,0,0], v) <= 100 order by dis, id;
+-- result:
+0	0.0
+1	4.0
+2	16.0
+3	36.0
+4	64.0
+5	100.0
+-- !result
+DROP TABLE IF EXISTS t_ivfpq;
+-- result:
+-- !result
+DROP TABLE IF EXISTS t_hnsw_sq8;
+-- result:
+-- !result
+DROP TABLE IF EXISTS t_hnsw_flat;
+-- result:
+-- !result
+DROP TABLE IF EXISTS t_novi;
+-- result:
+-- !result
+DROP TABLE IF EXISTS __refine_rows;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
+-- result:
+-- !result

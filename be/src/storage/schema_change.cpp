@@ -42,10 +42,10 @@
 #include "base/failpoint/fail_point.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/sorting/sorting.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -56,7 +56,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/chunk_helper.h"
-#include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/metadata_util.h"
@@ -767,7 +766,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
             return Status::InternalError(_alter_msg_header +
                                          "change materialized view but query_options/query_globals is not set");
         }
-        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals, _exec_env);
 
         RuntimeState* runtime_state = chunk_changer->get_runtime_state();
         RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
@@ -803,7 +802,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
         DCHECK_EQ(sc_params.sc_sorting, false);
 
         chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
-                                          request.materialized_column_req.query_globals);
+                                          request.materialized_column_req.query_globals, _exec_env);
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
@@ -880,9 +879,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
-            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
-                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
-            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
@@ -896,6 +892,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
                     ss << ver << ",";
                 }
                 return Status::InternalError(fmt::format("fail to get rowset by version: {}", ss.str()));
+            }
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
             }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =

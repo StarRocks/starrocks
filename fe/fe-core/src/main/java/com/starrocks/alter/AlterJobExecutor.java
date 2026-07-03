@@ -35,6 +35,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -163,7 +164,25 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
         if (table instanceof OlapTable && ((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
             OlapTable olapTable = (OlapTable) table;
-            throw new AlterJobException("", InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName()));
+            OlapTable.OlapTableState state = olapTable.getState();
+            // Partition creation is metadata-only and provably safe to run concurrently with a narrow
+            // set of alter operations: the transient UPDATING_META window of fast schema evolution
+            // (only observable by lock-free readers; addPartitions serializes behind the table WRITE
+            // lock, by which time the state is NORMAL again), and the shared-data ADD/DROP INDEX
+            // fast-path jobs (which declare allowConcurrentPartitionCreation()). Mixed-clause
+            // statements, all other states, and all non-partition clauses keep the legacy rejection.
+            boolean addPartitionOnly = statement.getAlterClauseList().stream()
+                    .allMatch(c -> AlterOpType.getOpType(c) == AlterOpType.ADD_PARTITION);
+            boolean tolerable = Config.enable_concurrent_add_partition_during_alter
+                    && addPartitionOnly
+                    && (state == OlapTable.OlapTableState.UPDATING_META
+                        || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                            && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())));
+            if (!tolerable) {
+                throw new AlterJobException("", InvalidOlapTableStateException.of(state, olapTable.getName()));
+            }
+            LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
+                    olapTable.getName(), state);
         }
 
         this.db = db;
@@ -362,10 +381,23 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     @Override
     public Void visitDropPersistentIndexClause(DropPersistentIndexClause clause, ConnectContext context) {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        // This clause is dispatched via the unlocked else branch in visitAlterTableStatement, so take the
+        // table WRITE lock here (mirroring the other clause handlers): processLakeTableDropPersistentIndex
+        // walks the table's partition/index/tablet structures and runs a check-then-set on
+        // LakeTablet.rebuildPindexVersion, and that work must be serialized against concurrent alters.
+        // NOTE: this lock does NOT serialize with the lake publish path. That reader (Utils.processTablets)
+        // reads rebuildPindexVersion lock-free after publishPartition has released its own table lock, so
+        // cross-thread visibility relies solely on the field being volatile. A publish already in flight for
+        // the marked version can still miss the rebuild request -- that is a pre-existing version-matching
+        // TOCTOU in the publish/flag protocol, not something an FE-side lock can close.
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
             schemaChangeHandler.processLakeTableDropPersistentIndex(clause, db, (OlapTable) table);
         } catch (StarRocksException e) {
             throw new AlterJobException(e.getMessage(), e);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
         return null;
     }
@@ -1059,6 +1091,12 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 ctx.getSessionVariable().getSqlMode(),
                 alterViewClause.getComment(),
                 alterViewClause.getOriginalViewDefineSql());
+        // For CREATE OR REPLACE VIEW, redefine the SQL SECURITY characteristic atomically with the definition.
+        // A null value (plain ALTER VIEW ... AS) leaves the view's existing characteristic unchanged.
+        if (alterViewClause.getSecurity() != null) {
+            alterViewInfo.setUpdateSecurity(true);
+            alterViewInfo.setSecurity(alterViewClause.getSecurity());
+        }
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;

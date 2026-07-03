@@ -26,10 +26,10 @@
 #include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 #ifdef WITH_STARCACHE
 #include "cache/disk_cache/starcache_engine.h"

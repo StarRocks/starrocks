@@ -14,6 +14,7 @@
 
 set(TYPES_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    agg_state_desc_test.cpp
     bitmap_value_test.cpp
     copied_datum_test.cpp
     date_value_test.cpp
@@ -21,6 +22,7 @@ set(TYPES_TEST_FILES
     decimalv3_test.cpp
     datetime_value_test.cpp
     hll_test.cpp
+    int128_arithmetic_ops_test.cpp
     json_value_test.cpp
     logical_type_test.cpp
     type_descriptor_test.cpp

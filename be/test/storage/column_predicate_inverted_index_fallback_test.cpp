@@ -22,11 +22,11 @@
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
 #include "roaring/roaring.hh"
-#include "storage/column_expr_predicate.h"
-#include "storage/column_predicate.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.h"
+#include "storage/primitive/column_expr_predicate.h"
+#include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/predicate_tree/predicate_tree.h"
 #include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
@@ -340,6 +340,24 @@ TEST_F(OrMatchFallbackVisitorTest, recurses_through_nested_compound) {
     ASSERT_OK(visitor(or_node));
 
     EXPECT_FALSE(has_fallback);
+}
+
+// Unit-tests the extracted query-type decision used by inverted-index pushdown,
+// including the new fallback (std::nullopt) for LIKE patterns containing '_'.
+TEST(ChooseInvertedIndexQueryTypeTest, all_branches) {
+    using QT = InvertedIndexQueryType;
+    // For valid_like cases valid_match is false, so `op` is ignored; pass any value.
+    const auto IGN = TExprOpcode::MATCH_ANY;
+
+    EXPECT_EQ(QT::MATCH_ANY_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ANY, "x").value());
+    EXPECT_EQ(QT::MATCH_ALL_QUERY, choose_inverted_index_query_type(false, true, TExprOpcode::MATCH_ALL, "x").value());
+
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "foo_bar").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "中_文").has_value());
+    EXPECT_FALSE(choose_inverted_index_query_type(true, false, IGN, "a_b%c").has_value());
+
+    EXPECT_EQ(QT::MATCH_WILDCARD_QUERY, choose_inverted_index_query_type(true, false, IGN, "foo%bar").value());
+    EXPECT_EQ(QT::EQUAL_QUERY, choose_inverted_index_query_type(true, false, IGN, "foobar").value());
 }
 
 } // namespace starrocks

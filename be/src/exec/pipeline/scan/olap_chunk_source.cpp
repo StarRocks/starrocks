@@ -30,17 +30,20 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/runtime_range_pruner.hpp"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/catalog_scan_metrics.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/primitives/query_runtime_state.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/query_scan_metrics.h"
+#include "exec/runtime/query_runtime_state.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
@@ -51,8 +54,6 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -62,7 +63,6 @@
 #include "storage/predicate_parser.h"
 #include "storage/primitive/projection_iterator.h"
 #include "storage/primitive/vector_search_option.h"
-#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
 #include "types/json_value.h"
@@ -103,7 +103,9 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     const TVectorSearchOptions& vector_search_options = thrift_olap_scan_node.vector_search_options;
     _use_vector_index = thrift_olap_scan_node.__isset.vector_search_options && vector_search_options.enable_use_ann;
     if (_use_vector_index) {
-        _use_ivfpq = vector_search_options.use_ivfpq;
+        // use_ivfpq is the deprecated predecessor of refine_distance (both mean "run the refine path").
+        // Honor it too so an older FE that only sets use_ivfpq picks the right path under a rolling upgrade.
+        _refine_distance = vector_search_options.refine_distance || vector_search_options.use_ivfpq;
         _vector_distance_column_name = vector_search_options.vector_distance_column_name;
         _vector_slot_id = vector_search_options.vector_slot_id;
         _params.vector_search_option = std::make_shared<VectorSearchOption>();
@@ -300,7 +302,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
         _params.vector_search_option->result_order = vector_options.result_order;
-        _params.vector_search_option->use_ivfpq = _use_ivfpq;
+        _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
         _params.vector_search_option->pq_refine_factor = _runtime_state->query_options().pq_refine_factor;
     }
@@ -349,6 +351,14 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
     }
 
+    // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
+    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
+    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
+    // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
+    _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
+                                           _scan_node->is_filtered_above_iterator();
+
     // Range
     for (const auto& key_range : key_ranges) {
         if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
@@ -373,7 +383,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         DCHECK(slot->is_materialized());
         int32_t index;
         // TODO: port vector index column to virtual column
-        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+        if (_use_vector_index && !_refine_distance && slot->id() == _vector_slot_id) {
             index = _tablet_schema->num_columns();
             _params.vector_search_option->vector_column_id = index;
             _params.vector_search_option->vector_slot_id = slot->id();
@@ -621,7 +631,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
         COUNTER_SET(_non_pushdown_predicates_counter,
                     static_cast<int64_t>(_scan_ctx->not_push_down_conjuncts().size() + _non_pushdown_pred_tree.size()));
-        if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        if (runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
                     _non_pushdown_pred_tree.visit([](const auto& node) { return node.debug_string(); }));
@@ -664,7 +674,7 @@ Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             int32_t index;
-            if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+            if (_use_vector_index && !_refine_distance && slot->id() == _vector_slot_id) {
                 index = _tablet_schema->num_columns();
             } else {
                 index = _tablet_schema->field_index(slot->col_name());
@@ -843,7 +853,7 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
-    if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+    if (_runtime_state->fragment_runtime_state()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(
                 "PushdownPredicateTree", _params.pred_tree.visit([](const auto& node) { return node.debug_string(); }));
     }
@@ -962,9 +972,11 @@ void OlapChunkSource::_update_counter() {
 
     // Data sampling
     if (_params.sample_options.enable_sampling) {
+        double sample_percent = _params.sample_options.__isset.probability_percent_v2
+                                        ? _params.sample_options.probability_percent_v2
+                                        : static_cast<double>(_params.sample_options.probability_percent);
         _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
-        _runtime_profile->add_info_string("SamplePercent",
-                                          std::to_string(_params.sample_options.probability_percent) + "%");
+        _runtime_profile->add_info_string("SamplePercent", std::to_string(sample_percent) + "%");
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
                        _reader->stats().sample_population_size);
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),

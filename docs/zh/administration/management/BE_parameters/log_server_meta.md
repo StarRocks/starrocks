@@ -192,7 +192,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 引入版本：v4.2.0
 - 描述：是否对大部分外部 BE HTTP 接口启用 Basic Auth。凭证通过 Thrift `checkAuth` RPC 转发到 FE Leader 校验，用户/密码以 FE 端的认证体系（含 LDAP / security integration）为准。以下接口始终豁免：
-  - 公开探针 / 可观测性：`/api/health`、`/metrics`、`/metrics/memory`。
   - Token 鉴权的内部传输（FE/BE 用于 tablet clone 和 load 错误文件拉取）：`/api/_tablet/_download`、`/api/_download_load`。这些接口仍由各自的 token 检查保护；开启 `enable_http_auth=true` **不**能弥补 `enable_token_check=false` 带来的安全损失。
   - Stream Load 及 transaction 接口，由 handler 内基于 load label + 表级授权识别身份：`/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
 
@@ -375,7 +374,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 GlobalEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
+- 描述：该项设置为 `true` 时，BE 会启动一个后台线程（`jemalloc_tracker_daemon`），该线程以每秒一次的频率轮询 Jemalloc 统计信息，并将 Jemalloc 的 "stats.metadata" 值更新到 RuntimeEnv 的 Jemalloc 元数据 MemTracker 中。这可确保 Jemalloc 元数据的消耗被计入 StarRocks 进程的内存统计，防止低报 Jemalloc 内部使用的内存。该 Tracker 仅在非 macOS 构建上编译/启动（#ifndef __APPLE__），并以名为 "jemalloc_tracker_daemon" 的守护线程运行。仅在未使用 Jemalloc 或者 Jemalloc 跟踪被有意以不同方式管理时才禁用，否则请保持启用以维护准确的内存计量和分配保护。
 - 引入版本：v3.2.12
 
 ### enable_jvm_metrics

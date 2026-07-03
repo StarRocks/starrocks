@@ -525,6 +525,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         private AsyncRefreshContext asyncRefreshContext;
         @SerializedName(value = "lastRefreshTime")
         private long lastRefreshTime;
+        // Wall-clock confirm time of the last successful refresh run, not the base-table data version (see lastRefreshTime).
+        @SerializedName(value = "lastFreshnessConfirmedAt")
+        private long lastFreshnessConfirmedAt;
 
         public MvRefreshScheme() {
             this.moment = RefreshMoment.IMMEDIATE;
@@ -584,11 +587,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastRefreshTime = lastRefreshTime;
         }
 
+        public long getLastFreshnessConfirmedAt() {
+            return lastFreshnessConfirmedAt;
+        }
+
+        public void setLastFreshnessConfirmedAt(long lastFreshnessConfirmedAt) {
+            this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
+        }
+
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.moment = this.moment;
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
+            res.lastFreshnessConfirmedAt = this.lastFreshnessConfirmedAt;
             if (this.asyncRefreshContext != null) {
                 res.asyncRefreshContext = this.asyncRefreshContext.copy();
             }
@@ -602,6 +614,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", type=" + type +
                     ", asyncRefreshContext=" + asyncRefreshContext +
                     ", lastRefreshTime=" + lastRefreshTime +
+                    ", lastFreshnessConfirmedAt=" + lastFreshnessConfirmedAt +
                     '}';
         }
     }
@@ -876,8 +889,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return formatInsertSql("insert overwrite");
     }
 
-    public String getIVMTaskDefinition() {
-        return formatInsertSql("INSERT INTO");
+    public String getTaskDefinition(String selectSql) {
+        return formatInsertSql("insert overwrite", selectSql);
+    }
+
+    public String getIVMTaskDefinition(String selectSql) {
+        return formatInsertSql("INSERT INTO", selectSql);
     }
 
     /**
@@ -887,10 +904,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * which {@code InsertAnalyzer} rejects if listed explicitly.
      */
     private String formatInsertSql(String insertKeyword) {
+        return formatInsertSql(insertKeyword, getMVQueryDefinedSql());
+    }
+
+    private String formatInsertSql(String insertKeyword, String selectSql) {
         String targetSpec = hasAutoIncrementColumn()
                 ? String.format("`%s` (%s)", getName(), queryProducedColumnList())
                 : String.format("`%s`", getName());
-        return String.format("%s %s %s", insertKeyword, targetSpec, getMVQueryDefinedSql());
+        return String.format("%s %s %s", insertKeyword, targetSpec, selectSql);
     }
 
     /**
@@ -966,6 +987,53 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    // Per-base-table data version time as a JSON map {catalog.db.table: datetime}, vs LAST_REFRESH_TIME which is
+    // their single MAX. External/lake base tables report the partition source modified time; OLAP base tables report
+    // the visible-version commit time. "{}" when no base table has a recorded time.
+    public String getBaseTableRefreshVersionTimesJson() {
+        MvRefreshScheme scheme = getRefreshScheme();
+        if (scheme == null || scheme.getAsyncRefreshContext() == null) {
+            return "{}";
+        }
+        AsyncRefreshContext ctx = scheme.getAsyncRefreshContext();
+        Map<String, String> result = new LinkedHashMap<>();
+        // External/lake base tables, keyed by BaseTableInfo; stored time is the connector's native unit.
+        for (Map.Entry<BaseTableInfo, Map<String, BasePartitionInfo>> entry :
+                ctx.getBaseTableInfoVisibleVersionMap().entrySet()) {
+            long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+            if (maxRefreshTime > 0) {
+                result.put(entry.getKey().getReadableString(),
+                        TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+            }
+        }
+        // OLAP base tables, keyed by table id; stored time is the partition visible-version commit time (millis).
+        List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+        if (baseTableInfos != null) {
+            Map<Long, BaseTableInfo> idToBaseTableInfo = new HashMap<>();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                idToBaseTableInfo.put(baseTableInfo.getTableId(), baseTableInfo);
+            }
+            for (Map.Entry<Long, Map<String, BasePartitionInfo>> entry :
+                    ctx.getBaseTableVisibleVersionMap().entrySet()) {
+                BaseTableInfo baseTableInfo = idToBaseTableInfo.get(entry.getKey());
+                long maxRefreshTime = maxPartitionRefreshTime(entry.getValue());
+                if (baseTableInfo != null && maxRefreshTime > 0) {
+                    result.put(baseTableInfo.getReadableString(),
+                            TimeUtils.longToTimeString(TimeUtils.normalizeToEpochMillis(maxRefreshTime)));
+                }
+            }
+        }
+        return result.isEmpty() ? "{}" : GsonUtils.GSON.toJson(result);
+    }
+
+    private static long maxPartitionRefreshTime(Map<String, BasePartitionInfo> partitionInfos) {
+        return partitionInfos.values().stream()
+                .mapToLong(BasePartitionInfo::getLastRefreshTime)
+                .filter(t -> t > 0)
+                .max()
+                .orElse(0L);
     }
 
     public void setWarehouseId(long warehouseId) {

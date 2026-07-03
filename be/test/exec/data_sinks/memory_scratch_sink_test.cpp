@@ -52,24 +52,24 @@
 #include <iostream>
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "base/logging.h"
 #include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "compute_env/result/result_queue_mgr.h"
+#include "exec/exec_env.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "types/logical_type.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

@@ -104,6 +104,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
+import static com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -405,6 +406,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * Policy for selecting a backup compute node when the tablet's primary worker cannot be used in shared-data mode.
      */
     public static final String BLACKLIST_BACKUP_ROUTING = "blacklist_backup_routing";
+
+    // The default SQL SECURITY characteristic (NONE | INVOKER) applied when CREATE VIEW omits the SECURITY clause.
+    public static final String DEFAULT_VIEW_SQL_SECURITY = "default_view_sql_security";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
@@ -1015,6 +1019,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String HDFS_BACKEND_SELECTOR_FORCE_REBALANCE = "hdfs_backend_selector_force_rebalance";
 
+    public static final String HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM = "hdfs_backend_selector_cache_replica_num";
+
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
@@ -1084,6 +1090,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String K_FACTOR = "k_factor";
 
+    public static final String ENABLE_VECTOR_INDEX_REFINE = "enable_vector_index_refine";
+
     /**
      * Used to split files stored in dfs such as object storage or hdfs into smaller files.
      */
@@ -1139,8 +1147,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
+    // TopN runtime-filter back-pressure tuning knobs for the lake/connector self-enabled path.
+    public static final String TOPN_FILTER_BACK_PRESSURE_IO_TASKS = "topn_filter_back_pressure_io_tasks";
+    public static final String ENABLE_TOPN_FILTER_BACK_PRESSURE =
+            "enable_topn_filter_back_pressure";
+    public static final String TOPN_BACK_PRESSURE_MAX_ROUNDS = "topn_back_pressure_max_rounds";
+    public static final String TOPN_BACK_PRESSURE_NUM_ROWS = "topn_back_pressure_num_rows";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_MS = "topn_back_pressure_throttle_time_ms";
+    public static final String TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS =
+            "topn_back_pressure_throttle_time_upper_bound_ms";
 
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
+    public static final String NGRAM_SEARCH_SUPPORT_UTF8 = "ngram_search_support_utf8";
 
     public static final String SEMI_JOIN_DEDUPLICATE_MODE = "semi_join_deduplicat_mode";
     public static final String ENABLE_INNER_JOIN_TO_SEMI = "enable_inner_join_to_semi";
@@ -1290,6 +1308,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
     private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+
+    @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
+    private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -2206,6 +2227,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_FORCE_REBALANCE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorForceRebalance = false;
 
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_CACHE_REPLICA_NUM)
+    private int hdfsBackendSelectorCacheReplicaNum = 1;
+
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 256;
 
@@ -2259,6 +2283,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
     private long backPressureThrottleTimeUpperBound = 300;
 
+    // Read-ahead IO-task cap while a TopN runtime filter is still pending; <=0 disables the clamp.
+    @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_IO_TASKS)
+    private int topnFilterBackPressureIoTasks = 1;
+    // Whether scans (both shared-nothing olap and shared-data lake/connector) self-enable TopN
+    // back-pressure even when the FE topn_filter_back_pressure_mode flag is 0.
+    @VarAttr(name = ENABLE_TOPN_FILTER_BACK_PRESSURE)
+    private boolean enableTopnFilterBackPressure = true;
+    // Throttle window parameters for the lake/connector self-enabled back-pressure path (tuned defaults).
+    @VarAttr(name = TOPN_BACK_PRESSURE_MAX_ROUNDS)
+    private int topnBackPressureMaxRounds = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_NUM_ROWS)
+    private long topnBackPressureNumRows = 1024;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_MS)
+    private long topnBackPressureThrottleTimeMs = 8;
+    @VarAttr(name = TOPN_BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND_MS)
+    private long topnBackPressureThrottleTimeUpperBoundMs = 100;
+
     // Determines whether the upper/lower function supports utf8,
     // introduced by https://github.com/StarRocks/starrocks/pull/56192
     // Before this, the upper/lower function only supports ascii characters, and SR has made special optimizations in performance.
@@ -2269,6 +2310,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In order to be compatible with the previous behavior, the default value is false.
     @VarAttr(name = LOWER_UPPER_SUPPORT_UTF8)
     private boolean lowerUpperSupportUTF8 = false;
+
+    // Enable UTF-8 support for ngram_search and ngram_search_case_insensitive functions.
+    // When enabled, n-grams are computed based on UTF-8 characters instead of bytes.
+    // This allows proper similarity computation for non-ASCII text (e.g., Cyrillic, Chinese).
+    // Default is false for backward compatibility.
+    @VarAttr(name = NGRAM_SEARCH_SUPPORT_UTF8)
+    private boolean ngramSearchSupportUTF8 = false;
 
     // this sv controls whether to create distinct agg below semi join
     // -1 means disable this optimization
@@ -3167,6 +3215,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = K_FACTOR)
     private double kFactor = 1;
 
+    // When on, a quantized vector index (IVFPQ, or HNSW with a non-flat quantizer) refines its ANN
+    // result by recomputing the exact distance on the full-precision vectors. Off = trust the (lossy)
+    // index distance. No effect on a non-quantized index, whose distance is already exact.
+    @VarAttr(name = ENABLE_VECTOR_INDEX_REFINE)
+    private boolean enableVectorIndexRefine = false;
+
+    public boolean isEnableVectorIndexRefine() {
+        return enableVectorIndexRefine;
+    }
+
+    public void setEnableVectorIndexRefine(boolean enableVectorIndexRefine) {
+        this.enableVectorIndexRefine = enableVectorIndexRefine;
+    }
+
     public int getPrepareMetadataPoolSize() {
         return prepareMetadataPoolSize;
     }
@@ -3792,6 +3854,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 .or(BlacklistBackupRoutingPolicy.getDefault());
     }
 
+    public void setDefaultViewSqlSecurity(String defaultViewSqlSecurity) {
+        DefaultViewSqlSecurity result =
+                Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity)).orNull();
+        if (result == null) {
+            String legalValues = Joiner.on(" | ").join(DefaultViewSqlSecurity.values());
+            throw new IllegalArgumentException("Legal values of " + DEFAULT_VIEW_SQL_SECURITY + " are " + legalValues);
+        }
+        this.defaultViewSqlSecurity = StringUtils.upperCase(defaultViewSqlSecurity);
+    }
+
+    public DefaultViewSqlSecurity getDefaultViewSqlSecurity() {
+        return Enums.getIfPresent(DefaultViewSqlSecurity.class,
+                        StringUtils.upperCase(defaultViewSqlSecurity))
+                .or(DefaultViewSqlSecurity.getDefault());
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }
@@ -4080,6 +4159,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setConsistentHashVirtualNodeNum(int consistentHashVirtualNodeNum) {
         this.consistentHashVirtualNodeNum = consistentHashVirtualNodeNum;
+    }
+
+    public int getHdfsBackendSelectorCacheReplicaNum() {
+        return Math.max(1, hdfsBackendSelectorCacheReplicaNum);
+    }
+
+    public void setHdfsBackendSelectorCacheReplicaNum(int hdfsBackendSelectorCacheReplicaNum) {
+        this.hdfsBackendSelectorCacheReplicaNum = hdfsBackendSelectorCacheReplicaNum;
     }
 
     public void setBigQueryProfileThreshold(String bigQueryProfileThreshold) {
@@ -4926,6 +5013,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableOptimizerSkewJoinOptimizeV1(boolean enableOptimizerSkewJoinByQueryRewrite) {
         this.enableOptimizerSkewJoinByQueryRewrite = enableOptimizerSkewJoinByQueryRewrite;
         this.enableOptimizerSkewJoinByBroadCastSkewValues = !enableOptimizerSkewJoinByQueryRewrite;
+    }
+
+    // Disable both skew-join rewrites at once. setEnableOptimizerSkewJoinOptimizeV1/V2 each turn the
+    // other on, so callers that need both off (e.g. MERGE INTO, whose per-driver duplicate check must
+    // not have its join key salted by V1 or broadcast by V2) must use this.
+    public void disableSkewJoinOptimize() {
+        this.enableOptimizerSkewJoinByBroadCastSkewValues = false;
+        this.enableOptimizerSkewJoinByQueryRewrite = false;
     }
 
     public boolean isEnableColumnExprPredicate() {
@@ -6114,6 +6209,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.backPressureThrottleTimeUpperBound = value;
     }
 
+    public int getTopnFilterBackPressureIoTasks() {
+        return this.topnFilterBackPressureIoTasks;
+    }
+
+    public boolean isEnableTopnFilterBackPressure() {
+        return this.enableTopnFilterBackPressure;
+    }
+
+    public int getTopnBackPressureMaxRounds() {
+        return this.topnBackPressureMaxRounds;
+    }
+
+    public long getTopnBackPressureNumRows() {
+        return this.topnBackPressureNumRows;
+    }
+
+    public long getTopnBackPressureThrottleTimeMs() {
+        return this.topnBackPressureThrottleTimeMs;
+    }
+
+    public long getTopnBackPressureThrottleTimeUpperBoundMs() {
+        return this.topnBackPressureThrottleTimeUpperBoundMs;
+    }
+
     public boolean isEnableDataCacheSharing() {
         return enableDataCacheSharing;
     }
@@ -6454,6 +6573,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_join_runtime_filter_pushdown(enableJoinRuntimeFilterPushDown);
         tResult.setEnable_join_runtime_bitset_filter(enableJoinRuntimeBitsetFilter);
         tResult.setLower_upper_support_utf8(lowerUpperSupportUTF8);
+        tResult.setNgram_search_support_utf8(ngramSearchSupportUTF8);
         tResult.setEnable_global_late_materialization(enableGlobalLateMaterialization);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
@@ -6489,6 +6609,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setTopn_filter_back_pressure_io_tasks(topnFilterBackPressureIoTasks);
+        tResult.setEnable_topn_filter_back_pressure(enableTopnFilterBackPressure);
+        tResult.setTopn_back_pressure_max_rounds(topnBackPressureMaxRounds);
+        tResult.setTopn_back_pressure_num_rows(topnBackPressureNumRows);
+        tResult.setTopn_back_pressure_throttle_time_ms(topnBackPressureThrottleTimeMs);
+        tResult.setTopn_back_pressure_throttle_time_upper_bound_ms(topnBackPressureThrottleTimeUpperBoundMs);
         tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
         tResult.setUse_page_cache(usePageCache);
 

@@ -14,10 +14,25 @@
 
 set(COLUMN_TEST_FILES
     ../base/cxa_throw_wrap.cpp
+    array_column_test.cpp
+    array_view_column_test.cpp
+    binary_column_test.cpp
     column_base_test.cpp
-    mysql_row_buffer_test.cpp
+    column_cow_test.cpp
+    column_hash_test.cpp
+    column_helper_test.cpp
+    column_view_test.cpp
+    const_column_test.cpp
+    decimalv3_column_test.cpp
+    global_dict_core_test.cpp
     german_string_test.cpp
+    json_column_test.cpp
+    map_column_test.cpp
+    mysql_row_buffer_test.cpp
     object_column_core_test.cpp
+    simd_mulselector_test.cpp
+    simd_selector_test.cpp
+    struct_column_test.cpp
     column_visitor_test.cpp
     raw_data_visitor_test.cpp
     column_filter_range_test.cpp
@@ -28,6 +43,8 @@ set(COLUMN_TEST_FILES
     array_view_column_core_test.cpp
     arrow_to_starrocks_converter_test.cpp
     arrow_to_json_converter_test.cpp
+    type_to_arrow_converter_test.cpp
+    record_batch_converter_test.cpp
     map_column_core_test.cpp
     struct_column_core_test.cpp
     binary_column_core_test.cpp
@@ -36,6 +53,7 @@ set(COLUMN_TEST_FILES
     decimalv3_json_core_test.cpp
     append_with_mask_core_test.cpp
     datum_convert_core_test.cpp
+    type_converter_core_test.cpp
     column_helper_time_core_test.cpp
     json_converter_core_test.cpp
     adaptive_offsets_test.cpp
@@ -50,6 +68,10 @@ set(COLUMN_TEST_FILES
     variant_encoder_test.cpp
     buffer_test.cpp
 )
+
+if (USE_AVX2)
+    list(APPEND COLUMN_TEST_FILES avx_numeric_column_test.cpp)
+endif ()
 
 set(COLUMN_TEST_LINK_LIBS
     ColumnCore
@@ -80,6 +102,7 @@ set(CHUNK_TEST_FILES
     chunk_factory_test.cpp
     chunk_schema_helper_test.cpp
     chunk_core_test.cpp
+    chunk_test.cpp
     segmented_chunk_core_test.cpp
     field_test.cpp
     schema_test.cpp
@@ -107,3 +130,31 @@ target_link_libraries(starrocks_chunk_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_chunk_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(chunk_test $<TARGET_OBJECTS:starrocks_chunk_test_objs>)
 target_link_libraries(chunk_test ${CHUNK_TEST_LINK_LIBS} gtest_main)
+
+set(COLUMN_SORT_CORE_TEST_FILES
+    ../base/cxa_throw_wrap.cpp
+    fixed_length_column_extended_test.cpp
+    nullable_column_test.cpp
+    sorting/sort_core_test.cpp
+)
+
+set(COLUMN_SORT_CORE_TEST_LINK_LIBS
+    ColumnSortCore
+    ChunkCore
+    ColumnCore
+    Types
+    Common
+    Base
+    Gutil
+    StarRocksGen
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(column_sort_core_test ${COLUMN_SORT_CORE_TEST_FILES})
+target_link_libraries(column_sort_core_test ${COLUMN_SORT_CORE_TEST_LINK_LIBS} gtest_main)

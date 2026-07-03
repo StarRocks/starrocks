@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
@@ -66,7 +65,9 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -121,34 +122,72 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        long finishedSQLNum = 0;
-        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-        long totalCollectSQL = collectSQLList.size();
+        long startMs = System.currentTimeMillis();
+        long jobId = analyzeStatus.getId();
+        LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
+                jobId, catalogName, db.getOriginName(), table.getName(),
+                partitionNames.size(), columnNames.size());
 
-        // First, the collection task is divided into several small tasks according to the column name and partition,
-        // and then the multiple small tasks are aggregated into several tasks
-        // that will actually be run according to the configured parallelism, and are connected by union all
-        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
-        // dop will be set to 1 to meet the requirements of the degree of parallelism.
-        // If the number of unions is less than the degree of parallelism,
-        // dop should be adjusted appropriately to use enough cpu cores
-        for (List<String> sqlUnion : collectSQLList) {
-            if (sqlUnion.size() < parallelism) {
-                context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
-            } else {
-                context.getSessionVariable().setPipelineDop(1);
+        Map<String, String> extendedInfo = new LinkedHashMap<>();
+        extendedInfo.put("table_format", table.getType().name().toLowerCase(Locale.ROOT));
+        extendedInfo.put("partition_count", String.valueOf(partitionNames.size()));
+        extendedInfo.put("column_count", String.valueOf(columnNames.size()));
+        extendedInfo.putAll(table.getStatsCollectMetadata());
+
+        // Merge into the existing properties map so it surfaces via the Properties column of
+        // SHOW ANALYZE STATUS without introducing new columns.
+        Map<String, String> mergedProperties = new LinkedHashMap<>();
+        if (analyzeStatus.getProperties() != null) {
+            mergedProperties.putAll(analyzeStatus.getProperties());
+        }
+        mergedProperties.putAll(extendedInfo);
+        analyzeStatus.setProperties(mergedProperties);
+
+        LOG.info("[ExternalStats] table info | jobId={} catalog={} db={} table={} {}",
+                jobId, catalogName, db.getOriginName(), table.getName(), extendedInfo);
+
+        String status = "SUCCESS";
+        String failureReason = "";
+        try {
+            long finishedSQLNum = 0;
+            int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+            List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+            long totalCollectSQL = collectSQLList.size();
+
+            // First, the collection task is divided into several small tasks according to the column name and partition,
+            // and then the multiple small tasks are aggregated into several tasks
+            // that will actually be run according to the configured parallelism, and are connected by union all
+            // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
+            // dop will be set to 1 to meet the requirements of the degree of parallelism.
+            // If the number of unions is less than the degree of parallelism,
+            // dop should be adjusted appropriately to use enough cpu cores
+            for (List<String> sqlUnion : collectSQLList) {
+                if (sqlUnion.size() < parallelism) {
+                    context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
+                } else {
+                    context.getSessionVariable().setPipelineDop(1);
+                }
+
+                String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
+
+                collectStatisticSync(sql, context, analyzeStatus);
+                finishedSQLNum++;
+                analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
             }
 
-            String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
-
-            collectStatisticSync(sql, context, analyzeStatus);
-            finishedSQLNum++;
-            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            flushInsertStatisticsData(context, true);
+        } catch (Exception e) {
+            status = "FAILED";
+            failureReason = e.getMessage();
+            throw e;
+        } finally {
+            LOG.info("[ExternalStats] collect end | jobId={} catalog={} db={} table={} status={} " +
+                            "durationMs={} partitions={} columns={} reason={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(),
+                    status, System.currentTimeMillis() - startMs,
+                    partitionNames.size(), columnNames.size(), failureReason);
         }
-
-        flushInsertStatisticsData(context, true);
     }
 
     protected List<List<String>> buildCollectSQLList(int parallelism) {

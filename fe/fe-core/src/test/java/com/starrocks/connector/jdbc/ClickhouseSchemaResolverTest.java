@@ -30,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -48,6 +49,9 @@ public class ClickhouseSchemaResolverTest {
 
     @Mocked
     Connection connection;
+
+    @Mocked
+    PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -243,5 +247,75 @@ public class ClickhouseSchemaResolverTest {
         List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
         List<String> expectResult = Lists.newArrayList("clickhouse", "template1", "test");
         Assertions.assertEquals(expectResult, result);
+    }
+
+    // -------------------------------------------------------------------------
+    // getTableRowCount tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetTableRowCountReturnsCount() throws SQLException {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("total_rows", Arrays.asList(2_000_000L));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "testdb", "tbl1");
+        Assertions.assertEquals(2_000_000L, count);
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenEmpty() throws SQLException {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("total_rows", Arrays.asList());
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "testdb", "tbl1");
+        Assertions.assertEquals(-1L, count, "Should return -1 when result set is empty");
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenNull() throws SQLException {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("total_rows", Arrays.asList((Object) null));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "testdb", "tbl1");
+        Assertions.assertEquals(-1L, count, "Should return -1 when total_rows is NULL (e.g. Distributed engine)");
     }
 }

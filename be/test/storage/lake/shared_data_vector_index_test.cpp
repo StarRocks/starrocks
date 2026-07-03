@@ -21,6 +21,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_vector_index_fwd.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
@@ -118,7 +119,7 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_write_shared_data_path) {
     const int64_t index_id = 0;
     const std::string segment_name = "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
 
-    std::string vi_filename = gen_vector_index_filename(segment_name, index_id);
+    std::string vi_filename = gen_vector_index_filename(segment_name, tablet_id, index_id);
     std::string vector_index_path = _location_provider->segment_location(tablet_id, vi_filename);
 
     auto tablet_index = create_tablet_index(index_id);
@@ -150,11 +151,11 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_write_shared_data_path) {
 // Test that gen_vector_index_filename produces correct filename for shared-data segment names.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_filename_for_shared_data_segment) {
     std::string segment_name = "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
-    std::string vi_name = gen_vector_index_filename(segment_name, 0);
-    ASSERT_EQ(vi_name, "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_0.vi");
+    std::string vi_name = gen_vector_index_filename(segment_name, 7, 0);
+    ASSERT_EQ(vi_name, "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_7_0.vi");
 
-    vi_name = gen_vector_index_filename(segment_name, 123);
-    ASSERT_EQ(vi_name, "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_123.vi");
+    vi_name = gen_vector_index_filename(segment_name, 7, 123);
+    ASSERT_EQ(vi_name, "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_7_123.vi");
 
     // Verify full path from LocationProvider matches expected layout
     const int64_t tablet_id = 1;
@@ -173,7 +174,7 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     const int64_t tablet_id = 999;
     const int64_t index_id = 0;
     std::string segment_name = "0000000000000002_abc12345-6789-0def-1234-567890abcdef.dat";
-    std::string vi_filename = gen_vector_index_filename(segment_name, index_id);
+    std::string vi_filename = gen_vector_index_filename(segment_name, tablet_id, index_id);
     std::string vector_index_path = _location_provider->segment_location(tablet_id, vi_filename);
 
     // Build an ivfpq tablet_index from scratch — using create_tablet_index() and then
@@ -361,7 +362,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_vi_via_tablet_mgr) {
     EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
 
     std::string seg_path = _tablet_mgr->segment_location(kTabletId, seg.path);
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(seg_path));
     EXPECT_TRUE(fs::path_exist(vi_path));
 
@@ -395,7 +397,50 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_vi_via_location_prov
     ASSERT_EQ(seg.vector_index_ids.size(), 1);
     EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
 
-    std::string vi_path = _lp->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path = _lp->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
+    EXPECT_TRUE(fs::path_exist(vi_path));
+
+    writer->close();
+}
+
+// A bundle-file segment must now build its vector index (previously bundle segments skipped it
+// entirely and relied on compaction to rewrite them first). The .vi is named with the tablet id
+// via gen_vector_index_filename so tablets sharing one bundle never collide; here a single writer
+// drives the bundle path (is_bundle requires a BundleWritableFileContext + single segment + eos)
+// and we assert the bundle segment records its index id and produces the .vi inline (sync mode).
+TEST_F(SharedDataTabletWriterVITest, test_bundle_segment_builds_vector_index) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+
+    auto schema_pb = create_vi_schema_pb(); // sync hnsw vector index
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    int64_t txn_id = 2100;
+    // One physical bundle file shared by the partition's tablets; mirror DeltaWriter's
+    // active-writer lifecycle so the shared file is finalized on the last writer.
+    auto bundle_ctx = std::make_unique<BundleWritableFileContext>();
+    bundle_ctx->increase_active_writers();
+
+    auto writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema, txn_id,
+                                                                  /*is_compaction=*/false, /*flush_pool=*/nullptr,
+                                                                  bundle_ctx.get());
+    ASSERT_OK(writer->open());
+    auto chunk = build_chunk(tablet_schema, 3);
+    // eos=true so the first reset_segment_writer takes the bundle branch
+    // (is_bundle requires a context + no prior segment + eos).
+    ASSERT_OK(writer->write(*chunk, /*segment=*/nullptr, /*eos=*/true));
+    ASSERT_OK(writer->finish());
+    ASSERT_OK(bundle_ctx->decrease_active_writers());
+
+    ASSERT_EQ(writer->segments().size(), 1);
+    const auto& seg = writer->segments().front();
+    // Confirm the write really went through the bundle path (a slice in the shared file).
+    ASSERT_TRUE(seg.bundle_file_offset.has_value());
+    // Bundle segment now records its vector index id (no longer skipped).
+    ASSERT_EQ(seg.vector_index_ids.size(), 1);
+    EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
+    // The .vi is built inline and named from the shared bundle filename + this tablet's id.
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 
     writer->close();
@@ -430,7 +475,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_sync_records_inde
     EXPECT_EQ(5, seg.num_rows);
     ASSERT_EQ(1u, seg.vector_index_ids.size());
     EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
     writer->close();
 }
@@ -492,7 +538,8 @@ TEST_F(SharedDataTabletWriterVITest, test_vertical_writer_vi) {
     ASSERT_EQ(seg.vector_index_ids.size(), 1);
     EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
 
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 
     writer->close();
@@ -556,7 +603,7 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_shared_data_path) {
     const int64_t index_id = 0;
     const std::string segment_name = "0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
 
-    std::string vi_filename = gen_vector_index_filename(segment_name, index_id);
+    std::string vi_filename = gen_vector_index_filename(segment_name, tablet_id, index_id);
     std::string vector_index_path = _location_provider->segment_location(tablet_id, vi_filename);
 
     // Write vector index first
@@ -593,7 +640,7 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_empty_mark_shared_data_
     const int64_t tablet_id = 999;
     const int64_t index_id = 0;
     std::string segment_name = "0000000000000002_abc12345-6789-0def-1234-567890abcdef.dat";
-    std::string vi_filename = gen_vector_index_filename(segment_name, index_id);
+    std::string vi_filename = gen_vector_index_filename(segment_name, tablet_id, index_id);
     std::string vector_index_path = _location_provider->segment_location(tablet_id, vi_filename);
 
     // Write empty mark file directly (the current writer skips file generation
@@ -634,16 +681,11 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_read_not_found) {
 // vector column. With skip_vector_index=true, no .vi path is configured,
 // no .vi file is produced, and _has_vector_index_written stays false.
 //
-// HorizontalGeneralTabletWriter sets this flag for bundle-file segments
-// (segments that share a single underlying data file across the rowset)
-// because the segment filename in metadata is the bundle filename, not
-// the per-segment name used to derive .vi paths. Producing .vi files for
-// bundle segments would generate paths that don't match what readers
-// look up, so the writer suppresses them.
-//
-// This test pins down the SegmentWriter-level contract directly, without
-// the BundleWritableFileContext scaffolding, so a regression that drops
-// the `&& !_opts.skip_vector_index` guard would fail here.
+// The async/deferred bundle path sets this flag: the .vi is produced later by the
+// lake build task from the bundle slice, not inline. This test pins down the
+// SegmentWriter-level contract directly, without the BundleWritableFileContext
+// scaffolding -- skip_vector_index=true must leave no inline .vi artifact behind.
+// (End-to-end bundle .vi creation is covered by test_bundle_segment_builds_vector_index.)
 TEST_F(SharedDataTabletWriterVITest, test_segment_writer_skip_vector_index_no_vi_artifact) {
     ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
 
@@ -762,7 +804,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_async_above_threshol
     EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
 
     // Async: no .vi inline; the deferred build task is responsible for producing it.
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_FALSE(fs::path_exist(vi_path));
     writer->close();
 }
@@ -793,7 +836,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_force_inline_builds_
 
     // Force-inline overrides async deferral: the .vi must exist right after the write
     // (a non-TenANN build still writes the empty-mark placeholder, like the sync tests above).
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path)) << "force-inline build should produce .vi inline despite async mode";
     writer->close();
 }
@@ -846,7 +890,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_async_above_thres
     EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
 
     // Async: no .vi inline; the deferred build task produces it later.
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_FALSE(fs::path_exist(vi_path));
     writer->close();
 }
@@ -927,7 +972,8 @@ TEST_F(SharedDataTabletWriterVITest, test_vertical_writer_async_above_threshold_
     EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
 
     // Async: no .vi inline.
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_FALSE(fs::path_exist(vi_path));
     writer->close();
 }

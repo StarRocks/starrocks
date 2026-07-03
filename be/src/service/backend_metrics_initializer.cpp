@@ -28,6 +28,7 @@
 
 #include "agent/agent_metrics.h"
 #include "base/compression/compression_context_pool_metrics.h"
+#include "base/logging.h"
 #include "base/network/network_util.h"
 #include "cache/datacache_metrics.h"
 #include "common/config_metrics_fwd.h"
@@ -35,28 +36,26 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/system/disk_info.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
-#include "fs/fs.h"
-#include "fs/fs_util.h"
-#include "fs/key_cache.h"
-#include "http/http_metrics.h"
-#include "io/io_profiler_metrics.h"
-#include "platform/platform_metrics.h"
-#include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_metrics.h"
-#include "service/service_metrics.h"
-#include "staros_integration/staros_worker_metrics.h"
-#include "storage/storage_metrics.h"
-#ifndef __APPLE__
-#include "util/jvm_metrics.h"
-#endif
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/spill/spill_metrics.h"
+#include "compute_env/staros/staros_worker_metrics.h"
 #include "connector/file_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
+#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/query_scan_metrics.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
+#include "io/io_profiler_metrics.h"
+#include "platform/http/http_metrics.h"
+#include "platform/key_cache.h"
+#include "platform/platform_metrics.h"
+#include "runtime/process_memory_metrics.h"
+#include "runtime/runtime_env.h"
+#include "runtime/runtime_metrics.h"
+#include "service/service_metrics.h"
 #include "storage/flat_json_metrics.h"
-#include "util/logging.h"
-#include "util/system_metrics.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -233,7 +232,6 @@ BackendMetricsInitOptions BackendMetricsInitializer::from_config(std::vector<std
     options.storage_paths = std::move(storage_paths);
     options.collect_hook_enabled = !config::enable_metric_calculator;
     options.init_system_metrics = config::enable_system_metrics;
-    options.init_jvm_metrics = config::enable_jvm_metrics;
     options.bind_ipv6 = BackendOptions::is_bind_ipv6();
     return options;
 }
@@ -268,7 +266,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
 
     if (options.init_system_metrics) {
         PlatformMetrics::instance()->install(registry, disk_devices, network_interfaces);
-        SystemMetrics::instance()->install(registry);
+        RuntimeEnv::GetInstance()->process_memory_metrics()->install(registry);
         IOProfilerMetrics::instance()->install(registry);
     }
 
@@ -276,20 +274,9 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     CatalogScanMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);
+    VectorIndexCacheMetrics::instance()->install(registry);
     StorageMetrics::instance()->install(registry);
     KeyCache::instance().install_metrics(registry);
-
-#ifndef __APPLE__
-    if (options.init_jvm_metrics) {
-        auto* jvm_metrics = JVMMetrics::instance();
-        auto status = jvm_metrics->init();
-        if (!status.ok()) {
-            LOG(WARNING) << "init jvm metrics failed: " << status.to_string();
-            return;
-        }
-        jvm_metrics->install(registry);
-    }
-#endif
 }
 
 } // namespace starrocks

@@ -169,8 +169,10 @@ public:
         if constexpr (isCorelation) {
             one_element_size += (sizeof(double) * 2);
         }
-        bytes.resize(one_element_size * chunk_size);
-        dst_column->get_offset().resize(chunk_size + 1);
+        const size_t final_size = old_size + one_element_size * chunk_size;
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
 
         const auto* src_column0 = down_cast<const InputColumnType*>(src[0].get());
         const auto* src_column1 = down_cast<const InputColumnType*>(src[1].get());
@@ -197,8 +199,7 @@ public:
                        sizeof(double));
             }
             old_size += one_element_size;
-
-            dst_column->get_offset()[i + 1] = old_size;
+            offsets.set(i + 1, old_size);
         }
     }
 };

@@ -18,10 +18,10 @@
 #include "http/monitor_action.h"
 
 #include "common/status.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
-#include "http/rest_monitor_iface.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
+#include "runtime/rest_monitor_iface.h"
 
 namespace starrocks {
 

@@ -70,9 +70,19 @@ MutableColumns extract_group_by_columns(Aggregator* aggregator) {
 struct AggInRuntimeFilterBuilderImpl {
     template <LogicalType ltype>
     RuntimeFilter* operator()(ObjectPool* pool, Aggregator* aggregator, size_t build_expr_order) {
-        auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
         auto group_by_columns = extract_group_by_columns(aggregator);
-        runtime_filter->build(group_by_columns[build_expr_order].get());
+        Column* build_column = group_by_columns[build_expr_order].get();
+        // A constant build column carries a single value spread over column->size() logical rows but
+        // is backed by one physical row. InRuntimeFilter::build() down_casts to the typed/nullable
+        // column and iterates column->size() rows (its is_constant() check is only a DCHECK, compiled
+        // out in release builds), so a ConstColumn would be misinterpreted and overrun its backing
+        // storage. Returning nullptr leaves the merged filter always-true (conservative and correct),
+        // mirroring the ConstColumn handling in AggTopNRuntimeFilterBuilder::update().
+        if (build_column->is_constant()) {
+            return nullptr;
+        }
+        auto runtime_filter = InRuntimeFilter<ltype>::create(pool);
+        runtime_filter->build(build_column);
         return runtime_filter;
     }
 };
@@ -83,6 +93,10 @@ RuntimeFilter* AggInRuntimeFilterBuilder::build(Aggregator* aggretator, ObjectPo
 }
 
 bool AggInRuntimeFilterMerger::merge(size_t seq, RuntimeFilterBuildDescriptor* desc, RuntimeFilter* in_rf) {
+    // A null builder result means this driver could not contribute its keys to the IN filter (e.g. a
+    // constant build column, see AggInRuntimeFilterBuilder). An IN filter is only correct if it
+    // contains every build-side key, so a single missing contribution forces the whole filter to
+    // always-true (no pruning); return false so it is never published.
     if (in_rf == nullptr) {
         _always_true = true;
         return false;
@@ -254,6 +268,13 @@ RuntimeFilter* AggTopNRuntimeFilterBuilder::build(Aggregator* aggretator, Object
 
 void AggTopNRuntimeFilterBuilder::update(const Columns& group_by_columns, const Filter& selection) {
     if (_heap_builder == nullptr || _runtime_filter == nullptr) {
+        return;
+    }
+    // A constant build column carries a single value and cannot meaningfully narrow the min/max topn
+    // runtime filter; skipping it keeps the filter conservative (correct). It also avoids feeding a
+    // ConstColumn to the updater, which reads the raw typed column via an unchecked down_cast (e.g.
+    // to BinaryColumn) and would misinterpret a ConstColumn and crash.
+    if (group_by_columns[_build_desc->build_expr_order()]->is_constant()) {
         return;
     }
     type_dispatch_predicate<void>(_type, false, AggTopNRuntimeFilterUpdaterImpl(), _heap_builder, _runtime_filter,

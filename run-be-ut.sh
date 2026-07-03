@@ -227,6 +227,21 @@ if [[ -z ${USE_AVX512} ]]; then
     # Disable it by default
     USE_AVX512=OFF
 fi
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
+        USE_AVX2=OFF
+    fi
+    if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
+        USE_AVX512=OFF
+    fi
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
+        USE_SSE4_2=OFF
+    fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
+    fi
+fi
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
         ENABLE_JIT=OFF
@@ -323,7 +338,7 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
 split_debug_symbol() {
     local bin="$1"
     local symbol="${bin}.debuginfo"
-    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
     objcopy --only-keep-debug "$bin" "$symbol"
     strip --strip-debug "$bin"
     objcopy --add-gnu-debuglink="$symbol" "$bin"

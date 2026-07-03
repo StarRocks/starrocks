@@ -61,9 +61,9 @@
 #include "common/config_expr_fwd.h"
 #include "common/status.h"
 #include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "exprs/expr.h"
 #include "exprs/jit/expr_jit_codegen.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -289,12 +289,12 @@ public:
         // getBufferSize's returning value is a little less than the real size of the buffer, since
         // the buffer contains alignment padding and keep the module identifier at its tail.
         size_t value_size = value->getBufferSize();
-        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
+        RuntimeEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
         auto* handle = _cache.insert(
                 key, value, value_size,
                 [](const auto& key, auto* value) {
                     auto* p = static_cast<llvm::MemoryBuffer*>(value);
-                    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(p->getBufferSize());
+                    RuntimeEnv::GetInstance()->jit_cache_mem_tracker()->release(p->getBufferSize());
                     delete p; // Release the memory buffer
                 },
                 CachePriority::NORMAL);
@@ -368,12 +368,12 @@ public:
         DCHECK(callable);
         auto* value = new CacheValue{std::move(callable)};
         auto value_size = value->callable->getSize();
-        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
+        RuntimeEnv::GetInstance()->jit_cache_mem_tracker()->consume(value_size);
         auto* handle = _cache.insert(
                 func_name, value, value_size,
                 [](const auto& key, auto* value) {
                     auto* p = static_cast<CacheValue*>(value);
-                    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(p->callable->getSize());
+                    RuntimeEnv::GetInstance()->jit_cache_mem_tracker()->release(p->callable->getSize());
                     delete p;
                 },
                 CachePriority::NORMAL);
@@ -383,7 +383,7 @@ public:
             _cache.release(handle);
         } else {
             VLOG(10) << "JIT callable cache for " << func_name << " is full, not cached";
-            GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(value_size);
+            RuntimeEnv::GetInstance()->jit_cache_mem_tracker()->release(value_size);
             delete value; // Release the memory if not cached
         }
     }
@@ -465,7 +465,7 @@ Status JITEngine::init() {
     jit_lru_object_cache_size = 16 * 1024 * 1024;
     jit_lru_cache_size = 16 * 1024 * 1024;
 #else
-    int64_t mem_limit = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
     if (jit_lru_cache_size <= 0 && jit_lru_object_cache_size <= 0) {
         if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
             _initialized = true;

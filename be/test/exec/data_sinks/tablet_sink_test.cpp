@@ -26,14 +26,14 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
-#include "exec/tablet_info.h"
-#include "runtime/base_load_path_mgr.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load_path/base_load_path_mgr.h"
+#include "exec/exec_env.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_state.h"
+#include "storage/primitive/tablet_info.h"
 #include "types/decimalv2_value.h"
 
 namespace starrocks {

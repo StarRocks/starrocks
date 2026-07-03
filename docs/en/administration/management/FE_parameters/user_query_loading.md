@@ -91,6 +91,15 @@ This topic introduces the following types of FE configurations:
 - Description: Timeout in milliseconds applied to the BRPC TalkTimeoutController before sending a plan fragment. `BackendServiceClient.sendPlanFragmentAsync` sets this value prior to calling the backend `execPlanFragmentAsync`. It governs how long BRPC will wait when borrowing an idle connection from the connection pool and while performing the send; if exceeded, the RPC will fail and may trigger the method's retry logic. Set this lower to fail fast under contention, or raise it to tolerate transient pool exhaustion or slow networks. Be cautious: very large values can delay failure detection and block request threads.
 - Introduced in: v3.3.11, v3.4.1, v3.5.0
 
+### `connector_row_size_estimate_bytes`
+
+- Default: 256
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The estimated average row size in bytes used by the optimizer to estimate row counts for external file tables (FILES() and ENGINE=file tables) when the storage format is unknown or the column schema is not available. The row count is estimated as `total_file_bytes / connector_row_size_estimate_bytes`. A smaller value produces a higher row count estimate and may affect join ordering decisions.
+- Introduced in: v3.4
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - Default: 12 * 3600
@@ -353,6 +362,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable predicate columns collection. If disabled, predicate columns will not be recorded during query optimization.
 - Introduced in: -
 
+### `push_down_non_grouped_aggregate_below_union`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to push down non-grouped aggregations below Union in the physical plan.
+- Introduced in: -
+
 ### `enable_query_queue_v2`
 
 - Default: true
@@ -422,6 +440,25 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Controls whether UPDATE statements can trigger automatic statistics collection. When enabled, UPDATE operations that modify table data may schedule statistics collection through the same ingestion-based statistics framework controlled by `enable_statistic_collect_on_first_load`. Disabling this configuration skips statistics collection for UPDATE statements while keeping load-triggered statistics collection behavior unchanged.
 - Introduced in: v3.5.11, v4.0.4
+
+### `enable_sync_statistics_load`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether queries wait for all statistics to be loaded before execution. When enabled, if a query references a table/column whose statistics are not fully loaded, the query will wait until the statistics loading is complete before proceeding. This ensures that the query optimizer has access to the latest statistics for better plan generation but may increase query latency if statistics loading takes time. When disabled, queries will proceed without waiting for statistics to load, which may lead to suboptimal plans if statistics are missing or outdated.
+- Introduced in: -
+
+### `sync_statistics_load_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Timeout to synchronously wait for stats (when `enable_sync_statistics_load` is enabled). When the stats are not available during this time, the query will proceed without the stats, which may lead to suboptimal plans. Set this value to a reasonable time based on your cluster's performance and workload characteristics.
+- Introduced in: -
+
 
 ### `enable_udf`
 
@@ -813,6 +850,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The interval at which the cache of statistical information is updated.
 - Introduced in: -
+
+
+### `enable_external_stats_lazy_refresh_on_replay`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how followers (and restart recovery) refresh the connector (external table) statistics cache when replaying statistics journals. When set to `true`, the cache is invalidated by the table UUID persisted in the journal and reloaded lazily on the next query, which avoids resolving external table metadata (`MetadataMgr.getTable`) during replay — such resolution may block the journal replayer on the Hive Metastore or object storage. When set to `false` (default), the legacy eager refresh is used, preserving existing behavior. Statistics journals written before this UUID was persisted always fall back to eager refresh regardless of this setting.
 
 ### `statistics_large_string_column_merge_threshold`
 

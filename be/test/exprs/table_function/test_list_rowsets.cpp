@@ -13,38 +13,39 @@
 // limitations under the License.
 
 #include "base/testutil/assert.h"
+#include "common/config_lake_fwd.h"
 #include "exprs/table_function/list_rowsets.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.h"
+#include "platform/platform_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
-
-class MockRuntimeState : public RuntimeState {
-public:
-    MockRuntimeState(ExecEnv* execEnv) : RuntimeState(&execEnv->query_execution_services(), execEnv) {}
-    MOCK_METHOD((ExecEnv*), exec_env, ());
-};
 
 class ListRowsetsTableFunctionTest : public ::testing::Test {
 public:
     void SetUp() override {
+        StorageEnv::GetInstance()->stop();
+        StorageEnv::GetInstance()->destroy();
         _state = new ListRowsets::MyState();
-        _execEnv = new ExecEnv();
-        _runtimeState = new MockRuntimeState(_execEnv);
+        _runtimeState = new RuntimeState(static_cast<const QueryExecutionServices*>(nullptr), nullptr);
     }
 
     void TearDown() override {
         delete _state;
-        delete _execEnv;
         delete _runtimeState;
+        StorageEnvOptions storage_env_options;
+        storage_env_options.store_path_registry = PlatformEnv::GetInstance()->store_path_registry();
+        storage_env_options.update_mem_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();
+        storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+        storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+        ASSERT_OK(StorageEnv::GetInstance()->init(storage_env_options));
     }
 
 protected:
     ListRowsets::MyState* _state;
-    MockRuntimeState* _runtimeState;
-    ExecEnv* _execEnv;
+    RuntimeState* _runtimeState;
 };
 
 TEST_F(ListRowsetsTableFunctionTest, basic_test) {
@@ -58,10 +59,13 @@ TEST_F(ListRowsetsTableFunctionTest, basic_test) {
     input_columns.push_back(tablet_version_column);
 
     _state->set_params(input_columns);
-    EXPECT_CALL(*_runtimeState, exec_env()).WillRepeatedly(testing::Return(nullptr));
 
     ListRowsets list_rowsets_func;
     auto result = list_rowsets_func.process(_runtimeState, _state);
+#ifndef __APPLE__
     ASSERT_EQ("Only works for tablets in the cloud-native table", _state->status().message());
+#else
+    ASSERT_EQ("Lake storage is disabled on macOS", _state->status().message());
+#endif
 }
 } // namespace starrocks

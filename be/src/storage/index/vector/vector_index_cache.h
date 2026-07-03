@@ -19,7 +19,8 @@
 
 namespace starrocks {
 class MemTracker;
-}
+class VectorIndexCacheMetrics;
+} // namespace starrocks
 
 #ifdef WITH_TENANN
 
@@ -28,8 +29,8 @@ class MemTracker;
 #include <ostream>
 #include <string>
 
+#include "cache/dynamic_cache.h"
 #include "tenann/index/index_cache.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks {
 
@@ -59,7 +60,7 @@ public:
     using Cache = DynamicCache<std::string, VectorIndexCacheEntry>;
     using Entry = Cache::Entry;
 
-    VectorIndexCache(size_t capacity, MemTracker* tracker);
+    VectorIndexCache(size_t capacity, MemTracker* tracker, VectorIndexCacheMetrics* metrics = nullptr);
     ~VectorIndexCache() override;
 
     VectorIndexCache(const VectorIndexCache&) = delete;
@@ -72,7 +73,7 @@ public:
     [[nodiscard]] bool GetOrCreate(const tenann::CacheKey& key, const IndexLoader& loader,
                                    tenann::IndexCacheHandle* handle) override;
 
-    void SetCapacity(size_t new_capacity) { _cache.set_capacity(new_capacity); }
+    void SetCapacity(size_t new_capacity);
     size_t capacity() const { return _cache.capacity(); }
     size_t memory_usage() const { return _cache.size(); }
 
@@ -81,8 +82,10 @@ public:
 
 private:
     tenann::IndexCacheHandle _wrap(Entry* entry, tenann::IndexRef ref);
+    void _update_metrics() const;
 
     Cache _cache;
+    VectorIndexCacheMetrics* _metrics = nullptr;
     std::atomic<uint64_t> _lookup_count{0};
     std::atomic<uint64_t> _hit_count{0};
 };
@@ -97,7 +100,7 @@ namespace starrocks {
 // reference accessors without their own WITH_TENANN guards.
 class VectorIndexCache {
 public:
-    VectorIndexCache(size_t, MemTracker*) {}
+    VectorIndexCache(size_t, MemTracker*, VectorIndexCacheMetrics* = nullptr) {}
     void SetCapacity(size_t) {}
     size_t capacity() const { return 0; }
     size_t memory_usage() const { return 0; }

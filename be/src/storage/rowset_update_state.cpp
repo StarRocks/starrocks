@@ -21,17 +21,17 @@
 #include "column/binary_column.h"
 #include "column/chunk_factory.h"
 #include "column/raw_data_visitor.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
@@ -792,18 +792,21 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     int64_t t_rewrite_start = MonotonicMillis();
     // TODO(cbl): non-cloud-native mode currently doesn't support encryption,
     // so encryption meta support in segment file rewrite is not supported here
+    SegmentFileMark segment_file_mark{rowset->rowset_path(), rowset->rowset_id().to_string()};
     if (txn_meta.has_auto_increment_partial_update_column_id() &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+        MutableColumns* partial_update_columns =
+                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr;
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment(
                 src_path, dest_path, _tablet_schema, _auto_increment_partial_update_states[segment_id], read_column_ids,
-                _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
+                partial_update_columns, segment_file_mark));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
         FileInfo src{.path = src_path};
         FileInfo dest{.path = dest_path};
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(src, &dest, _tablet_schema, read_column_ids,
                                                                 _partial_update_states[segment_id].write_columns,
-                                                                segment_id, partial_rowset_footer));
+                                                                segment_id, partial_rowset_footer, segment_file_mark));
     }
     int64_t t_rewrite_end = MonotonicMillis();
 

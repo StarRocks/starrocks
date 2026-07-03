@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 
 import java.util.Collections;
@@ -46,7 +47,8 @@ import java.util.Optional;
  * set by {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer}.
  * This rule reads that same data source as {@code TvrTableScanRule}.
  *
- * <p>For append-only Iceberg tables, {@code __ACTION__} is a constant {@code 0} (INSERT = UPSERT).
+ * <p>For append-only Iceberg tables, {@code __ACTION__} is a constant {@link IvmRuleUtils#INSERT_ACTION}
+ * (INSERT = UPSERT).
  */
 public class IvmDeltaIcebergScanRule extends TransformationRule {
     public IvmDeltaIcebergScanRule() {
@@ -80,14 +82,14 @@ public class IvmDeltaIcebergScanRule extends TransformationRule {
                     new LogicalValuesOperator(outputColumns, Collections.emptyList())));
         }
 
-        // Build a project on top of the scan that adds __ACTION__ = 0 (append-only INSERT).
+        // Build a project on top of the scan that adds __ACTION__ = INSERT_ACTION (append-only INSERT).
         ColumnRefOperator actionColumn = delta.getActionColumn();
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator col : scan.getOutputColumns()) {
             projectMap.put(col, col);
         }
         if (actionColumn != null) {
-            projectMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 0));
+            projectMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
         }
 
         // Keep the scan with its tvrVersionRange intact — the physical layer (IcebergMetadata)

@@ -39,11 +39,14 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.MetricVisitor;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -67,6 +70,7 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TFeMetricsResult;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
@@ -210,6 +214,33 @@ public class FrontendServiceImplTest {
 
         TMVReportEpochResponse response = impl.mvReport(request);
         Assertions.assertNotNull(response);
+    }
+
+    @Test
+    public void testGetFeMetrics() throws TException {
+        // information_schema.fe_metrics is served over this RPC instead of scraping HTTP /metrics.
+        // It returns the same JSON payload as /metrics?type=json with an OK status.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getJson_metrics());
+    }
+
+    @Test
+    public void testGetFeMetricsReturnsErrorStatusOnException() throws TException {
+        // When metric collection throws, getFeMetrics must return an INTERNAL_ERROR status
+        // (with an error message) instead of propagating the exception.
+        new MockUp<MetricRepo>() {
+            @Mock
+            public String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
+                throw new RuntimeException("boom");
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertFalse(result.getStatus().getError_msgs().isEmpty());
     }
 
     @Test

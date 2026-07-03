@@ -24,12 +24,12 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "exec/exec_env.h"
 #include "exprs/column_ref.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

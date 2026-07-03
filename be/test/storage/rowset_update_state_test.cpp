@@ -25,7 +25,7 @@
 #include "column/datum_tuple.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"

@@ -111,7 +111,10 @@ Wildcards can also be used to specify intermediate paths.
 
   :::note
 
-  To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+  To access NFS(NAS) via the `file://` protocol, mount the same NAS device as NFS under the same directory on the nodes that need to access the path:
+
+  - For read/write operations, mount it on each FE node and each BE or CN node. FE nodes list the files and infer the file schema, and BE/CN nodes read the data.
+  - For write only operations, mount it on each BE or CN node.
 
   :::
 
@@ -136,6 +139,18 @@ Example of the Parquet format:
 "parquet.use_legacy_encoding" = "true",   -- for unloading only
 "parquet.version" = "2.6"                 -- for unloading only
 ```
+
+When reading Parquet files (for example, via `FILES()` or Broker Load), StarRocks maps the Parquet TIMESTAMP logical type to DATETIME according to the type's `isAdjustedToUTC` attribute:
+
+- **Instant Semantics**: If `isAdjustedToUTC` is `true`, the value identifies an instant on the timeline normalized to UTC. StarRocks converts it to the wall-clock reading in the current session time zone.
+- **Local Semantics**: If `isAdjustedToUTC` is `false`, the value is a wall-clock reading without a time zone. StarRocks returns it as written, regardless of the session time zone.
+- The legacy INT96 physical type carries no `isAdjustedToUTC` attribute. StarRocks treats an INT96 column as an instant normalized to UTC and converts it to the session time zone, whether the INT96 timestamp is a top-level column or nested inside a STRUCT, ARRAY, or MAP.
+
+:::note
+
+**Behavior change**: In earlier versions, StarRocks shifted timestamps with Local Semantics (`isAdjustedToUTC` = `false`) by the session time zone offset on read. Such values are now returned as written. If your session time zone is not UTC, the same file now returns different values than in earlier versions. The new values are correct per the Parquet specification.
+
+:::
 
 ###### `parquet.use_legacy_encoding`
 

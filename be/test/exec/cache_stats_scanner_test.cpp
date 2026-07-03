@@ -25,16 +25,17 @@
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "connector/cache_stats_connector.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -42,7 +43,7 @@ class CacheStatsScannerTest : public ::testing::Test {
 public:
     CacheStatsScannerTest() : _tablet_id(next_id()) {
         _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
-        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
 
         CHECK(FileSystem::Default()

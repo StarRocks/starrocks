@@ -42,8 +42,8 @@
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/vector_index_file_reader.h"
 #include "tenann/common/error.h"
@@ -77,15 +77,26 @@ Status TenANNReader::init_searcher(const tenann::IndexMeta& meta, const std::str
     auto* cache = tenann::GetGlobalIndexCache();
     if (cache == nullptr) {
         return Status::InternalError(
-                "VectorIndexCache not injected. ExecEnv::init must call tenann::SetGlobalIndexCache.");
+                "VectorIndexCache not injected. StorageEnv must initialize the TenANN global index cache.");
     }
 
     auto meta_copy = meta;
     apply_index_reader_cache_options(&meta_copy);
 
-    // Loader runs under vector_index mem tracker and opens the remote file
-    // lazily, so warm-path cache hits skip the OSS/S3 round-trip entirely.
-    auto* tracker = GlobalEnv::GetInstance()->vector_index_mem_tracker();
+    // Loader opens the remote file lazily, so warm-path cache hits skip the OSS/S3
+    // round-trip entirely.
+    //
+    // Charge the load to the process tracker (not the vector_index tracker): the
+    // index lives in the heap, so the allocator hook already accounts these bytes
+    // to process exactly once here. The VectorIndexCache then labels the same bytes
+    // on the vector_index tracker via consume_without_root (see its ctor), which
+    // does NOT re-add to process. Pointing the hook at the vector_index tracker
+    // instead would double the vector_index label (hook + cache) and leak it on
+    // eviction (the eventual tenann free runs on whatever thread drops the last
+    // IndexRef, not necessarily under this tracker). Routing through process keeps
+    // the load off the originating query's mem limit while leaving the deterministic
+    // cache consume/release as the sole source of the vector_index label.
+    auto* tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
 
     // Loader catches its own failures (incl. tenann::Error, which inherits
     // privately from std::exception and would otherwise escape GetOrCreate)

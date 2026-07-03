@@ -40,15 +40,14 @@
 #include "exprs/column_ref.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "util/json_flattener.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
@@ -291,6 +290,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
 
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             result.append_null();
         } else {
             result.append(std::move(json.value()));
@@ -538,17 +540,19 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
                     state->real_path.paths.emplace_back(p);
                     continue;
                 }
-                if (p.key.find('.') != std::string::npos) {
-                    in_flat = false;
-                }
-                if (in_flat) {
-                    flat_path += "." + p.key;
+                // A key containing the '.' separator is still a valid flat level once wrapped in
+                // quotes (the inverse of JsonFlatPath::split_path, matching SubfieldAccessPathNormalizer
+                // on the FE); only a key whose name itself contains a '"' is unrepresentable and falls
+                // back to extraction from the reconstructed JSON via real_path.
+                if (in_flat && p.key.find('"') == std::string::npos) {
+                    flat_path += (p.key.find('.') == std::string::npos) ? "." + p.key : ".\"" + p.key + "\"";
                     if (p.array_selector->type != NONE) {
                         state->real_path.paths.emplace_back("", p.array_selector);
                         in_flat = false;
                     }
                     continue;
                 }
+                in_flat = false;
                 state->real_path.paths.emplace_back(p);
             }
 

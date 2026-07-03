@@ -17,10 +17,14 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
-set(RUNTIME_CORE_FILES
+set(RUNTIME_SRCS
+    byte_buffer.cpp
+    message_body_sink.cpp
     current_thread.cpp
+    chunk_accumulator.cpp
     chunk_helper.cpp
     descriptors.cpp
+    descriptors_ext.cpp
     runtime_state.cpp
     mem_tracker.cpp
     mem_pool.cpp
@@ -32,10 +36,7 @@ set(RUNTIME_CORE_FILES
     bucket_aware_partition.cpp
     query_statistics.cpp
     runtime_metrics.cpp
-    stream_load/stream_load_metrics.cpp
-    global_dict/decoder.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
+    time_guard.cpp
     type_pack.cpp
     load_fail_point.cpp
     memory/roaring_hook.cpp
@@ -43,15 +44,30 @@ set(RUNTIME_CORE_FILES
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
+    memory/memory_lock.cpp
     exception_stack.cpp
     prof/heap_prof.cpp
+    serde/chunk_encode_context.cpp
+    serde/protobuf_chunk_serde.cpp
+    diagnose_daemon.cpp
+    process_memory_metrics.cpp
+    runtime_env.cpp
+    global_thread_pools.cpp
+    java/java_env.cpp
+    java/java_global_ref.cpp
+    java/java_runtime.cpp
+    java/native_method_helper.cpp
+    java/jvm_metrics.cpp
+    java/jvm_helper.cpp
+    java/jvm_class.cpp
 )
 
-ADD_BE_LIB(RuntimeCore
-    ${RUNTIME_CORE_FILES}
+ADD_BE_LIB(Runtime
+    ${RUNTIME_SRCS}
 )
 
-target_link_libraries(RuntimeCore PRIVATE
+target_link_libraries(Runtime PUBLIC
+    Platform
     ChunkCore
     ColumnCore
     Types
@@ -60,76 +76,3 @@ target_link_libraries(RuntimeCore PRIVATE
     Gutil
     StarRocksGen
 )
-
-set(RUNTIME_ENV_FILES
-    env/global_env.cpp
-    env/global_thread_pools.cpp
-    env/java/java_env.cpp
-)
-
-ADD_BE_LIB(RuntimeEnv
-    ${RUNTIME_ENV_FILES}
-)
-
-target_link_libraries(RuntimeEnv PUBLIC
-    Platform
-    RuntimeCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
-set(RUNTIME_FILES
-    broker_mgr.cpp
-    lookup_stream_mgr.cpp
-    descriptors_ext.cpp
-    exec_env.cpp
-    jdbc_driver_manager.cpp
-    plan_fragment_executor.cpp
-    runtime_state_helper.cpp
-    rejected_record_writer.cpp
-    rejected_record_sync_daemon.cpp
-    fragment_mgr.cpp
-    load_path_mgr.cpp
-    dummy_load_path_mgr.cpp
-    agg_state_desc.cpp
-    load_channel_mgr.cpp
-    load_channel.cpp
-    local_tablets_channel.cpp
-    snapshot_loader.cpp
-    message_body_sink.cpp
-    stream_load/transaction_mgr.cpp
-    stream_load/stream_load_context.cpp
-    stream_load/stream_load_executor.cpp
-    stream_load/stream_load_pipe.cpp
-    stream_load/time_bounded_stream_load_pipe.cpp
-    batch_write/isomorphic_batch_write.cpp
-    batch_write/batch_write_mgr.cpp
-    batch_write/batch_write_util.cpp
-    batch_write/txn_state_cache.cpp
-    routine_load/data_consumer.cpp
-    routine_load/data_consumer_group.cpp
-    routine_load/data_consumer_pool.cpp
-    routine_load/routine_load_task_executor.cpp
-    small_file_mgr.cpp
-    external_scan_context_mgr.cpp
-    tablets_channel.cpp
-    runtime_filter_worker.cpp
-    runtime_filter_serde.cpp
-    global_dict/fragment_dict_state.cpp
-    global_dict/parser.cpp
-    lake_tablets_channel.cpp
-    lake_snapshot_loader.cpp
-    command_executor.cpp
-    diagnose_daemon.cpp
-    logconfig.cpp
-)
-
-ADD_BE_LIB(Runtime
-    ${RUNTIME_FILES}
-    )
-
-target_link_libraries(Runtime PUBLIC RuntimeEnv RuntimeCore ComputeEnv ExecPrimitive ExecSinkCore Platform)
-target_link_libraries(Runtime PRIVATE ConnectorBuiltinRegistry)

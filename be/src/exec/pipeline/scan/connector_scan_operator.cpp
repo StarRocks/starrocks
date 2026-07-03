@@ -15,9 +15,11 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/lake_connector.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -27,28 +29,11 @@
 #include "gutil/casts.h"
 #include "gutil/walltime.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
-ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
-                                                                                 int connector_scan_node_number)
-        : query_mem_limit(query_mem_limit),
-          scan_mem_limit(query_mem_limit),
-          total_chunk_source_mem_bytes(connector_scan_node_number *
-                                       connector::DataSourceProvider::DEFAULT_DATA_SOURCE_MEM_BYTES) {}
-
-int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
-    int64_t diff = new_value - old_value;
-    int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
-    if (new_value == 0) return 0;
-    if (total <= 0) return scan_mem_limit;
-    return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
-}
-
 class ConnectorScanOperatorIOTasksMemLimiter {
 private:
     mutable std::mutex lock;
@@ -705,7 +690,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
                                          << ", error=" << report_status.to_string();
 
     if (_enable_adaptive_io_tasks) {
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        MemTracker* mem_tracker = state->query_runtime_state()->connector_scan_mem_tracker();
         mem_tracker->release(_request_mem_tracker_bytes);
 
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
@@ -761,7 +746,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        MemTracker* mem_tracker = state->query_runtime_state()->connector_scan_mem_tracker();
 
         [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;

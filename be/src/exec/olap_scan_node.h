@@ -28,7 +28,6 @@
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/expr_context.h"
-#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 class DescriptorTbl;

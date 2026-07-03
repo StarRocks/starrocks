@@ -24,21 +24,21 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
+#include "column/serde/column_array_serde.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "connector/hive_connector.h"
 #include "exec/pipeline/lookup_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
-#include "storage/chunk_helper.h"
 #include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {
@@ -520,7 +520,7 @@ StatusOr<ChunkPtr> IcebergV3LookUpTask::_get_data_from_storage(
 
         // Build HiveDataSource for this scan range
         auto glm_ctx = down_cast<IcebergGlobalLateMaterilizationContext*>(
-                state->query_ctx()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
+                state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id));
         if (glm_ctx == nullptr) {
             return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
                                          std::to_string(_ctx->scan_id));
@@ -828,7 +828,7 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
 
     // acquire global late materialization context
     auto scan_id = _ctx->scan_id;
-    auto glm_ctx = state->query_ctx()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id);
+    auto glm_ctx = state->query_runtime_state()->global_late_materialization_ctx_mgr()->get_ctx(_ctx->scan_id);
     if (glm_ctx == nullptr) {
         return Status::InternalError("GlobalLateMaterilizationContext not found for scan_id: " +
                                      std::to_string(scan_id));

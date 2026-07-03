@@ -20,24 +20,24 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
-#include "serde/column_array_serde.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primary_key_encoder.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
@@ -347,29 +347,33 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
     const auto& txn_meta = params.op_write.txn_meta();
 
+    // cid may shift across schema versions; recompute it from uid against the current
+    // tablet schema. partial_update_column_ids in txn_meta is kept for compatibility only.
+    DCHECK_EQ(txn_meta.partial_update_column_ids_size(), txn_meta.partial_update_column_unique_ids_size());
     std::vector<ColumnId> update_column_ids;
     std::vector<ColumnUID> unique_update_column_ids;
-    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
-        if (cid >= params.tablet_schema->num_key_columns()) {
-            if (!params.tablet_schema->column(cid).is_auto_increment()) {
-                update_column_ids.push_back(cid);
-            }
-        }
-    }
-    for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
-        auto cid = params.tablet_schema->field_index(uid);
+    for (int i = 0; i < txn_meta.partial_update_column_unique_ids_size(); ++i) {
+        const uint32_t uid = txn_meta.partial_update_column_unique_ids(i);
+        const auto cid = params.tablet_schema->field_index(uid);
         if (cid == -1) {
             std::string msg = strings::Substitute("column with unique id:$0 does not exist. tablet:$1", uid,
                                                   params.tablet->tablet_id());
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!params.tablet_schema->column(cid).is_key() && !params.tablet_schema->column(cid).is_auto_increment()) {
-            unique_update_column_ids.push_back(uid);
+        const auto& col = params.tablet_schema->column(cid);
+        if (col.is_key() || col.is_auto_increment()) {
+            continue;
+        }
+        update_column_ids.push_back(cid);
+        unique_update_column_ids.push_back(uid);
+
+        if (cid != static_cast<ColumnId>(txn_meta.partial_update_column_ids(i))) {
+            LOG(INFO) << "lake pcu schema drift detected: tablet=" << params.tablet->tablet_id() << " uid=" << uid
+                      << " frozen_cid=" << txn_meta.partial_update_column_ids(i) << " current_cid=" << cid
+                      << " schema_id=" << params.tablet_schema->id();
         }
     }
-
-    DCHECK(update_column_ids.size() == unique_update_column_ids.size());
 
     // When condition update is enabled together with column-mode PCU, delta_writer has validated
     // that the condition column is part of the partial column set; we force a single column batch
@@ -442,7 +446,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 

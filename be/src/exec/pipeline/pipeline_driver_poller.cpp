@@ -16,20 +16,21 @@
 
 #include <chrono>
 
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_manager.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/primitives/driver_queue.h"
 #include "exec/pipeline/primitives/driver_state.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/query_context_manager.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec/runtime/query_context_manager.h"
+#include "exec/runtime/schedule/event_scheduler.h"
+#include "platform/query_timeout_hook.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/logconfig.h"
-#include "util/time_guard.h"
+#include "runtime/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -114,8 +115,8 @@ void PipelineDriverPoller::run_internal() {
                     auto query_id = driver->query_runtime_state()->query_id();
                     size_t timeout = driver->query_runtime_state()->get_query_expire_seconds();
                     hook_on_query_timeout(query_id, timeout);
-                    fragment_ctx->cancel(
-                            Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", timeout)));
+                    cancel_fragment_context(fragment_ctx, Status::TimedOut(fmt::format(
+                                                                  "Query reached its timeout of {} seconds", timeout)));
                     on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                 } else if (runtime_state->is_cancelled()) {
                     // If the fragment is cancelled when the source operator is already pending i/o task,
@@ -147,7 +148,7 @@ void PipelineDriverPoller::run_internal() {
                 } else {
                     auto status_or_is_not_blocked = driver->is_not_blocked();
                     if (!status_or_is_not_blocked.ok()) {
-                        fragment_ctx->cancel(status_or_is_not_blocked.status());
+                        cancel_fragment_context(fragment_ctx, status_or_is_not_blocked.status());
                         on_cancel(driver, ready_drivers, _local_blocked_drivers, driver_it);
                     } else if (status_or_is_not_blocked.value()) {
                         driver->set_driver_state(DriverState::READY);

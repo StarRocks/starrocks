@@ -443,6 +443,9 @@ public class InsertPlanner {
                 if (session.getTxnId() != 0) {
                     ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
                 }
+                if (insertStmt.getTargetWriteIndexId() != null) {
+                    ((OlapTableSink) dataSink).setTargetWriteIndexId(insertStmt.getTargetWriteIndexId());
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);

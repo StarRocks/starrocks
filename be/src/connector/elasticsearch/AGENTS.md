@@ -8,8 +8,8 @@ Run `python3 build-support/check_be_module_boundaries.py --mode full` to validat
 ### ConnectorElasticsearch (`connectorelasticsearch`)
 Elasticsearch connector implementation above connector contracts without registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorElasticsearch`
-- Allowed internal include prefixes: `connector/elasticsearch/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `http/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ConnectorPrimitive`, `HttpCore`, `ExprCore`, `RuntimeCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector/elasticsearch/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `platform/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ConnectorPrimitive`, `Platform`, `ExprCore`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_elasticsearch_test`
 - Remediation: Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library.
 <!-- END GENERATED: BE MODULE HARNESSES -->

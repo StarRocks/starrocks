@@ -186,6 +186,138 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
     return false;
 }
 
+// 2b. Decide whether a picked low-score level should be skipped to avoid low-value
+// sparse mid-tier merges (high rewrite cost, negligible IO-count reduction). Returns
+// true => skip compaction this round.
+//
+// Background: size-tiered selection always returns the highest-score level, even
+// when no level genuinely needs compaction. On large PK tablets this manifests as
+// pathological "sparse mid-tier base merges": a level with only a few large
+// non-overlapped rowsets (e.g., 4 x 700MB on a 13GB tablet) has very low score
+// (~0.006) but still gets picked because L0 was already drained by prior cumulative
+// compactions, leaving this mid-tier as the only candidate. Each such pick rewrites
+// GBs of data with negligible file-count reduction, dominating write amplification.
+//
+// Levels that contain overlapped (multi-segment) rowsets are always allowed to
+// compact since their inherent IO overhead can only be reduced by compaction.
+// Levels containing deletes are also allowed, since delete vectors must eventually
+// be applied/cleaned up via compaction.
+//
+// Four overrides (any one fires => compaction proceeds):
+//   [A] has_overlap            - structural read amp, always compact
+//   [B] size_overflow_ratio    - level total bytes exceed alpha * next-tier-target
+//   [C] benefit_cost_ratio     - segments saved + delete cleanup density vs rewrite
+//                                cost is acceptable
+//   [D] emergency_score        - tablet-wide read pressure forces compaction
+static bool skip_sparse_low_score_level(const PKSizeTieredLevel& pick_level,
+                                        const std::vector<RowsetCandidate>& rowset_vec, int64_t tablet_id) {
+    if (!config::enable_lake_pk_compaction_score_gate) {
+        // Gate disabled in one step: never skip, every picked level compacts (pre-gate behavior).
+        return false;
+    }
+    if (pick_level.score >= config::lake_pk_compaction_min_level_score) {
+        return false;
+    }
+    bool has_overlap = false;
+    double total_dels = 0.0;
+    double total_rows = 0.0;
+    int64_t total_input_bytes = 0;
+    int64_t input_segs = 0;
+    // Track the largest rowset size across the picked level. This is the
+    // size_overflow basis (not pick_level.compact_level), because
+    // pick_max_level may MERGE the top level with the second-largest level when the
+    // top is a single non-overlap rowset. After such a merge, compact_level retains
+    // the ORIGINAL top's level_size (e.g., 20 MB from L0), while the merged level
+    // actually contains 500 MB / 5 GB rowsets. Using compact_level directly inflates
+    // size_overflow by orders of magnitude and incorrectly forces compaction.
+    int64_t max_rowset_bytes = 0;
+    auto rs_copy = pick_level.rowsets;
+    while (!rs_copy.empty()) {
+        const auto& r = rs_copy.top();
+        if (r.multi_segment_with_overlapped()) has_overlap = true;
+        total_dels += static_cast<double>(r.stat.num_dels);
+        total_rows += static_cast<double>(r.stat.num_rows);
+        // Cost basis uses full bytes (not read_bytes which subtracts delete bytes):
+        // compaction reads the entire rowset to filter via delvec, so the I/O cost
+        // is dominated by the raw byte count.
+        total_input_bytes += static_cast<int64_t>(r.stat.bytes);
+        input_segs += r.rowset_meta_ptr->segment_metas_size();
+        max_rowset_bytes = std::max(max_rowset_bytes, static_cast<int64_t>(r.stat.bytes));
+        rs_copy.pop();
+    }
+    const double delete_ratio = total_rows > 0 ? total_dels / total_rows : 0.0;
+    const double estimated_io_mb = static_cast<double>(total_input_bytes) / (1024.0 * 1024.0);
+
+    bool override_compact = has_overlap;
+
+    // [B] size_overflow_ratio: bound accumulation at alpha * next-tier-target.
+    // next-tier-target = level_size * level_multiple (size-tiered natural promotion
+    // point). alpha=2 means "tolerate 2x the natural promotion threshold before
+    // forced compaction". Scales with level_size so it works uniformly across levels.
+    double size_overflow = 0.0;
+    if (!override_compact) {
+        // Use max_rowset_bytes from the actual picked level (which may have been
+        // merged across multiple size-tiered levels by pick_max_level), not the
+        // pick_level.compact_level field which can be stale post-merge.
+        const int64_t next_level_target = max_rowset_bytes * static_cast<int64_t>(config::size_tiered_level_multiple);
+        if (next_level_target > 0) {
+            size_overflow = static_cast<double>(total_input_bytes) / static_cast<double>(next_level_target);
+        }
+        if (config::lake_pk_compaction_size_overflow_ratio > 0.0 &&
+            size_overflow >= config::lake_pk_compaction_size_overflow_ratio) {
+            override_compact = true;
+        }
+    }
+
+    // [C] benefit_cost_ratio (corrected formula):
+    //   real_benefit_segs = max(0, input_segs - output_segs)
+    //     where output_segs = ceil(total_input_bytes / lake_compaction_max_rowset_size)
+    //   benefit_score = real_benefit_segs + delete_ratio * input_segs * delvec_benefit_weight
+    //     (folds delete cleanup value into segment-count benefit)
+    //   bcr = benefit_score / io_mb
+    double benefit_cost_ratio = 0.0;
+    if (!override_compact) {
+        const int64_t max_rowset_size_bytes = config::lake_compaction_max_rowset_size;
+        int64_t output_segs = 1;
+        if (max_rowset_size_bytes > 0) {
+            output_segs = std::max<int64_t>(1, (total_input_bytes + max_rowset_size_bytes - 1) / max_rowset_size_bytes);
+        }
+        const double real_benefit_segs = std::max(0.0, static_cast<double>(input_segs - output_segs));
+        const double benefit_score = real_benefit_segs + delete_ratio * static_cast<double>(input_segs) *
+                                                                 config::lake_pk_compaction_delvec_benefit_weight;
+        benefit_cost_ratio = benefit_score / std::max(estimated_io_mb, 1.0);
+        if (config::lake_pk_compaction_min_benefit_cost_ratio > 0.0 &&
+            benefit_cost_ratio >= config::lake_pk_compaction_min_benefit_cost_ratio) {
+            override_compact = true;
+        }
+    }
+
+    // [D] tablet-wide read pressure emergency.
+    double tablet_read_pressure = 0.0;
+    if (!override_compact) {
+        for (const auto& rc : rowset_vec) {
+            tablet_read_pressure += rc.score;
+        }
+        if (config::lake_pk_compaction_emergency_score > 0.0 &&
+            tablet_read_pressure >= config::lake_pk_compaction_emergency_score) {
+            override_compact = true;
+        }
+    }
+
+    if (!override_compact) {
+        VLOG(2) << strings::Substitute(
+                "lake PK compaction skipped: tablet=$0 level_score=$1 < mls=$2 "
+                "delete_ratio=$3 size_overflow=$4 (alpha=$5) "
+                "bcr=$6 (min_bcr=$7) tablet_pressure=$8 (em=$9) — sparse mid-tier",
+                tablet_id, pick_level.score, config::lake_pk_compaction_min_level_score, delete_ratio, size_overflow,
+                config::lake_pk_compaction_size_overflow_ratio, benefit_cost_ratio,
+                config::lake_pk_compaction_min_benefit_cost_ratio, tablet_read_pressure,
+                config::lake_pk_compaction_emergency_score);
+        return true; // skip -> no compaction this round
+    }
+    return false;
+}
+
 StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
     bool is_real_time = is_real_time_compaction_strategy(tablet_metadata);
@@ -217,6 +349,11 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(rowset_vec));
     if (pick_level_ptr == nullptr) {
         return rowset_indexes;
+    }
+
+    // 2b. Skip low-value sparse mid-tier picks (see skip_sparse_low_score_level).
+    if (skip_sparse_low_score_level(*pick_level_ptr, rowset_vec, tablet_metadata->id())) {
+        return rowset_indexes; // empty -> no compaction this round
     }
 
     // 3. pick input rowsets from level

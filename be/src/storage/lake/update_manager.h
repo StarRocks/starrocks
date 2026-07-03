@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "cache/dynamic_cache.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_primary_index.h"
@@ -24,7 +25,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_compaction_state.h"
-#include "util/dynamic_cache.h"
 
 namespace starrocks {
 
@@ -34,6 +34,7 @@ class TxnLogPB_OpWrite;
 namespace lake {
 
 class LocationProvider;
+class LakePersistentIndexParallelCompactMgr;
 class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
@@ -79,6 +80,9 @@ public:
     UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+    void set_parallel_compact_mgr(LakePersistentIndexParallelCompactMgr* parallel_compact_mgr) {
+        _parallel_compact_mgr = parallel_compact_mgr;
+    }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
@@ -313,6 +317,7 @@ private:
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
+    LakePersistentIndexParallelCompactMgr* _parallel_compact_mgr = nullptr;
 
     // memory checkers
     MemTracker* _update_mem_tracker = nullptr;

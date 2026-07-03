@@ -23,7 +23,7 @@ ADD_BE_LIB(ConnectorPrimitive
 target_link_libraries(ConnectorPrimitive PUBLIC
         ExecPrimitive
         ExprCore
-        RuntimeCore
+        Runtime
         ChunkCore
         ColumnCore
         Types
@@ -52,7 +52,6 @@ ADD_BE_LIB(Connector
         partition_chunk_writer.cpp
         connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
-        deletion_vector/deletion_bitmap.cpp
         iceberg_delete_sink.cpp
         iceberg_row_delta_sink.cpp
 )
@@ -72,9 +71,9 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
 
     target_link_libraries(ConnectorElasticsearch PUBLIC
             ConnectorPrimitive
-            HttpCore
+            Platform
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -94,7 +93,7 @@ if (WITH_CONNECTOR_MYSQL)
     target_link_libraries(ConnectorMySQL PUBLIC
             ConnectorPrimitive
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -118,7 +117,7 @@ if (WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(ConnectorBenchmark PUBLIC
             ConnectorPrimitive
             ExprCore
-            RuntimeCore
+            Runtime
             ChunkCore
             ColumnCore
             Types

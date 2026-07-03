@@ -68,6 +68,9 @@ void SpillMetrics::install(MetricRegistry* registry) {
     registry->register_metric("spill_disk_bytes_used", MetricLabels().add("storage_type", "remote"),
                               _remote_disk_bytes_used.get());
 
+    _parked_with_uncovered_reason_total = std::make_unique<IntCounter>(MetricUnit::OPERATIONS);
+    registry->register_metric("spill_parked_with_uncovered_reason_total", _parked_with_uncovered_reason_total.get());
+
     register_labeled(registry, "local", &_local);
     register_labeled(registry, "remote", &_remote);
 }

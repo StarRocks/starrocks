@@ -41,8 +41,8 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/column_viewer.h"
+#include "exec/exec_env.h"
 #include "fs/fs_memory.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -71,7 +71,7 @@ protected:
     void TearDown() override {}
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
-                                BitmapIndexIterator** iter, int32_t gram_num = -1) {
+                                SegmentBitmapIndexIterator** iter, int32_t gram_num = -1) {
         _opts.read_file = rfile;
         *reader = new BitmapIndexReader(gram_num);
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
@@ -131,7 +131,7 @@ TEST_F(BitmapIndexTest, test_invert) {
     write_index_file<TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -186,7 +186,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -221,7 +221,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
     write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -253,7 +253,7 @@ TEST_F(BitmapIndexTest, test_null) {
     write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -304,7 +304,7 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     }
     ASSERT_EQ(1, loads.load());
 
-    BitmapIndexIterator* iter = nullptr;
+    SegmentBitmapIndexIterator* iter = nullptr;
     ASSERT_OK(reader->new_iterator(opts, &iter));
 
     Roaring bitmap;
@@ -359,7 +359,7 @@ TEST_F(BitmapIndexTest, test_add_value_with_current_rowid) {
     }
 
     BitmapIndexReader* reader = nullptr;
-    BitmapIndexIterator* iter = nullptr;
+    SegmentBitmapIndexIterator* iter = nullptr;
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -405,7 +405,7 @@ TEST_F(BitmapIndexTest, test_read_union_variants) {
     write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -449,7 +449,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
     write_index_file<TYPE_VARCHAR>(file_name, slices.data(), values.size(), 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -532,7 +532,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(const auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter, 3);
 
@@ -576,7 +576,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 // Verify that BitmapIndexReader with owned_mem_tracker=false does NOT affect the
 // bitmap_index_mem_tracker during construction, load, or destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;
@@ -620,7 +620,7 @@ TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
 // Verify that BitmapIndexReader with owned_mem_tracker=true (default) properly tracks
 // memory via bitmap_index_mem_tracker during construction, load, and destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_true_tracks_memory) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;

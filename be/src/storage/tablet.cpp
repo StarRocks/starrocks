@@ -49,11 +49,11 @@
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "common/util/table_metrics.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/binlog_builder.h"
 #include "storage/compaction_candidate.h"
 #include "storage/compaction_context.h"
@@ -61,7 +61,7 @@
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/size_tiered_compaction_policy.h"
@@ -86,7 +86,7 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableM
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     _keys_type = _max_version_schema->keys_type();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
     if (_table_metrics_mgr != nullptr) {
         _table_metrics_mgr->register_table(_tablet_meta->table_id());
     }
@@ -94,11 +94,11 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir, TableM
 
 Tablet::Tablet(KeysType keys_type) {
     _keys_type = keys_type;
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::~Tablet() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
     if (_table_metrics_mgr != nullptr && _tablet_meta != nullptr) {
         _table_metrics_mgr->unregister_table(_tablet_meta->table_id());
     }

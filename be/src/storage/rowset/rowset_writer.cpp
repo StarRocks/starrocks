@@ -45,27 +45,28 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "fs/key_cache.h"
 #include "io/io_error.h"
+#include "platform/key_cache.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
-#include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
 #include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/metadata_util.h"
-#include "storage/olap_define.h"
 #include "storage/primitive/empty_iterator.h"
+#include "storage/primitive/primary_key_encoder.h"
 #include "storage/primitive/type_utils.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
@@ -694,6 +695,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             wopts.encryption_info = pair.info;
             encryption_meta = std::move(pair.encryption_meta);
         }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
         auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);

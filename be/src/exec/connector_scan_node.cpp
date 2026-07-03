@@ -22,15 +22,16 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/thread/threadpool.h"
+#include "compute_env/global_dict/parser.h"
 #include "connector/connector_registry.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 
@@ -72,14 +73,14 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         mem_ratio = query_options.connector_scan_use_query_mem_ratio;
     }
 
-    if (runtime_state()->query_ctx() != nullptr) {
-        _mem_share_arb = runtime_state()->query_ctx()->connector_scan_operator_mem_share_arbitrator();
+    if (runtime_state()->query_runtime_state() != nullptr) {
+        _mem_share_arb = runtime_state()->query_runtime_state()->connector_scan_operator_mem_share_arbitrator();
     }
     if (_mem_share_arb != nullptr) {
         _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
 
         // we don't want scan mem limit to exceed global memory limit.
-        int64_t global_lowest = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
+        int64_t global_lowest = RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
         if (global_lowest > 0) {
             _scan_mem_limit = std::min(_scan_mem_limit, global_lowest);
         }
@@ -100,6 +101,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
             _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
         }
+        _topn_filter_back_pressure_disabled = tnode.lake_scan_node.__isset.topn_filter_back_pressure_disabled &&
+                                              tnode.lake_scan_node.topn_filter_back_pressure_disabled;
     }
 
     return Status::OK();
@@ -170,8 +173,9 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
     auto operators = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 
     if (_data_source_provider->insert_local_exchange_operator()) {
-        operators = context->maybe_interpolate_local_passthrough_exchange(
-                context->fragment_context()->runtime_state(), id(), operators, context->degree_of_parallelism());
+        operators = ::starrocks::pipeline::builder::maybe_interpolate_local_passthrough_exchange(
+                context, context->fragment_context()->runtime_state(), id(), operators,
+                context->degree_of_parallelism());
     }
     return operators;
 }

@@ -15,14 +15,15 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "common/config_scan_io_fwd.h"
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/global_dict/parser.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/runtime_state_helper.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"
 #endif
@@ -107,8 +108,8 @@ Status OlapScanContext::capture_tablet_rowsets(RuntimeState* state,
 
     if (enable_glm) {
         int32_t scan_node_id = scan_node()->id();
-        auto* glm_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
-        auto* obj_pool = state->query_ctx()->object_pool();
+        auto* glm_mgr = state->query_runtime_state()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = state->query_runtime_state()->object_pool();
         auto creator = [&]() {
             auto* ctx = obj_pool->add(new OlapScanLazyMaterializationContext());
             return ctx;
@@ -179,7 +180,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     opts.scan_keys_unlimited = true;
     opts.max_scan_key_num = max_scan_key_num;
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
-    opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
+    opts.pred_tree_params = state->fragment_runtime_state()->pred_tree_params();
 
     _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;

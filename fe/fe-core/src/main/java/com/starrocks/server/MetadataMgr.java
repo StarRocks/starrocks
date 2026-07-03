@@ -573,6 +573,11 @@ public class MetadataMgr {
                 .orElse(TvrTableSnapshot.empty());
     }
 
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.flatMap(metadata -> metadata.getVersionCommitTimeMillis(dbName, table, version));
+    }
+
     public Optional<Database> getDatabase(ConnectContext context, BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(getDb(baseTableInfo.getDbId()));
@@ -746,7 +751,7 @@ public class MetadataMgr {
                 }
             }
         }
-        return statistics.build();
+        return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -791,7 +796,8 @@ public class MetadataMgr {
                     });
 
                     return Statistics.builder().addColumnStatistics(combinedColumnStatsMap).
-                            setOutputRowCount(connectorBasicStats.getOutputRowCount()).build();
+                            setOutputRowCount(connectorBasicStats.getOutputRowCount())
+                            .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     return connectorBasicStats;
                 }

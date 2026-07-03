@@ -1248,6 +1248,34 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_uses_context_timezone) 
     ASSERT_EQ(column->get_data()[0], string_to_datetime<TYPE_DATETIME>("1970-01-01 08:00:00"));
 }
 
+// Per Parquet LogicalTypes.md TIMESTAMP section, an INT64 timestamp with
+// isAdjustedToUTC=false is surfaced by Arrow as timezone-naive (empty
+// `timezone`) and must be displayed "the same way, regardless of the local
+// time zone in effect." Confirms that the convert path no longer applies the
+// session timezone offset to such columns (the bug introduced by PR #50448
+// and only partially guarded by PR #73460).
+PARALLEL_TEST(ArrowConverterTest, test_timestamp_convert_naive_preserves_wall_clock) {
+    auto type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND, "");
+    size_t counter = 0;
+    auto array = create_constant_datetime_array<arrow::TimestampType, false>(1, 0, type, counter);
+    ConvertFuncTree cf(get_arrow_converter(ArrowTypeId::TIMESTAMP, TYPE_DATETIME, false, false));
+    ASSERT_TRUE(cf.func != nullptr);
+
+    // The raw value (0) is 1970-01-01 00:00:00 in wall-clock semantics.
+    // No matter what session timezone is set, the result must be identical.
+    for (const auto* session_tz : {"UTC", "Asia/Shanghai", "Asia/Seoul", "America/Los_Angeles"}) {
+        SCOPED_TRACE(std::string("session_tz=") + session_tz);
+        ArrowConvertContext ctx;
+        ctx.timezone = session_tz;
+        auto column = TimestampColumn::create();
+        Filter filter(1, 1);
+        ASSERT_STATUS_OK(
+                convert_arrow_array_to_column(&cf, array->length(), array.get(), column.get(), 0, 0, &filter, &ctx));
+        ASSERT_EQ(column->get_data()[0], string_to_datetime<TYPE_DATETIME>("1970-01-01 00:00:00"))
+                << "naive timestamp must not be shifted by session timezone";
+    }
+}
+
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
                                                          const std::shared_ptr<arrow::Decimal128Type>& type,

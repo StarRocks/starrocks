@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## 查看 FE 配置项
@@ -715,6 +717,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
 
+<EditonSpecificFEItemSharedLakeOther />
+
 ## 其他
 
 ### `agent_task_resend_wait_time_ms`
@@ -1038,6 +1042,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: 秒
 - 是否可变: Yes
 - 描述: JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 true 时，新创建的 JDBC Catalog 将默认设置元数据缓存的过期时间。
+- 引入版本: -
+
+### `jdbc_row_count_cache_refresh_sec`
+
+- 默认值: 600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存的后台刷新间隔。超过此间隔后，立即返回旧值，同时在后台异步重新加载。可通过 Catalog 属性 `jdbc_row_count_cache_refresh_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_expire_sec`
+
+- 默认值: 1200
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: JDBC 表行数缓存条目的强制淘汰 TTL。在此时间窗口内未访问的条目将被淘汰。必须大于 `jdbc_row_count_cache_refresh_sec`。可通过 Catalog 属性 `jdbc_row_count_cache_expire_sec` 按 Catalog 覆盖。
+- 引入版本: -
+
+### `jdbc_row_count_cache_max_size`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: -
+- 是否可变: Yes
+- 描述: 每个 JDBC Catalog 的行数缓存最大条目数。限制表数量较多的 Catalog 的内存增长。可通过 Catalog 属性 `jdbc_row_count_cache_max_size` 按 Catalog 覆盖。
 - 引入版本: -
 
 ### `jdbc_minimum_idle_connections`
@@ -1433,5 +1464,5 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在物化视图创建和 CTAS 操作中，是否更倾向于为固定长度的 varchar 列使用 string 类型。
+- 描述: 在物化视图创建中，是否更倾向于为固定长度的 char/varchar 列使用 string 类型。
 - 引入版本: v4.0.0

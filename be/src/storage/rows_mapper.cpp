@@ -27,7 +27,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "lake/filenames.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
@@ -255,7 +255,7 @@ Status RowsMapperIterator::_maybe_submit_next() {
 
     _in_flight.push_back(std::move(chunk));
 
-    auto* pool = GlobalEnv::GetInstance()->pk_index_execution_thread_pool();
+    auto* pool = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool();
     if (pool == nullptr) {
         // Pool unavailable — execute inline so the promise is always satisfied.
         promise->set_value(rf_raw->read_at_fully(off, data_raw, bytes));

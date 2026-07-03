@@ -24,12 +24,14 @@
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec/pipeline/pipeline_driver_instantiator.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime/group_execution/execution_group.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
@@ -60,10 +62,11 @@ DEFINE_FAIL_POINT(collect_stats_source_initialize_prepare_failed);
 
 void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     DeferOp defer_op([this, state] { finish(state); });
+    auto* fragment_ctx = state->fragment_ctx();
 
     for (auto* pipeline : _pipelines) {
         pipeline->source_operator_factory()->adjust_dop();
-        pipeline->instantiate_drivers(state);
+        instantiate_pipeline_drivers(fragment_ctx, pipeline);
     }
 
     auto prepare_drivers = [state, &pipelines = _pipelines]() {
@@ -141,7 +144,7 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 
     if (const auto status = prepare_drivers(); !status.ok()) {
         LOG(WARNING) << "[ADAPTIVE DOP] failed to prepare pipeline drivers [status=" << status.message() << "]";
-        state->fragment_ctx()->cancel(status);
+        cancel_fragment_context(state->fragment_ctx(), status);
         for (const auto& pipeline : _pipelines) {
             // The pipeline without driver indicates it has not been instantiated.
             // So we just count down the driver num once to trigger finalization of the pipeline.

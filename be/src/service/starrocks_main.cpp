@@ -43,40 +43,36 @@
 #include <gflags/gflags.h>
 #include <thrift/TOutput.h>
 
-#ifndef __APPLE__
-#include "fs/s3/aws_sdk_guard.h"
-#endif
-
 #include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/path/path_util.h"
 #include "base/uid_util.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/configbase.h"
-#include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
+#include "exec/exec_env.h"
+#include "exec/jdbc/jdbc_driver_manager.h"
 #include "exec/pipeline/query_context.h"
 #include "formats/orc/lzo_decompressor_registration.h"
-#include "fs/fs_provider_bootstrap.h"
+#include "fs/fs_s3.h"
+#include "module/fs_provider_bootstrap.h"
+#include "platform/aws/aws_sdk_guard.h"
 #include "platform/path_rw.h"
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/heartbeat_flags.h"
-#include "runtime/jdbc_driver_manager.h"
 #include "runtime/memory/roaring_hook.h"
 #include "service/daemon.h"
 #include "service/service.h"
 #include "storage/storage_engine.h"
-#include "util/logging.h"
 
 #if !defined(__clang__) && defined(__GNUC__) && !_GLIBCXX_USE_CXX11_ABI
 #error _GLIBCXX_USE_CXX11_ABI must be non-zero
@@ -200,9 +196,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-#ifndef __APPLE__
     starrocks::AwsSdkGuard aws_sdk_guard;
-#endif
 
     EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
     LOG(INFO) << "file system provider registry init successfully";
@@ -245,6 +239,9 @@ int main(int argc, char** argv) {
 
     // cn need to support all ops for cloudnative table, so just start_be
     starrocks::start_be(paths, as_cn);
+
+    // TODO: Move S3 client cleanup into a unified storage/platform lifecycle owner once the shutdown order is clearer.
+    starrocks::close_s3_clients();
 
     if (starrocks::process_quick_exit_in_progress()) {
         LOG(INFO) << "BE is shutting down, will exit quickly";

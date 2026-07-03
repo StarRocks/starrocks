@@ -47,7 +47,6 @@
 #include "io/direct_s3_output_stream.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
-#include "util/hdfs_util.h"
 
 namespace starrocks {
 
@@ -123,6 +122,10 @@ void S3ClientFactory::close() {
     for (auto& item : _clients) {
         item.reset();
     }
+    for (auto& key : _client_cache_keys) {
+        key = ClientCacheKey{};
+    }
+    _items = 0;
 }
 
 // clang-format: off
@@ -263,6 +266,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 // Only use for UT
 bool S3ClientFactory::_find_client_cache_keys_by_config_TEST(const Aws::Client::ClientConfiguration& config,
                                                              AWSCloudConfiguration* cloud_config) {
+    std::lock_guard l(_lock);
     auto aws_config = cloud_config == nullptr ? AWSCloudConfiguration{} : *cloud_config;
     for (size_t i = 0; i < _items; i++) {
         if (_client_cache_keys[i] == ClientCacheKey{std::make_shared<Aws::Client::ClientConfiguration>(config),

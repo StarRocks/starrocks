@@ -31,24 +31,19 @@ set(STARROCKS_LIBS
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     FileSystem
-    FSCore
     Formats
-    orc
     Gutil
-    HttpCore
     IO
-    Serde
+    Platform
     Storage
-    Rowset
     Runtime
-    RuntimeCore
     Types
-    Util
     Script
     StarRocksGen
-    Webserver
+    HttpService
     Cache
     ${WL_END_GROUP}
+    FormatOrc
 )
 
 add_library(hdfs_so SHARED IMPORTED GLOBAL)
@@ -58,7 +53,7 @@ SET(STARROCKS_FORMAT_LIBS
     ${STARROCKS_LIBS}
     ${STARROCKS_DEPENDENCIES}
     -static-libstdc++ -static-libgcc
-    -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    -lresolv -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
     hdfs_so
 )
 message(STATUS "STARROCKS_FORMAT_LIBS is ${STARROCKS_FORMAT_LIBS}")

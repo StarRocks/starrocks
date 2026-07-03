@@ -27,6 +27,7 @@
 #include "butil/time.h"
 #include "column/column.h"
 #include "column/const_column.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
@@ -41,7 +42,6 @@
 #include "runtime/runtime_state.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 

@@ -35,6 +35,7 @@
 #include <gtest/gtest.h>
 
 #include <mutex>
+#include <string>
 
 #include "agent/agent_metrics.h"
 #include "base/testutil/assert.h"
@@ -42,15 +43,16 @@
 #include "cache/mem_cache/page_cache.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "exec/catalog_scan_metrics.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/query_scan_metrics.h"
-#include "http/http_metrics.h"
-#include "runtime/exec_env.h"
+#include "platform/http/http_metrics.h"
 #include "runtime/runtime_metrics.h"
-#include "runtime/stream_load/stream_load_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/service_metrics.h"
+#include "storage/index/vector/vector_index_cache_metrics.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks {
@@ -78,7 +80,6 @@ void init_backend_metrics_for_test() {
         options.storage_paths.emplace_back(kTestDiskPath);
         options.collect_hook_enabled = true;
         options.init_system_metrics = false;
-        options.init_jvm_metrics = false;
         BackendMetricsInitializer::initialize(backend_process_metrics_registry_for_test(), options);
     });
 }
@@ -160,6 +161,7 @@ TEST_F(BackendMetricsTest, Normal) {
     auto runtime_metrics = RuntimeMetrics::instance();
     auto service_metrics = ServiceMetrics::instance();
     auto storage_metrics = StorageMetrics::instance();
+    auto vector_index_cache_metrics = VectorIndexCacheMetrics::instance();
     auto metrics = backend_metrics_registry_for_test();
     metrics->collect(&visitor);
     // check metric
@@ -216,6 +218,13 @@ TEST_F(BackendMetricsTest, Normal) {
         auto metric = metrics->get_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("106", metric->to_string().c_str());
+    }
+    {
+        vector_index_cache_metrics->update(/*capacity=*/1024, /*usage=*/256, /*lookup_count=*/2, /*hit_count=*/1);
+        metrics->trigger_hook();
+        auto metric = metrics->get_metric("vector_index_cache_capacity");
+        ASSERT_TRUE(metric != nullptr);
+        ASSERT_STREQ("1024", metric->to_string().c_str());
     }
     {
         storage_metrics->push_requests_fail_total.increment(107);
@@ -297,6 +306,37 @@ TEST_F(BackendMetricsTest, Normal) {
                                           MetricLabels().add("type", "delete").add("status", "total"));
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("22", metric->to_string().c_str());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_add_index").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_add_index_requests_total.increment(24);
+        ASSERT_EQ(std::to_string(before + 24), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_add_index").add("status", "failed"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_add_index_requests_failed.increment(25);
+        ASSERT_EQ(std::to_string(before + 25), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("engine_requests_total",
+                                          MetricLabels().add("type", "lake_drop_index").add("status", "total"));
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_drop_index_requests_total.increment(26);
+        ASSERT_EQ(std::to_string(before + 26), metric->to_string());
+    }
+    {
+        auto metric = metrics->get_metric("lake_idg_files_written_total");
+        ASSERT_TRUE(metric != nullptr);
+        auto before = std::stoll(metric->to_string());
+        storage_metrics->lake_idg_files_written_total.increment(27);
+        ASSERT_EQ(std::to_string(before + 27), metric->to_string());
     }
     {
         agent_metrics->clone_requests_total.increment(23);

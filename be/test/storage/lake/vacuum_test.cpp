@@ -3001,11 +3001,11 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
     create_data_file("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat");
     create_data_file("00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat");
     // .vi files for the compaction input segments
-    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_100.vi");
-    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_200.vi");
-    create_data_file("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_100.vi");
+    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_5000_100.vi");
+    create_data_file("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_5000_200.vi");
+    create_data_file("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_5000_100.vi");
     // .vi file for the alive segment (should NOT be deleted)
-    create_data_file("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_100.vi");
+    create_data_file("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_5000_100.vi");
 
     // Version 2: has the old segments (will become compaction_inputs in v3)
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
@@ -3096,13 +3096,13 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_in_compaction_inputs) {
         // Compaction input segments and their .vi files should be deleted
         EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111.dat"));
         EXPECT_FALSE(file_exist("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222.dat"));
-        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_100.vi"));
-        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_200.vi"));
-        EXPECT_FALSE(file_exist("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_5000_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_aaaa1111-1111-1111-1111-111111111111_5000_200.vi"));
+        EXPECT_FALSE(file_exist("00000000000a59e4_bbbb2222-2222-2222-2222-222222222222_5000_100.vi"));
 
         // Alive segment and its .vi file should survive
         EXPECT_TRUE(file_exist("00000000000a59e5_cccc3333-3333-3333-3333-333333333333.dat"));
-        EXPECT_TRUE(file_exist("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_100.vi"));
+        EXPECT_TRUE(file_exist("00000000000a59e5_cccc3333-3333-3333-3333-333333333333_5000_100.vi"));
     }
 }
 
@@ -3113,7 +3113,7 @@ TEST_P(LakeVacuumTest, test_vacuum_no_blind_vi_deletion) {
     create_data_file("00000000000b59e5_eeee5555-5555-5555-5555-555555555555.dat");
     // A .vi file that happens to match the naming pattern but is NOT tracked in segment_metas
     // (e.g., leftover from a different operation). It should NOT be deleted by vacuum.
-    create_data_file("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_999.vi");
+    create_data_file("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_5100_999.vi");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -3179,7 +3179,7 @@ TEST_P(LakeVacuumTest, test_vacuum_no_blind_vi_deletion) {
         // Segment should be deleted
         EXPECT_FALSE(file_exist("00000000000b59e4_dddd4444-4444-4444-4444-444444444444.dat"));
         // .vi file is NOT tracked in segment_metas, so vacuum should NOT delete it
-        EXPECT_TRUE(file_exist("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_999.vi"));
+        EXPECT_TRUE(file_exist("00000000000b59e4_dddd4444-4444-4444-4444-444444444444_5100_999.vi"));
     }
 }
 
@@ -3201,11 +3201,11 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
     create_data_file("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat"); // m - new
 
     // .vi files for all segments
-    create_data_file("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_100.vi"); // a - must survive
-    create_data_file("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_100.vi"); // b - must be deleted
-    create_data_file("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_100.vi"); // c - must be deleted
-    create_data_file("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_100.vi"); // d - must survive
-    create_data_file("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_100.vi"); // m - must survive
+    create_data_file("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_5400_100.vi"); // a - must survive
+    create_data_file("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_5400_100.vi"); // b - must be deleted
+    create_data_file("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_5400_100.vi"); // c - must be deleted
+    create_data_file("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_5400_100.vi"); // d - must survive
+    create_data_file("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_5400_100.vi"); // m - must survive
 
     // Version 2: original rowset
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
@@ -3324,18 +3324,18 @@ TEST_P(LakeVacuumTest, test_vacuum_vi_files_partial_compaction) {
         // Consumed segments and their .vi files should be deleted
         EXPECT_FALSE(file_exist("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002.dat"));
         EXPECT_FALSE(file_exist("00000000000e59e4_cccc0003-0003-0003-0003-000000000003.dat"));
-        EXPECT_FALSE(file_exist("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_100.vi"));
-        EXPECT_FALSE(file_exist("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000e59e4_bbbb0002-0002-0002-0002-000000000002_5400_100.vi"));
+        EXPECT_FALSE(file_exist("00000000000e59e4_cccc0003-0003-0003-0003-000000000003_5400_100.vi"));
 
         // Reused segments and their .vi files must survive
         EXPECT_TRUE(file_exist("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001.dat"));
         EXPECT_TRUE(file_exist("00000000000e59e4_dddd0004-0004-0004-0004-000000000004.dat"));
-        EXPECT_TRUE(file_exist("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_100.vi"));
-        EXPECT_TRUE(file_exist("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_100.vi"));
+        EXPECT_TRUE(file_exist("00000000000e59e4_aaaa0001-0001-0001-0001-000000000001_5400_100.vi"));
+        EXPECT_TRUE(file_exist("00000000000e59e4_dddd0004-0004-0004-0004-000000000004_5400_100.vi"));
 
         // New compacted segment and its .vi file must survive
         EXPECT_TRUE(file_exist("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005.dat"));
-        EXPECT_TRUE(file_exist("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_100.vi"));
+        EXPECT_TRUE(file_exist("00000000000e59e5_mmmm0005-0005-0005-0005-000000000005_5400_100.vi"));
     }
 }
 
@@ -3346,13 +3346,13 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
     create_data_file("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat");
     create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.dat");
     // .vi files for alive rowsets
-    create_data_file("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_300.vi");
-    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_300.vi");
-    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_400.vi");
+    create_data_file("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_5200_300.vi");
+    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_5200_300.vi");
+    create_data_file("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_5200_400.vi");
     // Segments in compaction_inputs
     create_data_file("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat");
     // .vi files for compaction_inputs
-    create_data_file("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_300.vi");
+    create_data_file("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_5200_300.vi");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -3408,10 +3408,10 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
         EXPECT_FALSE(file_exist("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc.dat"));
 
         // All .vi files should be deleted (tracked in segment_metas)
-        EXPECT_FALSE(file_exist("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_300.vi"));
-        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_300.vi"));
-        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_400.vi"));
-        EXPECT_FALSE(file_exist("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_300.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_1111aaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa_5200_300.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_5200_300.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e4_2222bbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_5200_400.vi"));
+        EXPECT_FALSE(file_exist("00000000000c59e3_3333cccc-cccc-cccc-cccc-cccccccccccc_5200_300.vi"));
 
         // Metadata should be deleted
         EXPECT_FALSE(file_exist(tablet_metadata_filename(5200, 2)));
@@ -3423,9 +3423,9 @@ TEST_P(LakeVacuumTest, test_delete_tablets_vi_files) {
 TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
     // Referenced segment and its .vi file
     create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat");
-    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_500.vi");
+    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_5300_500.vi");
     // Orphan .vi file (not tracked in any segment_metas)
-    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_999.vi");
+    create_data_file("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_5300_999.vi");
 
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -3462,11 +3462,11 @@ TEST_P(LakeVacuumTest, test_find_orphan_vi_files) {
                                                               bundle_meta_files, nullptr /*audit_ostream*/));
 
     // The referenced .vi file should NOT be in orphan list
-    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_500.vi"), 0);
+    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_5300_500.vi"), 0);
     // The referenced segment should NOT be in orphan list
     EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111.dat"), 0);
     // The untracked .vi file SHOULD be in orphan list
-    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_999.vi"), 1);
+    EXPECT_EQ(orphan_files.count("00000000000d59e4_aaaa1111-1111-1111-1111-111111111111_5300_999.vi"), 1);
 }
 
 // Test: vacuum honours the `i < segment_metas_size()` defensive guard in
@@ -3482,7 +3482,7 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
     // .vi entry; seg_b does not. Vacuum should delete seg_a's .vi only.
     create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat");
     create_data_file("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat");
-    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi");
+    create_data_file("00000000000e59e4_p1111111-1111-1111-1111-111111111111_5400_700.vi");
     // The fresh-version segment (alive after compaction).
     create_data_file("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat");
 
@@ -3565,7 +3565,7 @@ TEST_P(LakeVacuumTest, test_vacuum_partial_segment_metas) {
     EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111.dat"));
     EXPECT_FALSE(exists("00000000000e59e4_p2222222-2222-2222-2222-222222222222.dat"));
     // The .vi tracked by segment_metas[0] is deleted.
-    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_700.vi"));
+    EXPECT_FALSE(exists("00000000000e59e4_p1111111-1111-1111-1111-111111111111_5400_700.vi"));
     // The alive segment must still exist; vacuum did not crash on the partial-metas rowset.
     EXPECT_TRUE(exists("00000000000e59e5_p3333333-3333-3333-3333-333333333333.dat"));
 }
@@ -3657,6 +3657,139 @@ TEST_P(LakeVacuumTest, full_vacuum_drops_local_cache_for_active_idx) {
     EXPECT_NE(std::find(dropped.begin(), dropped.end(), std::string("8003_active.idx")), dropped.end());
 }
 
+// A deadline that expires while walking the version chain must stop the walk early without
+// deleting anything; the next run (no deadline pressure) completes normally.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_deadline_expired_mid_walk) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 2,
+            "prev_garbage_version": 0,
+            "commit_time": 1687331159
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 3,
+            "prev_garbage_version": 2,
+            "commit_time": 1687331160
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20002,
+            "version": 4,
+            "prev_garbage_version": 3,
+            "commit_time": 1687331161
+        }
+        )DEL")));
+
+    // The first checks (request entry, first two walk iterations) observe a mocked clock
+    // before the deadline, every later check observes one far past it, so the deadline
+    // expires in the middle of the version chain walk.
+    int64_t check_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+        check_count++;
+        *(int64_t*)arg = (check_count > 3) ? (int64_t{1} << 62) : 0;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_GT(check_count, 3);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+
+    SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.add_tablet_ids(20002);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331162);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, response.vacuumed_version());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(20002, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(20002, 4)));
+    }
+}
+
+// A task that reaches the BE with less than 1/10 of the FE timeout window left must abort at the
+// entry, before walking any metadata: the walk could not finish in the time remaining and would
+// only end in a mid-walk timeout that advances nothing, so it should never start.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_deadline_window_too_small_to_start) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20003,
+            "version": 2,
+            "prev_garbage_version": 0,
+            "commit_time": 1687331159
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 20003,
+            "version": 3,
+            "prev_garbage_version": 2,
+            "commit_time": 1687331160
+        }
+        )DEL")));
+
+    // Pin the clock to a moment that is still before the real deadline (1000000) but inside the
+    // minimum start window. With timeout_ms=600000 that window is min(5min, 600000/10)=60000ms, so
+    // the entry brings the effective deadline forward to 940000 and 950000 >= 940000 fails fast,
+    // even though the strict "now >= 1000000" test would not.
+    int64_t check_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline", [&](void* arg) {
+        check_count++;
+        *(int64_t*)arg = 950000;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumRequest request;
+    VacuumResponse response;
+    request.add_tablet_ids(20003);
+    request.set_min_retain_version(3);
+    request.set_grace_timestamp(1687331162);
+    request.set_min_active_txn_id(12344);
+    request.set_timeout_ms(600000);
+    vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1000000);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+    // Aborted at the entry: the version chain was never walked.
+    EXPECT_EQ(1, check_count);
+    EXPECT_EQ(0, response.vacuumed_files());
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 3)));
+}
+
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
@@ -3671,7 +3804,7 @@ TEST(LakeVacuumTest2, test_delete_files_async) {
     ASSERT_OK(f2->close());
 
     delete_files_async({"test_vacuum_delete_files1.txt", "test_vacuum_delete_files2.txt"});
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files1.txt"));
     ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files2.txt"));
 }
@@ -5618,7 +5751,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_parses_valid_name) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/1000,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);
 }
@@ -5684,7 +5817,7 @@ TEST_P(LakeVacuumTest, vacuum_load_spill_flat_threshold_strict_less_than) {
     int64_t deleted = 0;
     ASSERT_OK(vacuum_load_spill(kTestDir, /*min_active_txn_id=*/100,
                                 /*cleanup_legacy_load_spill=*/false, &deleted));
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
     EXPECT_TRUE(path_exists(kept));
     EXPECT_FALSE(path_exists(victim));
     EXPECT_EQ(1, deleted);

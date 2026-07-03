@@ -43,15 +43,14 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/staros/starlet_filesystem.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
+#include "exec/exec_env.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_starlet.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
@@ -132,7 +131,7 @@ protected:
         config::enable_transparent_data_encryption = false;
 
         // check primary index cache's ref
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
             EXPECT_FALSE(fs::path_exist(file));
@@ -655,7 +654,7 @@ protected:
     }
 
     void TearDown() override {
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         ASSERT_OK(fs::remove_all(_test_dir));
     }
 
@@ -850,7 +849,7 @@ protected:
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
 
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         ASSERT_OK(fs::remove_all(_test_dir));
     }
 

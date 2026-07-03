@@ -399,7 +399,7 @@ public class StatisticsCollectJobFactory {
                                                    List<Type> columnTypes) {
         // get updated partitions
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
-        LOG.info("create external full statistics job for table: {}, partitions: {}",
+        LOG.info("[ExternalStats] create full job | table={} partitions={}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
@@ -411,7 +411,7 @@ public class StatisticsCollectJobFactory {
                                                      List<String> columnNames, List<Type> columnTypes) {
         // get updated partitions
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
-        LOG.info("create external sa,ple statistics job for table: {}, partitions: {}",
+        LOG.info("[ExternalStats] create sample job | table={} partitions={}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 null, columnNames, columnTypes, StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(),

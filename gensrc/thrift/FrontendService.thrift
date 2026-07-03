@@ -431,6 +431,8 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
+    38: optional string last_freshness_confirmed_at
+    39: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {
@@ -499,6 +501,36 @@ struct TListPipeFilesResult {
 
 struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
+}
+
+struct TMaterializedViewRefreshJobInfo {
+    1: optional string job_id
+    2: optional string materialized_view_id
+    3: optional string table_schema
+    4: optional string table_name
+    5: optional string task_id
+    6: optional string warehouse
+    7: optional string resource_group
+    8: optional string creator
+    9: optional string submit_user
+    10: optional string run_as_user
+    11: optional string submit_time
+    12: optional string refresh_state
+    13: optional string finish_time
+    14: optional string duration_time
+    15: optional string refresh_trigger
+    16: optional string refresh_mode
+    17: optional string imv_source_version_range
+    18: optional string imv_source_timestamp_range
+    19: optional string imv_source_pinned_snapshot_id_map
+    20: optional string failed_task_run_id
+    21: optional string failed_query_id
+    22: optional string error_code
+    23: optional string error_message
+}
+
+struct TListMaterializedViewRefreshJobsResult {
+    1: optional list<TMaterializedViewRefreshJobInfo> jobs
 }
 
 // Pagination cursor for request segmentation
@@ -1750,6 +1782,7 @@ struct TQueryStatisticsInfo {
     15: optional string resourceGroupName
     16: optional string execProgress
     17: optional string execState
+    18: optional string queryType
 }
 
 struct TGetQueryStatisticsResponse {
@@ -2406,6 +2439,16 @@ struct TBatchGetTabletMetadataResponse {
     2: optional list<TGetTabletMetadataResponse> responses;
 }
 
+// information_schema.fe_metrics: the BE scanner fetches each FE's metrics over the getFeMetrics
+// RPC (instead of scraping the HTTP /metrics endpoint), so fe_metrics works regardless of
+// `enable_http_auth` and no longer depends on HTTP Basic auth. The RPC takes no arguments —
+// FE process metrics are global with no per-object RBAC to authorize.
+struct TFeMetricsResult {
+    1: optional Status.TStatus status
+    // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
+    2: optional string json_metrics
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2448,6 +2491,7 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 
@@ -2505,6 +2549,9 @@ service FrontendService {
 
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
+    // information_schema.fe_metrics
+    TFeMetricsResult getFeMetrics()
 
     // information_schema.column_stats_uage
     TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)

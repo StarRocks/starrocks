@@ -25,17 +25,17 @@
 #include "compute_env/spill/dir_manager.h"
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/operator_mem_resource_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_driver.h"
 #include "pipeline_test_base.h"
-#include "runtime/exec_env.h"
 #include "runtime/service_contexts.h"
 
 #define ASSERT_COUNTER_LIFETIME(counter, dop)       \
@@ -289,7 +289,7 @@ public:
             : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence, std::move(counter)) {}
     ~TestNormalOperator() override = default;
 
-    bool need_input() const override { return true; }
+    bool need_input() const override { return !_is_finished && _chunk == nullptr; }
     bool has_output() const override { return _chunk != nullptr; }
     bool is_finished() const override { return _is_finished && !has_output(); }
     Status set_finishing(RuntimeState* state) override {
@@ -445,6 +445,26 @@ public:
 };
 
 class TestPipelineControlFlow : public PipelineTestBase {};
+
+TEST_F(TestPipelineControlFlow, test_normal_operator_backpressure) {
+    CounterPtr normalCounter = std::make_shared<Counter>();
+    TestNormalOperatorFactory factory(next_operator_id(), next_plan_node_id(), normalCounter);
+    auto normal = std::static_pointer_cast<TestNormalOperator>(factory.create(1, 0));
+    auto chunk = _create_and_fill_chunk(1);
+
+    ASSERT_TRUE(normal->need_input());
+    ASSERT_OK(normal->push_chunk(nullptr, chunk));
+    ASSERT_FALSE(normal->need_input());
+    ASSERT_TRUE(normal->has_output());
+
+    ASSIGN_OR_ABORT(auto output_chunk, normal->pull_chunk(nullptr));
+    ASSERT_EQ(chunk, output_chunk);
+    ASSERT_TRUE(normal->need_input());
+
+    ASSERT_OK(normal->set_finishing(nullptr));
+    ASSERT_FALSE(normal->need_input());
+    ASSERT_TRUE(normal->is_finished());
+}
 
 class SpillLifecycleSourceOperator final : public SourceOperator {
 public:
@@ -678,8 +698,8 @@ struct SpillDriverTestHarness {
         query_execution_services.runtime = &runtime_services;
         query_ctx.set_query_id(generate_uuid());
         query_ctx.set_query_execution_services(&query_execution_services);
-        query_ctx.init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
-                                   GlobalEnv::GetInstance()->query_pool_mem_tracker());
+        query_ctx.init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                   RuntimeEnv::GetInstance()->query_pool_mem_tracker());
         EXPECT_OK(query_ctx.init_spill_manager(TQueryOptions{}));
         EXPECT_EQ(query_ctx.spill_manager(), query_ctx.query_runtime_state().query_spill_manager());
         query_ctx.set_query_execution_services(nullptr);
@@ -689,7 +709,7 @@ struct SpillDriverTestHarness {
         auto runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
         runtime_state->set_query_execution_services(&query_execution_services);
         runtime_state->set_query_runtime_state(&query_ctx.query_runtime_state());
-        runtime_state->set_fragment_ctx(&fragment_ctx);
+        runtime_state->set_fragment_ctx(&fragment_ctx, &fragment_ctx.fragment_runtime_state());
         runtime_state->init_mem_trackers(query_ctx.mem_tracker());
         fragment_ctx.set_runtime_state(std::move(runtime_state));
     }

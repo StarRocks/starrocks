@@ -18,11 +18,12 @@
 #include <utility>
 
 #include "connector/async_flush_stream_poller.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
@@ -76,7 +77,7 @@ bool ConnectorSinkOperator::need_input() const {
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
-        _fragment_context->cancel(status);
+        cancel_fragment_context(_fragment_context, status);
     }
 
     return can_accept_more_input;
@@ -101,7 +102,7 @@ bool ConnectorSinkOperator::is_finished() const {
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
-        _fragment_context->cancel(status);
+        cancel_fragment_context(_fragment_context, status);
     }
     return ret;
 }
@@ -137,7 +138,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
           _data_sink_provider(std::move(data_sink_provider)),
           _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
-    MemTracker* query_pool_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
+    MemTracker* query_pool_tracker = RuntimeEnv::GetInstance()->query_pool_mem_tracker();
     MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
 

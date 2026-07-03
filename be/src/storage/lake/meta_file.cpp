@@ -27,7 +27,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -183,6 +183,15 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
+        // The rewrite produces a full segment under a new name; the replace FileInfo carries the
+        // authoritative vector_index_ids for it (built inline / carried over from the partial
+        // segment in sync mode, or scheduled for the FE build task in async mode). Any ids copied
+        // from the partial segment's own metadata refer to .vi files keyed on the old segment
+        // name, so refresh them wholesale.
+        segment_meta->clear_vector_index_ids();
+        for (int64_t vi_id : replace_seg.second.vector_index_ids) {
+            segment_meta->add_vector_index_ids(vi_id);
+        }
         // The rewrite file is a brand-new file private to this tablet, not shared with
         // sibling split tablets. If the original segment was marked shared during a
         // cross-publish, clear the flag so GC routes the rewrite file through the normal
@@ -224,9 +233,9 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-    // collect trash files
+    // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
         _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
     }
     if (!_tablet_meta->rowset_to_schema().empty()) {
@@ -244,9 +253,10 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     for (const auto& segment_meta : op_write.rowset().segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled segment (bundle_file_offset set) is shared with
+        // sibling tablets. The orphan FileMetaPB only carries `shared`, so encode bundling into it
+        // too, otherwise vacuum deletes the shared bundle file while a sibling still references it.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -808,9 +818,10 @@ void MetaFileBuilder::apply_opcompaction_with_conflict(const TxnLogPB_OpCompacti
     for (const auto& segment_meta : rowset_metadata.segment_metas()) {
         FileMetaPB file_meta;
         file_meta.set_name(segment_meta.filename());
-        if (segment_meta.has_shared()) {
-            file_meta.set_shared(segment_meta.shared());
-        }
+        // Mirror is_shared_segment(): a bundled compaction-output segment is shared with sibling
+        // tablets. Encode bundling into the orphan's `shared` flag so vacuum's alive-check protects
+        // it instead of deleting a bundle file a sibling still references.
+        file_meta.set_shared(segment_meta.shared() || segment_meta.has_bundle_file_offset());
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -1256,6 +1267,12 @@ Status MetaFileBuilder::set_final_rowset() {
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
+        // See apply_opwrite: refresh vector_index_ids for the full rewrite segment so the dest
+        // segment keeps its vector index (sync .vi built inline, or async .vi to be built).
+        segment_meta->clear_vector_index_ids();
+        for (int64_t vi_id : replace_seg.second.vector_index_ids) {
+            segment_meta->add_vector_index_ids(vi_id);
+        }
         // See apply_opwrite: clear the shared flag for the rewrite file, which is
         // private to this tablet and must not be GC'd through the shared-file path.
         if (segment_meta->has_shared()) {
@@ -1294,9 +1311,9 @@ Status MetaFileBuilder::set_final_rowset() {
     // If rowset doesn't contain segment files, still increment next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
-    // Collect orphan files
+    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
         _tablet_meta->mutable_orphan_files()->Add()->CopyFrom(orphan_file);
     }
 

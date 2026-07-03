@@ -45,7 +45,7 @@
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace butil {
 class IOBuf;

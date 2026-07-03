@@ -23,15 +23,15 @@
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
 #include "fmt/core.h"
 #include "gutil/strings/split.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
 #include "storage/cumulative_compaction.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
@@ -47,7 +47,7 @@ Status run_manual_compaction(uint64_t tablet_id, const std::string& compaction_t
 
     auto mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(tablet->tablet_id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker());
     if (tablet->updates() != nullptr) {
         StorageMetrics::instance()->update_compaction_request_total.increment(1);
         StorageMetrics::instance()->running_update_compaction_task_num.increment(1);

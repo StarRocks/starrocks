@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard;
 
 import com.starrocks.common.Config;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -188,6 +190,36 @@ public class TabletReshardUtilsTest {
         long data = (Long.MAX_VALUE / t) * t;
         // expected to cap at max_split_count
         assertEquals(Config.tablet_reshard_max_split_count, TabletReshardUtils.calcSplitCount(data, t));
+    }
+
+    @Test
+    public void safeComputeParallelismFloor_returnsZeroWhenComputeFails() {
+        // computeParallelismFloor resolves warehouse / compute-node state via StarMgr and can throw
+        // (e.g. the warehouse no longer exists). safeComputeParallelismFloor must swallow that and
+        // fall back to "no floor" (0) so a single table's warehouse error cannot abort the scan.
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public static int computeParallelismFloor(long tableId) {
+                throw new RuntimeException("warehouse unavailable");
+            }
+        };
+        assertEquals(0, TabletReshardUtils.safeComputeParallelismFloor(123L));
+    }
+
+    @Test
+    public void parallelismFloor_clampsAndBounds() {
+        // typical: floor follows compute node count
+        assertEquals(4, TabletReshardUtils.parallelismFloor(4, 1024));
+        // upper clamp at max split count
+        assertEquals(1024, TabletReshardUtils.parallelismFloor(2000, 1024));
+        // lower bound at 2 (matches pre-split's clamp(...,2,...))
+        assertEquals(2, TabletReshardUtils.parallelismFloor(1, 1024));
+        assertEquals(2, TabletReshardUtils.parallelismFloor(2, 1024));
+        // zero-node edge: computeNodeCount guarantees >= 1 in practice, but floor still holds
+        assertEquals(2, TabletReshardUtils.parallelismFloor(0, 1024));
+        // max split count < 2 => pre-split disabled => no floor (degrades to 1)
+        assertEquals(1, TabletReshardUtils.parallelismFloor(5, 1));
+        assertEquals(1, TabletReshardUtils.parallelismFloor(5, 0));
     }
 
     /**

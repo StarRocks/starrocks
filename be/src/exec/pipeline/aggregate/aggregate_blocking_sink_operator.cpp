@@ -23,8 +23,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
+#include "exec/runtime_filter_compat/runtime_filter_port.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

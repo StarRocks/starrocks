@@ -19,6 +19,7 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRangeRewriteSchemaChangeJob;
 import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.LakeTableAddIndexJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
@@ -67,6 +68,7 @@ import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.BoolVariant;
 import com.starrocks.catalog.DateVariant;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -242,6 +244,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                         .registerSubtype(MergePartitionJob.class, "MergePartitionJob")
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                        .registerSubtype(LakeRangeRewriteSchemaChangeJob.class, "LakeRangeRewriteSchemaChangeJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                         .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")
@@ -453,6 +456,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LargeIntVariant.class, "LargeIntVariant")
                         .registerSubtype(StringVariant.class, "StringVariant")
                         .registerSubtype(DateVariant.class, "DateVariant")
+                        .registerSubtype(DecimalVariant.class, "DecimalVariant")
                         // Canonical colocate boundaries serialized via SplittingTablet contain
                         // NullVariant suffixes; MinVariant / MaxVariant cover the unbounded
                         // sentinel cases observed in ColocateRange persistence.

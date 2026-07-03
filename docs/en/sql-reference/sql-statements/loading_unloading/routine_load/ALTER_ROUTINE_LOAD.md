@@ -87,8 +87,8 @@ FROM data_source
   - **`data_source_properties`**
 
     The properties of the data source. Currently, only the following properties can be altered:
-    - `kafka_partitions` and `kafka_offsets`: Note that StarRocks only supports modifying the offset of Kafka partitions that have already been consumed but does not support adding new Kafka partitions.
-    - `property.*`: Custom parameters for the data source Kafka, such as `property.kafka_default_offsets`.
+    - `kafka_partitions` and `kafka_offsets`: By default, StarRocks only supports modifying the offset of Kafka partitions that have already been consumed and does not support adding new Kafka partitions. If `property.kafka_partition_discovery` is set to `true` in the same statement, the listed partitions are validated against the Kafka topic instead, so offsets can also be specified for partitions beyond the pinned list.
+    - `property.*`: Custom parameters for the data source Kafka, such as `property.kafka_default_offsets`. Note that `property.kafka_partition_discovery` can only be set to `true`, which unpins the partition list specified at job creation and re-enables automatic partition discovery. Setting it back to `false` is not supported; recreate the job to pin partitions again.
 
 ## Examples
 

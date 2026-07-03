@@ -25,14 +25,14 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
+#include "exec/runtime/pipeline.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {

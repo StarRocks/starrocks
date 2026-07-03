@@ -19,14 +19,14 @@
 #include <vector>
 
 #include "column/column_access_path.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "options.h"
-#include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/primitive/chunk_iterator.h"
 #include "storage/primitive/olap_tuple.h"
+#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
 
@@ -110,6 +110,10 @@ struct TabletReaderParams {
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    // Set by the scan source (OlapChunkSource / LakeDataSource) when a predicate for this scan is
+    // evaluated ABOVE the segment iterator; routes vector-filter queries to exact brute-force so a
+    // segment-level ANN k-limit cannot under-return. See design doc §7.
+    bool has_predicate_above_iterator = false;
 
 public:
     std::string to_string() const;

@@ -14,17 +14,19 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include <arrow/memory_pool.h>
+
 #include "compute_env/result/result_queue_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
+#include "exec/arrow/result_to_arrow_converter.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/primitives/driver_executor.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "util/arrow/row_batch.h"
-#include "util/arrow/starrocks_column_to_arrow.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks::pipeline {
 

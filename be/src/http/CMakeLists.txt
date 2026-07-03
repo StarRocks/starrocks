@@ -17,23 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-set(HTTP_CORE_FILES
-  http_metrics.cpp
-  http_auth.cpp
-  http_headers.cpp
-  http_method.cpp
-  http_request.cpp
-  http_channel.cpp
-  http_status.cpp
-  http_parser.cpp
-  http_stream_channel.cpp
-  ev_http_server.cpp
-  http_client.cpp
-)
-
-ADD_BE_LIB(HttpCore ${HTTP_CORE_FILES})
-
-set(WEB_SERVER_FILES
+set(HTTP_SERVICE_FILES
   download_action.cpp
   web_page_handler.cpp
   monitor_action.cpp
@@ -65,21 +49,8 @@ set(WEB_SERVER_FILES
   action/stop_be_action.cpp)
 
 if(STARROCKS_JIT_ENABLE)
-    set(WEB_SERVER_FILES ${WEB_SERVER_FILES} action/jit_cache_action.cpp)
+    set(HTTP_SERVICE_FILES ${HTTP_SERVICE_FILES} action/jit_cache_action.cpp)
 endif()
 
-ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
-target_link_libraries(Webserver PUBLIC HttpCore PRIVATE Storage)
-
-# target_link_libraries(Webserver pthread dl Util)
-#ADD_BE_TEST(integer-array-test)
-#ADD_BE_TEST(runtime-profile-test)
-#ADD_BE_TEST(benchmark-test)
-#ADD_BE_TEST(decompress-test)
-#ADD_BE_TEST(metrics-test)
-#ADD_BE_TEST(debug-util-test)
-#ADD_BE_TEST(url-coding-test)
-#ADD_BE_TEST(thrift-util-test)
-#ADD_BE_TEST(bit-util-test)
-#ADD_BE_TEST(rle-test)
-##ADD_BE_TEST(perf-counters-test)
+ADD_BE_LIB(HttpService ${HTTP_SERVICE_FILES})
+target_link_libraries(HttpService PUBLIC Platform PRIVATE Storage DataWorkflows Orchestration)

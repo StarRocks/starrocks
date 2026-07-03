@@ -248,7 +248,12 @@ import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.MergeTabletClause;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedDeleteClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
@@ -427,7 +432,6 @@ import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
-import com.starrocks.sql.ast.UnitBoundary;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
@@ -625,6 +629,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             Lists.newArrayList(FunctionSet.SUBSTR, FunctionSet.SUBSTRING,
                     FunctionSet.FROM_UNIXTIME, FunctionSet.FROM_UNIXTIME_MS,
                     FunctionSet.STR2DATE);
+
+    // Boundary keywords accepted as the third argument of time_slice / date_slice
+    // (e.g. time_slice(dt, interval 5 minute, FLOOR)); the lower-case form is what the
+    // function implementation expects.
+    private static final String TIME_SLICE_BOUNDARY_FLOOR = "floor";
+    private static final String TIME_SLICE_BOUNDARY_CEIL = "ceil";
+
     // rewriter
     private static final CompoundPredicateExprRewriter COMPOUND_PREDICATE_EXPR_REWRITER = new CompoundPredicateExprRewriter();
 
@@ -1890,7 +1901,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         boolean isSecurity = false;
-        if (context.SECURITY() != null) {
+        boolean securityExplicit = context.SECURITY() != null;
+        if (securityExplicit) {
             if (context.NONE() != null) {
                 isSecurity = false;
             } else if (context.INVOKER() != null) {
@@ -1905,6 +1917,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
+                securityExplicit,
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
@@ -2707,6 +2720,71 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         ret.setHintNodes(hintMap.get(context));
         return ret;
+    }
+
+    @Override
+    public ParseNode visitMergeIntoStatement(
+            com.starrocks.sql.parser.StarRocksParser.MergeIntoStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
+        String targetAlias = context.targetAlias != null ? getIdentifierName(context.targetAlias) : null;
+        Relation sourceRelation = (Relation) visit(context.relation());
+        String sourceAlias = context.sourceAlias != null ? getIdentifierName(context.sourceAlias) : null;
+        if (sourceAlias != null && sourceRelation.getAlias() == null) {
+            sourceRelation.setAlias(new TableName(null, sourceAlias));
+        }
+        Expr mergeCondition = (Expr) visit(context.mergeCondition);
+        List<MergeWhenClause> whenClauses = visit(context.mergeWhenClause(), MergeWhenClause.class);
+        MergeIntoStmt ret = new MergeIntoStmt(tableRef, targetAlias, sourceRelation, sourceAlias,
+                mergeCondition, whenClauses, createPos(context));
+        if (context.explainDesc() != null) {
+            ret.setIsExplain(true, getExplainType(context.explainDesc()));
+            if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
+            }
+        }
+        ret.setHintNodes(hintMap.get(context));
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitMergeWhenMatched(
+            com.starrocks.sql.parser.StarRocksParser.MergeWhenMatchedContext context) {
+        Expr condition = context.matchedCondition != null ? (Expr) visit(context.matchedCondition) : null;
+        var action = context.mergeMatchedAction();
+        if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeMatchedUpdateContext updateCtx) {
+            List<ColumnAssignment> assignments =
+                    visit(updateCtx.assignmentList().assignment(), ColumnAssignment.class);
+            return new MergeWhenMatchedUpdateClause(condition, assignments, createPos(context));
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeMatchedDeleteContext) {
+            return new MergeWhenMatchedDeleteClause(condition, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge matched action: " + action.getClass().getSimpleName()));
+        }
+    }
+
+    @Override
+    public ParseNode visitMergeWhenNotMatched(
+            com.starrocks.sql.parser.StarRocksParser.MergeWhenNotMatchedContext context) {
+        Expr condition = context.notMatchedCondition != null ? (Expr) visit(context.notMatchedCondition) : null;
+        var action = context.mergeNotMatchedAction();
+        if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertStarContext) {
+            return new MergeWhenNotMatchedInsertClause(condition, null, null, true, createPos(context));
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertValuesContext valuesCtx) {
+            List<String> cols = null;
+            if (valuesCtx.cols != null && !valuesCtx.cols.isEmpty()) {
+                cols = new ArrayList<>();
+                for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext idCtx : valuesCtx.cols) {
+                    cols.add(getIdentifierName(idCtx));
+                }
+            }
+            List<Expr> values = visit(valuesCtx.expressionList().expression(), Expr.class);
+            return new MergeWhenNotMatchedInsertClause(condition, cols, values, false, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge not matched action: " + action.getClass().getSimpleName()));
+        }
     }
 
     // ------------------------------------------- Routine Statement ---------------------------------------------------
@@ -8052,6 +8130,23 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
     }
 
+    // time_slice / date_slice accept FLOOR or CEIL (case-insensitive) as their boundary argument,
+    // e.g. time_slice(dt, interval 5 minute, FLOOR). FLOOR and CEIL are non-reserved keywords, so the
+    // parser builds a column reference (SlotRef) for the bare keyword; recognize it here and normalize
+    // to the lower-case string the function implementation expects.
+    private static String getTimeSliceBoundary(ParseNode boundaryArg, String functionName) {
+        if (boundaryArg instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) boundaryArg;
+            if (slotRef.getTblNameWithoutAnalyzed() == null && slotRef.getColumnName() != null) {
+                String boundary = slotRef.getColumnName().toLowerCase();
+                if (boundary.equals(TIME_SLICE_BOUNDARY_FLOOR) || boundary.equals(TIME_SLICE_BOUNDARY_CEIL)) {
+                    return boundary;
+                }
+            }
+        }
+        throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), boundaryArg.getPos());
+    }
+
     @Override
     public ParseNode visitSimpleFunctionCall(com.starrocks.sql.parser.StarRocksParser.SimpleFunctionCallContext context) {
         String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
@@ -8092,7 +8187,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
-                        "floor"), pos);
+                        TIME_SLICE_BOUNDARY_FLOOR), pos);
 
                 return functionCallExpr;
             } else if (context.expression().size() == 3) {
@@ -8104,13 +8199,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
                 ParseNode e3 = visit(context.expression(2));
-                if (!(e3 instanceof UnitBoundary)) {
-                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
-                }
-                UnitBoundary unitBoundary = (UnitBoundary) e3;
+                String boundary = getTimeSliceBoundary(e3, functionName);
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName, getArgumentsForTimeSlice(e1,
                         intervalLiteral.getValue(), intervalLiteral.getUnitIdentifier().getDescription().toLowerCase(),
-                        unitBoundary.getDescription().toLowerCase()), pos);
+                        boundary), pos);
 
                 return functionCallExpr;
             } else if (context.expression().size() == 4) {
@@ -8902,11 +8994,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitUnitIdentifier(com.starrocks.sql.parser.StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText(), createPos(context));
-    }
-
-    @Override
-    public ParseNode visitUnitBoundary(com.starrocks.sql.parser.StarRocksParser.UnitBoundaryContext context) {
-        return new UnitBoundary(context.getText(), createPos(context));
     }
 
     @Override

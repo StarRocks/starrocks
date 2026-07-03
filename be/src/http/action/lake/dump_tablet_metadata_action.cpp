@@ -19,18 +19,19 @@
 #include <json2pb/pb_to_json.h>
 
 #include "base/string/string_parser.hpp"
+#include "exec/exec_env.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
-#include "http/http_stream_channel.h"
-#include "runtime/exec_env.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
+#include "platform/http/http_stream_channel.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
@@ -54,7 +55,7 @@ void DumpTabletMetadataAction::handle(HttpRequest* req) {
         }
     }
 
-    TabletManager* tablet_mgr = _exec_env->lake_tablet_manager();
+    TabletManager* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     if (tablet_mgr == nullptr) {
         HttpChannel::send_reply(req, HttpStatus::INTERNAL_SERVER_ERROR, "Not built with --use-staros");
         return;

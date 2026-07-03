@@ -111,7 +111,10 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
   :::note
 
-  `file://` プロトコルを介して NFS 内のファイルにアクセスするには、各 BE または CN ノードの同じディレクトリに NAS デバイスを NFS としてマウントする必要があります。
+  `file://` プロトコルを介して NFS(NAS) にアクセスするには、同じ NAS デバイスを NFS として、パスにアクセスする必要があるノード上の同じディレクトリにマウントしてください。
+
+  - 読み取り/書き込み操作の場合、各 FE ノードおよび各 BE または CN ノードにマウントする必要があります。FE ノードはファイルを一覧表示し、ファイルスキーマを推論します。BE/CN ノードはデータを読み取ります。
+  - 書き込みのみの操作の場合、各 BE または CN ノードにマウントする必要があります。
 
   :::
 
@@ -136,6 +139,18 @@ Parquet 形式の例:
 "parquet.use_legacy_encoding" = "true",   -- アンロードのみ
 "parquet.version" = "2.6"                 -- アンロードのみ
 ```
+
+Parquet ファイルを読み取る際（たとえば `FILES()` または Broker Load を使用）、StarRocks は Parquet TIMESTAMP 論理型をその `isAdjustedToUTC` 属性に従って DATETIME にマッピングします:
+
+- **インスタントセマンティクス**: `isAdjustedToUTC` が `true` の場合、その値は UTC に正規化されたタイムライン上の瞬間を特定します。StarRocks は現在のセッションタイムゾーンにおける壁時計時刻に変換します。
+- **ローカルセマンティクス**: `isAdjustedToUTC` が `false` の場合、その値はタイムゾーンを持たない壁時計時刻です。StarRocks はセッションタイムゾーンに関係なく、書き込まれたままの値を返します。
+- レガシーな INT96 物理型は `isAdjustedToUTC` 属性を持ちません。StarRocks は、INT96 タイムスタンプがトップレベルの列であるか STRUCT、ARRAY、または MAP 内にネストされているかにかかわらず、INT96 列を UTC に正規化された瞬間として扱い、セッションタイムゾーンに変換します。
+
+:::note
+
+**動作変更**: 以前のバージョンでは、StarRocks はローカルセマンティクス（`isAdjustedToUTC` が `false`）のタイムスタンプを読み取る際、セッションタイムゾーンのオフセット分だけ値をシフトしていました。現在は書き込まれたままの値が返されます。セッションタイムゾーンが UTC でない場合、同じファイルから返される値は以前のバージョンと異なります（現在の動作は Parquet 仕様に準拠しています）。
+
+:::
 
 ###### `parquet.use_legacy_encoding`
 

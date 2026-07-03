@@ -12,6 +12,8 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
+import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
+
 <FEConfigMethod />
 
 ## FE 設定項目の表示
@@ -710,6 +712,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
 - 導入時期：v4.1.0
 
+<EditonSpecificFEItemSharedLakeOther />
+
 ## その他
 
 ### `agent_task_resend_wait_time_ms`
@@ -1034,6 +1038,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：Seconds
 - 変更可能：Yes
 - 説明：JDBC カタログのメタデータキャッシュのデフォルトの有効期限。`jdbc_meta_default_cache_enable` が true に設定されている場合、新しく作成された JDBC カタログはデフォルトでメタデータキャッシュの有効期限を設定します。
+- 導入時期：-
+
+### `jdbc_row_count_cache_refresh_sec`
+
+- デフォルト：600
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュのバックグラウンド更新間隔。この間隔を過ぎると、古い値を即座に返しながらバックグラウンドで非同期に再読み込みします。カタログプロパティ `jdbc_row_count_cache_refresh_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_expire_sec`
+
+- デフォルト：1200
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：JDBC テーブルの行数キャッシュエントリの強制削除 TTL。この期間内にアクセスされなかったエントリは削除されます。`jdbc_row_count_cache_refresh_sec` より大きい値を設定してください。カタログプロパティ `jdbc_row_count_cache_expire_sec` でカタログごとに上書き可能です。
+- 導入時期：-
+
+### `jdbc_row_count_cache_max_size`
+
+- デフォルト：10000
+- タイプ：Long
+- 単位：-
+- 変更可能：Yes
+- 説明：JDBC カタログごとの行数キャッシュの最大エントリ数。テーブル数が多いカタログのメモリ増大を制限します。カタログプロパティ `jdbc_row_count_cache_max_size` でカタログごとに上書き可能です。
 - 導入時期：-
 
 ### `jdbc_minimum_idle_connections`
@@ -1394,3 +1425,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
+
+### `transform_type_prefer_string_for_varchar`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：マテリアライズドビュー作成時、固定長の char/varchar 列に string 型を優先するかどうか。
+- 導入時期：v4.0.0

@@ -84,6 +84,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -717,10 +718,11 @@ public class LeaderImpl {
                     long partitionId = tabletInfo.getPartition_id();
                     PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
                     if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                        long rowCount = tabletInfo.getRow_count();
                         long tabletId = tabletInfo.getTablet_id();
-                        Map<Long, Long> tableIdToRowCount = commitInfo.getTabletIdToRowCountForPartitionFirstLoad();
-                        tableIdToRowCount.put(tabletId, rowCount);
+                        TabletStatPB stat = new TabletStatPB();
+                        stat.numRows = tabletInfo.getRow_count();
+                        stat.dataSize = tabletInfo.getData_size();
+                        commitInfo.getTabletStats().put(tabletId, stat);
                     }
                 }
             }
@@ -780,8 +782,11 @@ public class LeaderImpl {
                 return;
             }
 
+            // Setting a single replica's path hash is table-local; scope the WRITE to that table
+            // instead of taking a full DB WRITE that would block every other table in the DB.
+            long tableId = tabletMeta.getTableId();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica =
@@ -789,7 +794,7 @@ public class LeaderImpl {
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());

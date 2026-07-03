@@ -16,13 +16,17 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -196,8 +200,11 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         properties.put("aws.s3.secret_key", "back\\slash");
         Column sortKeyColumn = new Column("weird`name", IntegerType.BIGINT);
 
-        String sql = FilesSampleSubqueryExecutor.buildSampleSql(
-                properties, List.of(sortKeyColumn), List.of(),
+        String propertiesClause = FilesSampleSubqueryExecutor.buildPropertiesClause(properties);
+        String fromClauseSql = "FILES(" + propertiesClause + ")";
+        List<String> sortKeyIdents = List.of(SqlUtils.getIdentSql(sortKeyColumn.getName()));
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql(
+                fromClauseSql, /*whereClauseSqlOrNull=*/ null, sortKeyIdents, List.of(),
                 /*samplingRate=*/ 0.1, /*rowLimit=*/ 200_000, /*seed=*/ 42L);
 
         Assertions.assertTrue(sql.contains("`weird``name`"), "backtick in identifier must be doubled: " + sql);
@@ -368,7 +375,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
-        ConnectContext returned = FilesSampleSubqueryExecutor.configureSampleContext(
+        ConnectContext returned = AbstractSqlSampleSubqueryExecutor.configureSampleContext(
                 sampleContext, computeResource, /*queryTimeoutSeconds=*/ 0);
 
         Assertions.assertSame(sampleContext, returned);
@@ -393,7 +400,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(7L);
 
-        FilesSampleSubqueryExecutor.configureSampleContext(
+        AbstractSqlSampleSubqueryExecutor.configureSampleContext(
                 sampleContext, computeResource, /*queryTimeoutSeconds=*/ 45);
 
         Mockito.verify(sessionVariable).setQueryTimeoutS(45);
@@ -413,6 +420,31 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(
                 bigintRequest(sourceTable, bigintColumn("sort_key")));
         Assertions.assertEquals(512L, execution.estimates().totalBytes());
+    }
+
+    @Test
+    void decimalSortKeyDecodesToDecimalVariant() throws Exception {
+        // Before DecimalVariant, Variant.of(decimalType, ...) threw and decodeCell recorded
+        // SAMPLE_FAILED -> no pre-split. The data tier must now decode decimal cells.
+        Column sortKeyColumn = new Column(
+                "price", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2));
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "oss://bucket/data/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("oss://bucket/data/a.parquet", 4L * 1024L * 1024L)));
+
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of(jsonResultBatch(
+                        "{\"data\":[\"12.34\"]}",
+                        "{\"data\":[\"56.78\"]}")));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(
+                bigintRequest(sourceTable, sortKeyColumn));
+
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(2, rows.size());
+        Assertions.assertInstanceOf(DecimalVariant.class, rows.get(0).sortKeyTuple().get(0));
+        Assertions.assertEquals("12.34", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("56.78", rows.get(1).sortKeyTuple().get(0).getStringValue());
     }
 
     private static TableFunctionTable mockSourceTable(

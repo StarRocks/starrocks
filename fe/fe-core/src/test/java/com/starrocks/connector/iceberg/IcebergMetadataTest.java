@@ -58,6 +58,7 @@ import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.iceberg.IcebergMetadataCollectJob;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricRepo;
@@ -242,6 +243,23 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assertions.assertEquals(expectResult, metadata.listDbNames(connectContext));
+    }
+
+    @Test
+    public void testGetVersionCommitTimeMillis() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.refresh();
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        IcebergTable table = new IcebergTable(1, "tableA", CATALOG_NAME, CATALOG_NAME, "iceberg_db",
+                "tableA", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        Assertions.assertEquals(Optional.of(snapshot.timestampMillis()),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId()));
+        Assertions.assertEquals(Optional.empty(),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId() + 1));
     }
 
     @Test
@@ -1437,6 +1455,70 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetTableStatisticsManifestPrunedKeepsIncrementalDelivery() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+        // Two separate commits => two data manifests. Manifest-pruned row count must sum across manifests
+        // (FILE_A=2 + FILE_A_2=2 = 4).
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_2).commit();
+        mockedNativeTableA.refresh();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
+        TvrVersionRange versionRange = TvrTableSnapshot.of(Optional.of(
+                mockedNativeTableA.currentSnapshot().snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
+        Assertions.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
+
+        // The default (manifest-pruned) path must NOT enumerate DataFiles, i.e. it must not pre-populate
+        // splitTasks. Otherwise getRemoteFilesAsync would replay an eager full list and incremental scan
+        // range delivery would be defeated.
+        java.lang.reflect.Field splitTasksField = IcebergMetadata.class.getDeclaredField("splitTasks");
+        splitTasksField.setAccessible(true);
+        Map<?, ?> splitTasks = (Map<?, ?>) splitTasksField.get(metadata);
+        Assertions.assertTrue(splitTasks.isEmpty());
+    }
+
+    @Test
+    public void testGetTableStatisticsIncrementalDeltaCostsDeltaOnly() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
+                new ConnectorProperties(ConnectorType.ICEBERG,
+                        Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+        // snap1: FILE_A (2 rows). snap2: FILE_A_1 (2 rows). Full table at snap2 = 4 rows.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_1).commit();
+        mockedNativeTableA.refresh();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+        Assertions.assertFalse(context.getSessionVariable().enableIcebergColumnStatistics());
+
+        // Append-only delta snap1(exclusive) -> snap2(inclusive) must be costed on the delta only
+        // (FILE_A_1 = 2 rows), NOT the full-table manifest-pruned count (4 rows).
+        TvrTableDelta delta = TvrTableDelta.of(TvrVersion.of(snap1.snapshotId()), TvrVersion.of(snap2.snapshotId()));
+        Statistics statistics = metadata.getTableStatistics(
+                context, icebergTable, colRefToColumnMetaMap, null, null, -1, delta);
+        Assertions.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
+    }
+
+    @Test
     public void testGetTableStatisticsWithColumnStats() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
@@ -1463,7 +1545,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assertions.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
+        Assertions.assertFalse(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
         ColumnStatistic columnStatistic = statistics.getColumnStatistic(columnRefOperator1);
         Assertions.assertEquals(1.0, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(2.0, columnStatistic.getMaxValue(), 0.001);
@@ -3110,6 +3192,86 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
         Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
                 "row-delta commit must advance the snapshot id past the plan-time base");
+    }
+
+    private long mergeCounterValue(String name, String labelKey, String labelValue) {
+        for (Metric<?> metric : MetricRepo.getMetricsByName(name)) {
+            if (!(metric instanceof LongCounterMetric)) {
+                continue;
+            }
+            boolean matched = labelKey == null;
+            for (MetricLabel label : metric.getLabels()) {
+                if (labelKey != null && labelKey.equals(label.getKey()) && labelValue.equals(label.getValue())) {
+                    matched = true;
+                    break;
+                }
+            }
+            if (matched) {
+                return ((LongCounterMetric) metric).getValue();
+            }
+        }
+        return 0L;
+    }
+
+    @Test
+    public void testCommitRowDeltaOperationMergeMetrics() throws Exception {
+        // A MERGE row-delta commit takes the isMerge branch of finishSink, which reports the
+        // iceberg_merge_* metrics from the resulting snapshot summary. Confirm the merge_rows
+        // counter is split by file_type: added-position-deletes -> position_delete (the delete
+        // file's 3 records) and added-records -> data (the data file's 3 records).
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long baseSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        long posDeleteRowsBefore = mergeCounterValue("iceberg_merge_rows", "file_type", "position_delete");
+        long dataRowsBefore = mergeCounterValue("iceberg_merge_rows", "file_type", "data");
+        long totalBefore = mergeCounterValue("iceberg_merge_total", "status", "success");
+
+        TSinkCommitInfo deleteCommit = new TSinkCommitInfo();
+        deleteCommit.setIceberg_data_file(buildRowDeltaPositionDeleteFile());
+        TSinkCommitInfo dataCommit = new TSinkCommitInfo();
+        dataCommit.setIceberg_data_file(buildRowDeltaDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.setBaseSnapshotId(baseSnapshotId);
+        extra.setOperationType(IcebergMetadata.IcebergSinkExtra.OperationType.MERGE);
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(deleteCommit, dataCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "MERGE row-delta commit must produce a snapshot");
+        Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
+                "MERGE row-delta commit must advance the snapshot id");
+
+        // position_delete rows come from added-position-deletes (3), data rows from added-records (3).
+        Assertions.assertEquals(posDeleteRowsBefore + 3,
+                mergeCounterValue("iceberg_merge_rows", "file_type", "position_delete"),
+                "iceberg_merge_rows{file_type=position_delete} must count the added position deletes");
+        Assertions.assertEquals(dataRowsBefore + 3,
+                mergeCounterValue("iceberg_merge_rows", "file_type", "data"),
+                "iceberg_merge_rows{file_type=data} must count the added data records");
+        Assertions.assertEquals(totalBefore + 1,
+                mergeCounterValue("iceberg_merge_total", "status", "success"),
+                "iceberg_merge_total{status=success} must increment after a successful MERGE commit");
+        Assertions.assertTrue(mergeCounterValue("iceberg_merge_files", "file_type", "position_delete") >= 1,
+                "iceberg_merge_files{file_type=position_delete} must count the committed delete file");
+        Assertions.assertTrue(mergeCounterValue("iceberg_merge_files", "file_type", "data") >= 1,
+                "iceberg_merge_files{file_type=data} must count the committed data file");
     }
 
     @Test

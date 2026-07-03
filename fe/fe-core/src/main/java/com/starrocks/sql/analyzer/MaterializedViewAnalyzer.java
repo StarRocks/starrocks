@@ -378,7 +378,6 @@ public class MaterializedViewAnalyzer {
                     queryStatement = result.queryStatement();
                     // re-analyze again
                     Analyzer.analyze(queryStatement, context);
-                    statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
                     // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
                     statement.setKeysType(KeysType.PRIMARY_KEYS);
@@ -610,6 +609,16 @@ public class MaterializedViewAnalyzer {
                 boolean colNullable = relationFields.get(i).isNullable();
                 if (colWithComments != null) {
                     colName = colWithComments.get(i).getColName();
+                }
+                // A materialized view is stored as a native OLAP table. VARIANT (and complex types that
+                // nest it) has no native storage write path, so a generated MV column carrying VARIANT
+                // would abort the BE on refresh (the storage LogicalType dispatch hits its default
+                // LOG(FATAL) for TYPE_VARIANT) -- exactly the case ColumnDefAnalyzer rejects for CREATE
+                // TABLE. The MV column path does not go through ColumnDefAnalyzer, so reject it here too.
+                if (type.containsVariant()) {
+                    throw new SemanticException(
+                            "VARIANT is not supported as a column type for materialized views: column '" +
+                                    colName + "'");
                 }
                 Column column = new Column(colName, type, colNullable);
                 if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {

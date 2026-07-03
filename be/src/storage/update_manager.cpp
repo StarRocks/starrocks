@@ -26,13 +26,14 @@
 #include "fs/fs_factory.h"
 #include "gutil/endian.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/rowset_column_update_state.h"
+#include "storage/rowset_update_state.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
@@ -60,7 +61,7 @@ Status LocalDeltaColumnGroupLoader::load(int64_t tablet_id, RowsetId rowsetid, u
 }
 
 Status UpdateManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
-    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
     return Status::OK();
@@ -85,7 +86,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    int64_t byte_limits = GlobalEnv::GetInstance()->process_mem_limit();
+    int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
@@ -566,7 +567,7 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
 
 DEFINE_FAIL_POINT(on_rowset_finished_failed_due_to_mem);
 Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? mem_tracker() : nullptr);
     if (!rowset->has_data_files() || tablet->tablet_state() == TABLET_NOTREADY) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index

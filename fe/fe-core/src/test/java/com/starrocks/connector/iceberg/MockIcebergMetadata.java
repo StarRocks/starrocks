@@ -53,6 +53,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.types.Types;
@@ -643,6 +644,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         return TvrTableSnapshot.of(TvrVersion.of(1L));
     }
 
+    @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, com.starrocks.catalog.Table table, long version) {
+        Snapshot snapshot = ((IcebergTable) table).getNativeTable().snapshot(version);
+        return snapshot == null ? Optional.empty() : Optional.of(snapshot.timestampMillis());
+    }
+
     // ConnectorMetadata's default returns TvrTableSnapshot.empty(), which leaves the planned scan
     // pinned to the MIN snapshot (0 partitions, no data) -- low-cardinality dict collection and the
     // group-by min/max rule both then no-op. Mirror production's IcebergMetadata.getTableVersionRange:
@@ -795,6 +802,18 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
                     "view_location", Maps.newHashMap());
+        }
+        // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
+        // connector-view detection. Each lookup mints a *fresh* id, mirroring
+        // IcebergApiConverter.toView (CONNECTOR_ID_GENERATOR.getNextId()), so the id can never be
+        // used to detect re-entry.
+        if (dbName.equalsIgnoreCase("view_db")
+                && (viewName.equalsIgnoreCase("cyc_a") || viewName.equalsIgnoreCase("cyc_b"))) {
+            List<Column> schema = Lists.newArrayList(new Column("id", IntegerType.INT));
+            String other = viewName.equalsIgnoreCase("cyc_a") ? "cyc_b" : "cyc_a";
+            String def = "SELECT id FROM " + MOCKED_ICEBERG_CATALOG_NAME + ".view_db." + other;
+            return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
         }
         return null;
     }

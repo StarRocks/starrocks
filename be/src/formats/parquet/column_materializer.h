@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -30,12 +31,17 @@
 
 namespace starrocks::parquet {
 
+class LazyMaterializationContext;
+class ReadRangePlanner;
+
 class ColumnMaterializer {
 public:
     using ColumnReaderMap = std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>;
 
-    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers)
-            : _param(param), _column_readers(column_readers) {}
+    ColumnMaterializer(const GroupReaderParam& param, ColumnReaderMap* column_readers);
+
+    ReadRangePlanner* read_range_planner() const { return _read_range_planner.get(); }
+    FormatScannerStats* stats() const { return _param.stats; }
 
     void clear_classification();
     void add_active_column(int col_idx);
@@ -81,6 +87,7 @@ public:
     void reset_read_chunk() {
         if (_read_chunk) _read_chunk->reset();
         _slot_cache.clear();
+        _logical_slot_ids.clear();
     }
 
     ChunkPtr create_active_chunk() const;
@@ -92,7 +99,10 @@ public:
                       ChunkPtr* chunk, bool ignore_reserved_field = false);
     Status read_active_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
     Status read_lazy_range(const Range<uint64_t>& range, const Filter* filter, ChunkPtr* chunk);
-    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk);
+    // read_active_range_round_by_round accepts an optional LazyMaterializationContext*
+    // as a forward-looking parameter for Phase 6 expression-driven materialization.
+    StatusOr<size_t> read_active_range_round_by_round(const Range<uint64_t>& range, Filter* filter, ChunkPtr* chunk,
+                                                      LazyMaterializationContext* lazy_ctx = nullptr);
 
     Status rewrite_dict_conjuncts_to_predicate(bool* is_group_filtered);
     Status filter_dict_column(SlotId slot_id, ColumnPtr& column, Filter* filter,
@@ -103,8 +113,11 @@ public:
     Status fill_dst_column(SlotId slot_id, ColumnPtr& dst, ColumnPtr& src);
 
     // Per-slot cache scoped to the current get_next() range.  Populated by
-    // read_slot(); cleared by reset_read_chunk().  Avoids repeated Parquet
-    // I/O when the same slot is referenced by multiple expression branches.
+    // materialize_slot() (on-demand lazy reads); NOT by read_slot().
+    // Cleared by reset_read_chunk().  All cached entries hold logical
+    // (finalized) columns — never dict codes or intermediate values.
+    // Avoids repeated Parquet I/O when the same slot is referenced by
+    // multiple expression branches during predicate evaluation.
     struct SlotCacheEntry {
         ColumnPtr values;
     };
@@ -114,16 +127,32 @@ public:
     }
 
     // On-demand single-slot materialization.  Reads the slot through its
-    // ColumnReader into _read_chunk and populates _slot_cache.  Returns OK
-    // (no-op) if the slot is already cached for the current range.
+    // ColumnReader into _read_chunk, calls finalize_lazy_state() so that
+    // the cached column is always logical, and populates _slot_cache.
+    // Returns OK (no-op) if the slot is already cached for the current range.
+    // Also records the trigger for fallback tracking.
     Status materialize_slot(SlotId slot_id, const Range<uint64_t>& range, const Filter* filter);
 
+    size_t lazy_triggered_count() const { return _triggered_lazy_slots.size(); }
+
     // Post-filter lazy-column backfill.
+    // chunk_filter has full_range.span_size() entries and is used to apply the
+    // correct filter to any lazy columns that were already triggered (via
+    // LazyMaterializationContext) during predicate evaluation.
     Status read_lazy_columns(const Range<uint64_t>& full_range, const Range<uint64_t>& post_filter_range,
-                             const Filter& post_filter, bool has_filter, ChunkPtr& active_chunk);
+                             const Filter& post_filter, const Filter& chunk_filter, bool has_filter,
+                             ChunkPtr& active_chunk);
     // Emit physical + reserved-field columns into dst. Skips slots listed in skip_slots.
+    // For slots in _logical_slot_ids, uses a direct swap instead of fill_dst_column.
     Status emit_physical_columns(ChunkPtr& active_chunk, ChunkPtr* dst,
                                  const std::unordered_set<SlotId>* skip_slots = nullptr);
+
+    // Finalize an active column from PHYSICAL to LOGICAL before expression
+    // evaluation.  Encapsulates the finalize_lazy_state() call so GroupReader
+    // doesn't need to reach into ColumnReader internals.  Unlike lazy columns,
+    // active columns still go through fill_dst_column() at emit time — pointer
+    // identity dispatch in each reader handles the LOGICAL fallback.
+    Status finalize_active_slot(SlotId slot_id, ChunkPtr& active_chunk);
 
     bool lazy_column_needed() const { return _lazy_column_needed; }
     void set_lazy_column_needed(bool v) { _lazy_column_needed = v; }
@@ -173,10 +202,102 @@ private:
 
     ChunkPtr _read_chunk;
 
-    // Per-range slot cache: populated by read_slot(), cleared by reset_read_chunk().
+    // ============================================================
+    //  Column state lifecycle & tracking sets
+    // ============================================================
+    //
+    // A column in _read_chunk transitions through two states:
+    //
+    //   [unread] ──read_range()──▶ [PHYSICAL] ──finalize_lazy_state()──▶ [LOGICAL]
+    //
+    // PHYSICAL: dict codes (_dict_code / _tmp_code_column) or intermediate
+    //           raw Parquet values before type conversion. Dict filters
+    //           run ON physical columns; post-read conjuncts run AFTER
+    //           finalization.  A column STAYS physical across multiple
+    //           range reads within the same chunk — the reader installs
+    //           its temporary column into the slot and expects the
+    //           caller to either hold it for dict-filter or finalize
+    //           before expression evaluation.
+    //
+    // LOGICAL:  StarRocks native column type (e.g. LowCardDictColumn,
+    //           BinaryColumn).  Once a column is logical it MUST NOT
+    //           re-enter fill_dst_column() — that path expects a
+    //           physical source and will either double-decode or reject
+    //           the column (e.g. LowCardColumnReader checks _is_dict_code_column).
+    //
+    // Per-chunk processing order (get_next() iteration):
+    //
+    //   1. read_active_range_round_by_round()
+    //      - read_slot() reads active columns → PHYSICAL in _read_chunk
+    //      - Dict filters run ON physical columns
+    //      - Post-read conjuncts → finalize_active_slot() → LOGICAL
+    //        (no _logical_slot_ids mark — pointer identity fallback
+    //        in fill_dst_column() handles already-logical columns)
+    //
+    //   2. Compound predicate eval (GroupReader Phase 2b)
+    //      - finalize_active_slot() on all active columns (no
+    //        _logical_slot_ids mark — pointer identity fallback
+    //        in fill_dst_column() handles already-logical columns)
+    //      - ColumnRef for missing lazy slots calls MissingColumnProvider
+    //        → materialize_slot(): read_range() + finalize_lazy_state()
+    //        → column in _read_chunk is LOGICAL, cached in _slot_cache
+    //
+    //   3. read_lazy_columns()
+    //      - Triggered (in _slot_cache): move LOGICAL column from
+    //        _read_chunk → active_chunk (filtered)
+    //      - Untriggered backfill: read_range() → finalize_lazy_state()
+    //        → LOGICAL in lazy_chunk → merge → active_chunk
+    //      - Untriggered predicate-only: append_default (LOGICAL)
+    //      - ALL lazy columns in active_chunk are LOGICAL after this call
+    //      - Populates _logical_slot_ids with every lazy slot processed
+    //
+    //   4. emit_physical_columns()
+    //      - PHYSICAL columns → fill_dst_column() (decode/convert)
+    //      - LOGICAL columns (in _logical_slot_ids) → swap_column
+    //        (bypass fill_dst_column; they're already final)
+    //
+    // Tracking sets:
+    //
+    //   _slot_cache            Per-chunk.
+    //     key=slot_id, value=LOGICAL column pointer in _read_chunk.
+    //     Populated by materialize_slot() (NOT by read_slot()).
+    //     Read by read_lazy_columns() to detect triggered slots.
+    //     All entries hold LOGICAL columns — never dict codes.
+    //     Cleared by reset_read_chunk().
+    //
+    //   _triggered_lazy_slots  Per-row-group.
+    //     Set of slot IDs that materialize_slot() triggered at least
+    //     once in the current row group.  Accumulates across chunks
+    //     for diagnostics (lazy_triggered_count).  NOT cleared by
+    //     reset_read_chunk(); cleared when GroupReader is destroyed.
+    //
+    //   _logical_slot_ids      Per-chunk.
+    //     Set of slot IDs whose column in active_chunk is already
+    //     LOGICAL (finalized, backfilled-and-finalized, or
+    //     default-filled).  Populated by read_lazy_columns().
+    //     Consumed by emit_physical_columns() to decide swap vs fill.
+    //     Cleared by reset_read_chunk().
+
+    // Per-range slot cache: populated by materialize_slot() (NOT read_slot()),
+    // cleared by reset_read_chunk(). All entries hold logical (finalized) columns.
     std::unordered_map<SlotId, SlotCacheEntry> _slot_cache;
 
     bool _lazy_column_needed = false;
+
+    // Per-row-group set of unique lazy slots triggered via materialize_slot().
+    // NOT cleared by reset_read_chunk() — accumulates across ranges within
+    // the same row group to track full-trigger diagnostics.
+    // Lifetime = one row group (owned by GroupReader, destroyed in ~GroupReader).
+    std::unordered_set<SlotId> _triggered_lazy_slots;
+
+    // Per-chunk set of lazy slots whose columns in active_chunk are already
+    // logical (finalized by materialize_slot(), finalized during backfill, or
+    // default-filled). Populated by read_lazy_columns(), consumed by
+    // emit_physical_columns() so those slots bypass fill_dst_column and use a
+    // direct swap instead. Cleared by reset_read_chunk().
+    std::unordered_set<SlotId> _logical_slot_ids;
+
+    std::unique_ptr<ReadRangePlanner> _read_range_planner;
 };
 
 } // namespace starrocks::parquet

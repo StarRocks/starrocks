@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -90,7 +91,7 @@ public class DefaultPreSplitPipelineTest {
         return new DefaultPreSplitPipeline(
                 metaTierSampler, dataTierSampler, tabletReshardJobManager,
                 database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES,
-                POLL_INTERVAL, clock);
+                POLL_INTERVAL, clock, null);
     }
 
     @Test
@@ -365,6 +366,30 @@ public class DefaultPreSplitPipelineTest {
         Assertions.assertEquals(2, ranges.size());
         Assertions.assertTrue(ranges.get(0).getRange().isMinimum());
         Assertions.assertTrue(ranges.get(1).getRange().isMaximum());
+    }
+
+    @Test
+    public void forLoadKindInsertFromTableSinglePartitionForcesDataTier() {
+        // Unpartitioned OlapTable; forLoadKind with INSERT_FROM_TABLE must install a
+        // meta-tier stub that throws MetaTierUnavailableException — the OLAP source
+        // has no Parquet/ORC footer so the meta tier is never usable for this load kind.
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(table.getPartitionInfo()).thenReturn(partitionInfo);
+
+        DefaultPreSplitPipeline pipeline = DefaultPreSplitPipeline.forLoadKind(
+                database, table, OLD_TABLET_ID, FILE_TOTAL_BYTES, LoadKind.INSERT_FROM_TABLE, null);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> pipeline.getMetaTierSamplerForTest().tryPlan(sampleRequest, 3),
+                "INSERT_FROM_TABLE must force data tier via MetaTierUnavailableException");
+    }
+
+    @Test
+    public void sampleSubqueryExecutorForInsertFromTableIsTableExecutor() {
+        SampleSubqueryExecutor executor = DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.INSERT_FROM_TABLE);
+        Assertions.assertInstanceOf(InsertFromTableSampleSubqueryExecutor.class, executor,
+                "INSERT_FROM_TABLE load kind must produce an InsertFromTableSampleSubqueryExecutor");
     }
 
     /** A test-only {@link Clock} whose "now" advances only when callers say so. */

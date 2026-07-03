@@ -43,10 +43,10 @@
 #include "base/string/utf8.h"
 #include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/primitive/rowid_types.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
 #include "types/olap_type_infra.h"
@@ -215,27 +215,33 @@ public:
         size_t gram_num = this->_bf_options.gram_num;
         const auto* cur_slice = reinterpret_cast<const Slice*>(values);
         for (int i = 0; i < count; ++i) {
-            std::vector<size_t> index;
-            size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
+            // For a case-insensitive index, lowercase the whole value once and build ngrams from the
+            // folded copy. The reader lowercases the whole needle before splitting it, so the writer
+            // must split in the same order: folding each ngram after slicing would disagree with the
+            // reader for context-dependent or length-changing case mappings (e.g. Turkish 'İ').
+            Slice value = *cur_slice;
+            std::string lower_buf;
+            if (!this->_bf_options.case_sensitive) {
+                if (validate_ascii_fast(value.get_data(), value.get_size())) {
+                    value.tolower(lower_buf);
+                } else {
+                    utf8_tolower(value.get_data(), value.get_size(), lower_buf);
+                }
+                value = Slice(lower_buf.data(), lower_buf.size());
+            }
 
-            size_t j;
-            for (j = 0; j + gram_num <= slice_gram_num; j++) {
+            std::vector<size_t> index;
+            size_t slice_gram_num = get_utf8_index(value, &index);
+
+            for (size_t j = 0; j + gram_num <= slice_gram_num; j++) {
                 // find next ngram
-                size_t cur_ngram_length = j + gram_num < slice_gram_num ? index[j + gram_num] - index[j]
-                                                                        : cur_slice->get_size() - index[j];
-                Slice cur_ngram = Slice(cur_slice->data + index[j], cur_ngram_length);
+                size_t cur_ngram_length =
+                        j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : value.get_size() - index[j];
+                Slice cur_ngram = Slice(value.get_data() + index[j], cur_ngram_length);
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    if (this->_bf_options.case_sensitive) {
-                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
-                    } else {
-                        // todo::exist two copy of ngram, need to optimize
-                        std::string lower_ngram;
-                        Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
-                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo,
-                                                             &this->_type_info_allocator));
-                    }
+                    _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
                 }
             }
             // move to next row

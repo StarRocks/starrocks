@@ -41,7 +41,7 @@ public:
 
         _query_context = std::make_shared<QueryContext>();
         _query_context->set_query_execution_services(&_exec_env->query_execution_services());
-        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         TQueryGlobals query_globals;
@@ -53,7 +53,7 @@ public:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_fragment_instance_id(_fragment_id);
         _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
-        _runtime_state->set_fragment_ctx(_fragment_context.get());
+        _runtime_state->set_fragment_ctx(_fragment_context.get(), &_fragment_context->fragment_runtime_state());
         _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
 
         TNetworkAddress address;
