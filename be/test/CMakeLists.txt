@@ -231,10 +231,6 @@ if (NOT APPLE)
     )
 endif ()
 
-if (STARROCKS_JIT_ENABLE)
-    set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
-endif()
-
 add_library(be_test_cxa_throw_wrap INTERFACE)
 if (NOT APPLE)
     target_sources(be_test_cxa_throw_wrap INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/base/cxa_throw_wrap.cpp)

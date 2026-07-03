@@ -61,7 +61,6 @@
 #include "common/config_expr_fwd.h"
 #include "common/status.h"
 #include "common/system/mem_info.h"
-#include "exec/exec_env.h"
 #include "exprs/expr.h"
 #include "exprs/jit/expr_jit_codegen.h"
 #include "runtime/mem_tracker.h"

@@ -23,8 +23,8 @@
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/compiler_util.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/expr_jit_codegen.h"
@@ -79,8 +79,12 @@ Status JITExpr::prepare_impl(RuntimeState* state, ExprContext* context) {
         auto expr_name = ExprJITCodegen::func_name(_expr, state);
         ASSIGN_OR_RETURN(_jit_callable, jit_engine->get_jit_callable(expr_name, context, _expr, _children));
         auto elapsed = MonotonicNanos() - start;
-        if (state->fragment_ctx() != nullptr) {
-            state->fragment_ctx()->update_jit_profile(elapsed);
+        auto* profile = state == nullptr ? nullptr : state->runtime_profile();
+        if (profile != nullptr) {
+            auto* jit_counter = ADD_COUNTER(profile, "JITCounter", TUnit::UNIT);
+            auto* jit_timer = ADD_TIMER(profile, "JITTotalCostTime");
+            COUNTER_UPDATE(jit_counter, 1);
+            COUNTER_UPDATE(jit_timer, elapsed);
         }
     }
     return Status::OK();
