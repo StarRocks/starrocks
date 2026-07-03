@@ -17,6 +17,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 set(EXPR_CORE_FILES
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
@@ -104,9 +106,24 @@ set(EXPR_CORE_FILES
   subfield_expr.cpp
   substring_index.cpp
   table_function/json_each.cpp
+  table_function/table_function_factory.cpp
   time_functions.cpp
+  udf/java/java_udf.cpp
+  udf/java/java_udf_context.cpp
+  udf/java/java_udf_reflection.cpp
+  udf/java/java_data_converter.cpp
+  udf/python/env.cpp
+  udf/python/callstub.cpp
+  udf/udf_call_stub.cpp
   variant_path_reader.cpp
   variant_functions.cpp
+  agg/aggregate_factory_exprs_extension.cpp
+  expr_factory_exprs_extension.cpp
+  arrow_function_call.cpp
+  agg/java_udaf_function.cpp
+  agg/java_window_function.cpp
+  table_function/java_udtf_function.cpp
+  java_function_call_expr.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
@@ -123,17 +140,11 @@ ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
 target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore Platform Geo)
 
 set(EXPR_FILES
-  agg/aggregate_factory_exprs_extension.cpp
-  expr_factory_exprs_extension.cpp
-  table_function/table_function_factory.cpp
+  expr_factory_dict_exprs_extension.cpp
+  table_function/list_rowsets_factory_extension.cpp
   table_function/list_rowsets.cpp
-  arrow_function_call.cpp
   dictmapping_expr.cpp
   utility_functions.cpp
-  agg/java_udaf_function.cpp
-  agg/java_window_function.cpp
-  table_function/java_udtf_function.cpp
-  java_function_call_expr.cpp
   dict_query_expr.cpp
   dictionary_get_expr.cpp
 )

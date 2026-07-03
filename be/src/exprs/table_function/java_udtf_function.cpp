@@ -25,6 +25,9 @@
 #include "common/compiler_util.h"
 #include "exprs/function_context.h"
 #include "exprs/table_function/table_function.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_reflection.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
@@ -32,9 +35,6 @@
 #include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
-#include "udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 const TableFunction* getJavaUDTFFunction() {

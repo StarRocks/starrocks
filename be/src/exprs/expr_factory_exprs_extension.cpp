@@ -14,9 +14,6 @@
 
 #include "common/object_pool.h"
 #include "exprs/arrow_function_call.h"
-#include "exprs/dict_query_expr.h"
-#include "exprs/dictionary_get_expr.h"
-#include "exprs/dictmapping_expr.h"
 #include "exprs/expr_factory.h"
 #include "exprs/java_function_call_expr.h"
 #ifdef STARROCKS_JIT_ENABLE
@@ -46,29 +43,6 @@ Status expr_factory_non_core_create_pre_hook(ObjectPool* pool, const TExprNode& 
     return Status::OK();
 }
 
-Status expr_factory_non_core_create_post_hook(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
-                                              RuntimeState* state) {
-    (void)state;
-    if (*expr != nullptr) {
-        return Status::OK();
-    }
-
-    switch (texpr_node.node_type) {
-    case TExprNodeType::DICT_EXPR:
-        *expr = pool->add(new DictMappingExpr(texpr_node));
-        break;
-    case TExprNodeType::DICT_QUERY_EXPR:
-        *expr = pool->add(new DictQueryExpr(texpr_node));
-        break;
-    case TExprNodeType::DICTIONARY_GET_EXPR:
-        *expr = pool->add(new DictionaryGetExpr(texpr_node));
-        break;
-    default:
-        break;
-    }
-    return Status::OK();
-}
-
 Status expr_factory_jit_rewrite_hook(Expr** root_expr, ObjectPool* pool, RuntimeState* state) {
 #ifdef STARROCKS_JIT_ENABLE
     return ExprJITPass::rewrite_root(root_expr, pool, state);
@@ -83,7 +57,6 @@ Status expr_factory_jit_rewrite_hook(Expr** root_expr, ObjectPool* pool, Runtime
 struct ExprFactoryExprsExtensionRegistrar {
     ExprFactoryExprsExtensionRegistrar() {
         ExprFactory::set_non_core_create_pre_hook(expr_factory_non_core_create_pre_hook);
-        ExprFactory::set_non_core_create_post_hook(expr_factory_non_core_create_post_hook);
         ExprFactory::set_jit_rewrite_hook(expr_factory_jit_rewrite_hook);
     }
 };

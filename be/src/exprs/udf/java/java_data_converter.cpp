@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_data_converter.h"
 
 #include <limits>
 #include <memory>
@@ -33,15 +33,15 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
+#include "exprs/udf/java/type_traits.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_udf.h"
-#include "udf/java/java_udf_context.h"
-#include "udf/java/type_traits.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \

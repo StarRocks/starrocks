@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "exprs/function_context.h"
-#include "udf/udf_call_stub.h"
+#include "exprs/udf/udf_call_stub.h"
 
 namespace starrocks {
 class ArrowFlightWithRW;

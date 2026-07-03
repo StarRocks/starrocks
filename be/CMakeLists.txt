@@ -565,7 +565,6 @@ set(STARROCKS_LINK_LIBS
     ComputeEnv
     ExecPrimitive
     StoragePrimitive
-    Udf
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     $<TARGET_FILE:Cache>
     $<TARGET_FILE:HdfsFileSystem>
@@ -990,7 +989,6 @@ add_subdirectory(${SRC_DIR}/compute_env)
 add_subdirectory(${SRC_DIR}/orchestration)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/script)

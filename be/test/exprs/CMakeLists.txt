@@ -35,6 +35,7 @@ set(EXPR_CORE_TEST_FILES
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
+    agg/aggregate_factory_extension_test.cpp
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
@@ -73,6 +74,9 @@ set(EXPR_CORE_TEST_FILES
     string_fn_url_extract_parameter_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
+    udf/java/java_data_converter_test.cpp
+    udf/java/java_udf_test.cpp
+    udf/python/env_test.cpp
     vectorized_literal_test.cpp
 )
 
@@ -89,6 +93,8 @@ set(EXPR_CORE_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
+    hdfs
+    jvm
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -113,3 +119,4 @@ endif()
 
 add_executable(expr_core_test expr_core_test_main.cpp ${EXPR_CORE_TEST_OBJECTS})
 target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS})
+STARROCKS_FORCE_LOAD_LIBS(expr_core_test ExprCore)

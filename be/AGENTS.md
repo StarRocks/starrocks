@@ -244,20 +244,12 @@ Data-plane workflow orchestration above concrete Storage and Exec for load, dele
 - Remediation: Keep DataWorkflows limited to data-plane orchestration over concrete Storage and Exec; move service/bootstrap, agent scheduling, connector registration, and lower reusable primitives to their owning layers.
 
 ### ExprCore (`exprcore`)
-Core expression infrastructure, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.
+Core expression infrastructure, UDF runtime helpers, builtin aggregate registry, and aggregate-state combinator helpers that depend only on Platform, Geo, Runtime, and lower layers.
 - Targets: `ExprCore`
 - Allowed internal include prefixes: `exprs/`, `platform/`, `geo/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `Platform`, `Geo`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `expr_core_test`
-- Remediation: Keep ExprCore limited to core expression infrastructure, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers; keep Java aggregate extensions in Exprs.
-
-### Udf (`udf`)
-Java and Python UDF runtime helpers, call stubs, type conversion, and worker management above ExprCore, Runtime, and Platform.
-- Targets: `Udf`
-- Allowed internal include prefixes: `udf/`, `exprs/`, `runtime/`, `platform/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExprCore`, `Runtime`, `Platform`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
-- Core tests: `udf_test`
-- Remediation: Keep UDF runtime helpers limited to expression-facing UDF execution, Java/Python conversion, worker management, and the ExprCore/Runtime/Platform dependency closure; move broader execution, storage, service, or connector orchestration upward.
+- Remediation: Keep ExprCore limited to core expression infrastructure, UDF runtime helpers, builtin scalar helpers, builtin aggregate registry and aggregate-state combinator helpers, and dependencies no higher than Platform, Geo, Runtime, and lower layers.
 
 ### ExecPrimitive (`execprimitive`)
 Primitive execution contracts, DataSink base contract, runtime-filter infrastructure, generic morsel queues, and stable pipeline operator/factory primitives without broader Exec runtime, scheduler, storage, service, or connector coupling.
@@ -339,16 +331,16 @@ Orchestration layer below Service for query, fragment, and ingestion lifecycle e
 ### Script (`script`)
 Diagnostic script execution and command dispatch layer below Service, HttpService, Tools, and AgentServer, and above the remaining reusable BE modules.
 - Targets: `Script`
-- Allowed internal include prefixes: `script/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `geo/`, `gutil/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `types/`, `udf/`
-- Allowed target deps: `Base`, `Gutil`, `Common`, `Cache`, `IO`, `FileSystem`, `Platform`, `Types`, `ColumnCore`, `ChunkCore`, `ColumnSortCore`, `Runtime`, `Runtime`, `Runtime`, `FormatCore`, `FormatCsv`, `FormatJson`, `FormatAvro`, `FormatOrc`, `Formats`, `StoragePrimitive`, `StorageBase`, `Storage`, `ComputeEnv`, `DataWorkflows`, `ExprCore`, `Exprs`, `ExecPrimitive`, `ExecRuntime`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecJoinCore`, `Exec`, `ConnectorPrimitive`, `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Orchestration`, `Udf`, `Geo`, `StarRocksGen`
+- Allowed internal include prefixes: `script/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `geo/`, `gutil/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `types/`
+- Allowed target deps: `Base`, `Gutil`, `Common`, `Cache`, `IO`, `FileSystem`, `Platform`, `Types`, `ColumnCore`, `ChunkCore`, `ColumnSortCore`, `Runtime`, `Runtime`, `Runtime`, `FormatCore`, `FormatCsv`, `FormatJson`, `FormatAvro`, `FormatOrc`, `Formats`, `StoragePrimitive`, `StorageBase`, `Storage`, `ComputeEnv`, `DataWorkflows`, `ExprCore`, `Exprs`, `ExecPrimitive`, `ExecRuntime`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecJoinCore`, `Exec`, `ConnectorPrimitive`, `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Orchestration`, `Geo`, `StarRocksGen`
 - Core tests: `script_test`
 - Remediation: Keep Script below Service, HttpService, Tools, and AgentServer; lower reusable behavior can live in lower BE modules that Script is allowed to depend on.
 
 ### Service (`service`)
 Shared service-layer target above Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
 - Targets: `Service`
-- Allowed internal include prefixes: `service/`, `script/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `storage/`, `types/`, `udf/`
-- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `Udf`, `ChunkCore`, `ColumnCore`, `Types`
+- Allowed internal include prefixes: `service/`, `script/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `storage/`, `types/`
+- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `ChunkCore`, `ColumnCore`, `Types`
 - Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 

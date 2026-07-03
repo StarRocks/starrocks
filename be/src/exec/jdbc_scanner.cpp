@@ -29,11 +29,11 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "exprs/udf/java/java_udf.h"
 #include "runtime/java/java_runtime.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 

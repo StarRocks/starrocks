@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "exprs/agg/aggregate_factory.h"
-#include "udf/java/java_function_fwd.h"
+#include "exprs/udf/java/java_function_fwd.h"
 
 namespace starrocks {
 

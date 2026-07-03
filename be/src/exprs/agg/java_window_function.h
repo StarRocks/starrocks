@@ -22,10 +22,10 @@
 
 #include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
 #include "jni.h"
 #include "types/logical_type.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,
