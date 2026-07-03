@@ -132,8 +132,6 @@ set(EXEC_FILES
         ./exprs/function_call_expr_test.cpp
         ./exprs/if_expr_test.cpp
         ./exprs/flat_json_functions_test.cpp
-        ./exprs/lambda_array_expr_test.cpp
-        ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp

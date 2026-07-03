@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXPR_CORE_FILES
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
+  agg/combinator/agg_state_utils.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
@@ -42,6 +43,8 @@ set(EXPR_CORE_FILES
   array_expr.cpp
   ai_functions.cpp
   array_functions.cpp
+  array_map_expr.cpp
+  array_sort_lambda_expr.cpp
   binary_functions.cpp
   bit_functions.cpp
   binary_predicate.cpp
@@ -62,6 +65,7 @@ set(EXPR_CORE_FILES
   es_functions.cpp
   expr_factory.cpp
   expr_executor.cpp
+  function_call_expr.cpp
   function_helper.cpp
   find_in_set.cpp
   geo_functions.cpp
@@ -84,6 +88,7 @@ set(EXPR_CORE_FILES
   locate.cpp
   math_functions.cpp
   map_expr.cpp
+  map_apply_expr.cpp
   map_element_expr.cpp
   map_functions.cpp
   match_expr.cpp
@@ -114,22 +119,17 @@ ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
 target_link_libraries(ExprCore PUBLIC Runtime ColumnSortCore Platform Geo)
 
 set(EXPR_FILES
-  agg/combinator/agg_state_utils.cpp
   agg/aggregate_factory_exprs_extension.cpp
   expr_factory_exprs_extension.cpp
   table_function/table_function_factory.cpp
   table_function/list_rowsets.cpp
   arrow_function_call.cpp
   dictmapping_expr.cpp
-  function_call_expr.cpp
   utility_functions.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
-  array_map_expr.cpp
-  array_sort_lambda_expr.cpp
-  map_apply_expr.cpp
   dict_query_expr.cpp
   dictionary_get_expr.cpp
 )

@@ -21,6 +21,7 @@ set(RUNTIME_SRCS
     byte_buffer.cpp
     message_body_sink.cpp
     current_thread.cpp
+    chunk_accumulator.cpp
     chunk_helper.cpp
     descriptors.cpp
     descriptors_ext.cpp

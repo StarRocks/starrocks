@@ -36,9 +36,9 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 #include "storage/primitive/range.h"
 
 namespace starrocks::pipeline {

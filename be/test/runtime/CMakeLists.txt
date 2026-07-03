@@ -20,6 +20,7 @@ endif()
 set(RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     byte_buffer_test.cpp
+    chunk_accumulator_test.cpp
     current_thread_core_test.cpp
     descriptors_test.cpp
     diagnose_daemon_test.cpp
