@@ -214,6 +214,10 @@ public class OptExternalPartitionPruner {
                 }
             }
         } else if (partitionPredicate instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cpo = (CompoundPredicateOperator) partitionPredicate;
+            if (cpo.isNot()) {
+                return false;
+            }
             ScalarOperator leftChild = partitionPredicate.getChild(0);
             ScalarOperator rightChild = partitionPredicate.getChild(1);
             return containsPartitionColumn(leftChild, partitionColRefSet)

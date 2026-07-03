@@ -1403,6 +1403,22 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **説明**: レイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してパーティションフィルターなしのクエリを許可するかどうか。`false` に設定すると、有効なパーティションフィルターを含まないクエリは拒否され、意図しないフルテーブルスキャンを防止します。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **エイリアス**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **説明**: 単一のレイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してスキャンできるパーティションの最大数。`0` に設定すると制限なし。上限を超えるとクエリはエラーを返します。なお、増分的にスプリットを列挙するカタログタイプ（Iceberg、Delta Lake）では、制限チェックはスキャンレンジのディスパッチ時に行われ、クエリが即座に拒否されるのではなく、実行途中で失敗する場合があります。
+* **スコープ**: セッション
+* **デフォルト**: `0`（制限なし）
+* **タイプ**: Int
+* **エイリアス**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **説明**: FE がスキャンレンジを構築するときに、各タブレットの内部スキャンレンジに `skip_disk_cache` をマークするよう指示するセッションフラグです。`true` に設定すると、`OlapScanNode.addScanRangeLocations()` は作成された `TInternalScanRange` オブジェクトに対して `internalRange.setSkip_disk_cache(true)` を設定するため、下流の BE スキャンノードはそのスキャンでローカルディスクキャッシュをバイパスするよう指示されます。この設定はセッション単位で適用され、プラン／スキャンレンジ構築時に評価されます。ページキャッシュスキップの制御には `skip_page_cache` と組み合わせて使用し、データキャッシュ関連の変数（`enable_scan_datacache` / `enable_populate_datacache`）と併せて適切に利用してください。
