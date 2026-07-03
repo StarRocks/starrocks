@@ -417,6 +417,14 @@ public class PredicateStatisticsCalculator {
                 double originalNdv = statistics.getColumnStatistic(columnRefOperator).getDistinctValuesCount();
                 double accumulatedNdv = columnStatistic.getDistinctValuesCount() + rightColumnStatistic.getDistinctValuesCount();
                 columnBuilder.setDistinctValuesCount(Math.min(originalNdv, accumulatedNdv));
+                double origNulls =
+                        statistics.getColumnStatistic(columnRefOperator).getNullsFraction() * statistics.getOutputRowCount();
+                double leftNulls = cumulativeStatistics.getOutputRowCount() * columnStatistic.getNullsFraction();
+                double rightNulls = orItemStatistics.getOutputRowCount() * rightColumnStatistic.getNullsFraction();
+                double unionNulls = Math.min(leftNulls + rightNulls, Math.min(origNulls, rowCount));
+                double nullsFraction = rowCount > 0 ? Math.min(1.0, unionNulls / rowCount) : 0.0;
+                columnBuilder.setNullsFraction(nullsFraction);
+
                 builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
             });
             return builder.build();
