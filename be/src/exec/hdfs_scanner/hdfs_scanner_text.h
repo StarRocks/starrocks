@@ -26,23 +26,24 @@ namespace starrocks {
 // ever shrinks data).
 struct HiveTextFields {
     std::vector<Slice> fields;
-    std::vector<uint8_t> is_null; // LazySimpleSerDe: raw (pre-unescape) bytes matched "\N"
-    std::string materialized;     // storage for fields that needed unescape/unquote
-    bool all_null_row = false;    // OpenCSVSerde: opencsv's readNext() returned null
+    std::string materialized;  // storage for fields that needed unescape/unquote
+    bool all_null_row = false; // OpenCSVSerde: opencsv's readNext() returned null
 
     void reset(size_t line_len) {
         fields.clear();
-        is_null.clear();
         materialized.clear();
         materialized.reserve(line_len);
         all_null_row = false;
     }
 };
 
-// Field splitting for ONE physical line of a LazySimpleSerDe (ESCAPED BY) table:
-// the escape character makes any following character literal (so an escaped
-// separator stays inside the field), and the null sequence "\N" is decided on the
-// RAW bytes BEFORE unescaping, exactly like Hive's LazyStruct/LazyPrimitive.
+// Field boundary finder for ONE physical line of a LazySimpleSerDe (ESCAPED BY)
+// table: the escape character makes any following byte literal, so an escaped
+// separator does not split. Fields are emitted RAW (escape bytes intact, nothing
+// unescaped) -- deciding null and unescaping happen one level down, in
+// NullableConverter, once it is known whether this field's type is a scalar leaf or
+// a complex type (ARRAY/MAP/STRUCT) that still needs to find its OWN separators in
+// the untouched bytes.
 void split_hive_lazy_simple_line(const Slice& line, char field_delim, char escape, HiveTextFields* out);
 
 // Field splitting for ONE physical line of an OpenCSVSerde table, byte-compatible

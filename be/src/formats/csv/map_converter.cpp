@@ -129,18 +129,36 @@ bool MapConverter::read_hive_map(Column* column, const Slice& s, const Options& 
     DCHECK_EQ(old_size, values->size());
 
     // An empty field is an EMPTY map (matches Hive), not null: field-level null was
-    // already decided upstream against the "\N" literal.
+    // already decided upstream, in NullableConverter, against the raw "\N" literal.
+    const char escape = options.escape;
     std::vector<Slice> key_fields;
     std::vector<Slice> value_fields;
     std::vector<bool> has_value; // an entry without a kv separator has a null value
     if (!s.empty()) {
         size_t start = 0;
         for (size_t i = 0; i <= s.size; i++) {
+            // An escaped delimiter is not a real boundary; entries/keys/values stay RAW
+            // here (escape bytes intact) -- NullableConverter unescapes each one level
+            // down, once it knows whether it is a scalar leaf or a nested complex type.
+            if (i < s.size && escape != 0 && s[i] == escape && i + 1 < s.size) {
+                i++;
+                continue;
+            }
             if (i < s.size && s[i] != entry_delim) {
                 continue;
             }
             Slice entry(s.data + start, i - start);
-            const char* sep = static_cast<const char*>(memchr(entry.data, kv_delim, entry.size));
+            const char* sep = nullptr;
+            for (size_t j = 0; j < entry.size; j++) {
+                if (escape != 0 && entry[j] == escape && j + 1 < entry.size) {
+                    j++;
+                    continue;
+                }
+                if (entry[j] == kv_delim) {
+                    sep = entry.data + j;
+                    break;
+                }
+            }
             if (sep == nullptr) {
                 key_fields.emplace_back(entry);
                 value_fields.emplace_back();

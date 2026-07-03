@@ -83,11 +83,14 @@ public:
         size_t array_hive_nested_level = 1;
 
         // [Only used in Hive now!]
-        // True when the CSV reader already decided the null literal on the RAW
-        // (pre-unescape) bytes of this field, so NullableConverter must skip its own
-        // "\N" check: an escaped field like "\\N" unescapes to a literal "\N" string
-        // that would otherwise be mistaken for null.
-        bool ignore_null_literal = false;
+        // Non-zero when this scan uses LazySimpleSerDe's ESCAPED BY. NullableConverter
+        // uses it to decide null on the RAW (pre-unescape) bytes before deciding whether
+        // to unescape: "\N" is null even though it unescapes to "N", while "\\N"
+        // unescapes to a literal "\N" string that would otherwise be mistaken for null.
+        // Left 0 for OpenCSVSerde (which has no null literal at all) even though that
+        // format has its own escape character -- the scanner never sets this field for
+        // OpenCSVSerde -- and for every non-Hive caller (unaffected, existing behavior).
+        char escape = 0;
 
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;
@@ -109,6 +112,13 @@ public:
     virtual bool read_string(Column* column, const Slice& s, const Options& options) const = 0;
 
     virtual bool read_quoted_string(Column* column, const Slice& s, const Options& options) const = 0;
+
+    // True for converters (Map/Array) whose OWN separator scanning still needs the raw,
+    // not-yet-unescaped bytes -- e.g. an escaped array-element separator like "a\|b|c"
+    // must stay intact until ArrayConverter has found its OWN element boundaries.
+    // NullableConverter checks this to decide whether it may safely unescape `s` before
+    // delegating, or must pass `s` through untouched for the child to split further.
+    virtual bool consumes_raw_bytes() const { return false; }
 
 protected:
     template <char quote>

@@ -2296,7 +2296,7 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
         status = scanner->get_next(_runtime_state, &chunk);
         ASSERT_TRUE(status.ok()) << status.message();
-        EXPECT_EQ(5, chunk->num_rows());
+        EXPECT_EQ(7, chunk->num_rows());
         // Escaped separator is field data; Hive text array/map parse without braces.
         EXPECT_EQ("['a,b', 'c', ['a','b','c'], {'k1':'v1','k2':'v2'}]", chunk->debug_row(0));
         // Raw "\N" is null (mid-row emission site); empty fields are EMPTY collections.
@@ -2307,12 +2307,20 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         EXPECT_EQ("['p\\q', 'z', [], NULL]", chunk->debug_row(3));
         // Raw "\N" at row end (row-delimiter emission site).
         EXPECT_EQ("['m', NULL, [], {}]", chunk->debug_row(4));
+        // An escaped ARRAY-ELEMENT separator ("a\|b|c") is not a real boundary: the
+        // array's own escape-aware split must see it, giving 2 elements ("a|b","c"),
+        // not 3 -- this is the bug the "MapConverter unescape" review comment flagged.
+        EXPECT_EQ("['x', 'y', ['a|b','c'], {}]", chunk->debug_row(5));
+        // A raw "\N" ARRAY ELEMENT ("a|\N") is a null element, decided on its own raw
+        // bytes one level down in NullableConverter, not corrupted by an eager
+        // top-level unescape.
+        EXPECT_EQ("['x', 'y', ['a',NULL], {}]", chunk->debug_row(6));
         scanner->close();
     }
 
-    // Splittable: total rows must stay 5 regardless of the split point (the escape
+    // Splittable: total rows must stay 7 regardless of the split point (the escape
     // handling must not disturb the scan-range boundary bookkeeping).
-    for (int offset = 4; offset < 58; offset++) {
+    for (int offset = 4; offset < 80; offset++) {
         int records = 0;
         auto read_range = [&](int start, int end) {
             auto* range0 = _create_scan_range(compat_file, start, end);
@@ -2332,7 +2340,7 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         };
         read_range(0, offset);
         read_range(offset, 0);
-        ASSERT_EQ(records, 5) << "offset=" << offset;
+        ASSERT_EQ(records, 7) << "offset=" << offset;
     }
 }
 
@@ -2738,9 +2746,15 @@ TEST_F(HdfsScannerTest, TestOpenCsvSplitterGolden) {
 
 // LazySimpleSerDe splitter unit cases (semantics from Hive's LazyStruct/LazyUtils,
 // cross-checked with the audit goldens L2/L3/L9).
+// split_hive_lazy_simple_line only finds field BOUNDARIES now (an escaped separator
+// does not split); it never decides null and never unescapes. Both of those now
+// happen one level down, in NullableConverter, once it is known whether a field is a
+// scalar leaf or a complex type that still needs its own escaped bytes intact (see
+// TestCSVLazySimpleCompat for that end-to-end behavior, including \N and escaped
+// array/map separators).
 TEST_F(HdfsScannerTest, TestLazySimpleSplitter) {
-    // Unescaped fields are zero-copy slices into the input line, so the line must
-    // outlive the assertions: |holder| keeps the current case's bytes alive.
+    // Fields are zero-copy slices into the input line, so the line must outlive the
+    // assertions: |holder| keeps the current case's bytes alive.
     std::string holder;
     auto split = [&holder](const std::string& line, HiveTextFields* out) {
         holder = line;
@@ -2751,19 +2765,18 @@ TEST_F(HdfsScannerTest, TestLazySimpleSplitter) {
     };
 
     HiveTextFields out;
-    // Escaped separator stays in the field.
+    // Escaped separator stays in the field, RAW: the backslash is not stripped here.
     split("a\\,b,c", &out);
     ASSERT_EQ(2, out.fields.size());
-    EXPECT_EQ("a,b", field(out, 0));
+    EXPECT_EQ("a\\,b", field(out, 0));
     EXPECT_EQ("c", field(out, 1));
-    EXPECT_FALSE(out.is_null[0]);
 
-    // Raw "\N" is null; escaped "\\N" is a literal "\N" string.
+    // Raw "\N" and raw "\\N" both pass through untouched -- deciding either is null
+    // (only the first is) happens in NullableConverter, not here.
     split("\\N,\\\\N", &out);
     ASSERT_EQ(2, out.fields.size());
-    EXPECT_TRUE(out.is_null[0]);
-    EXPECT_FALSE(out.is_null[1]);
-    EXPECT_EQ("\\N", field(out, 1));
+    EXPECT_EQ("\\N", field(out, 0));
+    EXPECT_EQ("\\\\N", field(out, 1));
 
     // Empty line is ONE empty field (L3: first column '', the rest null).
     split("", &out);
@@ -2771,24 +2784,17 @@ TEST_F(HdfsScannerTest, TestLazySimpleSplitter) {
     EXPECT_EQ("", field(out, 0));
     EXPECT_FALSE(out.all_null_row);
 
-    // A trailing escape at end of line escapes nothing and stays literal.
+    // A trailing escape at end of line escapes nothing (no next byte to protect) and
+    // is not a boundary by itself.
     split("a,b\\", &out);
     ASSERT_EQ(2, out.fields.size());
     EXPECT_EQ("b\\", field(out, 1));
 
-    // Escaped escape.
+    // Escaped escape: RAW, both backslashes survive (unescaping is not this
+    // function's job anymore).
     split("p\\\\q,z", &out);
     ASSERT_EQ(2, out.fields.size());
-    EXPECT_EQ("p\\q", field(out, 0));
-
-    // With a non-backslash escape char the raw "\N" check still applies.
-    HiveTextFields out2;
-    holder = "\\N,#N";
-    split_hive_lazy_simple_line(Slice(holder), ',', '#', &out2);
-    ASSERT_EQ(2, out2.fields.size());
-    EXPECT_TRUE(out2.is_null[0]);
-    EXPECT_FALSE(out2.is_null[1]);
-    EXPECT_EQ("N", std::string(out2.fields[1].data, out2.fields[1].size));
+    EXPECT_EQ("p\\\\q", field(out, 0));
 }
 
 TEST_F(HdfsScannerTest, TestCSVArrayLastElementEmpty) {

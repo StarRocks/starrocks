@@ -3,3 +3,5 @@ a\,b,c,a|b|c,k1:v1|k2:v2
 \\N,y,x,k:
 p\\q,z,,\N
 m,\N,,
+x,y,a\|b|c,
+x,y,a|\N,

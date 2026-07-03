@@ -29,6 +29,7 @@ public:
                                const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;
+    bool consumes_raw_bytes() const override { return true; }
 
 private:
     bool validate(const Slice& s) const;

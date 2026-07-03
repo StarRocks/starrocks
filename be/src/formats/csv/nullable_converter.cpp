@@ -20,6 +20,30 @@
 
 namespace starrocks::csv {
 
+namespace {
+// Raw-bytes null check for LazySimpleSerDe: matches the literal 2-byte sequence "\N",
+// decided BEFORE unescaping (an escaped "\\N" unescapes to a literal "\N" string that
+// must NOT be treated as null).
+inline bool is_raw_null_literal(const Slice& s) {
+    return s.size == 2 && s.data[0] == '\\' && s.data[1] == 'N';
+}
+
+// Unescape `s` (escape makes the following byte literal; a trailing escape at the end
+// of `s` stays literal) into `buf`, returning a Slice into it. Mirrors the top-level
+// field unescape LazyUtils performs on a scalar leaf.
+inline Slice unescape_into(const Slice& s, char escape, std::string* buf) {
+    buf->clear();
+    buf->reserve(s.size);
+    for (size_t i = 0; i < s.size; i++) {
+        if (s.data[i] == escape && i + 1 < s.size) {
+            i++;
+        }
+        buf->push_back(s.data[i]);
+    }
+    return Slice(buf->data(), buf->size());
+}
+} // namespace
+
 Status NullableConverter::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
     if (column.is_nullable()) {
@@ -55,7 +79,14 @@ Status NullableConverter::write_quoted_string(formats::FormattedOutputStream* os
 bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const {
     auto* nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
-    if (!options.ignore_null_literal && s == "\\N") {
+    if (options.escape != 0) {
+        if (is_raw_null_literal(s)) {
+            return nullable_column->append_nulls(1);
+        }
+        if (!_base_converter->consumes_raw_bytes()) {
+            s = unescape_into(s, options.escape, &_unescape_buf);
+        }
+    } else if (s == "\\N") {
         return nullable_column->append_nulls(1);
     }
     auto* data = nullable_column->begin_append_not_default_value();
@@ -69,13 +100,29 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
     }
 }
 
-bool NullableConverter::read_string(Column* column, const Slice& s, const Options& options) const {
+bool NullableConverter::read_string(Column* column, const Slice& s_in, const Options& options) const {
     auto* nullable = down_cast<NullableColumn*>(column);
     auto* data = nullable->data_column_raw_ptr();
+    Slice s = s_in;
 
-    if (!options.ignore_null_literal && s == "\\N") {
+    if (options.escape != 0) {
+        // LazySimpleSerDe (ESCAPED BY): decide null on the RAW bytes before touching
+        // escapes at all, then only unescape if the base converter wants clean bytes.
+        // A Map/ArrayConverter answers consumes_raw_bytes()=true and does its OWN
+        // escape-aware separator scanning on `s` unescaped -- e.g. an escaped array
+        // element separator like "a\|b|c" must stay intact for it to find the real
+        // boundary.
+        if (is_raw_null_literal(s)) {
+            return nullable->append_nulls(1);
+        }
+        if (!_base_converter->consumes_raw_bytes()) {
+            s = unescape_into(s, options.escape, &_unescape_buf);
+        }
+    } else if (s == "\\N") {
         return nullable->append_nulls(1);
-    } else if (_base_converter->read_string(data, s, options)) {
+    }
+
+    if (_base_converter->read_string(data, s, options)) {
         nullable->null_column_raw_ptr()->append(0);
         return true;
     } else if (options.invalid_field_as_null) {

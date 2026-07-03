@@ -175,44 +175,23 @@ void split_hive_lazy_simple_line(const Slice& line, char field_delim, char escap
     const char* p = line.data;
     const size_t n = line.size;
     size_t start = 0;
-    bool escaped_field = false;
     for (size_t i = 0; i <= n; i++) {
-        // Mirrors LazyStruct's separator scan: the escape makes the next byte
-        // literal; an escape that is the very last byte of the line escapes nothing.
+        // Mirrors LazyStruct's separator scan: the escape makes the next byte literal
+        // (so an escaped separator, e.g. inside an ARRAY column's raw text, is not a
+        // real field boundary); an escape that is the very last byte of the line
+        // escapes nothing. Deciding null and unescaping happen ONE level down, in
+        // NullableConverter -- this function only finds boundaries and must hand the
+        // RAW bytes through untouched: a complex-typed field (ARRAY/MAP/STRUCT) still
+        // needs its own escape markers intact to find ITS OWN separators.
         if (i < n && p[i] == escape && i + 1 < n) {
-            escaped_field = true;
             i++;
             continue;
         }
         if (i < n && p[i] != field_delim) {
             continue;
         }
-        const char* f = p + start;
-        const size_t len = i - start;
-        // Null is decided on the RAW bytes BEFORE unescaping (LazyPrimitive checks
-        // its null sequence first): "\N" is null even though it unescapes to "N",
-        // while "\\N" unescapes to a literal "\N" string (audit case L9).
-        if (len == 2 && f[0] == '\\' && f[1] == 'N') {
-            out->fields.emplace_back();
-            out->is_null.push_back(1);
-        } else if (!escaped_field) {
-            out->fields.emplace_back(f, len);
-            out->is_null.push_back(0);
-        } else {
-            // Unescape into |materialized| (LazyUtils: a trailing escape inside the
-            // field stays literal).
-            const size_t mat_start = out->materialized.size();
-            for (size_t j = 0; j < len; j++) {
-                if (f[j] == escape && j + 1 < len) {
-                    j++;
-                }
-                out->materialized.push_back(f[j]);
-            }
-            out->fields.emplace_back(out->materialized.data() + mat_start, out->materialized.size() - mat_start);
-            out->is_null.push_back(0);
-        }
+        out->fields.emplace_back(p + start, i - start);
         start = i + 1;
-        escaped_field = false;
     }
 }
 
@@ -292,7 +271,6 @@ void split_hive_open_csv_line(const Slice& line, char field_delim, char quote, c
             i++;
         } else if (c == field_delim && !in_quotes) {
             out->fields.emplace_back(buf.data() + tok_start, buf.size() - tok_start);
-            out->is_null.push_back(0);
             tok_start = buf.size();
             in_field = false;
             i++;
@@ -317,7 +295,6 @@ void split_hive_open_csv_line(const Slice& line, char field_delim, char quote, c
         return;
     }
     out->fields.emplace_back(buf.data() + tok_start, buf.size() - tok_start);
-    out->is_null.push_back(0);
 }
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
@@ -585,10 +562,12 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
     options.invalid_field_as_null = _invalid_field_as_null;
 
-    // The splitters below decide the null literal themselves (LazySimpleSerDe: raw
-    // pre-unescape "\N"; OpenCSVSerde: no null literal at all), so the converter's
-    // own "\N" check must never re-fire on field data.
-    options.ignore_null_literal = true;
+    // Only LazySimpleSerDe (ESCAPED BY) has a null literal and needs NullableConverter's
+    // raw-bytes "\N" check (see Options::escape); leave it unset (0) for OpenCSVSerde,
+    // which has no null literal at all even though it has its own escape character --
+    // split_hive_open_csv_line already fully resolves quotes/escapes before any
+    // converter sees the bytes, so the converter layer has no escape work left to do.
+    options.escape = (_enclose == 0) ? _escape : 0;
 
     const size_t num_materialize_columns = _scanner_ctx->format_scan_context.materialized_columns.size();
     const char field_delim = _field_delimiter.front();
@@ -636,13 +615,9 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
             Column* column = _column_raw_ptrs[chunk_index];
             if (csv_index < row.fields.size()) {
-                if (UNLIKELY(row.is_null[csv_index])) {
-                    if (!column->append_nulls(1)) {
-                        return Status::InternalError(strings::Substitute(
-                                "CSV parser failed to append null, column name is: $0", column_info.name()));
-                    }
-                    continue;
-                }
+                // Null (LazySimpleSerDe's raw "\N") is decided by NullableConverter,
+                // uniformly at every leaf position -- top-level scalar field, or a
+                // scalar nested inside an ARRAY/MAP -- via Options::escape.
                 const Slice& field = row.fields[csv_index];
                 options.type_desc = &(column_info.slot_type());
                 if (!_converters[j]->read_string(column, field, options)) {
