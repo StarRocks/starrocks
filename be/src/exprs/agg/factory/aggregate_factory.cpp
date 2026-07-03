@@ -21,6 +21,7 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "exprs/udf/java/java_function_fwd.h"
 #include "types/agg_state_desc.h"
 #include "types/logical_type.h"
 
@@ -30,26 +31,18 @@ DEFINE_FAIL_POINT(not_exist_agg_function);
 
 namespace {
 
-const AggregateFunction* null_non_builtin_aggregate_function_provider(TFunctionBinaryType::type, bool, bool) {
-    return nullptr;
-}
-
-NonBuiltinAggregateFunctionProvider& non_builtin_aggregate_function_provider() {
-    static NonBuiltinAggregateFunctionProvider provider = null_non_builtin_aggregate_function_provider;
-    return provider;
-}
-
 AggregateFunctionPtr resolve_non_builtin_aggregate_function(TFunctionBinaryType::type binary_type,
                                                             bool is_window_function, bool is_input_nullable) {
-    return non_builtin_aggregate_function_provider()(binary_type, is_window_function, is_input_nullable);
+    if (binary_type != TFunctionBinaryType::SRJAR) {
+        return nullptr;
+    }
+    if (is_window_function) {
+        return getJavaWindowFunction();
+    }
+    return getJavaUDAFFunction(is_input_nullable);
 }
 
 } // namespace
-
-void set_non_builtin_aggregate_function_provider(NonBuiltinAggregateFunctionProvider provider) {
-    DCHECK_NE(nullptr, provider);
-    non_builtin_aggregate_function_provider() = provider;
-}
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();

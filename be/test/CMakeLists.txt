@@ -107,7 +107,6 @@ set(EXEC_FILES
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
-        ./exprs/agg/aggregate_factory_extension_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
@@ -254,7 +253,6 @@ add_subdirectory(compute_env)
 add_subdirectory(orchestration)
 add_subdirectory(data_workflows)
 add_subdirectory(exprs)
-add_subdirectory(udf)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(fs_ext)

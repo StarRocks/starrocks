@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/python/env.h"
+#include "exprs/udf/python/env.h"
 
 #include <dirent.h>
 #include <fmt/core.h>
@@ -103,11 +103,14 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     }
     posix_spawn_file_actions_addclose(&actions, pipefd[0]);
 
+    posix_spawnattr_t attrs;
+    posix_spawnattr_init(&attrs);
+    auto cleanup_attr = DeferOp([&attrs]() { posix_spawnattr_destroy(&attrs); });
+
 #ifdef __APPLE__
-    DIR* dir = opendir("/dev/fd");
+    posix_spawnattr_setflags(&attrs, POSIX_SPAWN_CLOEXEC_DEFAULT);
 #else
     DIR* dir = opendir("/proc/self/fd");
-#endif
     auto defer = DeferOp([&dir]() {
         if (dir != nullptr) {
             closedir(dir);
@@ -115,11 +118,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     });
 
     if (dir == nullptr) {
-#ifdef __APPLE__
-        return Status::InternalError(fmt::format("open /dev/fd error {}", std::strerror(errno)));
-#else
         return Status::InternalError(fmt::format("open /proc/self/fd error {}", std::strerror(errno)));
-#endif
     }
 
     {
@@ -131,20 +130,14 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
 
     struct dirent* entry;
     while ((entry = readdir(dir)) != nullptr) {
-#ifdef __APPLE__
-        int fd = atoi(entry->d_name);
-        if (fd >= 3 && fd != pipefd[0] && fd != pipefd[1]) {
-            posix_spawn_file_actions_addclose(&actions, fd);
-        }
-#else
         if (entry->d_type == DT_LNK || entry->d_type == DT_UNKNOWN) {
             int fd = atoi(entry->d_name);
             if (fd >= 3 && fd != pipefd[0] && fd != pipefd[1]) {
                 posix_spawn_file_actions_addclose(&actions, fd);
             }
         }
-#endif
     }
+#endif
 
     std::string script = PyWorkerManager::bootstrap();
     std::string unix_socket = PyWorkerManager::unix_socket_prefix();
@@ -153,7 +146,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<PyWorker>* child_process
     const char* args[] = {"python3", script.c_str(), unix_socket.c_str(), nullptr};
     const char* envs[] = {python_home_env.c_str(), nullptr};
 
-    int rc = posix_spawnp(&pid, python_path.c_str(), &actions, nullptr, const_cast<char* const*>(args),
+    int rc = posix_spawnp(&pid, python_path.c_str(), &actions, &attrs, const_cast<char* const*>(args),
                           const_cast<char* const*>(envs));
     close(pipefd[1]);
 

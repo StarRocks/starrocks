@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "udf/python/callstub.h"
+#include "exprs/udf/python/callstub.h"
 
 #include <cstring>
 #include <memory>
@@ -28,12 +28,12 @@
 #include "common/config_udf_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/udf/python/env.h"
 #include "rapidjson/document.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "types/type_descriptor.h"
-#include "udf/python/env.h"
 
 #define RETURN_IF_ARROW_ERROR(expr)    \
     do {                               \

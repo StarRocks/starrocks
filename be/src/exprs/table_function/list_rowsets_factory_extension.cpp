@@ -12,11 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gtest/gtest.h"
-#include "types/time_types.h"
+#include "exprs/table_function/list_rowsets.h"
+#include "exprs/table_function/table_function_factory.h"
 
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    starrocks::date::init_date_cache();
-    return RUN_ALL_TESTS();
-}
+namespace starrocks {
+
+namespace {
+
+struct ListRowsetsFactoryExtensionRegistrar {
+    ListRowsetsFactoryExtensionRegistrar() {
+        register_builtin_table_function(
+                "list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},
+                {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BOOLEAN, TYPE_VARCHAR},
+                std::make_shared<ListRowsets>());
+    }
+};
+
+ListRowsetsFactoryExtensionRegistrar k_list_rowsets_factory_extension_registrar;
+
+} // namespace
+
+} // namespace starrocks
