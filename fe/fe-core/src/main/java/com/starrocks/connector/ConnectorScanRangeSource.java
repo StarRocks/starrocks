@@ -15,8 +15,8 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.logging.log4j.LogManager;
@@ -59,7 +59,7 @@ public abstract class ConnectorScanRangeSource implements AutoCloseable {
 
     // Enforces scan_lake_partition_num_limit incrementally as new partitions are discovered during scan-range
     // dispatch.
-    protected static void checkPartitionNumLimit(Table table, int selectedPartitionCount) throws AnalysisException {
+    protected static void checkPartitionNumLimit(Table table, int selectedPartitionCount) {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null) {
             return;
@@ -74,6 +74,6 @@ public abstract class ConnectorScanRangeSource implements AutoCloseable {
                 + selectedPartitionCount + ". Please adjust the SQL or change the limit by set variable "
                 + "scan_lake_partition_num_limit.";
         LOG.warn("{} queryId: {}", msg, DebugUtil.printId(connectContext.getQueryId()));
-        throw new AnalysisException(msg);
+        throw new StarRocksConnectorException(msg);
     }
 }

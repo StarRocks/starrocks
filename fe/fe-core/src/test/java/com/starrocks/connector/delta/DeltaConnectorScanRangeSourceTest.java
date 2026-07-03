@@ -17,9 +17,9 @@ package com.starrocks.connector.delta;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.qe.ConnectContext;
@@ -91,7 +91,7 @@ public class DeltaConnectorScanRangeSourceTest {
         connectContext.getSessionVariable().setScanLakePartitionNumLimit(1);
         DeltaConnectorScanRangeSource scanRangeSource = newScanRangeSource(metadata, format);
 
-        Assertions.assertThrows(AnalysisException.class, () -> {
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
             scanRangeSource.addPartition(newFileScanTask("/path/to/f1.parquet", "2020-01-01"));
             scanRangeSource.addPartition(newFileScanTask("/path/to/f2.parquet", "2020-01-02"));
         });

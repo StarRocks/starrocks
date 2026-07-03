@@ -18,10 +18,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
@@ -723,7 +723,7 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableC.newScan().planFiles());
         Assertions.assertEquals(2, fileScanTasks.size());
 
-        Assertions.assertThrows(AnalysisException.class, () -> {
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
             for (FileScanTask task : fileScanTasks) {
                 scanRangeSource.addPartition(task);
             }
