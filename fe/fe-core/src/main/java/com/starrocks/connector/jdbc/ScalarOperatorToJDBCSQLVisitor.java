@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -76,29 +77,28 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
     public static ScalarOperatorToJDBCSQLVisitor forDialect(List<LogicalJDBCScanOperator> scans,
                                                             Map<ColumnRefOperator, String> columnNames) {
         JDBCTable.ProtocolType dialect = ((JDBCTable) scans.get(0).getTable()).getProtocolType();
-        switch (dialect) {
-            case MYSQL:
-            case MARIADB:
-                return new MySQLLikeSQLRenderer(columnNames);
-            case POSTGRES:
-                return new PostgresSQLRenderer(columnNames);
-            case ORACLE:
-                return new OracleSQLRenderer(columnNames, oracleTemporalColumns(scans));
-            case CLICKHOUSE:
-                return new ClickHouseSQLRenderer(columnNames);
-            case UNKNOWN:
-            default:
-                return new UnknownSQLRenderer(columnNames);
-        }
+        return forDialect(dialect, columnNames,
+                dialect == JDBCTable.ProtocolType.ORACLE ? oracleTemporalColumns(scans) : Collections.emptyMap());
     }
 
     /**
-     * Compatibility entry point for callers that render expressions outside a concrete scan
-     * context. Oracle remote DATE/TIMESTAMP column wrapping is only available through the
-     * scan-aware overload, where original JDBC column types are present.
+     * Renderer for a single base-table JDBC scan -- the {@code JDBCScanNode} filter path. The Oracle
+     * temporal-column map is derived from this one scan's columns, mirroring
+     * {@link #forDialect(List, Map)} for the merged-pushdown path so a temporal predicate renders
+     * identical SQL whether or not aggregate/join pushdown fires.
      */
-    public static ScalarOperatorToJDBCSQLVisitor forDialect(Map<ColumnRefOperator, String> columnNames,
-                                                            JDBCTable.ProtocolType dialect) {
+    public static ScalarOperatorToJDBCSQLVisitor forScan(JDBCTable table,
+                                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                         Map<ColumnRefOperator, String> columnNames) {
+        JDBCTable.ProtocolType dialect = table.getProtocolType();
+        return forDialect(dialect, columnNames,
+                dialect == JDBCTable.ProtocolType.ORACLE
+                        ? oracleTemporalColumns(table, colRefToColumnMetaMap) : Collections.emptyMap());
+    }
+
+    private static ScalarOperatorToJDBCSQLVisitor forDialect(JDBCTable.ProtocolType dialect,
+                                                             Map<ColumnRefOperator, String> columnNames,
+                                                             Map<ColumnRefOperator, String> oracleTemporalColumns) {
         switch (dialect) {
             case MYSQL:
             case MARIADB:
@@ -106,7 +106,7 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
             case POSTGRES:
                 return new PostgresSQLRenderer(columnNames);
             case ORACLE:
-                return new OracleSQLRenderer(columnNames);
+                return new OracleSQLRenderer(columnNames, oracleTemporalColumns);
             case CLICKHOUSE:
                 return new ClickHouseSQLRenderer(columnNames);
             case UNKNOWN:
@@ -125,15 +125,23 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
     private static Map<ColumnRefOperator, String> oracleTemporalColumns(List<LogicalJDBCScanOperator> scans) {
         Map<ColumnRefOperator, String> temporal = new HashMap<>();
         for (LogicalJDBCScanOperator scan : scans) {
-            Map<String, TemporalKind> byName = temporalColumnsByNormalizedName((JDBCTable) scan.getTable());
-            if (byName.isEmpty()) {
-                continue;
-            }
-            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
-                TemporalKind kind = byName.get(normalizeColumnName(entry.getValue().getName()));
-                if (kind != null) {
-                    temporal.put(entry.getKey(), kind == TemporalKind.DATE ? "DATE" : "TIMESTAMP");
-                }
+            temporal.putAll(oracleTemporalColumns((JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap()));
+        }
+        return temporal;
+    }
+
+    /** Single-scan version of {@link #oracleTemporalColumns(List)}, keyed by this scan's columns. */
+    private static Map<ColumnRefOperator, String> oracleTemporalColumns(
+            JDBCTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Map<String, TemporalKind> byName = temporalColumnsByNormalizedName(table);
+        if (byName.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<ColumnRefOperator, String> temporal = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            TemporalKind kind = byName.get(normalizeColumnName(entry.getValue().getName()));
+            if (kind != null) {
+                temporal.put(entry.getKey(), kind == TemporalKind.DATE ? "DATE" : "TIMESTAMP");
             }
         }
         return temporal;
@@ -146,6 +154,49 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
      */
     public enum TemporalKind {
         DATE, TIMESTAMP
+    }
+
+    /** Which Oracle literal keyword a temporal string literal needs, decided by its textual shape. */
+    public enum OracleTemporalLiteralKind {
+        DATE, TIMESTAMP, NONE
+    }
+
+    private static final Pattern ORACLE_DATE_ONLY_LITERAL = Pattern.compile("^\\d{4}-\\d{1,2}-\\d{1,2}$");
+
+    /**
+     * Classify an Oracle temporal string literal by its textual shape -- NOT by the column's
+     * declared type. Oracle's DATE literal must be exactly {@code 'YYYY-MM-DD'} (a time component
+     * raises ORA-01861), so a bare date ({@code <= 10} chars matching {@code YYYY-M-D}) is a
+     * {@code DATE} literal, anything longer is a {@code TIMESTAMP} literal, and a short non-date
+     * string needs no keyword. The shape decision used by {@link #renderOracleTemporalLiteral}.
+     */
+    public static OracleTemporalLiteralKind classifyOracleTemporalLiteral(String literal) {
+        if (literal.length() <= "0000-00-00".length()) {
+            return ORACLE_DATE_ONLY_LITERAL.matcher(literal).matches()
+                    ? OracleTemporalLiteralKind.DATE : OracleTemporalLiteralKind.NONE;
+        }
+        return OracleTemporalLiteralKind.TIMESTAMP;
+    }
+
+    /**
+     * Render {@code literal} as an Oracle temporal literal, choosing the keyword from the literal's
+     * textual shape ({@link #classifyOracleTemporalLiteral}): {@code DATE 'YYYY-MM-DD'},
+     * {@code TIMESTAMP '...'}, or a bare quoted string when it is not a temporal shape. The single
+     * quote is the only character Oracle needs escaped inside a string literal. Shared by the
+     * aggregate-pushdown renderer ({@link OracleSQLRenderer#renderTemporalLiteral}) and the scan
+     * path ({@code JDBCScanNode.buildOracleTemporalLiteralExpr}) so a temporal predicate renders
+     * byte-identical SQL whether or not aggregate pushdown fires.
+     */
+    public static String renderOracleTemporalLiteral(String literal) {
+        String quoted = "'" + literal.replace("'", "''") + "'";
+        switch (classifyOracleTemporalLiteral(literal)) {
+            case DATE:
+                return "DATE " + quoted;
+            case TIMESTAMP:
+                return "TIMESTAMP " + quoted;
+            default:
+                return quoted;
+        }
     }
 
     // Oracle's java.sql.Types vendor extensions (not part of the JDBC standard).
@@ -200,6 +251,17 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
     }
 
     protected abstract JDBCTable.ProtocolType dialect();
+
+    /**
+     * Whether {@code AVG} over an integer column must be rendered as {@code AVG(col * 1.0)} so the
+     * remote engine computes a floating-point average. Engines whose {@code AVG(<integer>)} truncates
+     * via integer division (e.g. SQL Server: {@code AVG} of {@code {1,1,2,3}} is {@code 1}, not
+     * {@code 1.75}) opt in; dialects whose AVG is already fractional (MySQL/PostgreSQL/Oracle/
+     * ClickHouse) leave it {@code false} and emit {@code AVG(col)} unchanged.
+     */
+    protected boolean avgIntegerNeedsFloatCast() {
+        return false;
+    }
 
     @Override
     public String visit(ScalarOperator scalarOperator, Void context) {
@@ -323,6 +385,13 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
                 return fnName + "(*)";
             }
             String arg = op.getChild(0).accept(this, null);
+            // AVG over an integer column integer-divides on some engines (e.g. SQL Server) and may
+            // return a narrower JDBC type than the DOUBLE avg slot; multiplying by 1.0 forces the
+            // remote AVG into floating point, matching StarRocks' avg semantics. Only dialects that
+            // need it opt in (see avgIntegerNeedsFloatCast); the others emit AVG(col) unchanged.
+            if ("avg".equals(fnName) && avgIntegerNeedsFloatCast() && op.getChild(0).getType().isIntegerType()) {
+                arg = "(" + arg + " * 1.0)";
+            }
             return fnName + "(" + (op.isDistinct() ? "DISTINCT " : "") + arg + ")";
         }
         // Fallback for unknown functions — shouldn't reach here if CanPushDownPredicateVisitor was checked
@@ -474,7 +543,11 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
             if (constant.isNull() || !constant.getType().isStringType()) {
                 return null;
             }
-            return keyword + " '" + constant.toString().replace("'", "''") + "'";
+            // `keyword` only gates that the COLUMN is temporal; renderOracleTemporalLiteral then picks
+            // the literal keyword from the literal's shape (see there). Following the column type would
+            // emit DATE '2024-01-15 12:34:56' for a DATE column compared to a datetime string, which
+            // Oracle rejects (ORA-01861).
+            return renderOracleTemporalLiteral(constant.toString());
         }
     }
 
@@ -503,6 +576,13 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
         @Override
         protected JDBCTable.ProtocolType dialect() {
             return JDBCTable.ProtocolType.UNKNOWN;
+        }
+
+        @Override
+        protected boolean avgIntegerNeedsFloatCast() {
+            // SQL Server (whose jdbc:sqlserver: URI resolves to UNKNOWN) integer-divides
+            // AVG(<integer>); force a floating-point average so the result matches StarRocks.
+            return true;
         }
     }
 }

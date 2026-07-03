@@ -47,23 +47,23 @@ red	40
 -- !result
 select * from table(jdbc_native_query_${uuid0}.native_query('select id from db_native_query_${uuid0}.native_query_base')) q(id_alias);
 -- result:
-[REGEX].*column aliases are not supported for JDBC query table function.*
+E: (1064, 'Getting analyzing error. Detail message: column aliases are not supported for JDBC query table function.')
 -- !result
 select * from table(jdbc_native_query_${uuid0}.native_query(query => 'select id from db_native_query_${uuid0}.native_query_base'));
 -- result:
-[REGEX].*JDBC query table function only supports TABLE\(<catalog>\.native_query\('<sql>'\)\).*
+E: (1064, "Getting analyzing error. Detail message: JDBC query table function only supports TABLE(<catalog>.native_query('<sql>')).")
 -- !result
 select * from table(jdbc_native_query_${uuid0}.system.query('select id from db_native_query_${uuid0}.native_query_base'));
 -- result:
-[REGEX].*JDBC query table function only supports TABLE\(<catalog>\.native_query\('<sql>'\)\).*
+E: (1064, "Getting analyzing error. Detail message: JDBC query table function only supports TABLE(<catalog>.native_query('<sql>')).")
 -- !result
 select * from table(jdbc_native_query_${uuid0}.native_query('insert into db_native_query_${uuid0}.native_query_base values (5, "bad", 50, "red")'));
 -- result:
-[REGEX].*JDBC query table function only supports SELECT queries.*
+E: (1064, 'Getting analyzing error. Detail message: JDBC query table function only supports SELECT queries.')
 -- !result
 select * from table(jdbc_native_query_${uuid0}.native_query('with cte as (select id from db_native_query_${uuid0}.native_query_base) select * from cte'));
 -- result:
-[REGEX].*JDBC query table function only supports SELECT queries.*
+E: (1064, 'Getting analyzing error. Detail message: JDBC query table function only supports SELECT queries.')
 -- !result
 drop catalog jdbc_native_query_${uuid0};
 -- result:

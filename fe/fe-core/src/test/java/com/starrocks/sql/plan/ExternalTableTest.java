@@ -215,7 +215,7 @@ public class ExternalTableTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
                 "     TABLE: `test_table`\n" +
-                "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10) AND (`b` < 'abc') LIMIT 10\n" +
+                "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE ((`a` > 10)) AND ((`b` < 'abc')) LIMIT 10\n" +
                 "     limit: 10"), plan);
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
@@ -226,8 +226,38 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
                         "     TABLE: `test_table`\n" +
-                        "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10)"), plan);
+                        "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE ((`a` > 10))"), plan);
 
+    }
+
+    @Test
+    public void testJDBCInListPushdownSizeLimit() throws Exception {
+        String sql = "select * from test.jdbc_test where a in (1, 2, 3)";
+        int original = connectContext.getSessionVariable().getJdbcPredicatePushdownMaxInListSize();
+        try {
+            // -1 = no limit (default): the IN list is pushed into the remote WHERE.
+            connectContext.getSessionVariable().setJdbcPredicatePushdownMaxInListSize(-1);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE ((`a` IN (1, 2, 3)))");
+
+            // A cap below the 3-item list keeps the IN local instead of pushing it.
+            connectContext.getSessionVariable().setJdbcPredicatePushdownMaxInListSize(2);
+            plan = getFragmentPlan(sql);
+            Assertions.assertFalse(plan.contains("WHERE ((`a` IN (1, 2, 3)))"), plan);
+            assertContains(plan, "a IN (1, 2, 3)");
+
+            // 0 = never push an IN list down: also kept local.
+            connectContext.getSessionVariable().setJdbcPredicatePushdownMaxInListSize(0);
+            plan = getFragmentPlan(sql);
+            Assertions.assertFalse(plan.contains("WHERE ((`a` IN (1, 2, 3)))"), plan);
+
+            // A cap at the list size pushes it again.
+            connectContext.getSessionVariable().setJdbcPredicatePushdownMaxInListSize(3);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE ((`a` IN (1, 2, 3)))");
+        } finally {
+            connectContext.getSessionVariable().setJdbcPredicatePushdownMaxInListSize(original);
+        }
     }
 
     @Test
@@ -251,7 +281,7 @@ public class ExternalTableTest extends PlanTestBase {
             Assertions.assertTrue(plan.contains(
                     "  0:SCAN JDBC\n" +
                             "     TABLE: (SELECT count(`a`) AS `jdbc_agg_"), plan);
-            Assertions.assertTrue(plan.contains("FROM `test_table` WHERE (`a` > 10)) sr_merged"), plan);
+            Assertions.assertTrue(plan.contains("FROM `test_table` WHERE (`a` > 10)) sr_inline"), plan);
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
 
             sql = "select b, count(distinct a) from test.jdbc_test group by b";
@@ -261,11 +291,14 @@ public class ExternalTableTest extends PlanTestBase {
                             "     TABLE: (SELECT `b` AS `b`, count(DISTINCT `a`) AS `jdbc_agg_"), plan);
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
 
+            // HAVING over a pushed-down aggregate folds into the remote query's HAVING clause.
             sql = "select b, sum(a) from test.jdbc_test group by b having sum(a) > 10";
             plan = getFragmentPlan(sql);
-            Assertions.assertTrue(plan.contains("AGGREGATE"), plan);
-            Assertions.assertTrue(plan.contains("TABLE: `test_table`"), plan);
-            Assertions.assertFalse(plan.contains("jdbc_agg_"), plan);
+            Assertions.assertTrue(plan.contains(
+                    "  0:SCAN JDBC\n" +
+                            "     TABLE: (SELECT `b` AS `b`, sum(`a`) AS `jdbc_agg_"), plan);
+            assertContains(plan, "GROUP BY `b` HAVING (sum(`a`) > 10)) sr_inline");
+            Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
 
             sql = "select count(b), a + 1 from test.jdbc_test group by a";
             plan = getFragmentPlan(sql);
@@ -286,7 +319,7 @@ public class ExternalTableTest extends PlanTestBase {
                             "     TABLE: (SELECT `jdbc_agg_"), plan);
             assertContains(plan, "(`lock_status` + 1) AS `jdbc_proj_");
             assertContains(plan, "(SELECT `lock_status` AS `lock_status`, count(`department_id`) AS `jdbc_agg_");
-            Assertions.assertTrue(plan.contains("FROM `t2` GROUP BY `lock_status`) sr_merged"), plan);
+            Assertions.assertTrue(plan.contains("FROM `t2` GROUP BY `lock_status`) sr_inline"), plan);
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
         } finally {
             connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
@@ -304,7 +337,7 @@ public class ExternalTableTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  0:SCAN JDBC\n" +
                     "     TABLE: (SELECT `c` AS `c`, sum(`a`) AS `jdbc_agg_");
-            assertContains(plan, "FROM `test_table` WHERE (`b` = '1') GROUP BY `c`) sr_merged");
+            assertContains(plan, "FROM `test_table` WHERE (`b` = '1') GROUP BY `c`) sr_inline");
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
         } finally {
             connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
@@ -336,7 +369,8 @@ public class ExternalTableTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("0:SCAN JDBC\n" +
                 "     TABLE: \"test_table\"\n" +
-                "     QUERY: SELECT \"a\", \"b\", \"c\" FROM \"test_table\" WHERE (\"a\" > 10) AND (\"b\" < 'abc') LIMIT 10\n" +
+                "     QUERY: SELECT \"a\", \"b\", \"c\" FROM \"test_table\" " +
+                "WHERE ((\"a\" > 10)) AND ((\"b\" < 'abc')) LIMIT 10\n" +
                 "     limit: 10"), plan);
     }
 
@@ -428,6 +462,6 @@ public class ExternalTableTest extends PlanTestBase {
         assertCContains(plan, "  1:SCAN JDBC\n" +
                 "     TABLE: `test_table`");
         assertCContains(plan, "QUERY: SELECT `a` FROM `test_table` WHERE " +
-                "(`a` IN (1, 2, 3)) AND (`a` IS NOT NULL)");
+                "((`a` IN (1, 2, 3))) AND ((`a` IS NOT NULL))");
     }
 }

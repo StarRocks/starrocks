@@ -193,10 +193,20 @@ TEST_F(TypeCheckerTest, SupportLongType) {
     auto status_or_type = type_checker_manager_.checkType("java.lang.Long", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BIGINT);
+
+    // A JDBC Long may land on a narrower integer slot when an expression is pushed down
+    // (e.g. a pushed CAST(... AS SIGNED) whose StarRocks slot is INT/SMALLINT/TINYINT). It is
+    // materialized as BIGINT and then cast down to the slot type.
+    for (auto narrow : {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT}) {
+        SlotDescriptor narrow_slot(0, "narrow_int_slot", TypeDescriptor(narrow));
+        auto narrow_or_type = type_checker_manager_.checkType("java.lang.Long", &narrow_slot);
+        ASSERT_TRUE(narrow_or_type.ok());
+        ASSERT_EQ(narrow_or_type.value(), LogicalType::TYPE_BIGINT);
+    }
 }
 
 TEST_F(TypeCheckerTest, NotSupportLongType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_VARCHAR));
     auto status_or_type = type_checker_manager_.checkType("java.lang.Long", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -394,6 +404,13 @@ TEST_F(TypeCheckerTest, SupporBigDecimalType) {
 
     SlotDescriptor double_type_slot(0, "double_type_slot", TypeDescriptor(TYPE_DOUBLE));
     status_or_type = type_checker_manager_.checkType("java.math.BigDecimal", &double_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+
+    // MySQL SUM(int) returns DECIMAL (read as BigDecimal) while StarRocks types sum(int) as
+    // BIGINT, so a pushed-down sum lands a BigDecimal on a BIGINT slot.
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    status_or_type = type_checker_manager_.checkType("java.math.BigDecimal", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }

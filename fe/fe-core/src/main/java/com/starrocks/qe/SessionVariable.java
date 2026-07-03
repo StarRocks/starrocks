@@ -1006,6 +1006,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_JDBC_JOIN_PUSH_DOWN = "enable_jdbc_join_push_down";
     public static final String ENABLE_JDBC_AGG_PUSH_DOWN = "enable_jdbc_agg_push_down";
     public static final String ENABLE_JDBC_PROJECT_PUSH_DOWN = "enable_jdbc_project_push_down";
+    public static final String JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE = "jdbc_predicate_pushdown_max_in_list_size";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
 
     public static final String SELECT_RATIO_THRESHOLD = "select_ratio_threshold";
@@ -3159,10 +3160,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableJdbcJoinPushDown = true;
 
     @VarAttr(name = ENABLE_JDBC_AGG_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enableJdbcAggPushDown = false;
+    private boolean enableJdbcAggPushDown = true;
 
     @VarAttr(name = ENABLE_JDBC_PROJECT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcProjectPushDown = true;
+
+    // Max items in a literal IN list that predicate/HAVING pushdown will send to a JDBC source:
+    // -1 = no limit; 0 = never push an IN down; N > 0 = push only lists of at most N items.
+    // (Oracle's ORA-01795 limit is version-specific, e.g. 1000 pre-23c; set this per your source.)
+    @VarAttr(name = JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE, flag = VariableMgr.INVISIBLE)
+    private int jdbcPredicatePushdownMaxInListSize = -1;
 
     @VarAttr(name = MAX_PUSHDOWN_OR_PREDICATES, flag = VariableMgr.INVISIBLE)
     private int maxPushdownOrPredicates = 32;
@@ -5856,6 +5863,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcAggPushDown(boolean enableJdbcAggPushDown) {
         this.enableJdbcAggPushDown = enableJdbcAggPushDown;
+    }
+
+    public int getJdbcPredicatePushdownMaxInListSize() {
+        return jdbcPredicatePushdownMaxInListSize;
+    }
+
+    public void setJdbcPredicatePushdownMaxInListSize(int jdbcPredicatePushdownMaxInListSize) {
+        this.jdbcPredicatePushdownMaxInListSize = jdbcPredicatePushdownMaxInListSize;
     }
 
     public boolean isEnableJdbcProjectPushDown() {

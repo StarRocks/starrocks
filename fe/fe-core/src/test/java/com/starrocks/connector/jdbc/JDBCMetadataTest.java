@@ -481,8 +481,9 @@ public class JDBCMetadataTest {
         Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
         Assertions.assertInstanceOf(JDBCTable.class, table);
         JDBCTable jdbcTable = (JDBCTable) table;
-        Assertions.assertTrue(jdbcTable.isQueryTable());
-        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertTrue(jdbcTable.isInlineTable());
+        Assertions.assertEquals(passThroughQuery, jdbcTable.getCatalogTableName());
+        Assertions.assertEquals("(" + passThroughQuery + ") sr_inline", jdbcTable.getInlineTableExpr());
         Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
         Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
         Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));

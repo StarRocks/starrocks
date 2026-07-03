@@ -91,9 +91,11 @@ public class PushDownProjectToJDBCScanRuleTest {
     }
 
     @Test
-    public void testMysqlNarrowIntegerWidenedToBigint() throws Exception {
+    public void testMysqlNarrowIntegerKeepsNarrowType() throws Exception {
         // A remotely-evaluated narrow integer (e.g. a % 3) comes back from MySQL/MariaDB as a wide
-        // java.lang.Long that a narrow INT slot would reject, so the pushed column is declared BIGINT.
+        // java.lang.Long, which the BE JDBC type checker maps into narrow integer slots via
+        // type_checker_config.xml (materialized as BIGINT, then cast down to the slot type), so
+        // the pushed column keeps its narrow type instead of being widened here.
         ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
         ColumnRefOperator mod = new ColumnRefOperator(3, IntegerType.INT, "mod", true);
 
@@ -103,7 +105,7 @@ public class PushDownProjectToJDBCScanRuleTest {
         LogicalJDBCScanOperator resultScan = transformOne(newJDBCScan(MYSQL_URI,
                 columns(a, "a"), new Projection(projectionMap)));
 
-        Assertions.assertEquals(IntegerType.BIGINT, resultScan.getColRefToColumnMetaMap().get(mod).getType());
+        Assertions.assertEquals(IntegerType.INT, resultScan.getColRefToColumnMetaMap().get(mod).getType());
     }
 
     @Test

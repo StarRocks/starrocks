@@ -291,7 +291,7 @@ public class QueryAnalyzer {
             throw new SemanticException("Failed to resolve JDBC query table function: %s", e.getMessage());
         }
 
-        if (!(table instanceof JDBCTable jdbcTable) || !jdbcTable.isQueryTable()) {
+        if (!(table instanceof JDBCTable jdbcTable) || !jdbcTable.isInlineTable()) {
             throw new SemanticException("Catalog '%s' does not support JDBC query table function",
                     functionName.catalogName);
         }

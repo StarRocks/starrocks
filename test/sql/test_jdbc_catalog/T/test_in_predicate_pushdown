@@ -1,0 +1,99 @@
+-- name: test_jdbc_catalog_in_predicate_pushdown
+-- Verifies IN / NOT IN filter pushdown and the session variable
+-- jdbc_predicate_pushdown_max_in_list_size that caps the literal IN list size
+-- a JDBC source may receive: -1 = no limit; 0 = never push an IN; N > 0 = push
+-- only lists of at most N items. The cap changes the plan (whether the IN folds
+-- into the remote QUERY) but must never change the result.
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_in_pushdown; create database db_in_pushdown;'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; CREATE TABLE customers (customer_id int not null, region varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,"open"),(7,60,9,"paid"),(8,70,33,"open");'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(40,"south"),(50,"east"),(60,"west"),(70,"north");'
+
+-- create catalog
+set catalog default_catalog;
+create external catalog jdbc_in_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+
+set catalog jdbc_in_pushdown_${uuid0};
+use db_in_pushdown;
+
+-- Default (-1 = no limit): the 4-item IN list folds into the remote QUERY.
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+
+-- cap = 0: never push an IN -- the predicate stays local (no IN in the remote
+-- QUERY), result unchanged.
+set jdbc_predicate_pushdown_max_in_list_size=0;
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+
+-- cap = 3: the 4-item list exceeds the cap and stays local...
+set jdbc_predicate_pushdown_max_in_list_size=3;
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+
+-- ...while a 2-item list is within the cap and folds into the remote QUERY.
+explain select order_id from orders where order_id in (2, 4) order by order_id;
+select order_id from orders where order_id in (2, 4) order by order_id;
+
+-- cap = 4: the 4-item list now fits and folds into the remote QUERY.
+set jdbc_predicate_pushdown_max_in_list_size=4;
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+
+-- NOT IN is gated by the same cap: pushed at the default...
+explain select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+
+-- ...and kept local when the cap forbids it (result unchanged).
+set jdbc_predicate_pushdown_max_in_list_size=0;
+explain select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+
+-- IN mixed with another predicate: when the cap keeps the IN local, the other
+-- pushable predicate (amount >= 20) still folds into the remote QUERY.
+set jdbc_predicate_pushdown_max_in_list_size=0;
+explain select order_id, amount from orders where order_id in (2, 4, 6) and amount >= 20 order by order_id;
+select order_id, amount from orders where order_id in (2, 4, 6) and amount >= 20 order by order_id;
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+
+-- A string-column IN list folds into the remote QUERY.
+explain select customer_id, region from customers where region in ('east', 'west') order by customer_id;
+select customer_id, region from customers where region in ('east', 'west') order by customer_id;
+
+-- IN inside a pushed-down join: the cap gates the IN even when the whole join is
+-- merged into one remote QUERY. Default -> IN pushed.
+explain select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+
+-- Same join with cap = 0: the join still merges remotely but the IN is applied
+-- locally; result unchanged.
+set jdbc_predicate_pushdown_max_in_list_size=0;
+explain select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+
+-- cleanup
+set catalog default_catalog;
+drop catalog jdbc_in_pushdown_${uuid0};
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_in_pushdown;'

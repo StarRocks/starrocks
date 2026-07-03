@@ -45,12 +45,10 @@ import java.util.Objects;
 import java.util.Set;
 
 public class PushDownAggToJDBCScanRule extends TransformationRule {
-    private static final Set<String> SUPPORTED_JDBC_AGG_FUNCTIONS = Set.of(
-            FunctionSet.COUNT,
-            FunctionSet.SUM,
-            FunctionSet.MIN,
-            FunctionSet.MAX,
-            FunctionSet.AVG);
+    // Single source of truth, shared with the HAVING push-down gate (CanPushDownPredicateVisitor):
+    // an aggregate can be folded into the remote SELECT iff it can also appear in a pushed HAVING.
+    private static final Set<String> SUPPORTED_JDBC_AGG_FUNCTIONS =
+            CanPushDownPredicateVisitor.PUSHABLE_AGGREGATE_FUNCTIONS;
 
     public PushDownAggToJDBCScanRule() {
         super(RuleType.TF_PUSH_DOWN_AGG_TO_JDBC_SCAN, Pattern.create(OperatorType.LOGICAL_AGGR)
@@ -153,7 +151,9 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
             ReplaceColumnRefRewriter havingRewriter = new ReplaceColumnRefRewriter(outputColumnRefToExpr, true);
             havingPredicate = havingRewriter.rewrite(aggregationOperator.getPredicate());
             JDBCTable.ProtocolType dialect = ((JDBCTable) scanOperator.getTable()).getProtocolType();
-            if (!CanPushDownPredicateVisitor.canPushDown(havingPredicate, dialect)) {
+            // A HAVING predicate may reference the aggregates folded into the remote SELECT
+            // (e.g. HAVING MAX(c) > 5), so it is vetted with aggregate calls allowed.
+            if (!CanPushDownPredicateVisitor.canPushDownHaving(havingPredicate, dialect)) {
                 return null;
             }
         }

@@ -14,15 +14,18 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.planner.JDBCScanNode;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -49,9 +52,9 @@ import java.util.Set;
  * Push down multi-table INNER JOINs to JDBC external database when all tables
  * belong to the same JDBC catalog and connection.
  *
- * <p>Each output column is aliased by its ColumnRefOperator ID (c{id}) so the
- * outer wrapping query built by PlanFragmentBuilder can reference them by name
- * without relying on positional ordering.
+ * <p>Each output column is aliased by its ColumnRefOperator ID (sr_c{id}) so the
+ * outer wrapping query (composed by the BE from JDBCScanNode's column list) can
+ * reference them by name without relying on positional ordering.
  *
  * <p>Before:
  * <pre>
@@ -62,9 +65,21 @@ import java.util.Set;
  *
  * <p>After:
  * <pre>
- *   JDBC_SCAN("SELECT t0.`id` AS c1, t1.`id` AS c2
- *              FROM `a` t0 INNER JOIN `b` t1 ON t0.`id` = t1.`id`")
+ *   JDBC_SCAN("SELECT sr_t0.`id` AS sr_c1, sr_t1.`id` AS sr_c2
+ *              FROM a sr_t0
+ *              INNER JOIN b sr_t1
+ *              ON (sr_t0.`id` = sr_t1.`id`)")
  * </pre>
+ *
+ * <p>The rule is self-contained: it computes the columns the merged scan must expose
+ * (the original root's output expressions plus the predicates that stay in the rebuilt
+ * local join) and prunes everything else from the merged SELECT, and it re-attaches the
+ * original output projection itself. It is meant to run as part of
+ * {@code RuleSet.JDBC_PUSHDOWN_RULES} — after CTE inlining and the final
+ * MergeProjectWithChildRule pass, where standalone projections have been merged into
+ * operators (which is what lets MultiJoinNode flatten through join projections) and where
+ * an operator-attached projection is the canonical output form. Applied iteratively,
+ * the companion rules of the set then fold aggregations and limits onto the merged scan.
  *
  * <p><b>Known limitation — statistics:</b> the merged scan inherits the same
  * default statistics path as any single-table JDBC scan
@@ -92,117 +107,88 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        // Step 1: Flatten the join tree into atoms and predicates
+        // Step 1: Flatten the join tree into atoms and join-level predicates.
         MultiJoinNode multiJoin = MultiJoinNode.toMultiJoinNode(input);
         LinkedHashSet<OptExpression> atoms = multiJoin.getAtoms();
-        List<ScalarOperator> allPredicates = multiJoin.getPredicates();
-
-        // Need at least 2 atoms to merge
         if (atoms.size() < 2) {
             return Lists.newArrayList();
         }
 
-        // Step 2: Classify atoms into JDBC groups by catalog name. The catalog identifies
-        // the JDBC connection (URI + credentials + driver) that BE uses to talk to the
-        // external DB
-        Map<String, List<AtomEntry>> jdbcGroups = new LinkedHashMap<>();
-
-        for (OptExpression atom : atoms) {
-            if (atom.getOp() instanceof LogicalJDBCScanOperator scanOp) {
-                JDBCTable jdbcTable = (JDBCTable) scanOp.getTable();
-                jdbcGroups.computeIfAbsent(jdbcTable.getCatalogName(), k -> new ArrayList<>())
-                        .add(new AtomEntry(atom, scanOp, jdbcTable));
+        // Flattened predicates may reference refs that no atom outputs — refs defined by
+        // projections MultiJoinNode absorbed into expressionMap (e.g. a + b AS c). Re-expand
+        // them down to atom columns first (the same compensation computeOutputProjection
+        // applies to the output): grouping and predicate ownership only see atom columns, so
+        // an unexpanded predicate can never connect or be owned by a group and the tables it
+        // bridges are left out of the merge.
+        List<ScalarOperator> flatPredicates = multiJoin.getPredicates();
+        if (!multiJoin.getExpressionMap().isEmpty()) {
+            ReplaceColumnRefRewriter expressionRewriter =
+                    new ReplaceColumnRefRewriter(multiJoin.getExpressionMap(), true);
+            List<ScalarOperator> rewritten = new ArrayList<>(flatPredicates.size());
+            for (ScalarOperator pred : flatPredicates) {
+                rewritten.add(expressionRewriter.rewrite(pred));
             }
+            flatPredicates = rewritten;
         }
 
-        // Step 3: Identify all groups eligible for merging. A group is eligible when:
-        //           - it contains >= 2 JDBC atoms, AND
-        //           - no atom has a projection (scans with projections are handled by the
-        //             standalone projection-pushdown rule), AND
-        //           - no atom is a query-table function (table(jdbc.native_query(...))).
-        //             Query-table's inner SQL is user-supplied and may contain arbitrary
-        //             structure (ORDER BY / UNION / aggregates), so inlining it as an atom
-        //             into a new merged SQL has unsafe semantics; bypass it entirely.
-        //         Other groups contribute their atoms individually to the rebuilt join tree.
-        List<List<AtomEntry>> mergeableGroups = new ArrayList<>();
-        for (List<AtomEntry> group : jdbcGroups.values()) {
-            boolean eligible = group.size() >= 2
-                    && group.stream().noneMatch(e -> e.scanOp.getProjection() != null)
-                    && group.stream().noneMatch(e -> e.table.isQueryTable());
-            if (eligible) {
-                mergeableGroups.add(group);
-            }
-        }
-
-        if (mergeableGroups.isEmpty()) {
+        // Step 2: Collect the candidate groups — same-catalog plain JDBC scans, >= 2 per group.
+        List<MergeGroup> groups = collectMergeGroups(atoms, flatPredicates);
+        if (groups.isEmpty()) {
             return Lists.newArrayList();
         }
 
-        // Step 4: Compute per-group column ref sets — used for predicate ownership and
-        //         join/filter classification.
-        List<ColumnRefSet> groupColumnRefs = new ArrayList<>();
-        for (List<AtomEntry> group : mergeableGroups) {
-            ColumnRefSet refs = new ColumnRefSet();
-            for (AtomEntry entry : group) {
-                refs.union(new ColumnRefSet(entry.scanOp.getOutputColumns()));
-            }
-            groupColumnRefs.add(refs);
-        }
-
-        // Step 5: Partition each predicate. See partitionPredicates() for details.
-        List<GroupPredicates> predicatesPerGroup = mergeableGroups.stream()
-                .map(g -> new GroupPredicates())
-                .collect(java.util.stream.Collectors.toList());
+        // Step 3: Route every predicate either to the group that owns it or to the rebuilt
+        // local join, and decide per group whether it actually merges.
         List<ScalarOperator> remainingPredicates = new ArrayList<>();
-        Set<Integer> disqualifiedGroups = new HashSet<>();
-        partitionPredicates(allPredicates, mergeableGroups, groupColumnRefs,
-                predicatesPerGroup, remainingPredicates, disqualifiedGroups);
-
-        // Step 6: Merge eligible groups. Disqualified groups (computed in partitionPredicates)
-        // fall back to local JOIN.
-        List<OptExpression> mergedExprs = new ArrayList<>();
-        for (int i = 0; i < mergeableGroups.size(); i++) {
-            List<AtomEntry> group = mergeableGroups.get(i);
-            if (disqualifiedGroups.contains(i)) {
-                continue;
-            }
-
-            List<ScalarOperator> joinPreds = predicatesPerGroup.get(i).joinPredicates;
-            List<ScalarOperator> filterPreds = predicatesPerGroup.get(i).filterPredicates;
-            mergedExprs.add(buildMergedScan(group, joinPreds, filterPreds));
-        }
-
-        // Bail out if no group ended up actually merging
-        if (mergedExprs.isEmpty()) {
+        routePredicates(flatPredicates, groups, remainingPredicates);
+        groups.removeIf(g -> !g.shouldMerge);
+        if (groups.isEmpty()) {
             return Lists.newArrayList();
         }
 
-        // Step 7: Rebuild the join tree in the original atom order, substituting merged
-        //         scans for their constituent atoms. This preserves the join order that
-        //         the earlier RBO join-reorder pass established for non-JDBC atoms and
-        //         unmerged JDBC atoms.
+        // Step 4: Compute the projection the rewritten subtree must expose to upper
+        // operators. Its value refs — or, when the original root exposed its raw child
+        // outputs unchanged (null projection), the root's visible output columns, which
+        // exclude columns a scan's pruning projection hides — plus the predicates that
+        // stay in the rebuilt local join, are exactly the columns the merged scans need
+        // to output. Join keys and filter columns consumed inside the pushdown SQL are
+        // pruned from the SELECT. A null projection is deliberately left unattached in
+        // Step 7 so a fully merged scan stays projection-free and the companion aggregate
+        // rule can still fold onto it.
+        Map<ColumnRefOperator, ScalarOperator> outputProjection =
+                computeOutputProjection(input, atoms, multiJoin.getExpressionMap(), context);
+        ColumnRefSet neededColumns = new ColumnRefSet();
+        if (outputProjection != null) {
+            for (ScalarOperator value : outputProjection.values()) {
+                neededColumns.union(value.getUsedColumns());
+            }
+        } else {
+            neededColumns.union(input.getOutputColumns());
+        }
+        for (ScalarOperator pred : remainingPredicates) {
+            neededColumns.union(pred.getUsedColumns());
+        }
+
+        // Step 5: Build one merged scan per group. The group's first atom is substituted by
+        // the merged scan; its remaining atoms are dropped from the join rebuild.
         Map<OptExpression, OptExpression> atomSubstitution = new HashMap<>();
         Set<OptExpression> droppedAtoms = new HashSet<>();
-        int mergedExprIdx = 0;
-        for (int i = 0; i < mergeableGroups.size(); i++) {
-            if (disqualifiedGroups.contains(i)) {
-                continue;
-            }
-            List<AtomEntry> group = mergeableGroups.get(i);
-            OptExpression mergedScan = mergedExprs.get(mergedExprIdx++);
-            atomSubstitution.put(group.get(0).atom, mergedScan);
-            for (int j = 1; j < group.size(); j++) {
-                droppedAtoms.add(group.get(j).atom);
+        for (MergeGroup group : groups) {
+            atomSubstitution.put(group.entries.get(0).atom, buildMergedScan(group, neededColumns));
+            for (int i = 1; i < group.entries.size(); i++) {
+                droppedAtoms.add(group.entries.get(i).atom);
             }
         }
 
+        // Step 6: Rebuild the join tree in the original atom order. This preserves the join
+        // order that the earlier RBO join-reorder pass established for non-JDBC atoms and
+        // unmerged JDBC atoms.
         List<OptExpression> toJoin = new ArrayList<>();
         for (OptExpression atom : atoms) {
             if (droppedAtoms.contains(atom)) {
                 continue;
             }
-            OptExpression sub = atomSubstitution.get(atom);
-            toJoin.add(sub != null ? sub : atom);
+            toJoin.add(atomSubstitution.getOrDefault(atom, atom));
         }
 
         OptExpression result = toJoin.get(0);
@@ -231,49 +217,221 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
             }
         }
 
-        // Step 8: Compensate the original join subtree's output projection on top of the
-        //         rewritten result. MultiJoinNode absorbs the root join's projection (and any
-        //         safe inner-join projection) into multiJoin.getExpressionMap() during
-        //         flattening, so those ColumnRefs would otherwise disappear from the output
-        //         and leave upper operators with dangling references.
-        attachOutputProjection(result, input, multiJoin.getExpressionMap(), context);
+        // Step 7: Re-expose the original root's output on top of the rewritten result, so
+        // upper operators keep seeing the same ColumnRefs.
+        if (outputProjection != null) {
+            result.getOp().setProjection(new Projection(outputProjection));
+        }
+
+        // Carry the join's row limit onto the rewritten root. PushDownLimitJoinRule folded the
+        // LOCAL-phase limit (= original limit + offset, offset-less) onto the matched join; re-exposing
+        // it lets a fully merged scan push a row cap to the remote DB. The GLOBAL limit above stays
+        // local as the authoritative trim (it applies the real offset+limit), so leaving it un-pushed
+        // only risks the remote over-fetching `offset` extra rows. Set it on the rewritten root, not
+        // the inner merged scan: on a partial merge the root is a rebuilt join and the limit must sit
+        // on the join output, never on one of its inputs (which would under-fetch).
+        if (input.getOp().getLimit() != Operator.DEFAULT_LIMIT) {
+            result.getOp().setLimit(input.getOp().getLimit());
+        }
 
         return Lists.newArrayList(result);
     }
 
     /**
-     * Re-expose every ColumnRef the original join root produced on top of the rewritten result.
+     * Group the JDBC scan atoms by catalog name — the catalog identifies the JDBC connection
+     * (URI + credentials + driver) that BE uses to talk to the external DB — split each catalog
+     * bucket into join-connected components ({@link #splitConnectedComponents}), and keep the
+     * components that are candidates for merging: at least 2 plain base-table scans. Splitting per
+     * component is what keeps a cross-joined atom (or a disconnected sub-join) out of the merge so
+     * it never becomes a remote Cartesian product.
      *
-     * <p>Cases:
+     * <p>Scans with an expression projection are excluded because the merged SQL cannot
+     * express projection expressions; a pure column-pruning projection (every value a bare
+     * ref of itself — typically hiding a predicate-only column from upstream) is fine, since
+     * the merged SELECT prunes to the needed columns anyway.
+     *
+     * <p>Inline-table scans — a native_query pass-through ({@code table(jdbc.native_query(...))})
+     * or a derived table produced by a previous pushdown — ARE merged: each is emitted as its
+     * own parenthesized derived subquery {@code (<body>) sr_t{i}} (see
+     * {@link JDBCPushDownSQLBuilder#buildTableExpression}), which isolates any inner structure
+     * (ORDER BY / UNION / aggregates / LIMIT) the way SQL scopes a derived table, so joining it
+     * is semantically safe. Termination still holds: every merge strictly reduces the atom count,
+     * and a single merged scan cannot form a >= 2 atom group by itself.
+     */
+    private List<MergeGroup> collectMergeGroups(LinkedHashSet<OptExpression> atoms,
+                                                List<ScalarOperator> predicates) {
+        Map<String, MergeGroup> byCatalog = new LinkedHashMap<>();
+        for (OptExpression atom : atoms) {
+            if (atom.getOp() instanceof LogicalJDBCScanOperator scanOp) {
+                JDBCTable table = (JDBCTable) scanOp.getTable();
+                if (!Strings.isNullOrEmpty(table.getResourceName())) {
+                    // Resource-based external tables (CREATE EXTERNAL TABLE ... ENGINE=jdbc) are
+                    // deprecated and lack a catalog name; keep them out of join merging.
+                    continue;
+                }
+                byCatalog.computeIfAbsent(table.getCatalogName(), k -> new MergeGroup())
+                        .add(new AtomEntry(atom, scanOp, table));
+            }
+        }
+
+        List<MergeGroup> groups = new ArrayList<>();
+        for (MergeGroup bucket : byCatalog.values()) {
+            for (MergeGroup component : splitConnectedComponents(bucket, predicates)) {
+                boolean eligible = component.entries.size() >= 2 && component.entries.stream()
+                        .allMatch(e -> JDBCPushDownRuleUtils.isColumnPruningOnly(e.scanOp.getProjection()));
+                if (eligible) {
+                    groups.add(component);
+                }
+            }
+        }
+        return groups;
+    }
+
+    /**
+     * Partition a same-catalog bucket into connected components, where two atoms are connected when
+     * an intra-bucket join predicate — one with >= 2 columns, all inside the bucket — touches both.
+     * Join predicates are the only edges; an atom no such predicate reaches becomes a component of one.
+     *
+     * <p>Only a component of >= 2 atoms is a merge candidate (the caller filters on this). A lone
+     * atom — standalone, or cross-joined to the rest with no connecting predicate — is its own
+     * single-atom component and stays an individual local scan; likewise two components with no
+     * predicate between them (e.g. {@code (a JOIN b) CROSS JOIN (c JOIN d)} in one catalog) are
+     * returned separately and merge into their own pushdowns, joined locally. Either way a remote
+     * Cartesian product is never pushed down — the cross join is evaluated locally, not by the
+     * external DB. The rule is idempotent on the result: the local cross join of two merged scans
+     * re-flattens to two predicate-free single-atom components, so nothing re-merges.
+     */
+    private List<MergeGroup> splitConnectedComponents(MergeGroup bucket, List<ScalarOperator> predicates) {
+        int n = bucket.entries.size();
+        int[] parent = new int[n];
+        for (int i = 0; i < n; i++) {
+            parent[i] = i;
+        }
+        for (ScalarOperator pred : predicates) {
+            ColumnRefSet used = pred.getUsedColumns();
+            if (used.cardinality() < 2 || !bucket.columns.containsAll(used)) {
+                // A single-column predicate is a filter, never a join; one referencing columns
+                // outside the bucket cannot connect two of its atoms.
+                continue;
+            }
+            int anchor = -1;
+            for (int i = 0; i < n; i++) {
+                if (bucket.entries.get(i).columns.isIntersect(used)) {
+                    if (anchor < 0) {
+                        anchor = i;
+                    } else {
+                        union(parent, anchor, i);
+                    }
+                }
+            }
+        }
+        // Group atoms by their component root, preserving first-seen (original atom) order.
+        Map<Integer, MergeGroup> components = new LinkedHashMap<>();
+        for (int i = 0; i < n; i++) {
+            components.computeIfAbsent(find(parent, i), k -> new MergeGroup())
+                    .add(bucket.entries.get(i));
+        }
+        return new ArrayList<>(components.values());
+    }
+
+    private static int find(int[] parent, int i) {
+        while (parent[i] != i) {
+            parent[i] = parent[parent[i]];   // path halving
+            i = parent[i];
+        }
+        return i;
+    }
+
+    private static void union(int[] parent, int a, int b) {
+        parent[find(parent, a)] = find(parent, b);
+    }
+
+    /**
+     * Split the flattened join-level predicates between the merge groups and the rebuilt
+     * local join, and decide which groups actually merge.
+     *
+     * <p>A predicate is owned by a group when the group covers all its columns (groups have
+     * disjoint column sets, so the owner is unique); everything else — spans several groups
+     * or references non-JDBC atoms — goes to {@code remainingPredicates}.
+     *
+     * <p>A group merges only when, all-or-nothing:
      * <ul>
-     *   <li>Original root has a projection: use it as the base projectMap. Any projection key
-     *       whose definition was flattened into {@code expressionMap} (and thus no longer
-     *       appears in the new output) is rebuilt by recursively expanding through
-     *       {@code expressionMap}.</li>
-     *   <li>Original root has no projection but {@code expressionMap} is non-empty (an inner
-     *       join with a safe projection contributed entries): synthesize an identity projection
-     *       over the original input's output columns, then compensate expressionMap keys the
-     *       same way.</li>
-     *   <li>Both empty: nothing to do — the raw scan outputs already match the original.</li>
+     *   <li><b>every owned predicate is convertible</b> to the external DB's SQL dialect.
+     *       Partial pushdown would allow the pathological case where a non-convertible JOIN
+     *       predicate becomes a local filter above the merged scan, degrading the remote
+     *       comma join into a remote Cartesian product with a potentially huge intermediate result;
+     *   <li><b>at least one owned predicate joins two of its tables</b> — otherwise the
+     *       pushed SQL would be a pure Cartesian product, losing the external
+     *       optimizer/index benefit.
      * </ul>
      *
-     * <p>Modelled after {@code ReorderJoinRule.enumerate(...)}'s projection compensation.
+     * <p>Owned predicates of a merging group are all rendered into the pushed SQL's WHERE clause
+     * (the remote comma join makes join and filter predicates positionally equivalent).
+     * Owned predicates of a non-merging group fall back to {@code remainingPredicates} so the
+     * local join rebuild re-applies them.
      */
-    private void attachOutputProjection(OptExpression result,
-                                        OptExpression originalInput,
-                                        Map<ColumnRefOperator, ScalarOperator> expressionMap,
-                                        OptimizerContext context) {
-        LogicalJoinOperator oldRoot = (LogicalJoinOperator) originalInput.getOp();
-        Projection oldProjection = oldRoot.getProjection();
+    private void routePredicates(List<ScalarOperator> allPredicates, List<MergeGroup> groups,
+                                 List<ScalarOperator> remainingPredicates) {
+        for (ScalarOperator pred : allPredicates) {
+            MergeGroup owner = groups.stream()
+                    .filter(g -> g.columns.containsAll(pred.getUsedColumns()))
+                    .findFirst().orElse(null);
+            if (owner != null) {
+                owner.ownedPredicates.add(pred);
+            } else {
+                remainingPredicates.add(pred);
+            }
+        }
 
+        for (MergeGroup group : groups) {
+            // Classify owned predicates once: cross-table -> INNER JOIN ON, single-table -> post-join
+            // WHERE filter. For the inner joins this rule merges, ON-vs-WHERE placement is semantically
+            // interchangeable (it is not, and must come from the operator, for outer joins -- which
+            // MultiJoinNode never flattens).
+            for (ScalarOperator pred : group.ownedPredicates) {
+                if (group.isCrossTablePredicate(pred)) {
+                    group.onPredicates.add(pred);
+                } else {
+                    group.filterPredicates.add(pred);
+                }
+            }
+            // Convertibility is checked per group because the dialect may differ across groups.
+            // CanPushDownPredicateVisitor mirrors the node coverage ScalarOperatorToJDBCSQLVisitor
+            // renders, so predicate gating and SQL rendering stay in sync.
+            boolean allPushable = group.ownedPredicates.stream()
+                    .allMatch(p -> CanPushDownPredicateVisitor.canPushDown(p, group.dialect()));
+            // A merge needs at least one cross-table (join) predicate, else it degenerates into a
+            // remote Cartesian product.
+            group.shouldMerge = allPushable && !group.onPredicates.isEmpty();
+            if (!group.shouldMerge) {
+                remainingPredicates.addAll(group.ownedPredicates);
+            }
+        }
+    }
+
+    /**
+     * The ColumnRef→expression map the rewritten subtree must expose to upper operators,
+     * or null when the original root exposed its raw child outputs unchanged.
+     *
+     * <p>Starts from the original root's projection (or an identity map over its raw output
+     * when MultiJoinNode absorbed inner-join projections without one on the root). Every
+     * exposed ref that no atom produces was defined by an expression MultiJoinNode absorbed
+     * into {@code expressionMap} during flattening; it is re-expanded recursively down to
+     * atom columns so it can be evaluated on top of the merged scans. (Same compensation as
+     * {@code ReorderJoinRule.enumerate(...)}.)
+     */
+    private Map<ColumnRefOperator, ScalarOperator> computeOutputProjection(
+            OptExpression input, LinkedHashSet<OptExpression> atoms,
+            Map<ColumnRefOperator, ScalarOperator> expressionMap, OptimizerContext context) {
+        Projection oldProjection = ((LogicalJoinOperator) input.getOp()).getProjection();
         if (oldProjection == null && expressionMap.isEmpty()) {
-            return;
+            return null;
         }
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         ColumnRefSet originalOutputCols = new ColumnRefSet();
         if (oldProjection == null) {
-            originalOutputCols.union(originalInput.getOutputColumns());
+            originalOutputCols.union(input.getOutputColumns());
             for (int id : originalOutputCols.getColumnIds()) {
                 ColumnRefOperator col = context.getColumnRefFactory().getColumnRef(id);
                 projectMap.put(col, col);
@@ -283,186 +441,86 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
             projectMap.putAll(oldProjection.getColumnRefMap());
         }
 
-        ColumnRefSet newOutputCols = result.getRowOutputInfo().getOutputColumnRefSet();
-        ColumnRefSet expressionKeys = new ColumnRefSet(new ArrayList<>(expressionMap.keySet()));
+        ColumnRefSet atomOutputCols = new ColumnRefSet();
+        for (OptExpression atom : atoms) {
+            atomOutputCols.union(atom.getRowOutputInfo().getOutputColumnRefSet());
+        }
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionMap, true);
-
-        for (int id : originalOutputCols.getColumnIds()) {
-            if (!newOutputCols.contains(id) && expressionKeys.contains(id)) {
-                ColumnRefOperator col = context.getColumnRefFactory().getColumnRef(id);
-                projectMap.put(col, rewriter.rewrite(expressionMap.get(col)));
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+            ColumnRefOperator col = entry.getKey();
+            if (originalOutputCols.contains(col) && !atomOutputCols.contains(col)) {
+                projectMap.put(col, rewriter.rewrite(entry.getValue()));
             }
         }
-
-        result.getOp().setProjection(new Projection(projectMap));
+        return projectMap;
     }
 
     /**
-     * Classify each predicate into one of:
-     *   - The join/filter bucket of a single mergeable group it belongs to (all columns
-     *     within that group AND fully pushable to the external DB).
-     *   - The "remaining" bucket (spans multiple groups, references unmerged atoms,
-     *     or belongs to a disqualified group).
-     * Within a group, a predicate is a "join" predicate if it touches 2+ tables in the
-     * group, otherwise it's a "filter" predicate.
+     * Build a single merged LogicalJDBCScanOperator for one merge group.
      *
-     * <p>A group is disqualified in either of two cases:
-     * <ul>
-     *   <li><b>Non-pushable predicate:</b> a predicate owned by the group is not fully
-     *       convertible to the external DB's SQL dialect. All-or-nothing pushdown avoids
-     *       the pathological case where a non-pushable JOIN predicate becomes a local
-     *       filter above the merged scan, degrading INNER JOIN into remote CROSS JOIN +
-     *       local filter with a potentially huge intermediate result.
-     *   <li><b>No cross-table join predicate:</b> the group has no predicate that joins
-     *       two of its tables. Pushing would emit a remote CROSS JOIN without any ON
-     *       clause, losing the external optimizer/index benefit.
-     * </ul>
-     *
-     * <p>{@code predicatesPerGroup}, {@code remainingPredicates}, and
-     * {@code disqualifiedGroups} are populated in place.
+     * <p>The merged SELECT exposes only {@code neededColumns} (what upper operators and the
+     * rebuilt local join actually reference) — join keys and filter columns consumed inside
+     * the pushdown SQL, and columns a scan's pruning projection hides, are not fetched back.
+     * When nothing is needed (e.g. a bare COUNT(*) over the join), the smallest column is
+     * kept so the SELECT list is never empty.
      */
-    private void partitionPredicates(List<ScalarOperator> allPredicates,
-                                     List<List<AtomEntry>> mergeableGroups,
-                                     List<ColumnRefSet> groupColumnRefs,
-                                     List<GroupPredicates> predicatesPerGroup,
-                                     List<ScalarOperator> remainingPredicates,
-                                     Set<Integer> disqualifiedGroups) {
-        for (ScalarOperator pred : allPredicates) {
-            ColumnRefSet usedCols = pred.getUsedColumns();
-            int owningGroup = findOwningGroup(usedCols, groupColumnRefs);
-            if (owningGroup == -1) {
-                remainingPredicates.add(pred);
-                continue;
-            }
+    private OptExpression buildMergedScan(MergeGroup group, ColumnRefSet neededColumns) {
+        List<AtomEntry> entries = group.entries;
 
-            // If the owning group is already disqualified by a prior non-pushable predicate,
-            // skip the pushability check — this pred will go to remainingPredicates regardless.
-            if (disqualifiedGroups.contains(owningGroup)) {
-                remainingPredicates.add(pred);
-                continue;
-            }
-
-            // Pushability is checked per-group because dialect may differ across groups.
-            // Reuse the same node coverage that ScalarOperatorToJDBCSQLVisitor relies on
-            // so predicate gating and SQL rendering stay in sync.
-            JDBCTable.ProtocolType dialect = mergeableGroups.get(owningGroup).get(0).table.getProtocolType();
-            if (!CanPushDownPredicateVisitor.canPushDown(pred, dialect)) {
-                disqualifiedGroups.add(owningGroup);
-                remainingPredicates.add(pred);
-                continue;
-            }
-
-            GroupPredicates bucket = predicatesPerGroup.get(owningGroup);
-            if (involvesMultipleTables(usedCols, mergeableGroups.get(owningGroup))) {
-                bucket.joinPredicates.add(pred);
-            } else {
-                bucket.filterPredicates.add(pred);
-            }
+        // Hand the group's scans to the builder, which owns alias assignment and qualified-name
+        // rendering (every scan column participates, since ON/WHERE may reference pruned columns;
+        // only the SELECT list below is pruned). allColumns is the union of every scan's columns
+        // in a stable order, used to pick the output columns and build the merged schema.
+        List<LogicalJDBCScanOperator> scans = new ArrayList<>();
+        Map<ColumnRefOperator, Column> allColumns = new LinkedHashMap<>();
+        for (AtomEntry entry : entries) {
+            scans.add(entry.scanOp);
+            allColumns.putAll(entry.scanOp.getColRefToColumnMetaMap());
         }
 
-        for (int i = 0; i < predicatesPerGroup.size(); i++) {
-            if (!disqualifiedGroups.contains(i)
-                    && predicatesPerGroup.get(i).joinPredicates.isEmpty()) {
-                disqualifiedGroups.add(i);
-            }
-        }
-
-        // For disqualified groups, move their already-bucketed predicates back to
-        // remainingPredicates so the local JOIN rebuilder can re-apply them.
-        for (int groupIdx : disqualifiedGroups) {
-            GroupPredicates bucket = predicatesPerGroup.get(groupIdx);
-            remainingPredicates.addAll(bucket.joinPredicates);
-            remainingPredicates.addAll(bucket.filterPredicates);
-            bucket.joinPredicates.clear();
-            bucket.filterPredicates.clear();
-        }
-    }
-
-    /** Return the index of the unique group containing all of {@code usedCols}, or -1. */
-    private int findOwningGroup(ColumnRefSet usedCols, List<ColumnRefSet> groupColumnRefs) {
-        for (int i = 0; i < groupColumnRefs.size(); i++) {
-            if (groupColumnRefs.get(i).containsAll(usedCols)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /** True if {@code usedCols} intersects 2 or more atoms in the group. */
-    private boolean involvesMultipleTables(ColumnRefSet usedCols, List<AtomEntry> group) {
-        int count = 0;
-        for (AtomEntry entry : group) {
-            if (usedCols.isIntersect(new ColumnRefSet(entry.scanOp.getOutputColumns()))) {
-                count++;
-                if (count >= 2) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Build a single merged LogicalJDBCScanOperator for one mergeable group.
-     *
-     * <p>All atoms in the group are guaranteed to have no projection (filtered in Step 3), so
-     * the merged scan's outputs are exactly the union of raw scan columns. Pushdown of
-     * projection expressions is handled by a separate standalone rule.
-     */
-    private OptExpression buildMergedScan(List<AtomEntry> group,
-                                          List<ScalarOperator> joinPredicates,
-                                          List<ScalarOperator> filterPredicates) {
-        String jdbcUri = group.get(0).table.getJdbcUri();
-        String identifierQuote = JDBCScanNode.getIdentifierSymbol(jdbcUri);
-
-        List<JDBCJoinPushDownSQLBuilder.TableEntry> tableEntries = new ArrayList<>();
-        Map<ColumnRefOperator, String> colRefToQualifiedName = new HashMap<>();
-        Map<ColumnRefOperator, Column> mergedColRefToColumnMap = new LinkedHashMap<>();
-        Map<Column, ColumnRefOperator> mergedColumnToColRefMap = new HashMap<>();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
-
-        for (int i = 0; i < group.size(); i++) {
-            AtomEntry entry = group.get(i);
-            String alias = "t" + i;
-            Map<ColumnRefOperator, Column> colMap = entry.scanOp.getColRefToColumnMetaMap();
-            tableEntries.add(new JDBCJoinPushDownSQLBuilder.TableEntry(entry.table, alias, entry.scanOp));
-
-            for (Map.Entry<ColumnRefOperator, Column> colEntry : colMap.entrySet()) {
-                ColumnRefOperator colRef = colEntry.getKey();
-                Column column = colEntry.getValue();
-                colRefToQualifiedName.put(colRef,
-                        alias + "." + identifierQuote + column.getName() + identifierQuote);
-
-                // Copy Column under an alias name so the Column→ColumnRef reverse map doesn't
-                // collide when multiple tables share a column name.
-                Column aliasedCol = new Column(column);
-                String colAlias = JDBCJoinPushDownSQLBuilder.outputColumnAlias(colRef.getId());
-                aliasedCol.setName(colAlias);
-                aliasedCol.setColumnId(ColumnId.create(colAlias));
-                mergedColRefToColumnMap.put(colRef, aliasedCol);
-                mergedColumnToColRefMap.put(aliasedCol, colRef);
+        for (ColumnRefOperator colRef : allColumns.keySet()) {
+            if (neededColumns.contains(colRef)) {
                 outputColumns.add(colRef);
             }
         }
+        if (outputColumns.isEmpty()) {
+            outputColumns.add(Utils.findSmallestColumnRef(new ArrayList<>(allColumns.keySet())));
+        }
 
-        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder(
-                identifierQuote, tableEntries, colRefToQualifiedName);
-        String pushDownSQL = sqlBuilder.build(outputColumns, joinPredicates, filterPredicates);
+        Map<ColumnRefOperator, Column> mergedColRefToColumnMap = new LinkedHashMap<>();
+        Map<Column, ColumnRefOperator> mergedColumnToColRefMap = new HashMap<>();
+        for (ColumnRefOperator colRef : outputColumns) {
+            // Copy Column under an alias name so the Column→ColumnRef reverse map doesn't
+            // collide when multiple tables share a column name.
+            Column aliasedCol = new Column(allColumns.get(colRef));
+            String colAlias = JDBCPushDownSQLBuilder.outputColumnAlias(colRef.getId());
+            aliasedCol.setName(colAlias);
+            aliasedCol.setColumnId(ColumnId.create(colAlias));
+            mergedColRefToColumnMap.put(colRef, aliasedCol);
+            mergedColumnToColRefMap.put(aliasedCol, colRef);
+        }
+
+        // Render an explicit INNER JOIN chain; the ON conditions vs post-join WHERE filter were
+        // pre-classified from ownedPredicates in routePredicates.
+        String pushDownSQL = JDBCPushDownSQLBuilder.buildJoinQuery(
+                scans, outputColumns, JoinOperator.INNER_JOIN, group.onPredicates, group.filterPredicates);
 
         // Synthesize a per-query JDBCTable that wraps the merged SELECT as a derived
         // table. Must not mutate the catalog-cached primaryTable.
-        JDBCTable primaryTable = group.get(0).table;
+        JDBCTable primaryTable = entries.get(0).table;
         JDBCTable mergedTable = new JDBCTable(primaryTable);
         mergedTable.setPushDownQuery(pushDownSQL);
         mergedTable.setNewFullSchema(new ArrayList<>(mergedColRefToColumnMap.values()));
 
-        LogicalJDBCScanOperator mergedOp = new LogicalJDBCScanOperator(
-                mergedTable,
-                mergedColRefToColumnMap,
-                mergedColumnToColRefMap,
-                -1,    // no limit on the merged scan
-                null,  // predicates are in the pushdown SQL
-                null); // no local projection — scans with projections were excluded in Step 3
+        LogicalJDBCScanOperator mergedOp = new LogicalJDBCScanOperator.Builder()
+                .setTable(mergedTable)
+                .setColRefToColumnMetaMap(mergedColRefToColumnMap)
+                .setColumnMetaToColRefMap(mergedColumnToColRefMap)
+                .setLimit(-1)        // = Operator.DEFAULT_LIMIT; transform() re-exposes the join's limit on the rewritten root
+                .setPredicate(null)  // predicates are in the pushdown SQL
+                .setProjection(null) // the output projection is attached on the rewritten root
+                .build();
 
         return new OptExpression(mergedOp);
     }
@@ -513,21 +571,50 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         return joinExpr;
     }
 
-    /** Per-group predicate buckets. Bundled to avoid parallel-list bookkeeping. */
-    private static class GroupPredicates {
-        final List<ScalarOperator> joinPredicates = new ArrayList<>();
+    /** All JDBC scan atoms of one catalog, plus the join-level predicates routed to them. */
+    private static class MergeGroup {
+        final List<AtomEntry> entries = new ArrayList<>();
+        final ColumnRefSet columns = new ColumnRefSet();
+        final List<ScalarOperator> ownedPredicates = new ArrayList<>();
+        // ownedPredicates split by routePredicates for a merging group: a cross-table predicate
+        // becomes an INNER JOIN ON condition, a single-table predicate a post-join WHERE filter.
+        final List<ScalarOperator> onPredicates = new ArrayList<>();
         final List<ScalarOperator> filterPredicates = new ArrayList<>();
+        boolean shouldMerge = false;
+
+        void add(AtomEntry entry) {
+            entries.add(entry);
+            columns.union(entry.columns);
+        }
+
+        JDBCTable.ProtocolType dialect() {
+            return entries.get(0).table.getProtocolType();
+        }
+
+        /** True if {@code pred} touches columns of 2 or more scans in this group. */
+        boolean isCrossTablePredicate(ScalarOperator pred) {
+            ColumnRefSet usedCols = pred.getUsedColumns();
+            int touched = 0;
+            for (AtomEntry entry : entries) {
+                if (entry.columns.isIntersect(usedCols) && ++touched >= 2) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     private static class AtomEntry {
         final OptExpression atom;
         final LogicalJDBCScanOperator scanOp;
         final JDBCTable table;
+        final ColumnRefSet columns;
 
         AtomEntry(OptExpression atom, LogicalJDBCScanOperator scanOp, JDBCTable table) {
             this.atom = atom;
             this.scanOp = scanOp;
             this.table = table;
+            this.columns = new ColumnRefSet(scanOp.getOutputColumns());
         }
     }
 }

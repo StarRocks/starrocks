@@ -1,0 +1,501 @@
+-- name: test_jdbc_catalog_in_predicate_pushdown
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_in_pushdown; create database db_in_pushdown;'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; CREATE TABLE customers (customer_id int not null, region varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,"open"),(7,60,9,"paid"),(8,70,33,"open");'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_in_pushdown; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(40,"south"),(50,"east"),(60,"west"),(70,"north");'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_in_pushdown_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${jdbc_url}",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+set catalog jdbc_in_pushdown_${uuid0};
+-- result:
+-- !result
+use db_in_pushdown;
+-- result:
+-- !result
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders` WHERE ((`order_id` IN (1, 3, 5, 7)))
+-- !result
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+1
+3
+5
+7
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=0;
+-- result:
+-- !result
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  1:SELECT
+  |  predicates: order_id IN (1, 3, 5, 7)
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders`
+-- !result
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+1
+3
+5
+7
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=3;
+-- result:
+-- !result
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  1:SELECT
+  |  predicates: order_id IN (1, 3, 5, 7)
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders`
+-- !result
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+1
+3
+5
+7
+-- !result
+explain select order_id from orders where order_id in (2, 4) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders` WHERE ((`order_id` IN (2, 4)))
+-- !result
+select order_id from orders where order_id in (2, 4) order by order_id;
+-- result:
+2
+4
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=4;
+-- result:
+-- !result
+explain select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders` WHERE ((`order_id` IN (1, 3, 5, 7)))
+-- !result
+select order_id from orders where order_id in (1, 3, 5, 7) order by order_id;
+-- result:
+1
+3
+5
+7
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+-- result:
+-- !result
+explain select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders` WHERE ((`order_id` NOT IN (1, 2, 3, 4, 5, 6)))
+-- !result
+select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+-- result:
+7
+8
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=0;
+-- result:
+-- !result
+explain select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  1:SELECT
+  |  predicates: order_id NOT IN (1, 2, 3, 4, 5, 6)
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id` FROM `db_in_pushdown`.`orders`
+-- !result
+select order_id from orders where order_id not in (1, 2, 3, 4, 5, 6) order by order_id;
+-- result:
+7
+8
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+-- result:
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=0;
+-- result:
+-- !result
+explain select order_id, amount from orders where order_id in (2, 4, 6) and amount >= 20 order by order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id | 3: amount
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 1> order_id ASC
+  |  offset: 0
+  |  
+  1:SELECT
+  |  predicates: order_id IN (2, 4, 6)
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id`, `amount` FROM `db_in_pushdown`.`orders` WHERE ((`amount` >= 20))
+-- !result
+select order_id, amount from orders where order_id in (2, 4, 6) and amount >= 20 order by order_id;
+-- result:
+2	25
+4	45
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+-- result:
+-- !result
+explain select customer_id, region from customers where region in ('east', 'west') order by customer_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: customer_id | 2: region
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 1> customer_id ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`customers`
+     QUERY: SELECT `customer_id`, `region` FROM `db_in_pushdown`.`customers` WHERE ((`region` IN ('east', 'west')))
+-- !result
+select customer_id, region from customers where region in ('east', 'west') order by customer_id;
+-- result:
+10	east
+20	west
+50	east
+60	west
+-- !result
+explain select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id | 6: region
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  3:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:SORT
+  |  order by: <slot 1> 1: order_id ASC
+  |  offset: 0
+  |  
+  1:Project
+  |  <slot 1> : order_id
+  |  <slot 6> : region
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT sr_t0.`order_id` AS sr_c1, sr_t1.`region` AS sr_c6 FROM (SELECT `order_id`, `customer_id` FROM `db_in_pushdown`.`orders` WHERE (`order_id` IN (2, 4, 6))) sr_t0 INNER JOIN (SELECT `customer_id`, `region` FROM `db_in_pushdown`.`customers` WHERE (`customer_id` IS NOT NULL)) sr_t1 ON (sr_t0.`customer_id` = sr_t1.`customer_id`)) sr_inline
+     QUERY: SELECT `sr_c1`, `sr_c6` FROM (SELECT sr_t0.`order_id` AS sr_c1, sr_t1.`region` AS sr_c6 FROM (SELECT `order_id`, `customer_id` FROM `db_in_pushdown`.`orders` WHERE (`order_id` IN (2, 4, 6))) sr_t0 INNER JOIN (SELECT `customer_id`, `region` FROM `db_in_pushdown`.`customers` WHERE (`customer_id` IS NOT NULL)) sr_t1 ON (sr_t0.`customer_id` = sr_t1.`customer_id`)) sr_inline
+-- !result
+select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+-- result:
+2	east
+4	north
+6	east
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=0;
+-- result:
+-- !result
+explain select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: order_id | 6: region
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  8:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: HASH_PARTITIONED: customer_id
+
+  STREAM DATA SINK
+    EXCHANGE ID: 08
+    UNPARTITIONED
+
+  7:SORT
+  |  order by: <slot 1> 1: order_id ASC
+  |  offset: 0
+  |  
+  6:Project
+  |  <slot 1> : order_id
+  |  <slot 6> : region
+  |  
+  5:HASH JOIN
+  |  join op: INNER JOIN (PARTITIONED)
+  |  colocate: false, reason: 
+  |  equal join conjunct: customer_id = customer_id
+  |  
+  |----4:EXCHANGE
+  |    
+  1:EXCHANGE
+
+PLAN FRAGMENT 2
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 04
+    HASH_PARTITIONED: customer_id
+
+  3:SELECT
+  |  predicates: order_id IN (2, 4, 6)
+  |  
+  2:SCAN JDBC
+     TABLE: `db_in_pushdown`.`orders`
+     QUERY: SELECT `order_id`, `customer_id` FROM `db_in_pushdown`.`orders`
+
+PLAN FRAGMENT 3
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 01
+    HASH_PARTITIONED: customer_id
+
+  0:SCAN JDBC
+     TABLE: `db_in_pushdown`.`customers`
+     QUERY: SELECT `customer_id`, `region` FROM `db_in_pushdown`.`customers` WHERE ((`customer_id` IS NOT NULL))
+-- !result
+select o.order_id, c.region from orders o
+join customers c on o.customer_id = c.customer_id
+where o.order_id in (2, 4, 6) order by o.order_id;
+-- result:
+2	east
+4	north
+6	east
+-- !result
+set jdbc_predicate_pushdown_max_in_list_size=-1;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog jdbc_in_pushdown_${uuid0};
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_in_pushdown;'
+-- result:
+0
+
+-- !result

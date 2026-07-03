@@ -21,7 +21,6 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -32,9 +31,12 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TPlanNode;
@@ -59,6 +61,17 @@ public class MySqlAndJDBCScanNodeTest {
 
     private JDBCScanNode createOracleScanNode(List<Column> columns, List<SlotDescriptor> slots,
                                               Map<String, Integer> originalJdbcTypes) throws DdlException {
+        JDBCTable oracleTable = createOracleTable(columns, originalJdbcTypes);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(oracleTable);
+        for (SlotDescriptor slot : slots) {
+            tupleDesc.addSlot(slot);
+        }
+        return new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
+    }
+
+    private JDBCTable createOracleTable(List<Column> columns, Map<String, Integer> originalJdbcTypes)
+            throws DdlException {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("user", "oracle");
         properties.put("password", "123456");
@@ -66,17 +79,23 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("driver_url", "driver_url");
         properties.put("checksum", "checksum");
         properties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
-
         JDBCTable oracleTable = new JDBCTable(1, "orders", columns, properties);
         if (originalJdbcTypes != null) {
             oracleTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
         }
-        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
-        tupleDesc.setTable(oracleTable);
-        for (SlotDescriptor slot : slots) {
-            tupleDesc.addSlot(slot);
-        }
-        return new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
+        return oracleTable;
+    }
+
+    private static Map<ColumnRefOperator, Column> singleColumnRefMap(ColumnRefOperator ref, Column column) {
+        Map<ColumnRefOperator, Column> colRefMap = new LinkedHashMap<>();
+        colRefMap.put(ref, column);
+        return colRefMap;
+    }
+
+    private static List<String> renderOracleScanFilters(JDBCTable table, ColumnRefOperator ref, Column column,
+                                                        ScalarOperator predicate) {
+        return JDBCPushDownSQLBuilder.renderScanFilters(table, singleColumnRefMap(ref, column),
+                Lists.newArrayList(predicate));
     }
 
     private SlotDescriptor createSlotDescriptor(int slotId, Column column) {
@@ -143,18 +162,24 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("driver_url", "driver_url");
         properties.put("checksum", "checksum");
         properties.put("driver_class", "driver_class");
-        JDBCTable mysqlTable = new JDBCTable(1, "jdbc_table",
-                Collections.singletonList(new Column("col", VarcharType.VARCHAR)), properties);
-        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
-        tupleDesc.setTable(mysqlTable);
-        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
-        scanNode.getConjuncts().addAll(createConjuncts());
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("SELECT * FROM `jdbc_table` WHERE " +
-                "(`col` NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) AND " +
-                "(`col` = 'ABC') AND ((`col` NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) " +
-                "OR (`col` = 'ABC'))\n"), nodeString);
+        Column col = new Column("col", VarcharType.VARCHAR);
+        JDBCTable mysqlTable = new JDBCTable(1, "jdbc_table", Collections.singletonList(col), properties);
+
+        ColumnRefOperator colRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "col", true);
+        String bigValue = Strings.repeat("ABCDE", 11);
+        ScalarOperator notIn = new InPredicateOperator(true, colRef, ConstantOperator.createVarchar(bigValue));
+        ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, colRef, ConstantOperator.createVarchar("ABC"));
+        ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, notIn, eq);
+
+        List<String> filters = JDBCPushDownSQLBuilder.renderScanFilters(mysqlTable,
+                singleColumnRefMap(colRef, col), Lists.newArrayList(notIn, eq, or));
+
+        // The full string literal renders inline -- no LargeStringLiteral / replaceLargeStringLiteral
+        // round-trip is needed on the ScalarOperator path.
+        Assertions.assertEquals(Lists.newArrayList(
+                "(`col` NOT IN ('" + bigValue + "'))",
+                "(`col` = 'ABC')",
+                "((`col` NOT IN ('" + bigValue + "')) OR (`col` = 'ABC'))"), filters);
     }
 
     @Test
@@ -171,7 +196,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: \"order\""), nodeString);
         Assertions.assertTrue(nodeString.contains("FROM \"order\""), nodeString);
@@ -191,7 +216,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: \"order\""), nodeString);
         Assertions.assertTrue(nodeString.contains("FROM \"order\""), nodeString);
@@ -211,7 +236,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(oracleTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: select"), nodeString);
         Assertions.assertTrue(nodeString.contains("FROM select"), nodeString);
@@ -223,7 +248,7 @@ public class MySqlAndJDBCScanNodeTest {
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(column),
                 Collections.singletonList(createSlotDescriptor(1, column)));
         scanNode.setLimit(5);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
 
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
@@ -233,177 +258,158 @@ public class MySqlAndJDBCScanNodeTest {
     @Test
     public void testOracleRewriteDateColumnAsDateLiteral() throws DdlException {
         Column dateColumn = new Column("date_col", DateType.DATE);
-        SlotDescriptor dateSlot = createSlotDescriptor(1, dateColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("date_col", Types.DATE);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(dateColumn),
-                Collections.singletonList(dateSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("date_col", dateSlot), StringLiteral.create("2022-01-01")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("date_col = date '2022-01-01'"), nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(dateColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, dateColumn.getType(), "date_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2022-01-01"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, dateColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("date_col = DATE '2022-01-01'"), filters.get(0));
     }
 
     @Test
     public void testOracleRewriteDatetimeColumnWithMicroseconds() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15.123456")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "ts_col = timestamp '2026-03-12 09:30:15.123456'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "ts_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15.123456"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("ts_col = TIMESTAMP '2026-03-12 09:30:15.123456'"),
+                filters.get(0));
     }
 
     @Test
     public void testOracleDoesNotRewriteLiteralColumnPredicate() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot));
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                StringLiteral.create("2026-03-12 09:30:15"), new SlotRef("ts_col", datetimeSlot)));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "'2026-03-12 09:30:15' = ts_col"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), null);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "ts_col", true);
+        // Literal on the left, column on the right: the renderer keys the temporal rewrite off the
+        // column side (child 0), so a literal-first comparison is left untouched.
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15"), ref);
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("'2026-03-12 09:30:15' = ts_col"), filters.get(0));
     }
 
     @Test
     public void testOracleRewriteBetweenPredicate() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BetweenPredicate(
-                new SlotRef("ts_col", datetimeSlot),
-                StringLiteral.create("2026-03-12 00:00:00"),
-                StringLiteral.create("2026-03-13 00:00:00"),
-                false));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "ts_col BETWEEN timestamp '2026-03-12 00:00:00' AND timestamp '2026-03-13 00:00:00'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "ts_col", true);
+        ScalarOperator predicate = new BetweenPredicateOperator(false, ref,
+                ConstantOperator.createVarchar("2026-03-12 00:00:00"),
+                ConstantOperator.createVarchar("2026-03-13 00:00:00"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains(
+                        "ts_col BETWEEN TIMESTAMP '2026-03-12 00:00:00' AND TIMESTAMP '2026-03-13 00:00:00'"),
+                filters.get(0));
     }
 
     @Test
     public void testOracleRewriteInPredicate() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new InPredicate(
-                new SlotRef("ts_col", datetimeSlot),
-                Lists.newArrayList(StringLiteral.create("2026-03-12 09:30:15"),
-                        StringLiteral.create("2026-03-13 09:30:15")),
-                false));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "ts_col IN (timestamp '2026-03-12 09:30:15', timestamp '2026-03-13 09:30:15')"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "ts_col", true);
+        ScalarOperator predicate = new InPredicateOperator(false, ref,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15"),
+                ConstantOperator.createVarchar("2026-03-13 09:30:15"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains(
+                        "ts_col IN (TIMESTAMP '2026-03-12 09:30:15', TIMESTAMP '2026-03-13 09:30:15')"),
+                filters.get(0));
     }
 
     @Test
     public void testOracleRewriteTimestampMappedToVarcharWithOriginalJdbcTypes() throws DdlException {
         // Oracle TIMESTAMP column mapped to VARCHAR (default behavior), but original JDBC type is available
         Column varcharColumn = new Column("ts_col", VarcharType.VARCHAR);
-        SlotDescriptor varcharSlot = createSlotDescriptor(1, varcharColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(varcharColumn),
-                Collections.singletonList(varcharSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("ts_col", varcharSlot), StringLiteral.create("2026-03-12 09:30:15")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "ts_col = timestamp '2026-03-12 09:30:15'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(varcharColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, varcharColumn.getType(), "ts_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, varcharColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("ts_col = TIMESTAMP '2026-03-12 09:30:15'"), filters.get(0));
     }
 
     @Test
     public void testOracleRewriteDateColumnWithOriginalJdbcTypes() throws DdlException {
         // Oracle DATE column with original JDBC type available
         Column dateColumn = new Column("date_col", DateType.DATE);
-        SlotDescriptor dateSlot = createSlotDescriptor(1, dateColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("date_col", Types.DATE);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(dateColumn),
-                Collections.singletonList(dateSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("date_col", dateSlot), StringLiteral.create("2026-03-12")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "date_col = date '2026-03-12'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(dateColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, dateColumn.getType(), "date_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2026-03-12"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, dateColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("date_col = DATE '2026-03-12'"), filters.get(0));
     }
 
     @Test
     public void testOracleOriginalJdbcDateTypeOverridesSlotType() throws DdlException {
         // Slot is DATETIME but original JDBC type is DATE: should still use TO_DATE.
         Column datetimeColumn = new Column("date_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("date_col", Types.DATE);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("date_col", datetimeSlot), StringLiteral.create("2026-03-12")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "date_col = date '2026-03-12'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "date_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2026-03-12"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("date_col = DATE '2026-03-12'"), filters.get(0));
     }
 
     @Test
     public void testOracleDoesNotRewriteTemporalVarcharColumnByName() throws DdlException {
         Column varcharColumn = new Column("tstz_col", VarcharType.VARCHAR);
-        SlotDescriptor varcharSlot = createSlotDescriptor(1, varcharColumn);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(varcharColumn),
-                Collections.singletonList(varcharSlot));
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("tstz_col", varcharSlot), StringLiteral.create("2026-03-12 09:30:15.123456")));
-        scanNode.computeColumnsAndFilters();
-        String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains(
-                        "tstz_col = '2026-03-12 09:30:15.123456'"),
-                nodeString);
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(varcharColumn), null);
+        ColumnRefOperator ref = new ColumnRefOperator(1, varcharColumn.getType(), "tstz_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, ref,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15.123456"));
+        List<String> filters = renderOracleScanFilters(oracleTable, ref, varcharColumn, predicate);
+        Assertions.assertEquals(1, filters.size());
+        Assertions.assertTrue(filters.get(0).contains("tstz_col = '2026-03-12 09:30:15.123456'"), filters.get(0));
     }
 
     @Test
     public void testOracleRewriteFilterInThriftPayload() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
-        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         Map<String, Integer> originalJdbcTypes = new HashMap<>();
         originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
-        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot), originalJdbcTypes);
-        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.GE,
-                new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15")));
-        scanNode.computeColumnsAndFilters();
+        JDBCTable oracleTable = createOracleTable(Collections.singletonList(datetimeColumn), originalJdbcTypes);
+        ColumnRefOperator ref = new ColumnRefOperator(1, datetimeColumn.getType(), "ts_col", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE, ref,
+                ConstantOperator.createVarchar("2026-03-12 09:30:15"));
+
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(oracleTable);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
+        scanNode.setFilters(renderOracleScanFilters(oracleTable, ref, datetimeColumn, predicate));
 
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
         Assertions.assertTrue(planNode.isSetJdbc_scan_node());
         Assertions.assertEquals(1, planNode.getJdbc_scan_node().getFiltersSize());
         Assertions.assertTrue(planNode.getJdbc_scan_node().getFilters().get(0)
-                .contains("ts_col >= timestamp '2026-03-12 09:30:15'"));
+                .contains("ts_col >= TIMESTAMP '2026-03-12 09:30:15'"));
     }
 
     @Test
@@ -507,7 +513,7 @@ public class MySqlAndJDBCScanNodeTest {
         tupleDesc.setTable(sqlServerTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, sqlServerTable);
         scanNode.setLimit(8);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: table"), nodeString);
         Assertions.assertTrue(nodeString.contains("QUERY: SELECT TOP(8) * FROM table"), nodeString);
@@ -541,7 +547,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should wrap table name with backticks
         Assertions.assertTrue(nodeString.contains("TABLE: `test_table`"), nodeString);
@@ -563,7 +569,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should wrap each part with double quotes
         Assertions.assertTrue(nodeString.contains("TABLE: \"public\".\"users\""), nodeString);
@@ -585,7 +591,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should not double-wrap
         Assertions.assertTrue(nodeString.contains("TABLE: `test_table`"), nodeString);
@@ -607,7 +613,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mariadbTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mariadbTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: `test_table`"), nodeString);
     }
@@ -627,7 +633,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(clickhouseTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, clickhouseTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains("TABLE: `events`"), nodeString);
     }
@@ -664,7 +670,7 @@ public class MySqlAndJDBCScanNodeTest {
         tupleDesc.addSlot(slot3);
 
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should have all columns wrapped with double quotes
         Assertions.assertTrue(nodeString.contains("\"id\", \"name\", \"age\""), nodeString);
@@ -692,7 +698,7 @@ public class MySqlAndJDBCScanNodeTest {
         tupleDesc.addSlot(slot);
 
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should not double-wrap the column name
         Assertions.assertTrue(nodeString.contains("SELECT `select`"), nodeString);
@@ -716,7 +722,7 @@ public class MySqlAndJDBCScanNodeTest {
         // Don't add any materialized slots to simulate count(*)
 
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should use SELECT *
         Assertions.assertTrue(nodeString.contains("SELECT *"), nodeString);
@@ -737,7 +743,7 @@ public class MySqlAndJDBCScanNodeTest {
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
         // Should wrap each part separately
         Assertions.assertTrue(nodeString.contains("\"mydb\".\"public\".\"users\""), nodeString);
@@ -771,13 +777,13 @@ public class MySqlAndJDBCScanNodeTest {
         tupleDesc.addSlot(nameSlot);
 
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, queryTable);
-        scanNode.computeColumnsAndFilters();
+        scanNode.createJDBCTableColumns();
         String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("TABLE: (select id, name from remote_table) starrocks_query"),
+        Assertions.assertTrue(nodeString.contains("TABLE: (select id, name from remote_table) sr_inline"),
                 nodeString);
         Assertions.assertTrue(nodeString.contains("SELECT `id`, `name` FROM " +
-                        "(select id, name from remote_table) starrocks_query"), nodeString);
-        Assertions.assertFalse(nodeString.contains("FROM `(select id, name from remote_table) starrocks_query`"),
+                        "(select id, name from remote_table) sr_inline"), nodeString);
+        Assertions.assertFalse(nodeString.contains("FROM `(select id, name from remote_table) sr_inline`"),
                 nodeString);
     }
 }

@@ -58,28 +58,23 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  3:MERGING-EXCHANGE
+  2:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
  OUTPUT EXPRS:
   PARTITION: UNPARTITIONED
 
   STREAM DATA SINK
-    EXCHANGE ID: 03
+    EXCHANGE ID: 02
     UNPARTITIONED
 
-  2:SORT
-  |  order by: <slot 2> 2: region ASC
+  1:SORT
+  |  order by: <slot 2> region ASC
   |  offset: 0
   |  
-  1:AGGREGATE (update finalize)
-  |  output: count(*), multi_distinct_count(customer_id), max(amount)
-  |  group by: region
-  |  having: 8: max >= 20
-  |  
   0:SCAN JDBC
-     TABLE: `db_agg_pushdown`.`orders`
-     QUERY: SELECT `region`, `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)
+     TABLE: (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, count(DISTINCT `customer_id`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10) GROUP BY `region` HAVING (max(`amount`) >= 20)) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6`, `jdbc_agg_7`, `jdbc_agg_8` FROM (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, count(DISTINCT `customer_id`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10) GROUP BY `region` HAVING (max(`amount`) >= 20)) sr_inline
 -- !result
 set enable_jdbc_agg_push_down=true;
 -- result:
@@ -97,28 +92,23 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  3:MERGING-EXCHANGE
+  2:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
  OUTPUT EXPRS:
   PARTITION: UNPARTITIONED
 
   STREAM DATA SINK
-    EXCHANGE ID: 03
+    EXCHANGE ID: 02
     UNPARTITIONED
 
-  2:SORT
-  |  order by: <slot 2> 2: region ASC
+  1:SORT
+  |  order by: <slot 2> region ASC
   |  offset: 0
   |  
-  1:AGGREGATE (update finalize)
-  |  output: count(*), multi_distinct_count(customer_id), max(amount)
-  |  group by: region
-  |  having: 8: max >= 20
-  |  
   0:SCAN JDBC
-     TABLE: `db_agg_pushdown`.`orders`
-     QUERY: SELECT `region`, `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)
+     TABLE: (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, count(DISTINCT `customer_id`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10) GROUP BY `region` HAVING (max(`amount`) >= 20)) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6`, `jdbc_agg_7`, `jdbc_agg_8` FROM (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, count(DISTINCT `customer_id`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10) GROUP BY `region` HAVING (max(`amount`) >= 20)) sr_inline
 -- !result
 select region, count(*), count(distinct customer_id), max(amount)
 from orders
@@ -141,8 +131,8 @@ PLAN FRAGMENT 0
   RESULT SINK
 
   0:SCAN JDBC
-     TABLE: (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
-     QUERY: SELECT `jdbc_agg_6`, `jdbc_agg_7` FROM (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_merged
+     TABLE: (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_inline
+     QUERY: SELECT `jdbc_agg_6`, `jdbc_agg_7` FROM (SELECT count(*) AS `jdbc_agg_6`, max(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`status` = 'paid')) sr_inline
 -- !result
 explain select count(*)
 from t2
@@ -156,27 +146,410 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  3:Project
-  |  <slot 4> : 4: count
-  |  
-  2:AGGREGATE (update finalize)
-  |  output: count(*), sum(3: project_id)
-  |  group by: 2: lock_status
-  |  having: 5: sum > 10
-  |  
   1:Project
-  |  <slot 2> : lock_status
-  |  <slot 3> : project_id
+  |  <slot 4> : count
   |  
   0:SCAN JDBC
-     TABLE: `db_agg_pushdown`.`t2`
-     QUERY: SELECT `id`, `lock_status`, `project_id` FROM `db_agg_pushdown`.`t2` WHERE (`id` > 1)
+     TABLE: (SELECT `lock_status` AS `lock_status`, count(*) AS `jdbc_agg_4`, sum(`project_id`) AS `jdbc_agg_5` FROM `db_agg_pushdown`.`t2` WHERE (`id` > 1) GROUP BY `lock_status` HAVING (sum(`project_id`) > 10)) sr_inline
+     QUERY: SELECT `lock_status`, `jdbc_agg_4`, `jdbc_agg_5` FROM (SELECT `lock_status` AS `lock_status`, count(*) AS `jdbc_agg_4`, sum(`project_id`) AS `jdbc_agg_5` FROM `db_agg_pushdown`.`t2` WHERE (`id` > 1) GROUP BY `lock_status` HAVING (sum(`project_id`) > 10)) sr_inline
 -- !result
 select count(*), max(amount)
 from orders
 where status = 'paid';
 -- result:
 3	40
+-- !result
+explain select sum(amount), min(amount), avg(amount) from orders where amount >= 10;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:sum | min | avg
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:SCAN JDBC
+     TABLE: (SELECT sum(`amount`) AS `jdbc_agg_6`, min(`amount`) AS `jdbc_agg_7`, avg(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)) sr_inline
+     QUERY: SELECT `jdbc_agg_6`, `jdbc_agg_7`, `jdbc_agg_8` FROM (SELECT sum(`amount`) AS `jdbc_agg_6`, min(`amount`) AS `jdbc_agg_7`, avg(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)) sr_inline
+-- !result
+select sum(amount), min(amount), avg(amount) from orders where amount >= 10;
+-- result:
+115	10	23.0
+-- !result
+explain select region, sum(amount) from orders group by region order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+-- !result
+select region, sum(amount) from orders group by region order by region;
+-- result:
+east	30
+north	5
+south	15
+west	70
+-- !result
+explain select region, count(*) as cnt from orders group by region having count(*) >= 2 order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: count
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 2)) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 2)) sr_inline
+-- !result
+select region, count(*) as cnt from orders group by region having count(*) >= 2 order by region;
+-- result:
+east	2
+west	2
+-- !result
+explain select region, count(*), sum(amount) from orders
+group by region having count(*) >= 1 and sum(amount) > 25 order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: count | 7: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, sum(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 1) AND (sum(`amount`) > 25)) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6`, `jdbc_agg_7` FROM (SELECT `region` AS `region`, count(*) AS `jdbc_agg_6`, sum(`amount`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 1) AND (sum(`amount`) > 25)) sr_inline
+-- !result
+select region, count(*), sum(amount) from orders
+group by region having count(*) >= 1 and sum(amount) > 25 order by region;
+-- result:
+east	2	30
+west	2	70
+-- !result
+explain select count(distinct region) from orders where amount >= 10;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:count
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:SCAN JDBC
+     TABLE: (SELECT count(DISTINCT `region`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)) sr_inline
+     QUERY: SELECT `jdbc_agg_6` FROM (SELECT count(DISTINCT `region`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 10)) sr_inline
+-- !result
+select count(distinct region) from orders where amount >= 10;
+-- result:
+3
+-- !result
+explain select region, max(amount) from orders
+where region in ('east', 'west') and amount between 10 and 50 group by region order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: max
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, max(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`region` IN ('east', 'west')) AND (`amount` >= 10) AND (`amount` <= 50) GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, max(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`region` IN ('east', 'west')) AND (`amount` >= 10) AND (`amount` <= 50) GROUP BY `region`) sr_inline
+-- !result
+select region, max(amount) from orders
+where region in ('east', 'west') and amount between 10 and 50 group by region order by region;
+-- result:
+east	20
+west	40
+-- !result
+explain select region, sum(amount) as s from orders group by region order by s desc, region limit 2;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+     limit: 2
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:TOP-N
+  |  order by: <slot 6> sum DESC, <slot 2> region ASC
+  |  offset: 0
+  |  limit: 2
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+-- !result
+select region, sum(amount) as s from orders group by region order by s desc, region limit 2;
+-- result:
+west	70
+east	30
+-- !result
+explain select t.lock_status, count(*) as cnt, sum(o.amount) as total
+from orders o
+join t2 t on o.customer_id = t.id
+group by t.lock_status
+having sum(o.amount) > 10
+order by t.lock_status;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:7: lock_status | 9: count | 10: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 7> lock_status ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `sr_c7` AS `sr_c7`, count(*) AS `jdbc_agg_9`, sum(`sr_c4`) AS `jdbc_agg_10` FROM (SELECT sr_t0.`amount` AS sr_c4, sr_t1.`lock_status` AS sr_c7 FROM (SELECT `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`customer_id` IS NOT NULL)) sr_t0 INNER JOIN (SELECT `id`, `lock_status` FROM `db_agg_pushdown`.`t2` WHERE (`id` IS NOT NULL)) sr_t1 ON (sr_t0.`customer_id` = sr_t1.`id`)) sr_inline GROUP BY `sr_c7` HAVING (sum(`sr_c4`) > 10)) sr_inline
+     QUERY: SELECT `sr_c7`, `jdbc_agg_9`, `jdbc_agg_10` FROM (SELECT `sr_c7` AS `sr_c7`, count(*) AS `jdbc_agg_9`, sum(`sr_c4`) AS `jdbc_agg_10` FROM (SELECT sr_t0.`amount` AS sr_c4, sr_t1.`lock_status` AS sr_c7 FROM (SELECT `customer_id`, `amount` FROM `db_agg_pushdown`.`orders` WHERE (`customer_id` IS NOT NULL)) sr_t0 INNER JOIN (SELECT `id`, `lock_status` FROM `db_agg_pushdown`.`t2` WHERE (`id` IS NOT NULL)) sr_t1 ON (sr_t0.`customer_id` = sr_t1.`id`)) sr_inline GROUP BY `sr_c7` HAVING (sum(`sr_c4`) > 10)) sr_inline
+-- !result
+select t.lock_status, count(*) as cnt, sum(o.amount) as total
+from orders o
+join t2 t on o.customer_id = t.id
+group by t.lock_status
+having sum(o.amount) > 10
+order by t.lock_status;
+-- result:
+0	4	100
+1	2	20
+-- !result
+explain select region, sum(amount) as s from orders
+group by region having region <> 'north' order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`region` != 'north') GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` WHERE (`region` != 'north') GROUP BY `region`) sr_inline
+-- !result
+select region, sum(amount) as s from orders
+group by region having region <> 'north' order by region;
+-- result:
+east	30
+south	15
+west	70
+-- !result
+explain select region, avg(amount) as a, min(amount) as mn, max(amount) as mx
+from orders group by region order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: avg | 7: min | 8: max
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, avg(`amount`) AS `jdbc_agg_6`, min(`amount`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6`, `jdbc_agg_7`, `jdbc_agg_8` FROM (SELECT `region` AS `region`, avg(`amount`) AS `jdbc_agg_6`, min(`amount`) AS `jdbc_agg_7`, max(`amount`) AS `jdbc_agg_8` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+-- !result
+select region, avg(amount) as a, min(amount) as mn, max(amount) as mx
+from orders group by region order by region;
+-- result:
+east	15.0	10	20
+north	5.0	5	5
+south	15.0	15	15
+west	35.0	30	40
+-- !result
+explain select count(distinct customer_id), count(distinct region) from orders where amount >= 5;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:count | count
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:SCAN JDBC
+     TABLE: (SELECT count(DISTINCT `customer_id`) AS `jdbc_agg_6`, count(DISTINCT `region`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 5)) sr_inline
+     QUERY: SELECT `jdbc_agg_6`, `jdbc_agg_7` FROM (SELECT count(DISTINCT `customer_id`) AS `jdbc_agg_6`, count(DISTINCT `region`) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` WHERE (`amount` >= 5)) sr_inline
+-- !result
+select count(distinct customer_id), count(distinct region) from orders where amount >= 5;
+-- result:
+5	4
+-- !result
+explain select region, sum(amount) * 10 as s10 from orders
+group by region having count(*) >= 1 order by region;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 8: expr
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:SORT
+  |  order by: <slot 2> region ASC
+  |  offset: 0
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, (`jdbc_agg_6` * 10) AS `jdbc_proj_8` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6`, count(*) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 1)) sr_inline) sr_inline
+     QUERY: SELECT `region`, `jdbc_proj_8` FROM (SELECT `region` AS `region`, (`jdbc_agg_6` * 10) AS `jdbc_proj_8` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6`, count(*) AS `jdbc_agg_7` FROM `db_agg_pushdown`.`orders` GROUP BY `region` HAVING (count(*) >= 1)) sr_inline) sr_inline
+-- !result
+select region, sum(amount) * 10 as s10 from orders
+group by region having count(*) >= 1 order by region;
+-- result:
+east	300
+north	50
+south	150
+west	700
+-- !result
+explain select region, sum(amount) as s from orders
+group by region order by s desc, region limit 2 offset 1;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: region | 6: sum
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  2:MERGING-EXCHANGE
+     offset: 1
+     limit: 2
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 02
+    UNPARTITIONED
+
+  1:TOP-N
+  |  order by: <slot 6> sum DESC, <slot 2> region ASC
+  |  offset: 0
+  |  limit: 3
+  |  
+  0:SCAN JDBC
+     TABLE: (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+     QUERY: SELECT `region`, `jdbc_agg_6` FROM (SELECT `region` AS `region`, sum(`amount`) AS `jdbc_agg_6` FROM `db_agg_pushdown`.`orders` GROUP BY `region`) sr_inline
+-- !result
+select region, sum(amount) as s from orders
+group by region order by s desc, region limit 2 offset 1;
+-- result:
+east	30
+south	15
 -- !result
 set enable_jdbc_agg_push_down=false;
 -- result:

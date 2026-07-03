@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
@@ -45,19 +44,20 @@ public class JDBCTable extends Table {
     public static final String PARTITION_NULL_VALUE = "null";
 
     public static final String JDBC_TABLENAME = "jdbc_tablename";
-    private static final String DERIVED_TABLE_ALIAS = "sr_merged";
+    private static final String INLINE_TABLE_ALIAS = "sr_inline";
 
     @SerializedName(value = "tn")
     private String jdbcTable;
     @SerializedName(value = "rn")
     private String resourceName;
+    // True when jdbcTable holds an inline subquery body (a raw SELECT) rather than a base-table
+    // name — either a native_query pass-through (setPassThroughQuery) or an optimizer pushdown
+    // derived table (setPushDownQuery). Rendered as "(<jdbcTable>) sr_inline" at the FROM site
+    // (getInlineTableExpr). Such tables are built per-query (native_query in the analyzer, derived
+    // in the optimizer) and never enter the catalog or edit log, so the persisted value is always
+    // false; the "qt" key is retained for image backward-compatibility.
     @SerializedName(value = "qt")
-    private boolean queryTable;
-    // True when this table is a derived-table wrapper synthesized for JDBC optimizer pushdown
-    // (jdbcTable holds "(SELECT ... ) sr_merged"). In-memory only: such tables are built
-    // per-query by optimizer pushdown rules and never enter the catalog or
-    // edit log, so no @SerializedName is needed.
-    private boolean derivedTable;
+    private boolean inlineTable;
 
     private Map<String, String> connectInfo;
     private String catalogName;
@@ -107,8 +107,7 @@ public class JDBCTable extends Table {
         super(other.id, other.name, TableType.JDBC, other.fullSchema);
         this.jdbcTable = other.jdbcTable;
         this.resourceName = other.resourceName;
-        this.queryTable = other.queryTable;
-        this.derivedTable = other.derivedTable;
+        this.inlineTable = other.inlineTable;
         this.connectInfo = other.connectInfo;
         this.catalogName = other.catalogName;
         this.dbName = other.dbName;
@@ -194,38 +193,27 @@ public class JDBCTable extends Table {
         this.commentFetched = commentFetched;
     }
 
-    public boolean isQueryTable() {
-        return queryTable;
+    public boolean isInlineTable() {
+        return inlineTable;
     }
 
+    /** FROM-clause expression for an inline table: the raw subquery body wrapped and aliased. */
+    public String getInlineTableExpr() {
+        return "(" + jdbcTable + ") " + INLINE_TABLE_ALIAS;
+    }
+
+    // Stores a native_query pass-through as the inline subquery body (raw, no parens/alias);
+    // wrapping is applied at the FROM site via getInlineTableExpr().
     public void setPassThroughQuery(String query) {
-        jdbcTable = "(" + normalizePassThroughQuery(query) + ") starrocks_query";
-        queryTable = true;
+        jdbcTable = normalizePassThroughQuery(query);
+        inlineTable = true;
     }
 
-    public boolean isDerivedTable() {
-        return derivedTable;
-    }
-
-    // Wraps the given query as a derived-table expression and marks the table as such.
-    // The query is assumed to be a valid SELECT produced by the optimizer
+    // Stores an optimizer-produced pushdown SELECT as the inline subquery body (raw); wrapping
+    // is applied at the FROM site via getInlineTableExpr().
     public void setPushDownQuery(String query) {
-        jdbcTable = "(" + query + ") " + DERIVED_TABLE_ALIAS;
-        derivedTable = true;
-    }
-
-    // Recovers the unwrapped inner SQL set by setPushDownQuery. Used by JDBCJoinPushDownSQLBuilder
-    // when re-embedding a derived-table atom into a new merged scan — we strip the inner
-    // sr_merged alias so the outer scan can give it its own alias without producing
-    // "(<inner>) sr_merged t0" double-alias garbage.
-    public String getPushDownQuery() {
-        Preconditions.checkState(derivedTable, "getPushDownQuery called on non-derived JDBCTable");
-        String suffix = ") " + DERIVED_TABLE_ALIAS;
-        int endExclusive = jdbcTable.length() - suffix.length();
-        Preconditions.checkState(
-                endExclusive >= 1 && jdbcTable.charAt(0) == '(' && jdbcTable.endsWith(suffix),
-                "JDBCTable not in derived-table form: %s", jdbcTable);
-        return jdbcTable.substring(1, endExclusive);
+        jdbcTable = query;
+        inlineTable = true;
     }
 
     public static String normalizePassThroughQuery(String query) {
@@ -365,6 +353,9 @@ public class JDBCTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TJDBCTable tJDBCTable = new TJDBCTable();
+        // For an inline table (native_query pass-through or optimizer pushdown) jdbcTable holds the
+        // raw subquery body; the BE needs the wrapped "(<body>) sr_inline" form to drop into FROM.
+        String fromTable = inlineTable ? getInlineTableExpr() : jdbcTable;
         if (!Strings.isNullOrEmpty(resourceName)) {
             JDBCResource resource =
                     (JDBCResource) (GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName));
@@ -374,7 +365,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_class(resource.getProperty(JDBCResource.DRIVER_CLASS));
 
             tJDBCTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
-            tJDBCTable.setJdbc_table(jdbcTable);
+            tJDBCTable.setJdbc_table(fromTable);
             tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
@@ -385,7 +376,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_driver_checksum(connectInfo.get(JDBCResource.CHECK_SUM));
             tJDBCTable.setJdbc_driver_class(connectInfo.get(JDBCResource.DRIVER_CLASS));
 
-            if (connectInfo.get(JDBC_TABLENAME) != null || queryTable || derivedTable || Strings.isNullOrEmpty(dbName)) {
+            if (connectInfo.get(JDBC_TABLENAME) != null || inlineTable || Strings.isNullOrEmpty(dbName)) {
                 tJDBCTable.setJdbc_url(uri);
             } else {
                 int delimiterIndex = uri.indexOf("?");
@@ -405,7 +396,7 @@ public class JDBCTable extends Table {
                     }
                 }
             }
-            tJDBCTable.setJdbc_table(jdbcTable);
+            tJDBCTable.setJdbc_table(fromTable);
             tJDBCTable.setJdbc_user(connectInfo.get(JDBCResource.USER));
             tJDBCTable.setJdbc_passwd(connectInfo.get(JDBCResource.PASSWORD));
         }

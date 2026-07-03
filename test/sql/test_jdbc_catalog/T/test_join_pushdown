@@ -1,12 +1,12 @@
 -- name: test_jdbc_catalog_join_pushdown
 -- prepare external MySQL tables
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_join_pushdown_${uuid0}; create database db_join_pushdown_${uuid0};'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE customers (customer_id int not null, region varchar(20));'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; CREATE TABLE regions (customer_id int not null, region_group varchar(20));'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,NULL);'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(50,"east");'
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown_${uuid0}; INSERT INTO regions VALUES (10,"coastal"),(20,"inland"),(30,"inland");'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_join_pushdown; create database db_join_pushdown;'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; CREATE TABLE orders (order_id int not null, customer_id int not null, amount int not null, status varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; CREATE TABLE customers (customer_id int not null, region varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; CREATE TABLE regions (customer_id int not null, region_group varchar(20));'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; INSERT INTO orders VALUES (1,10,15,"open"),(2,10,25,"open"),(3,20,30,"paid"),(4,30,45,"open"),(5,40,55,"paid"),(6,50,18,NULL);'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; INSERT INTO customers VALUES (10,"east"),(20,"west"),(30,"north"),(50,"east");'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_join_pushdown; INSERT INTO regions VALUES (10,"coastal"),(20,"inland"),(30,"inland");'
 
 -- create catalog
 set catalog default_catalog;
@@ -43,97 +43,100 @@ properties("replication_num" = "1");
 insert into db_join_pushdown_internal_${uuid0}.vip_customers values (10, 'gold'), (30, 'silver'), (40, 'bronze');
 
 explain select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
 
 select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
 
 -- Predicate-only columns can introduce a JDBC scan projection and should not be rewritten.
 explain select o.order_id, c.region
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20
 order by o.order_id;
 
 select o.order_id, c.region
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20
 order by o.order_id;
 
 explain select o.order_id, r.region_group, o.status, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r
 on c.customer_id = r.customer_id
 where o.amount between 20 and 50
 order by o.order_id;
 
 select o.order_id, r.region_group, o.status, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.regions r
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r
 on c.customer_id = r.customer_id
 where o.amount between 20 and 50
 order by o.order_id;
 
 explain select o.order_id, c.region, coalesce(o.status, 'missing')
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.status is null
 order by o.order_id;
 
 select o.order_id, c.region, coalesce(o.status, 'missing')
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.status is null
 order by o.order_id;
 
 explain select o.order_id, c.customer_id
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on abs(o.customer_id - 20) = c.customer_id
 where o.order_id in (1, 2)
 order by o.order_id, c.customer_id;
 
 select o.order_id, c.customer_id
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on abs(o.customer_id - 20) = c.customer_id
 where o.order_id in (1, 2)
 order by o.order_id, c.customer_id;
 
 explain select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 45
 order by o.order_id;
 
 select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-left join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 45
 order by o.order_id;
 
+-- Joins a pushed-down JDBC scan with a local internal table; the OlapScanNode prints a
+-- non-deterministic tabletList, so the recorded plan uses [REGEX] to assert the merged remote QUERY
+-- and the local vip_customers OlapScan while ignoring the volatile tablet ids.
 explain select o.order_id, c.region, v.label, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
 on o.customer_id = v.customer_id
@@ -141,85 +144,438 @@ where o.amount >= 20
 order by o.order_id;
 
 select o.order_id, c.region, v.label, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 join default_catalog.db_join_pushdown_internal_${uuid0}.vip_customers v
 on o.customer_id = v.customer_id
 where o.amount >= 20
 order by o.order_id;
 
+-- Different catalogs never merge: a local HASH JOIN over two separate JDBC scans. The build/probe
+-- side of this equal-cardinality inner join is a tie the optimizer breaks non-deterministically
+-- across FE restarts, so the recorded plan uses [REGEX] to assert both per-catalog JDBC QUERYs are
+-- present (in either order) rather than pinning the join side.
 explain select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.order_id in (2, 3, 4)
 order by o.order_id;
 
 select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.order_id in (2, 3, 4)
 order by o.order_id;
 
 explain select o.order_id, c.region, ao.order_id, ac.region
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.customers ac
 on ao.customer_id = ac.customer_id
 where o.order_id = 2 and ao.order_id in (3, 4)
 order by o.order_id, ao.order_id;
 
 select o.order_id, c.region, ao.order_id, ac.region
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.orders ao
-join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown_${uuid0}.customers ac
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.orders ao
+join jdbc_join_pushdown_alt_${uuid0}.db_join_pushdown.customers ac
 on ao.customer_id = ac.customer_id
 where o.order_id = 2 and ao.order_id in (3, 4)
 order by o.order_id, ao.order_id;
 
 -- Outer LIMIT lands on the merged QUERY, not on the inner subqueries.
 explain select o.order_id, c.region
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 limit 100;
 
 select count(*) from (
     select o.order_id, c.region
-    from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-    join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+    from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+    join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
     on o.customer_id = c.customer_id
     limit 100
 ) t;
 
 -- count(*) over the merged JDBC scan must not crash (regression for fullSchema mismatch NPE).
 explain select count(*)
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id;
 
 select count(*)
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id;
+
+-- Iterative inline-table pushdown: a native_query (inline) table joined with a base table on a
+-- connecting predicate is merged into one remote query, collapsing to a single JDBC scan.
+explain select o.order_id, q.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join table(jdbc_join_pushdown_${uuid0}.native_query('select customer_id, region from db_join_pushdown.customers')) q
+on o.customer_id = q.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+select o.order_id, q.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join table(jdbc_join_pushdown_${uuid0}.native_query('select customer_id, region from db_join_pushdown.customers')) q
+on o.customer_id = q.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+-- Single-table cross join (no cross-table join predicate, only per-table filters) is NOT merged:
+-- a lone cross-joined table is never pushed as a remote Cartesian product.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+cross join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+where o.amount >= 50 and c.region = 'east'
+order by o.order_id, c.region;
+
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+cross join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+where o.amount >= 50 and c.region = 'east'
+order by o.order_id, c.region;
+
+-- A cross-joined standalone table stays local while the predicate-connected pair merges remotely.
+explain select o.order_id, c.region, r.region_group
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+cross join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r
+on c.customer_id = r.customer_id
+where o.order_id = 1
+order by o.order_id, c.region, r.region_group;
+
+select o.order_id, c.region, r.region_group
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+cross join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r
+on c.customer_id = r.customer_id
+where o.order_id = 1
+order by o.order_id, c.region, r.region_group;
+
+-- Predicate expressions: OR, IS NOT NULL, and pushable arithmetic all fold into the remote WHERE.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where (o.amount < 20 or o.amount > 40) and c.region is not null and o.amount + 5 <= 60
+order by o.order_id;
+
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where (o.amount < 20 or o.amount > 40) and c.region is not null and o.amount + 5 <= 60
+order by o.order_id;
+
+-- A non-pushable predicate (abs) keeps the join local -- no remote merge.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where abs(o.amount - 30) <= 5
+order by o.order_id;
+
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where abs(o.amount - 30) <= 5
+order by o.order_id;
+
+-- order by + limit on the merged join is a deterministic top-N.
+explain select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id
+limit 2;
+
+select o.order_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id
+limit 2;
+
+-- Project pushdown: an expression projection folds into the remote SELECT when enabled.
+set enable_jdbc_project_push_down=true;
+explain select o.amount + 1 as amt1, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt1, c.region;
+
+select o.amount + 1 as amt1, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt1, c.region;
+
+-- With project pushdown disabled the same expression is computed locally (result unchanged).
+set enable_jdbc_project_push_down=false;
+explain select o.amount + 1 as amt1, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt1, c.region;
+
+select o.amount + 1 as amt1, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt1, c.region;
+set enable_jdbc_project_push_down=true;
+
+-- Combined join + aggregate + project pushdown: the join merges into an inline query and the
+-- aggregate (with HAVING) folds over it -- one remote JDBC scan, no local HASH JOIN/AGGREGATE.
+set enable_jdbc_agg_push_down=true;
+explain select c.region, sum(o.amount) as total, count(*) as cnt
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 15
+group by c.region
+having sum(o.amount) > 20
+order by c.region;
+
+select c.region, sum(o.amount) as total, count(*) as cnt
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id = c.customer_id
+where o.amount >= 15
+group by c.region
+having sum(o.amount) > 20
+order by c.region;
+set enable_jdbc_agg_push_down=false;
+
+-- ============================================================================
+-- Additional coverage: iterative inline pushdown, non-equi / outer-join
+-- boundaries, predicate & project expression variety, combined pushdown.
+-- ============================================================================
+
+-- Iterative inline pushdown: two native_query (inline) tables joined on a
+-- connecting predicate fold into one remote query (each inline body renders as
+-- an sr_t{i} atom), collapsing to a single JDBC scan.
+explain select q1.order_id, q2.region
+from table(jdbc_join_pushdown_${uuid0}.native_query('select order_id, customer_id, amount from db_join_pushdown.orders')) q1
+join table(jdbc_join_pushdown_${uuid0}.native_query('select customer_id, region from db_join_pushdown.customers')) q2
+on q1.customer_id = q2.customer_id
+where q1.amount >= 20
+order by q1.order_id, q2.region;
+
+select q1.order_id, q2.region
+from table(jdbc_join_pushdown_${uuid0}.native_query('select order_id, customer_id, amount from db_join_pushdown.orders')) q1
+join table(jdbc_join_pushdown_${uuid0}.native_query('select customer_id, region from db_join_pushdown.customers')) q2
+on q1.customer_id = q2.customer_id
+where q1.amount >= 20
+order by q1.order_id, q2.region;
+
+-- Iterative inline pushdown across multiple join levels: a native_query inline
+-- table joined with two base tables merges into one remote query.
+explain select q.order_id, c.region, r.region_group
+from table(jdbc_join_pushdown_${uuid0}.native_query('select order_id, customer_id, amount, status from db_join_pushdown.orders')) q
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on q.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r on c.customer_id = r.customer_id
+where q.amount between 20 and 50
+order by q.order_id;
+
+select q.order_id, c.region, r.region_group
+from table(jdbc_join_pushdown_${uuid0}.native_query('select order_id, customer_id, amount, status from db_join_pushdown.orders')) q
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on q.customer_id = c.customer_id
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r on c.customer_id = r.customer_id
+where q.amount between 20 and 50
+order by q.order_id;
+
+-- Non-equi (range) join condition: a pushable comparison that connects two
+-- atoms still merges into one remote query.
+explain select o.order_id, c.customer_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id < c.customer_id
+where o.order_id = 1
+order by o.order_id, c.customer_id;
+
+select o.order_id, c.customer_id, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
+on o.customer_id < c.customer_id
+where o.order_id = 1
+order by o.order_id, c.customer_id;
+
+-- Inner pair wrapped in an outer join: the inner o-c pair merges remotely while
+-- the LEFT JOIN to regions stays local (outer joins are never merged). The local
+-- outer join's distribution (broadcast vs shuffle) is non-deterministic, so the recorded
+-- plan uses [REGEX] to assert the merged inner-pair QUERY, the separate regions QUERY and the
+-- local LEFT OUTER JOIN while ignoring the volatile distribution; the select checks correctness.
+explain select o.order_id, c.region, r.region_group
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r on c.customer_id = r.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+select o.order_id, c.region, r.region_group
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+left join jdbc_join_pushdown_${uuid0}.db_join_pushdown.regions r on c.customer_id = r.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+-- Predicate expression variety: NOT IN, != and a simple comparison all fold into
+-- the remote WHERE and keep the join merged into one remote query.
+explain select o.order_id, o.amount, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.order_id not in (5, 6) and o.status != 'paid' and o.amount >= 20
+order by o.order_id;
+
+select o.order_id, o.amount, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.order_id not in (5, 6) and o.status != 'paid' and o.amount >= 20
+order by o.order_id;
+
+-- NOT BETWEEN folds into the remote WHERE.
+explain select o.order_id, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount not between 20 and 45
+order by o.order_id;
+
+select o.order_id, o.amount
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount not between 20 and 45
+order by o.order_id;
+
+-- LIKE is not pushable: it is applied locally above the JDBC scan, while the
+-- pushable predicate still folds into the remote QUERY.
+explain select order_id, status
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders
+where status like 'p%' and order_id >= 1
+order by order_id;
+
+select order_id, status
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders
+where status like 'p%' and order_id >= 1
+order by order_id;
+
+-- Project pushdown: nested arithmetic (multiply + add) folds into the remote SELECT.
+set enable_jdbc_project_push_down=true;
+explain select o.amount * 2 + 1 as amt, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt, c.region;
+
+select o.amount * 2 + 1 as amt, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by amt, c.region;
+
+-- Project pushdown: concat (a MySQL-pushable string function) folds remotely.
+explain select concat(c.region, '-', o.status) as label, o.order_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+select concat(c.region, '-', o.status) as label, o.order_id
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by o.order_id;
+
+-- Division is not pushable on MySQL: amount/2 stays in the local Project while
+-- the join still merges remotely.
+explain select o.amount / 2 as half, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by half, c.region;
+
+select o.amount / 2 as half, c.region
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by half, c.region;
+
+-- Column-only projection (renames only): no remote expression is added; the
+-- merged inline SELECT projects exactly the requested columns.
+explain select o.order_id as oid, c.region as reg
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by oid;
+
+select o.order_id as oid, c.region as reg
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+where o.amount >= 20
+order by oid;
+
+-- Combined join + aggregate + column-only project: join merges, aggregate folds,
+-- and the outer projection is just the group key + agg output (renamed).
+set enable_jdbc_agg_push_down=true;
+explain select c.region as r, count(*) as cnt
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+group by c.region
+order by r;
+
+select c.region as r, count(*) as cnt
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+group by c.region
+order by r;
+
+-- Combined join + aggregate + project expression: an expression over the pushed-down
+-- aggregate output (sum * 2) with HAVING, all folded into one remote query.
+explain select c.region, sum(o.amount) * 2 as double_total
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+group by c.region
+having sum(o.amount) >= 20
+order by c.region;
+
+select c.region, sum(o.amount) * 2 as double_total
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c on o.customer_id = c.customer_id
+group by c.region
+having sum(o.amount) >= 20
+order by c.region;
+set enable_jdbc_agg_push_down=false;
+set enable_jdbc_project_push_down=true;
 
 set enable_jdbc_join_push_down=false;
 explain select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
 
 select o.order_id, c.region, o.amount
-from jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.orders o
-join jdbc_join_pushdown_${uuid0}.db_join_pushdown_${uuid0}.customers c
+from jdbc_join_pushdown_${uuid0}.db_join_pushdown.orders o
+join jdbc_join_pushdown_${uuid0}.db_join_pushdown.customers c
 on o.customer_id = c.customer_id
 where o.amount >= 20 and c.region in ('east', 'west')
 order by o.order_id;
@@ -230,4 +586,4 @@ set enable_jdbc_join_push_down=true;
 drop catalog jdbc_join_pushdown_${uuid0};
 drop catalog jdbc_join_pushdown_alt_${uuid0};
 drop database db_join_pushdown_internal_${uuid0} force;
-shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_join_pushdown_${uuid0};'
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_join_pushdown;'

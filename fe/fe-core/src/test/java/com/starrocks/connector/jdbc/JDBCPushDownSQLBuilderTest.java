@@ -15,11 +15,13 @@
 package com.starrocks.connector.jdbc;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -28,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -137,6 +140,47 @@ public class JDBCPushDownSQLBuilderTest {
         Assertions.assertEquals("SELECT (`c` + `c`) AS `s` FROM `tbl0`", sql);
     }
 
+    private CallOperator avgCall(ColumnRefOperator arg) {
+        Function avgFn = ExprUtils.getBuiltinFunction(FunctionSet.AVG, new Type[] {arg.getType()},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assertions.assertNotNull(avgFn, "builtin avg function not found");
+        return new CallOperator(FunctionSet.AVG, avgFn.getReturnType(), List.of(arg), avgFn);
+    }
+
+    @Test
+    public void testAvgIntegerGetsFloatCastForUnknownDialect() throws Exception {
+        // SQL Server's jdbc:sqlserver: URI resolves to the UNKNOWN dialect, whose AVG(<integer>)
+        // truncates via integer division; the renderer must multiply the argument by 1.0 to force a
+        // floating-point average that matches StarRocks' avg semantics.
+        Column c = new Column("c", IntegerType.INT);
+        JDBCTable table = newTable("tbl0", "jdbc:sqlserver://localhost:1433;DatabaseName=db", List.of(c));
+        ColumnRefOperator colRef = new ColumnRefOperator(10, IntegerType.INT, "c", true);
+        Map<ColumnRefOperator, Column> scanColumns = new LinkedHashMap<>();
+        scanColumns.put(colRef, c);
+        LogicalJDBCScanOperator scan = newScan(table, Operator.DEFAULT_LIMIT, null, scanColumns);
+
+        String sql = JDBCPushDownSQLBuilder.buildScalarSelectQuery(scan,
+                List.of(avgCall(colRef)), List.of("jdbc_agg_1"), Collections.emptyList(), Collections.emptyList());
+        Assertions.assertTrue(sql.contains("* 1.0"), sql);
+        Assertions.assertTrue(sql.toLowerCase().contains("avg("), sql);
+    }
+
+    @Test
+    public void testAvgIntegerNoFloatCastForMySQL() throws Exception {
+        // MySQL AVG(<integer>) is already fractional, so the argument is emitted unchanged.
+        Column c = new Column("c", IntegerType.INT);
+        JDBCTable table = newTable("tbl0", "jdbc:mysql://localhost:3306/db", List.of(c));
+        ColumnRefOperator colRef = new ColumnRefOperator(10, IntegerType.INT, "c", true);
+        Map<ColumnRefOperator, Column> scanColumns = new LinkedHashMap<>();
+        scanColumns.put(colRef, c);
+        LogicalJDBCScanOperator scan = newScan(table, Operator.DEFAULT_LIMIT, null, scanColumns);
+
+        String sql = JDBCPushDownSQLBuilder.buildScalarSelectQuery(scan,
+                List.of(avgCall(colRef)), List.of("jdbc_agg_1"), Collections.emptyList(), Collections.emptyList());
+        Assertions.assertTrue(sql.contains("avg(`c`)"), sql);
+        Assertions.assertFalse(sql.contains("* 1.0"), sql);
+    }
+
     @Test
     public void testOracleTemporalColumnsUseJDBCTableHelper() throws Exception {
         Column column = new Column("ts_col", VarcharType.VARCHAR);
@@ -172,6 +216,71 @@ public class JDBCPushDownSQLBuilderTest {
         Assertions.assertTrue(sql.contains("WHERE (ts_col >= TIMESTAMP '2026-03-12 09:30:15')"), sql);
         Assertions.assertTrue(sql.contains("GROUP BY ts_col"), sql);
         Assertions.assertTrue(sql.contains("HAVING (ts_col <= TIMESTAMP '2026-03-13 09:30:15')"), sql);
+    }
+
+    @Test
+    public void testOracleTemporalLiteralKeywordFollowsLiteralShapeNotColumn() throws Exception {
+        // The literal keyword is chosen from the literal's textual shape, not the column's declared
+        // temporal kind. Following the column would emit DATE '2026-03-12 09:30:15' for a DATE column
+        // (ORA-01861: a DATE literal must be exactly 'YYYY-MM-DD') or TIMESTAMP '2026-03-12' for a
+        // TIMESTAMP column (also ORA-01861: a TIMESTAMP literal needs a time component). This mirrors
+        // the scan path (JDBCScanNode.buildOracleTemporalLiteralExpr) so the same predicate renders
+        // identically whether or not aggregate pushdown fires.
+
+        // DATE column compared to a datetime string -> TIMESTAMP literal (not DATE).
+        Column dateCol = new Column("d_col", VarcharType.VARCHAR);
+        JDBCTable dateTable = newTable("orders", "jdbc:oracle:thin:@localhost:1521:orcl", List.of(dateCol));
+        Map<String, Integer> dateTypes = new HashMap<>();
+        dateTypes.put("d_col", Types.DATE);
+        dateTable.setOriginalJdbcColumnTypes(dateTypes);
+        ColumnRefOperator dateRef = new ColumnRefOperator(1, VarcharType.VARCHAR, "d_col", true);
+        Map<ColumnRefOperator, Column> dateColumns = new LinkedHashMap<>();
+        dateColumns.put(dateRef, dateCol);
+        LogicalJDBCScanOperator dateScan = newScan(dateTable, Operator.DEFAULT_LIMIT,
+                new BinaryPredicateOperator(BinaryType.GE, dateRef,
+                        ConstantOperator.createVarchar("2026-03-12 09:30:15")),
+                dateColumns);
+        String dateSql = JDBCPushDownSQLBuilder.buildScalarSelectQuery(dateScan,
+                List.of(dateRef), List.of("jdbc_agg_1"), List.of(dateRef), Collections.emptyList());
+        Assertions.assertTrue(dateSql.contains("WHERE (d_col >= TIMESTAMP '2026-03-12 09:30:15')"), dateSql);
+        Assertions.assertFalse(dateSql.contains("DATE '2026-03-12 09:30:15'"), dateSql);
+
+        // TIMESTAMP column compared to a date-only string -> DATE literal (not TIMESTAMP).
+        Column tsCol = new Column("ts_col", VarcharType.VARCHAR);
+        JDBCTable tsTable = newTable("orders", "jdbc:oracle:thin:@localhost:1521:orcl", List.of(tsCol));
+        Map<String, Integer> tsTypes = new HashMap<>();
+        tsTypes.put("ts_col", Types.TIMESTAMP);
+        tsTable.setOriginalJdbcColumnTypes(tsTypes);
+        ColumnRefOperator tsRef = new ColumnRefOperator(2, VarcharType.VARCHAR, "ts_col", true);
+        Map<ColumnRefOperator, Column> tsColumns = new LinkedHashMap<>();
+        tsColumns.put(tsRef, tsCol);
+        LogicalJDBCScanOperator tsScan = newScan(tsTable, Operator.DEFAULT_LIMIT,
+                new BinaryPredicateOperator(BinaryType.GE, tsRef,
+                        ConstantOperator.createVarchar("2026-03-12")),
+                tsColumns);
+        String tsSql = JDBCPushDownSQLBuilder.buildScalarSelectQuery(tsScan,
+                List.of(tsRef), List.of("jdbc_agg_1"), List.of(tsRef), Collections.emptyList());
+        Assertions.assertTrue(tsSql.contains("WHERE (ts_col >= DATE '2026-03-12')"), tsSql);
+        Assertions.assertFalse(tsSql.contains("TIMESTAMP '2026-03-12')"), tsSql);
+    }
+
+    @Test
+    public void testClassifyOracleTemporalLiteralByShape() {
+        // <= 10 chars matching YYYY-M-D is a DATE literal.
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.DATE,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral("2026-03-12"));
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.DATE,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral("2026-3-2"));
+        // Anything longer carries a time component -> TIMESTAMP literal.
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.TIMESTAMP,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral("2026-03-12 09:30:15"));
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.TIMESTAMP,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral("2026-03-12 09:30:15.123456"));
+        // A short string that is not a bare date needs no keyword.
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.NONE,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral("hello"));
+        Assertions.assertEquals(ScalarOperatorToJDBCSQLVisitor.OracleTemporalLiteralKind.NONE,
+                ScalarOperatorToJDBCSQLVisitor.classifyOracleTemporalLiteral(""));
     }
 
     @Test

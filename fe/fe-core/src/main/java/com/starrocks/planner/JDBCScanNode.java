@@ -16,38 +16,18 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
-import com.starrocks.connector.jdbc.ScalarOperatorToJDBCSQLVisitor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.ast.expression.BetweenPredicate;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
-import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.InPredicate;
-import com.starrocks.sql.ast.expression.LiteralExpr;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * full scan on JDBC table.
@@ -57,61 +37,19 @@ public class JDBCScanNode extends ScanNode {
     private final List<String> filters = new ArrayList<>();
     // The table expression used in the FROM clause.
     // For a base-table scan, this is the quoted remote table name (e.g., `tbl0`).
-    // For a pushed-down optimizer subquery, this is a wrapped subquery
-    // (e.g., "(SELECT ... FROM t0 JOIN t1 ON ...) sr_merged") whose wrapping is set on a
-    // per-query JDBCTable via JDBCTable.setPushDownQuery (table.isDerivedTable() == true).
-    // For a JDBC query-table function (pass-through query), this is also a wrapped
-    // subquery (e.g., "(select ...) starrocks_query") set via JDBCTable.setPassThroughQuery
-    // (table.isQueryTable() == true); column/filter generation must still run for it.
+    // For an inline table (table.isInlineTable() == true), this is a wrapped subquery
+    // "(<body>) sr_inline" produced by JDBCTable.getInlineTableExpr(). The body comes either from
+    // an optimizer pushdown (JDBCTable.setPushDownQuery, e.g. "SELECT ... FROM t0 JOIN t1 ON ...")
+    // or from a JDBC query-table function pass-through (JDBCTable.setPassThroughQuery, e.g.
+    // "select ..."); column/filter generation must still run for it.
     private String tableName;
     private JDBCTable table;
-
-    private static final class OracleTemporalLiteralExpr extends LiteralExpr {
-        private final String sqlLiteral;
-
-        private OracleTemporalLiteralExpr(String sqlLiteral) {
-            super();
-            this.sqlLiteral = sqlLiteral;
-            this.type = VarcharType.VARCHAR;
-            analysisDone();
-        }
-
-        private OracleTemporalLiteralExpr(OracleTemporalLiteralExpr other) {
-            super(other);
-            this.sqlLiteral = other.sqlLiteral;
-        }
-
-        @Override
-        public Expr clone() {
-            return new OracleTemporalLiteralExpr(this);
-        }
-
-        @Override
-        public boolean isMinValue() {
-            return false;
-        }
-
-        @Override
-        public int compareLiteral(LiteralExpr expr) {
-            return getStringValue().compareTo(expr.getStringValue());
-        }
-
-        @Override
-        public Object getRealObjectValue() {
-            return sqlLiteral;
-        }
-
-        @Override
-        public String getStringValue() {
-            return sqlLiteral;
-        }
-    }
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
         super(id, desc, "SCAN JDBC");
         table = tbl;
-        if (tbl.isQueryTable() || tbl.isDerivedTable()) {
-            tableName = tbl.getCatalogTableName();
+        if (tbl.isInlineTable()) {
+            tableName = tbl.getInlineTableExpr();
         } else {
             String objectIdentifier = getIdentifierSymbol(getJdbcUri());
             tableName = wrapWithIdentifier(tbl.getCatalogTableName(), objectIdentifier);
@@ -157,9 +95,15 @@ public class JDBCScanNode extends ScanNode {
         return helper.addValue(super.debugString()).toString();
     }
 
-    public void computeColumnsAndFilters() {
-        createJDBCTableColumns();
-        createJDBCTableFilters();
+    /**
+     * Set the dialect-aware remote SQL predicate strings for this scan, already rendered from the
+     * scan's pushed-down ScalarOperator predicates by
+     * {@link JDBCPushDownSQLBuilder#renderScanFilters}. Both the explain {@code QUERY:} preview and
+     * the BE remote SQL wrap each entry in parentheses and join with {@code AND}.
+     */
+    public void setFilters(List<String> renderedFilters) {
+        filters.clear();
+        filters.addAll(renderedFilters);
     }
 
     @Override
@@ -184,7 +128,7 @@ public class JDBCScanNode extends ScanNode {
         return identifier + name + identifier;
     }
 
-    private void createJDBCTableColumns() {
+    public void createJDBCTableColumns() {
         String objectIdentifier = getIdentifierSymbol(getJdbcUri());
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
@@ -223,167 +167,6 @@ public class JDBCScanNode extends ScanNode {
             return "\"";
         }
         return "";
-    }
-
-    private boolean isOracleJdbcUri() {
-        return isOracleJdbcUri(getJdbcUri());
-    }
-
-    private static boolean isOracleJdbcUri(String jdbcUri) {
-        return jdbcUri != null && jdbcUri.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle");
-    }
-
-    private static Expr rewriteOracleTemporalPredicateExpr(
-            Expr expr, Map<String, ScalarOperatorToJDBCSQLVisitor.TemporalKind> temporalColumns) {
-        for (int i = 0; i < expr.getChildren().size(); i++) {
-            expr.setChild(i, rewriteOracleTemporalPredicateExpr(expr.getChild(i), temporalColumns));
-        }
-
-        if (expr instanceof BetweenPredicate) {
-            Expr left = expr.getChild(0);
-            Expr low = expr.getChild(1);
-            Expr high = expr.getChild(2);
-            if (!(left instanceof SlotRef) || low == null || high == null || !low.isConstant() || !high.isConstant()) {
-                return expr;
-            }
-
-            SlotRef slotRef = (SlotRef) left;
-            String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-            ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
-                    temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
-            if (slotKind == null) {
-                return expr;
-            }
-
-            Expr lowLiteralExpr = buildOracleTemporalLiteralExpr(low);
-            Expr highLiteralExpr = buildOracleTemporalLiteralExpr(high);
-            if (lowLiteralExpr == null || highLiteralExpr == null) {
-                return expr;
-            }
-            expr.setChild(1, lowLiteralExpr);
-            expr.setChild(2, highLiteralExpr);
-            return expr;
-        }
-
-        if (expr instanceof InPredicate) {
-            Expr left = expr.getChild(0);
-            if (!(left instanceof SlotRef)) {
-                return expr;
-            }
-
-            SlotRef slotRef = (SlotRef) left;
-            String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-            ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
-                    temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
-            if (slotKind == null) {
-                return expr;
-            }
-
-            List<Expr> rewrittenItems = new ArrayList<>(expr.getChildren().size() - 1);
-            for (int i = 1; i < expr.getChildren().size(); i++) {
-                Expr item = expr.getChild(i);
-                if (item == null || !item.isConstant()) {
-                    return expr;
-                }
-                Expr rewrittenItem = buildOracleTemporalLiteralExpr(item);
-                if (rewrittenItem == null) {
-                    return expr;
-                }
-                rewrittenItems.add(rewrittenItem);
-            }
-            for (int i = 0; i < rewrittenItems.size(); i++) {
-                expr.setChild(i + 1, rewrittenItems.get(i));
-            }
-            return expr;
-        }
-
-        if (!(expr instanceof BinaryPredicate)) {
-            return expr;
-        }
-
-        Expr left = expr.getChild(0);
-        Expr right = expr.getChild(1);
-        if (!(left instanceof SlotRef) || right == null || !right.isConstant()) {
-            return expr;
-        }
-
-        SlotRef slotRef = (SlotRef) left;
-        String slotColumnName = slotRef.getColumnName() != null ? slotRef.getColumnName() : slotRef.getLabel();
-        ScalarOperatorToJDBCSQLVisitor.TemporalKind slotKind =
-                temporalColumns.get(ScalarOperatorToJDBCSQLVisitor.normalizeColumnName(slotColumnName));
-        if (slotKind == null) {
-            return expr;
-        }
-
-        Expr literalExpr = buildOracleTemporalLiteralExpr(right);
-        if (literalExpr == null) {
-            return expr;
-        }
-        expr.setChild(1, literalExpr);
-        return expr;
-    }
-
-    private static Expr buildOracleTemporalLiteralExpr(Expr constantExpr) {
-        String literalValue;
-        if (constantExpr instanceof StringLiteral) {
-            literalValue = ((StringLiteral) constantExpr).getStringValue();
-        } else if (constantExpr instanceof DateLiteral) {
-            literalValue = ((DateLiteral) constantExpr).getStringValue();
-        } else {
-            return null;
-        }
-        if (literalValue == null) {
-            return null;
-        }
-        Pattern p = Pattern.compile("^(\\d{4})-(\\d{1,2})-(\\d{1,2})$");
-        Matcher m = p.matcher(literalValue);
-        String keyword = 
-                (literalValue.length() <= ("0000-00-00").length()) ? (m.matches() ? "date" : "") : "timestamp";
-        String escapedValue = literalValue.replace("'", "''");
-        return new OracleTemporalLiteralExpr(keyword + " '" + escapedValue + "'");
-    }
-
-    /**
-     * Converts scan conjuncts to JDBC-side predicate strings and appends them to
-     * {@link #filters}. Slot labels are rewritten with the dialect identifier quote so that
-     * {@link AstToStringBuilder} emits valid SQL for the remote DB. Merged push-down scans
-     * always have an empty conjuncts list (all filters are baked into the pushdown SQL string),
-     * so this method becomes a no-op for them via the early return below.
-     */
-    private void createJDBCTableFilters() {
-        if (conjuncts.isEmpty()) {
-            return;
-        }
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
-        ExprSubstitutionMap sMap = new ExprSubstitutionMap();
-        String identifier = getIdentifierSymbol(getJdbcUri());
-        for (SlotRef slotRef : slotRefs) {
-            SlotRef tmpRef = (SlotRef) slotRef.clone();
-            tmpRef.setTblName(null);
-            String label = tmpRef.getLabel() == null ? tmpRef.getColumnName() : tmpRef.getLabel();
-            tmpRef.setLabel(wrapColumnWithIdentifier(label, identifier));
-            sMap.put(slotRef, tmpRef);
-        }
-
-        ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
-        // Filters instead of conjuncts are used in BE to filter rows, the types of conjuncts' children
-        // would be unmatched after remove cast operator in PushDownPredicateTOExternalTableScanRule, which
-        // would cause BE report error "VectorizedInPredicate type not same";
-        conjuncts.clear();
-        Map<String, ScalarOperatorToJDBCSQLVisitor.TemporalKind> oracleTemporalColumns = Collections.emptyMap();
-        if (isOracleJdbcUri()) {
-            oracleTemporalColumns = ScalarOperatorToJDBCSQLVisitor.temporalColumnsByNormalizedName(table);
-        }
-        List<String> originalFilters = new ArrayList<>(jdbcConjuncts.size());
-        for (Expr p : jdbcConjuncts) {
-            p = ExprUtils.replaceLargeStringLiteral(p);
-            if (!oracleTemporalColumns.isEmpty()) {
-                p = rewriteOracleTemporalPredicateExpr(p, oracleTemporalColumns);
-            }
-            originalFilters.add(AstToStringBuilder.toString(p));
-        }
-        filters.addAll(originalFilters);
     }
 
     @Override

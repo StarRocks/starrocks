@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -161,21 +160,17 @@ public class JDBCPushDownRuleUtils {
      * external database's JDBC driver actually returns, since the BE JDBC type checker validates the
      * driver's Java class against this synthesized scan-schema type (see {@code type_checker_config.xml}).
      *
-     * <ul>
-     *   <li><b>Boolean results.</b> A pushed comparison keeps its {@code BOOLEAN} type. MySQL/MariaDB
-     *       return it as a numeric 0/1 ({@code java.lang.Long}); the BE JDBC type checker maps that Long
-     *       into a {@code BOOLEAN} slot (read as bigint, cast to boolean) through a
-     *       {@code type_checker_config.xml} rule, so the column is NOT widened to bigint here. PostgreSQL
-     *       returns a real {@code java.lang.Boolean} the {@code BOOLEAN} slot already accepts.</li>
-     *   <li><b>Narrow integer results.</b> On the same dialects a remotely-evaluated narrow scalar --
-     *       e.g. {@code a % 3} -- also comes back as a wide {@code Long}, and a narrow integer constant
-     *       (the {@code TINYINT 1} a {@code count(*)} materializes via {@code auto_fill_col}) does so on
-     *       every dialect; both would be rejected by a narrow slot, so widen them to {@code BIGINT}. A
-     *       narrow aggregate such as {@code max(int_col)} keeps its column type (the driver returns it
-     *       narrow), so it is left unchanged.</li>
-     * </ul>
+     * <p>Only ClickHouse needs the type widened here: it evaluates a remote expression to a wide UNSIGNED
+     * value (e.g. {@code UInt32}, returned as {@code com.clickhouse.data.value.UnsignedInteger}) whose range
+     * does not fit an equal-width signed slot, and the type checker deliberately refuses that narrowing
+     * (UInt8/16/32 are not mapped into TINYINT/SMALLINT/INT), so widen a narrow ClickHouse scalar/constant
+     * column to {@code BIGINT}.
      *
-     * Passthrough columns and wider/other types round-trip unchanged.
+     * <p>Every other dialect -- and a literal constant on any dialect -- returns a signed
+     * {@code java.lang.Long}, which the BE JDBC type checker narrows into a TINYINT/SMALLINT/INT slot via
+     * its {@code Long} rules (read as bigint, cast down, erroring on overflow), so the StarRocks type is
+     * left as-is. A narrow aggregate such as {@code max(int_col)} also keeps its type -- the driver returns
+     * it narrow, fitting the narrow slot. Passthrough and wider/other types round-trip unchanged.
      */
     private static Type jdbcReturnType(Type type, ScalarOperator expr, JDBCTable.ProtocolType dialect) {
         if (!type.isScalarType()) {
@@ -185,36 +180,12 @@ public class JDBCPushDownRuleUtils {
             case TINYINT:
             case SMALLINT:
             case INT:
-                // A narrow integer constant always materializes as a 64-bit Long. A narrow scalar
-                // expression evaluated remotely (e.g. a % 3) does too on MySQL/MariaDB/ClickHouse. A
-                // narrow aggregate (e.g. max(int_col)) instead keeps the column's own type -- the driver
-                // returns it narrow, fitting the narrow slot -- so leave aggregates unchanged.
-                if (expr instanceof ConstantOperator) {
-                    return IntegerType.BIGINT;
-                }
-                if (dialectWidensNarrowResult(dialect) && !isAggregate(expr)) {
+                if (dialect == JDBCTable.ProtocolType.CLICKHOUSE && !isAggregate(expr)) {
                     return IntegerType.BIGINT;
                 }
                 return type;
             default:
                 return type;
-        }
-    }
-
-    /**
-     * True for dialects whose JDBC driver returns a remotely-evaluated narrow result as a 64-bit value
-     * that only a {@code BIGINT} slot accepts: MySQL/MariaDB hand back {@code java.lang.Long} for
-     * integer arithmetic; ClickHouse returns wide unsigned integers. PostgreSQL returns an
-     * appropriately-sized integer its own slot type accepts, so leave those unchanged there.
-     */
-    private static boolean dialectWidensNarrowResult(JDBCTable.ProtocolType dialect) {
-        switch (dialect) {
-            case MYSQL:
-            case MARIADB:
-            case CLICKHOUSE:
-                return true;
-            default:
-                return false;
         }
     }
 

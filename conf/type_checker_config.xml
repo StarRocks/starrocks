@@ -42,6 +42,9 @@
   
   <!-- Java Long type -->
   <type-mapping java_class="java.lang.Long" display_name="Long">
+    <type-rule allowed_type="TYPE_TINYINT" return_type="TYPE_BIGINT"/>
+    <type-rule allowed_type="TYPE_SMALLINT" return_type="TYPE_BIGINT"/>
+    <type-rule allowed_type="TYPE_INT" return_type="TYPE_BIGINT"/>
     <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_BIGINT"/>
   </type-mapping>
   
@@ -111,6 +114,7 @@
     <type-rule allowed_type="TYPE_DECIMAL256" return_type="TYPE_VARCHAR"/>
     <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARCHAR"/>
     <type-rule allowed_type="TYPE_DOUBLE" return_type="TYPE_VARCHAR"/>
+    <type-rule allowed_type="TYPE_BIGINT" return_type="TYPE_VARCHAR"/>
   </type-mapping>
   
   <!-- Oracle TIMESTAMP types -->

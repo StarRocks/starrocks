@@ -145,6 +145,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownFlatJsonMetaToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinToJDBCRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
@@ -272,12 +273,14 @@ public class RuleSet {
             new RewriteToVectorPlanRule()
     ));
 
-    // JDBC pushdown: fold expressions and aggregations into a JDBC scan. Applied iteratively
-    // after the final MergeProjectWithChildRule pass so aggregation pushdown can create a scan
-    // projection and the following iteration can fold that projection into the pushed SQL.
+    // JDBC pushdown: rewrite same-catalog INNER JOINs into one merged JDBC scan, then fold
+    // aggregations onto it. Applied iteratively (after CTE inlining and the final
+    // MergeProjectWithChildRule pass): the join merge happens first, and the following
+    // iteration lets the agg rule see the merged scan as its direct child.
     public static final Rule JDBC_PUSHDOWN_RULES = new CombinationRule(RuleType.GP_JDBC_PUSHDOWN,
             ImmutableList.of(
                     new PushDownProjectToJDBCScanRule(),
+                    new PushDownJoinToJDBCRule(),
                     new PushDownAggToJDBCScanRule()
             ));
 

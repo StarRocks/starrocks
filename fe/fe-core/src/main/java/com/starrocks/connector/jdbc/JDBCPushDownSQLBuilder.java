@@ -19,7 +19,9 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.planner.JDBCScanNode;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -95,6 +97,32 @@ public class JDBCPushDownSQLBuilder {
     }
 
     /**
+     * Render a base-table JDBC scan's pushed-down predicates into individual dialect-aware SQL
+     * predicate strings for {@link JDBCScanNode}. The predicates were already vetted by
+     * {@link com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor} (in
+     * ExternalTablePredicateExtractor), the matched gate for this same renderer, so every one
+     * renders cleanly. Rendering from ScalarOperator keeps the scan path on the one
+     * {@link ScalarOperatorToJDBCSQLVisitor} pipeline shared with join/aggregate pushdown -- and so
+     * dialect-aware -- instead of going through the AST. Each predicate keeps the visitor's outer
+     * parentheses; the FE explain path and the BE both re-wrap each filter, so a harmless extra
+     * paren layer is fine.
+     */
+    public static List<String> renderScanFilters(JDBCTable table,
+                                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                 List<ScalarOperator> predicates) {
+        if (predicates.isEmpty()) {
+            return List.of();
+        }
+        String quote = JDBCScanNode.getIdentifierSymbol(table.getJdbcUri());
+        Map<ColumnRefOperator, String> columnNames = buildRawColumnNameMap(colRefToColumnMetaMap, quote);
+        ScalarOperatorToJDBCSQLVisitor renderer =
+                ScalarOperatorToJDBCSQLVisitor.forScan(table, colRefToColumnMetaMap, columnNames);
+        return predicates.stream()
+                .map(op -> op.accept(renderer, null))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Build a plain JDBC SELECT (base-column references only, no aliases). Table naming, column
      * naming, predicate rendering, and limit are all derived from the scan.
      */
@@ -157,7 +185,14 @@ public class JDBCPushDownSQLBuilder {
     }
 
     /**
-     * Build the merged join pushdown SQL for {@code scans} (same-catalog base-table scans).
+     * Build the merged join pushdown SQL for {@code scans} (same-catalog base-table scans),
+     * rendered as an order-insensitive remote comma join.
+     *
+     * <p>Only valid for INNER/CROSS merges: with no null-padding side, a comma join plus a single
+     * WHERE clause is semantically equivalent to an explicit INNER JOIN, so operand order and
+     * ON-vs-WHERE predicate placement do not matter. For order-sensitive joins (LEFT/RIGHT/FULL
+     * OUTER), use {@link #buildJoinQuery(List, List, JoinOperator, List, List)} instead, which
+     * emits an explicit {@code <type> JOIN ... ON ...} chain.
      *
      * @param outputColumns    columns to select (in order)
      * @param wherePredicates  all predicates for the merged query's WHERE clause (join + single-table)
@@ -166,32 +201,136 @@ public class JDBCPushDownSQLBuilder {
                                         List<ColumnRefOperator> outputColumns,
                                         List<ScalarOperator> wherePredicates) {
         Preconditions.checkArgument(!scans.isEmpty(), "scans must not be empty");
-        String identifierQuote = JDBCScanNode.getIdentifierSymbol(
-                ((JDBCTable) scans.get(0).getTable()).getJdbcUri());
+        String identifierQuote = identifierQuote(scans);
         Map<ColumnRefOperator, String> qualifiedNames = buildQualifiedNameMap(scans, identifierQuote);
         ScalarOperatorToJDBCSQLVisitor joinRenderer = renderer(scans, qualifiedNames);
 
-        // SELECT clause: use ColumnRefOperator.getId() as the alias suffix so each output
-        // column has a globally unique name. This lets the outer wrapping query reference
-        // columns by ID without depending on any ordering between the two sides.
-        String selectList = outputColumns.stream()
-                .map(col -> qualifiedNames.get(col) + " AS " + outputColumnAlias(col))
-                .collect(Collectors.joining(", "));
         List<String> tableExpressions = new ArrayList<>();
         for (int i = 0; i < scans.size(); i++) {
             tableExpressions.add(buildTableExpression(scans.get(i), tableAlias(i), identifierQuote));
         }
 
-        // The rule only merges INNER/CROSS join groups, so remote comma joins plus a single
-        // WHERE clause are semantically equivalent to explicit inner joins. Keep scan-local
-        // predicates inside buildTableExpression() so predicate/LIMIT order on each atom
-        // stays unchanged.
-
+        // Keep scan-local predicates inside buildTableExpression() so predicate/LIMIT order on
+        // each atom stays unchanged.
         VelocityContext context = new VelocityContext();
-        context.put("selectList", selectList);
+        context.put("selectList", buildSelectList(outputColumns, qualifiedNames));
         context.put("fromList", Joiner.on(", ").join(tableExpressions));
         context.put("whereClause", renderClause(" WHERE ", " AND ", wherePredicates, joinRenderer));
         return build(context, JOIN_QUERY_TEMPLATE);
+    }
+
+    /**
+     * Build the merged join pushdown SQL for {@code scans} as an explicit left-deep
+     * {@code <joinType> JOIN ... ON ...} chain, e.g.
+     * {@code FROM s0 LEFT OUTER JOIN s1 ON (...) LEFT OUTER JOIN s2 ON (...) [WHERE ...]}.
+     *
+     * <p>Required for order-sensitive joins (LEFT/RIGHT/FULL OUTER), whose result rows depend on
+     * operand order and on whether a predicate sits in ON or WHERE. The caller therefore MUST:
+     * <ul>
+     *   <li>pass {@code scans} already in join order — left operand first, then each subsequent
+     *       scan in the order it is joined in (the builder preserves this order verbatim);</li>
+     *   <li>split predicates into {@code onPredicates} (join conditions, rendered into ON clauses)
+     *       and {@code filterPredicates} (post-join filters, rendered into the trailing WHERE) —
+     *       moving an ON predicate to WHERE would silently turn an outer join into an inner one.</li>
+     * </ul>
+     *
+     * <p>Each ON predicate is attached to the chain step that first brings all of its referenced
+     * tables into scope (a predicate over {@code s0} and {@code s2} lands on the step that joins
+     * {@code s2}). Scan-local predicates and per-table LIMITs stay inside each scan's derived
+     * subquery (see {@link #buildTableExpression}), i.e. they pre-filter that base table before the
+     * join — the standard equivalent of an ON-clause filter on the null-producing side.
+     *
+     * @param joinType         join type applied at every step of the chain (its
+     *                         {@link JoinOperator#toString()} is the SQL keyword: {@code INNER JOIN},
+     *                         {@code LEFT OUTER JOIN}, ...)
+     * @param onPredicates     join conditions distributed across the chain's ON clauses
+     * @param filterPredicates post-join filters rendered in the trailing WHERE clause
+     */
+    public static String buildJoinQuery(List<LogicalJDBCScanOperator> scans,
+                                        List<ColumnRefOperator> outputColumns,
+                                        JoinOperator joinType,
+                                        List<ScalarOperator> onPredicates,
+                                        List<ScalarOperator> filterPredicates) {
+        Preconditions.checkArgument(!scans.isEmpty(), "scans must not be empty");
+        Preconditions.checkArgument(scans.size() >= 2 || onPredicates.isEmpty(),
+                "a single-scan query cannot carry join ON predicates");
+        String identifierQuote = identifierQuote(scans);
+        Map<ColumnRefOperator, String> qualifiedNames = buildQualifiedNameMap(scans, identifierQuote);
+        ScalarOperatorToJDBCSQLVisitor joinRenderer = renderer(scans, qualifiedNames);
+
+        VelocityContext context = new VelocityContext();
+        context.put("selectList", buildSelectList(outputColumns, qualifiedNames));
+        context.put("fromList", buildJoinChainFrom(scans, joinType, onPredicates, identifierQuote, joinRenderer));
+        context.put("whereClause", renderClause(" WHERE ", " AND ", filterPredicates, joinRenderer));
+        return build(context, JOIN_QUERY_TEMPLATE);
+    }
+
+    /**
+     * SELECT clause: use ColumnRefOperator.getId() as the alias suffix so each output column has a
+     * globally unique name. This lets the outer wrapping query reference columns by ID without
+     * depending on any ordering between the merged tables.
+     */
+    private static String buildSelectList(List<ColumnRefOperator> outputColumns,
+                                          Map<ColumnRefOperator, String> qualifiedNames) {
+        return outputColumns.stream()
+                .map(col -> qualifiedNames.get(col) + " AS " + outputColumnAlias(col))
+                .collect(Collectors.joining(", "));
+    }
+
+    /**
+     * Render the FROM clause as a left-deep {@code <joinType> JOIN ... ON ...} chain over
+     * {@code scans} in the given order. Each ON predicate is placed on the earliest step whose
+     * accumulated scope covers all the columns the predicate references.
+     */
+    private static String buildJoinChainFrom(List<LogicalJDBCScanOperator> scans, JoinOperator joinType,
+                                             List<ScalarOperator> onPredicates, String identifierQuote,
+                                             ScalarOperatorToJDBCSQLVisitor renderer) {
+        List<ColumnRefSet> scanColumns = new ArrayList<>();
+        for (LogicalJDBCScanOperator scan : scans) {
+            scanColumns.add(new ColumnRefSet(new ArrayList<>(scan.getColRefToColumnMetaMap().keySet())));
+        }
+
+        String keyword = " " + joinType + " ";
+        StringBuilder from = new StringBuilder(buildTableExpression(scans.get(0), tableAlias(0), identifierQuote));
+        ColumnRefSet inScope = new ColumnRefSet();
+        inScope.union(scanColumns.get(0));
+        boolean[] placed = new boolean[onPredicates.size()];
+        for (int i = 1; i < scans.size(); i++) {
+            inScope.union(scanColumns.get(i));
+            List<ScalarOperator> stepOn = new ArrayList<>();
+            for (int p = 0; p < onPredicates.size(); p++) {
+                if (!placed[p] && inScope.containsAll(onPredicates.get(p).getUsedColumns())) {
+                    stepOn.add(onPredicates.get(p));
+                    placed[p] = true;
+                }
+            }
+            String tableExpr = buildTableExpression(scans.get(i), tableAlias(i), identifierQuote);
+            if (stepOn.isEmpty()) {
+                // No join condition reaches this step yet. An outer join's rows depend on its ON
+                // clause and it is invalid without one, so that is an error; for INNER/CROSS fall
+                // back to a portable CROSS JOIN (valid in every dialect, unlike a bare INNER JOIN
+                // with no ON). A later step's ON re-applies the connecting predicate, and inner
+                // joins are associative, so the result is unchanged.
+                Preconditions.checkState(!joinType.isOuterJoin(),
+                        "outer join step for %s has no ON predicate", tableAlias(i));
+                from.append(" CROSS JOIN ").append(tableExpr);
+            } else {
+                from.append(keyword).append(tableExpr).append(" ON ").append(stepOn.stream()
+                        .map(op -> op.accept(renderer, null))
+                        .collect(Collectors.joining(" AND ")));
+            }
+        }
+        // Every ON predicate must land on some step; an unplaced one references a column outside
+        // the merged scan set, which would produce an out-of-scope reference in the rendered SQL.
+        for (int p = 0; p < placed.length; p++) {
+            Preconditions.checkState(placed[p],
+                    "join predicate references columns outside the merged scans: %s", onPredicates.get(p));
+        }
+        return from.toString();
+    }
+
+    private static String identifierQuote(List<LogicalJDBCScanOperator> scans) {
+        return JDBCScanNode.getIdentifierSymbol(((JDBCTable) scans.get(0).getTable()).getJdbcUri());
     }
 
     // ------------------------------------------------------------------------------------
@@ -204,8 +343,9 @@ public class JDBCPushDownSQLBuilder {
      *
      * <p>{@code selectItems} are group-by column refs and aggregate calls vetted by
      * {@code PushDownAggToJDBCScanRule}; {@code filters} are the scan's own pushed
-     * predicates. The scan may be a base table or a derived table produced by a previous
-     * pushdown (its {@code getCatalogTableName()} is then already a wrapped subquery).
+     * predicates. The scan may be a base table or an inline table — a native_query pass-through or
+     * a derived table produced by a previous pushdown — which {@link #buildTableRef} renders as its
+     * raw subquery body wrapped as {@code (<body>) sr_inline}.
      */
     public static String buildScalarSelectQuery(LogicalJDBCScanOperator scan,
                                              List<ScalarOperator> selectItems, List<String> selectAliases,
@@ -261,23 +401,26 @@ public class JDBCPushDownSQLBuilder {
     }
 
     /**
-     * Builds a single table reference for FROM/JOIN: a plain qualified name, or a derived subquery
-     * when the scan carries a predicate or a per-table limit.
+     * Builds a single table operand for FROM/JOIN under the join-local alias {@code alias}. A base
+     * table becomes its quoted name; an inline table (native_query pass-through or a prior pushdown)
+     * becomes its raw subquery body parenthesized. When the scan carries a per-table predicate or
+     * limit, the operand is instead a derived subquery that pre-filters that scan before the join.
      */
     private static String buildTableExpression(LogicalJDBCScanOperator scan, String alias, String identifierQuote) {
         JDBCTable table = (JDBCTable) scan.getTable();
-        // The rule only feeds plain base-table scans — never query-table pass-throughs or
-        // already-derived pushdown tables (see PushDownJoinToJDBCRule.collectMergeGroups).
-        Preconditions.checkState(!table.isQueryTable() && !table.isDerivedTable(),
-                "non-base table cannot be merged: %s", alias);
-        String tableRef = buildTableRef(table, identifierQuote);
 
         List<ScalarOperator> perTablePredicates = Utils.extractConjuncts(scan.getPredicate());
         if (perTablePredicates.isEmpty() && scan.getLimit() == Operator.DEFAULT_LIMIT) {
-            return tableRef + " " + alias;
+            // Reference the table directly under the join-local alias. buildBaseTableRef parenthesizes
+            // an inline table's body (a complete SELECT) so the sr_t{i} alias attaches to a derived
+            // table — quoting it as an identifier would be invalid SQL, and reusing getInlineTableExpr()
+            // would emit a redundant inner sr_inline alias underneath the sr_t{i} one.
+            return buildBaseTableRef(table, identifierQuote) + " " + alias;
         }
+        // Per-table predicate or limit: pre-filter inside a derived subquery taking the join-local
+        // alias. For an inline table this nests as (SELECT ... FROM (<body>) sr_inline WHERE ...) sr_t{i}.
         // PruneScanColumnRule guarantees the scan's colRefToColumnMetaMap is non-empty
-        // (it adds the smallest column back when no column is required, e.g. COUNT(*))
+        // (it adds the smallest column back when no column is required, e.g. COUNT(*)).
         Map<ColumnRefOperator, Column> columnRefMap = scan.getColRefToColumnMetaMap();
         Preconditions.checkState(!columnRefMap.isEmpty(),
                 "scan %s has empty columnRefMap", alias);
@@ -285,16 +428,37 @@ public class JDBCPushDownSQLBuilder {
         return "(" + tableQuery + ") " + alias;
     }
 
+    /**
+     * The FROM operand for a single-scan query: an inline table carries the {@code sr_inline}
+     * derived-table alias (a bare subquery is invalid SQL in most dialects), while a base table
+     * stands alone — with no join there is no need to alias it for column qualification.
+     */
     private static String buildTableRef(JDBCTable table, String identifierQuote) {
-        return (table.isQueryTable() || table.isDerivedTable())
-                ? table.getCatalogTableName()
+        return table.isInlineTable()
+                ? table.getInlineTableExpr()
+                : buildBaseTableRef(table, identifierQuote);
+    }
+
+    /**
+     * The FROM operand for a JDBC table <em>without</em> an alias: an inline table's raw subquery
+     * body (a complete SELECT) parenthesized as a derived table, or a quoted base-table name. The
+     * caller attaches whatever alias the surrounding query needs — {@code sr_t{i}} for a join atom.
+     */
+    private static String buildBaseTableRef(JDBCTable table, String identifierQuote) {
+        return table.isInlineTable()
+                ? "(" + table.getCatalogTableName() + ")"
                 : JDBCScanNode.wrapWithIdentifier(table.getCatalogTableName(), identifierQuote);
     }
 
     private static Map<ColumnRefOperator, String> buildRawColumnNameMap(LogicalJDBCScanOperator scan,
                                                                         String identifierQuote) {
+        return buildRawColumnNameMap(scan.getColRefToColumnMetaMap(), identifierQuote);
+    }
+
+    private static Map<ColumnRefOperator, String> buildRawColumnNameMap(
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap, String identifierQuote) {
         Map<ColumnRefOperator, String> rawNames = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, Column> e : scan.getColRefToColumnMetaMap().entrySet()) {
+        for (Map.Entry<ColumnRefOperator, Column> e : colRefToColumnMetaMap.entrySet()) {
             rawNames.put(e.getKey(), quoteIdentifier(e.getValue().getName(), identifierQuote));
         }
         return rawNames;

@@ -52,9 +52,9 @@ public class JDBCIdentifierQuoteTest extends ConnectorPlanTestBase {
                 "where b = 'x'";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN JDBC");
-        assertContains(plan, "TABLE: (select a, b from remote_table) starrocks_query");
+        assertContains(plan, "TABLE: (select a, b from remote_table) sr_inline");
         assertContains(plan, "QUERY: SELECT `a`, `b` FROM (select a, b from remote_table) " +
-                "starrocks_query WHERE (`b` = 'x')");
+                "sr_inline WHERE ((`b` = 'x'))");
     }
 
     @Test
@@ -62,8 +62,8 @@ public class JDBCIdentifierQuoteTest extends ConnectorPlanTestBase {
         String sql = "select * from table(jdbc0.native_query('select * from remote_table'))";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN JDBC");
-        assertContains(plan, "TABLE: (select * from remote_table) starrocks_query");
-        assertContains(plan, "QUERY: SELECT `a`, `b`, `c`, `d` FROM (select * from remote_table) starrocks_query");
+        assertContains(plan, "TABLE: (select * from remote_table) sr_inline");
+        assertContains(plan, "QUERY: SELECT `a`, `b`, `c`, `d` FROM (select * from remote_table) sr_inline");
     }
 
     @Test

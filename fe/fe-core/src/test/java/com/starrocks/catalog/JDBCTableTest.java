@@ -206,7 +206,7 @@ public class JDBCTableTest {
         TTableDescriptor tableDescriptor = table.toThrift(null);
         TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
         Assertions.assertEquals(uri, jdbcTable.getJdbc_url());
-        Assertions.assertEquals("(select * from system.t2) starrocks_query", jdbcTable.getJdbc_table());
+        Assertions.assertEquals("(select * from system.t2) sr_inline", jdbcTable.getJdbc_table());
     }
 
     @Test

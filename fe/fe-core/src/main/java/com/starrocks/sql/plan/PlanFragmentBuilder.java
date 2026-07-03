@@ -58,6 +58,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregateInfo;
@@ -2264,16 +2265,16 @@ public class PlanFragmentBuilder {
 
             currentExecGroup.add(scanNode, true);
 
-            // set predicate
-            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-            ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-            for (ScalarOperator predicate : predicates) {
-                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
-            }
+            // Render the scan's pushed-down predicates (already vetted by CanPushDownPredicateVisitor in
+            // ExternalTablePredicateExtractor) straight from ScalarOperator into dialect-aware remote SQL,
+            // keeping the scan on the same JDBC SQL builder/visitor pipeline as join/aggregate pushdown
+            // instead of converting to Expr conjuncts. The BE applies these filter strings; the node
+            // itself carries no Expr conjuncts.
+            scanNode.setFilters(JDBCPushDownSQLBuilder.renderScanFilters((JDBCTable) node.getTable(),
+                    node.getColRefToColumnMetaMap(), Utils.extractConjuncts(node.getPredicate())));
 
             scanNode.setLimit(node.getLimit());
-            scanNode.computeColumnsAndFilters();
+            scanNode.createJDBCTableColumns();
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             registerScanNode(node, scanNode, context);

@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -30,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Whether a {@link ScalarOperator} expression can be fully rendered as a simple
@@ -52,8 +55,57 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
             "mod", "%"
     );
 
+    /**
+     * Aggregate functions the JDBC pushdown renders remotely. Accepted as leaves only inside a
+     * HAVING predicate (see {@link #canPushDownHaving}); the single source of truth for which
+     * aggregates {@code PushDownAggToJDBCScanRule} folds into the remote SELECT.
+     */
+    public static final Set<String> PUSHABLE_AGGREGATE_FUNCTIONS = Set.of(
+            FunctionSet.COUNT,
+            FunctionSet.SUM,
+            FunctionSet.MIN,
+            FunctionSet.MAX,
+            FunctionSet.AVG);
+
+    // Whether aggregate calls (PUSHABLE_AGGREGATE_FUNCTIONS) count as pushable leaves. Off for WHERE
+    // and projection predicates (which never contain aggregates); on for a HAVING predicate, whose
+    // aggregate references were already validated and folded into the remote SELECT.
+    private boolean allowAggregateCalls = false;
+
+    // Max items allowed in a pushed-down literal IN list, from the session variable
+    // jdbc_predicate_pushdown_max_in_list_size: -1 = no limit; 0 = never push an IN; N > 0 = cap at N.
+    private int maxInListSize = -1;
+
     public static boolean canPushDown(ScalarOperator op, JDBCTable.ProtocolType dialect) {
-        return op.accept(forDialect(dialect), null);
+        return accept(op, dialect, false, sessionMaxInListSize());
+    }
+
+    /** Overload with an explicit IN-list cap (0 = unlimited), bypassing the session variable. */
+    public static boolean canPushDown(ScalarOperator op, JDBCTable.ProtocolType dialect, int maxInListSize) {
+        return accept(op, dialect, false, maxInListSize);
+    }
+
+    /**
+     * As {@link #canPushDown}, but also accepts the JDBC-pushable aggregate calls
+     * ({@link #PUSHABLE_AGGREGATE_FUNCTIONS}) as leaves — for vetting a HAVING predicate that
+     * references aggregates already pushed into the remote {@code SELECT} (e.g.
+     * {@code HAVING MAX(c) > 5}).
+     */
+    public static boolean canPushDownHaving(ScalarOperator op, JDBCTable.ProtocolType dialect) {
+        return accept(op, dialect, true, sessionMaxInListSize());
+    }
+
+    private static boolean accept(ScalarOperator op, JDBCTable.ProtocolType dialect,
+                                  boolean allowAggregateCalls, int maxInListSize) {
+        CanPushDownPredicateVisitor gate = forDialect(dialect);
+        gate.allowAggregateCalls = allowAggregateCalls;
+        gate.maxInListSize = maxInListSize;
+        return op.accept(gate, null);
+    }
+
+    private static int sessionMaxInListSize() {
+        ConnectContext ctx = ConnectContext.get();
+        return ctx == null ? -1 : ctx.getSessionVariable().getJdbcPredicatePushdownMaxInListSize();
     }
 
     public static CanPushDownPredicateVisitor forDialect(JDBCTable.ProtocolType dialect) {
@@ -106,6 +158,11 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         if (BINARY_INFIX_FUNCTIONS.containsKey(fnName)) {
             return arity == 2 && allChildrenPushable(op, ctx);
         }
+        if (allowAggregateCalls && PUSHABLE_AGGREGATE_FUNCTIONS.contains(fnName)) {
+            // A HAVING predicate may reference the aggregates already folded into the remote SELECT
+            // (e.g. MAX(c) in `HAVING MAX(c) > 5`); their arguments were vetted by the pushdown rule.
+            return allChildrenPushable(op, ctx);
+        }
         return false;
     }
 
@@ -129,6 +186,11 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
 
     @Override
     public Boolean visitInPredicate(InPredicateOperator op, Void ctx) {
+        // children = [LHS, item1, ..., itemN]. maxInListSize: -1 = no limit; 0 = never push an IN;
+        // N > 0 = push only when the list has at most N items. Oversized lists stay local.
+        if (maxInListSize >= 0 && op.getChildren().size() - 1 > maxInListSize) {
+            return false;
+        }
         return allChildrenPushable(op, ctx);
     }
 
@@ -189,12 +251,12 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     }
 
     /**
-     * ORACLE: no BOOLEAN type at the SQL layer, no {@code <=>}, no {@code %} operator
-     * (the single-table scan path emits {@code mod} as {@code %}), and a 1000-item
-     * limit on a single {@code IN (...)} list.
+     * ORACLE: no BOOLEAN type at the SQL layer, no {@code <=>}, and no {@code %} operator
+     * (the single-table scan path emits {@code mod} as {@code %}). The literal {@code IN (...)}
+     * list size is governed by {@code jdbc_predicate_pushdown_max_in_list_size}, like every dialect
+     * (Oracle's ORA-01795 limit is version-specific, so it is not hardcoded here).
      */
     public static class OraclePushDownGate extends CanPushDownPredicateVisitor {
-        private static final int IN_LIST_LIMIT = 1000;
 
         @Override
         protected JDBCTable.ProtocolType dialect() {
@@ -226,14 +288,6 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
             return super.visitBinaryPredicate(op, ctx);
         }
 
-        @Override
-        public Boolean visitInPredicate(InPredicateOperator op, Void ctx) {
-            // children = [LHS, item1, item2, ..., itemN]; Oracle rejects N > 1000.
-            if (op.getChildren().size() - 1 > IN_LIST_LIMIT) {
-                return false;
-            }
-            return super.visitInPredicate(op, ctx);
-        }
     }
 
     /** CLICKHOUSE: base behavior is sufficient; {@code <=>} is accepted natively. */

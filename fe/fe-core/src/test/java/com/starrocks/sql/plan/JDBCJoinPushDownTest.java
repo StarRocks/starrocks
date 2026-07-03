@@ -17,9 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.jdbc.ScalarOperatorToJDBCSQLVisitor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -31,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.CanPushDownPredicateVisitor;
-import com.starrocks.sql.optimizer.rule.transformation.JDBCJoinPushDownSQLBuilder;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -49,22 +50,19 @@ import java.util.Map;
 
 public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
 
-    private boolean oldEnableJdbcProjectPushDown;
-
     @BeforeAll
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
     }
 
     @BeforeEach
-    public void disableProjectPushDown() {
-        oldEnableJdbcProjectPushDown = connectContext.getSessionVariable().isEnableJdbcProjectPushDown();
-        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
+    public void setUp() {
+        connectContext.getSessionVariable().setEnableJdbcJoinPushDown(true);
     }
 
     @AfterEach
-    public void restoreProjectPushDown() {
-        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(oldEnableJdbcProjectPushDown);
+    public void tearDown() {
+        connectContext.getSessionVariable().setEnableJdbcJoinPushDown(false);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -112,29 +110,70 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
         assertContains(plan,
                 "TABLE: (SELECT ",
-                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
-                        + "ON (t0.`a` = t1.`a`)) sr_merged",
-                "QUERY: SELECT `c");
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline",
+                "QUERY: SELECT `sr_c");
+    }
+
+    @Test
+    public void testPredicateOnAbsorbedProjectionMergesAllTables() throws Exception {
+        // The middle projections (t1.c + 1 AS s, t3.c + 1 AS w — single-child expressions are
+        // the ones MultiJoinNode absorbs into expressionMap during flattening; a two-child
+        // expression stops flattening instead) leave the top ON referencing refs no atom
+        // outputs. The rule must re-expand such predicates down to atom columns before
+        // grouping/routing — otherwise the predicate can't connect the two subquery groups
+        // and the join degrades to two partial merges plus a local HASH JOIN.
+        String sql = "select v.s from (select t1.c + 1 as s from jdbc0.partitioned_db0.tbl0 t1 "
+                + "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a) v "
+                + "join (select t3.c + 1 as w from jdbc0.partitioned_db0.tbl2 t3 "
+                + "join jdbc0.partitioned_db0.tbl3 t4 on t3.a = t4.a) u on v.s = u.w";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        assertNotContains(plan, "HASH JOIN");
+        assertContains(plan, "sr_t0.`c` + 1");
+        assertContains(plan, "sr_t2.`c` + 1");
+    }
+
+    @Test
+    public void testPerTableLimitScanNotMerged() throws Exception {
+        // A JDBC scan carrying a row limit is not a bare merge atom (the limit sits above it until
+        // after join pushdown), so it is not merged — it stays a standalone scan whose limit reaches
+        // the BE as the scan's limit field (rendered dialect-aware there), not baked into merged SQL.
+        String sql = "select t1.a, t2.b from (select a from jdbc0.partitioned_db0.tbl0 limit 5) t1 "
+                + "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "sr_inline");
+        assertContains(plan, "QUERY: SELECT `a` FROM `tbl0` LIMIT 5");
+    }
+
+    @Test
+    public void testProbeLimitedScanRightSide() throws Exception {
+        // Symmetric to testPerTableLimitScanNotMerged: a row-limited scan on the probe (right)
+        // side is not a bare merge atom, so the group is not merged; its LIMIT reaches the BE as
+        // the scan's own limit.
+        String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 "
+                + "join (select a, b from jdbc0.partitioned_db0.tbl1 limit 5) t2 on t1.a = t2.a";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "sr_inline");
+        assertContains(plan, "QUERY: SELECT `a`, `b` FROM `tbl1` LIMIT 5");
     }
 
     @Test
     public void testTwoTableJoinWithOuterLimit() throws Exception {
-        // After PushDownJoinToJDBCRule merges the join into a derived JDBC scan, MERGE_LIMIT_RULES
-        // folds the outer LIMIT 100 into the scan's limit field. JDBCScanNode.getJDBCQueryStr()
-        // then emits "LIMIT 100" at the tail of the BE-side SQL — the LIMIT lands in the wrapped
-        // subquery's outer SELECT (not inside the merged inner SQL).
+        // After the join merges into a derived JDBC scan, the join's row limit is carried onto the
+        // merged scan (PushDownJoinToJDBCRule.transform, Step 7) and rendered onto the BE-side SQL.
+        // The global LIMIT stays local above the scan as the authoritative trim.
         String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "limit 100";
         String plan = getFragmentPlan(sql);
         Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
         assertContains(plan,
-                "TABLE: (SELECT ",
-                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
-                        + "ON (t0.`a` = t1.`a`)) sr_merged",
-                ") sr_merged LIMIT 100");
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline");
+        assertContains(plan, ") sr_inline LIMIT 100");
     }
 
     @Test
@@ -142,7 +181,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         // count(*) doesn't reference any specific column. PruneScanColumnRule's "smallest column"
         // fallback after PushDownJoinToJDBCRule leaves the merged scan with a single column in
         // its external output, but the inner merged SQL still SELECTs both join keys (needed
-        // for the ON clause). The count(*) aggregate stays as a local AGGREGATE above the JDBC
+        // for the remote WHERE clause). The count(*) aggregate stays as a local AGGREGATE above the JDBC
         // scan — there is no aggregation pushdown to JDBC.
         String sql = "select count(*) from jdbc0.partitioned_db0.tbl0 t1 "
                 + "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
@@ -150,9 +189,9 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
         // Merged scan: both atoms' join key visible in inner SQL.
         assertContains(plan,
-                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT `a` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
-                        + "ON (t0.`a` = t1.`a`)) sr_merged",
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline",
                 "AGGREGATE",
                 "count(*)");
         // count(*) is NOT pushed to JDBC — the BE-side SQL must not contain count.
@@ -167,9 +206,9 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
         assertContainsInOrder(plan,
-                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0",
-                "INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 ON (t0.`a` = t1.`a`)",
-                "INNER JOIN (SELECT `a`, `c` FROM `tbl2` WHERE (`a` IS NOT NULL)) t2 ON (t1.`a` = t2.`a`)");
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0",
+                "INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 ON (sr_t0.`a` = sr_t1.`a`)",
+                "INNER JOIN (SELECT `a`, `c` FROM `tbl2` WHERE (`a` IS NOT NULL)) sr_t2 ON (sr_t1.`a` = sr_t2.`a`)");
     }
 
     @Test
@@ -186,10 +225,10 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         assertContains(plan,
                 "HASH JOIN",
                 "CAST(c AS BIGINT) + CAST(c AS BIGINT)",
-                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`a` IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT `a`, `b`, `c` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
-                        + "ON (t0.`a` = t1.`a`) AND ((t0.`c` + t1.`c`) IS NOT NULL)) sr_merged",
-                "QUERY: SELECT `c1`, `c3`, `c6`, `c7`",
+                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a`, `b`, `c` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`) AND ((sr_t0.`c` + sr_t1.`c`) IS NOT NULL)) sr_inline",
+                "QUERY: SELECT `sr_c1`, `sr_c3`, `sr_c6`, `sr_c7`",
                 "TABLE: `tbl2`");
     }
 
@@ -211,21 +250,16 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "left join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "HASH JOIN");
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
     public void testFeatureDisabledSessionVariable() throws Exception {
-        boolean oldValue = connectContext.getSessionVariable().isEnableJdbcJoinPushDown();
         connectContext.getSessionVariable().setEnableJdbcJoinPushDown(false);
-        try {
-            String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
-                    "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
-            String plan = getFragmentPlan(sql);
-            assertNotContains(plan, "sr_merged");
-        } finally {
-            connectContext.getSessionVariable().setEnableJdbcJoinPushDown(oldValue);
-        }
+        String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
+                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
@@ -235,8 +269,46 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "where t1.c > 10";
         String plan = getFragmentPlan(sql);
         assertContains(plan,
-                "sr_merged",
-                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` > 10)) t0");
+                "sr_inline",
+                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` > 10)) sr_t0");
+    }
+
+    @Test
+    public void testFilterOnUnselectedColumnPushedDown() throws Exception {
+        // The WHERE column is filtered remotely but not selected, which leaves a pure
+        // column-pruning projection on the scan; that must not block the merge. The filter
+        // renders inside the per-table subquery, and the merged SELECT must not fetch the
+        // filter column back.
+        String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
+                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
+                "where t1.c > 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "sr_inline",
+                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` > 10)) sr_t0");
+        assertNotContains(plan, "HASH JOIN");
+        assertNotContains(plan, "sr_t0.`c` AS");
+    }
+
+    @Test
+    public void testHiddenFilterColumnNotFetchedWhenRootHasNoProjection() throws Exception {
+        // Selecting every visible column makes the final identity Project collapse, so the
+        // matched join root carries no projection and Step 4 takes the
+        // input.getOutputColumns() path. t1.c is consumed only by the remote WHERE and is
+        // hidden behind the scan's pruning projection — it must not be fetched back even
+        // though it is still present in the scan's colRefToColumnMetaMap.
+        String sql = "select t1.a, t1.b, t1.d, t2.a, t2.b, t2.c, t2.d " +
+                "from jdbc0.partitioned_db0.tbl0 t1 " +
+                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
+                "where t1.c > 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "sr_inline",
+                "FROM `tbl0` WHERE (`c` > 10)");
+        assertNotContains(plan, "HASH JOIN");
+        // tbl0's filter-only column c stays remote; tbl1 (alias sr_t1) legitimately ships its c.
+        assertNotContains(plan, "sr_t0.`c` AS");
+        assertContains(plan, "sr_t1.`c` AS");
     }
 
     @Test
@@ -246,10 +318,10 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan,
                 "TABLE: (SELECT ",
-                "FROM (SELECT \"a\" FROM \"tbl0\" WHERE (\"a\" IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT \"a\", \"b\" FROM \"tbl1\" WHERE (\"a\" IS NOT NULL)) t1 "
-                        + "ON (t0.\"a\" = t1.\"a\")) sr_merged",
-                "QUERY: SELECT \"c");
+                "FROM (SELECT \"a\" FROM \"tbl0\" WHERE (\"a\" IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT \"a\", \"b\" FROM \"tbl1\" WHERE (\"a\" IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.\"a\" = sr_t1.\"a\")) sr_inline",
+                "QUERY: SELECT \"sr_c");
     }
 
     @Test
@@ -263,51 +335,17 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assertions.assertEquals(2, countOccurrences(plan, "TABLE: (SELECT "));
         assertContains(plan,
-                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT `a` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1 "
-                        + "ON (t0.`a` = t1.`a`)) sr_merged",
-                "FROM (SELECT \"a\", \"c\" FROM \"tbl0\" WHERE (\"a\" IS NOT NULL)) t0 "
-                        + "INNER JOIN (SELECT \"a\" FROM \"tbl1\" WHERE (\"a\" IS NOT NULL)) t1 "
-                        + "ON (t0.\"a\" = t1.\"a\")) sr_merged");
+                "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline",
+                "FROM (SELECT \"a\", \"c\" FROM \"tbl0\" WHERE (\"a\" IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT \"a\" FROM \"tbl1\" WHERE (\"a\" IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.\"a\" = sr_t1.\"a\")) sr_inline");
     }
 
     @Test
-    public void testJoinWithPerTableLimit() throws Exception {
-        // SQL subqueries with LIMIT still leave a global limit above the scan when
-        // PushDownJoinToJDBCRule runs, so the planner path cannot reach this builder branch.
-        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
-        JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
-        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
-        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
-        ColumnRefOperator t1b = new ColumnRefOperator(12, VarcharType.VARCHAR, "b", true);
-
-        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
-        t0Columns.put(t0a, table0.getColumn("a"));
-        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
-        t1Columns.put(t1a, table1.getColumn("a"));
-        t1Columns.put(t1b, table1.getColumn("b"));
-
-        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, 10, null, t0Columns);
-        LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
-        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
-        qualifiedNames.put(t0a, "t0.`a`");
-        qualifiedNames.put(t1a, "t1.`a`");
-        qualifiedNames.put(t1b, "t1.`b`");
-        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(table0, "t0", t0Scan),
-                        new JDBCJoinPushDownSQLBuilder.TableEntry(table1, "t1", t1Scan)),
-                qualifiedNames);
-
-        String sql = sqlBuilder.build(List.of(t0a, t1b),
-                List.of(new BinaryPredicateOperator(BinaryType.GT, t0a, t1a)),
-                List.of());
-        Assertions.assertEquals("SELECT t0.`a` AS c10, t1.`b` AS c12 "
-                + "FROM (SELECT `a` FROM `tbl0` LIMIT 10) t0 "
-                + "INNER JOIN `tbl1` t1 ON (t0.`a` > t1.`a`)", sql);
-    }
-
-    @Test
-    public void testJoinWithLimitAndPredicate() throws Exception {
+    public void testJoinWithPerTablePredicate() throws Exception {
+        // A per-table predicate makes the scan render as a derived subquery.
         JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
         JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
         ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
@@ -323,24 +361,174 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         t1Columns.put(t1b, table1.getColumn("b"));
 
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GT, t0c, ConstantOperator.createInt(5));
-        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, 10, predicate, t0Columns);
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, -1, predicate, t0Columns);
         LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
-        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
-        qualifiedNames.put(t0a, "t0.`a`");
-        qualifiedNames.put(t0c, "t0.`c`");
-        qualifiedNames.put(t1a, "t1.`a`");
-        qualifiedNames.put(t1b, "t1.`b`");
-        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(table0, "t0", t0Scan),
-                        new JDBCJoinPushDownSQLBuilder.TableEntry(table1, "t1", t1Scan)),
-                qualifiedNames);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b),
+                List.of(new BinaryPredicateOperator(BinaryType.GT, t0a, t1a)));
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c13 "
+                + "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` > 5)) sr_t0"
+                + ", `tbl1` sr_t1 WHERE (sr_t0.`a` > sr_t1.`a`)", sql);
+    }
 
-        String sql = sqlBuilder.build(List.of(t0a, t1b),
-                List.of(new BinaryPredicateOperator(BinaryType.GT, t0a, t1a)),
+    @Test
+    public void testBuilderInnerJoinExplicitOn() throws Exception {
+        // The typed overload renders an explicit "INNER JOIN ... ON ..." chain instead of a comma
+        // join. The cross-table predicate becomes the ON clause; per-table predicates stay inside
+        // each scan's derived subquery.
+        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1b = new ColumnRefOperator(12, VarcharType.VARCHAR, "b", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, table0.getColumn("a"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, table1.getColumn("a"));
+        t1Columns.put(t1b, table1.getColumn("b"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, -1, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b), JoinOperator.INNER_JOIN,
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, t0a, t1a)),
                 List.of());
-        Assertions.assertEquals("SELECT t0.`a` AS c10, t1.`b` AS c13 "
-                + "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` > 5) LIMIT 10) t0 "
-                + "INNER JOIN `tbl1` t1 ON (t0.`a` > t1.`a`)", sql);
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c12 "
+                + "FROM `tbl0` sr_t0 INNER JOIN `tbl1` sr_t1 ON (sr_t0.`a` = sr_t1.`a`)", sql);
+    }
+
+    @Test
+    public void testBuilderLeftOuterJoinPreservesOrder() throws Exception {
+        // For an order-sensitive LEFT OUTER JOIN the scans are emitted in the given order with an
+        // explicit ON clause; the join condition must not be demoted to WHERE (that would turn the
+        // outer join into an inner one). A post-join filter goes to the trailing WHERE.
+        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1b = new ColumnRefOperator(12, VarcharType.VARCHAR, "b", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, table0.getColumn("a"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, table1.getColumn("a"));
+        t1Columns.put(t1b, table1.getColumn("b"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, -1, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b), JoinOperator.LEFT_OUTER_JOIN,
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, t0a, t1a)),
+                List.of(new BinaryPredicateOperator(BinaryType.GT, t1b, ConstantOperator.createVarchar("x"))));
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c12 "
+                + "FROM `tbl0` sr_t0 LEFT OUTER JOIN `tbl1` sr_t1 ON (sr_t0.`a` = sr_t1.`a`) "
+                + "WHERE (sr_t1.`b` > 'x')", sql);
+    }
+
+    @Test
+    public void testBuilderOuterJoinStepWithoutOnPredicateRejected() throws Exception {
+        // An outer-join chain step with no ON predicate is invalid SQL and changes semantics, so
+        // the builder refuses to render it.
+        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, table0.getColumn("a"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, table1.getColumn("a"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, -1, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                        List.of(t0a, t1a), JoinOperator.LEFT_OUTER_JOIN, List.of(), List.of()));
+    }
+
+    @Test
+    public void testBuilderJoinWithInlineOperand() throws Exception {
+        // A join operand may be an inline table (a native_query pass-through or a prior pushdown):
+        // with no per-table predicate it is emitted as its own parenthesized derived subquery under
+        // the join-local alias sr_t{i} — never double-aliased with the sr_inline getInlineTableExpr() adds.
+        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable inline = new JDBCTable(getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1));
+        inline.setPassThroughQuery("select a, b from remote_table");
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1b = new ColumnRefOperator(12, VarcharType.VARCHAR, "b", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, base.getColumn("a"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, inline.getColumn("a"));
+        t1Columns.put(t1b, inline.getColumn("b"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(base, -1, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(inline, -1, null, t1Columns);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b), JoinOperator.INNER_JOIN,
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, t0a, t1a)),
+                List.of());
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c12 "
+                + "FROM `tbl0` sr_t0 INNER JOIN (select a, b from remote_table) sr_t1 "
+                + "ON (sr_t0.`a` = sr_t1.`a`)", sql);
+    }
+
+    @Test
+    public void testBuilderJoinWithInlineOperandPerTablePredicate() throws Exception {
+        // An inline operand carrying its own predicate pre-filters inside a derived subquery: the
+        // raw body keeps the sr_inline alias and the wrapping SELECT takes the join-local sr_t{i}.
+        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable inline = new JDBCTable(getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1));
+        inline.setPassThroughQuery("select a, b from remote_table");
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(11, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1b = new ColumnRefOperator(12, VarcharType.VARCHAR, "b", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, base.getColumn("a"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, inline.getColumn("a"));
+        t1Columns.put(t1b, inline.getColumn("b"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(base, -1, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(inline, -1,
+                new BinaryPredicateOperator(BinaryType.GT, t1b, ConstantOperator.createVarchar("x")), t1Columns);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b), JoinOperator.INNER_JOIN,
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, t0a, t1a)),
+                List.of());
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c12 "
+                + "FROM `tbl0` sr_t0 INNER JOIN (SELECT `a`, `b` FROM (select a, b from remote_table) sr_inline "
+                + "WHERE (`b` > 'x')) sr_t1 ON (sr_t0.`a` = sr_t1.`a`)", sql);
+    }
+
+    @Test
+    public void testJoinWithPerTableLimit() throws Exception {
+        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        JDBCTable table1 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME1);
+        ColumnRefOperator t0a = new ColumnRefOperator(10, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t0c = new ColumnRefOperator(11, IntegerType.INT, "c", true);
+        ColumnRefOperator t1a = new ColumnRefOperator(12, VarcharType.VARCHAR, "a", true);
+        ColumnRefOperator t1b = new ColumnRefOperator(13, VarcharType.VARCHAR, "b", true);
+
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0a, table0.getColumn("a"));
+        t0Columns.put(t0c, table0.getColumn("c"));
+        Map<ColumnRefOperator, Column> t1Columns = new LinkedHashMap<>();
+        t1Columns.put(t1a, table1.getColumn("a"));
+        t1Columns.put(t1b, table1.getColumn("b"));
+
+        LogicalJDBCScanOperator t0Scan = newJDBCScan(table0, 7, null, t0Columns);
+        LogicalJDBCScanOperator t1Scan = newJDBCScan(table1, -1, null, t1Columns);
+        String sql = JDBCPushDownSQLBuilder.buildJoinQuery(List.of(t0Scan, t1Scan),
+                List.of(t0a, t1b),
+                List.of(new BinaryPredicateOperator(BinaryType.EQ, t0a, t1a)));
+        Assertions.assertEquals("SELECT sr_t0.`a` AS sr_c10, sr_t1.`b` AS sr_c13 "
+                + "FROM (SELECT `a`, `c` FROM `tbl0` LIMIT 7) sr_t0"
+                + ", `tbl1` sr_t1 WHERE (sr_t0.`a` = sr_t1.`a`)", sql);
     }
 
     @Test
@@ -350,43 +538,70 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
 
         Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
         t0Columns.put(t0c, table0.getColumn("c"));
-        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
-        qualifiedNames.put(t0c, "t0.`c`");
-
         ScalarOperator betweenPredicate = new BetweenPredicateOperator(false, t0c,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(10));
         LogicalJDBCScanOperator betweenScan = newJDBCScan(table0, -1, betweenPredicate, t0Columns);
-        JDBCJoinPushDownSQLBuilder betweenSqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(table0, "t0", betweenScan)),
-                qualifiedNames);
-        Assertions.assertEquals("SELECT t0.`c` AS c10 "
-                        + "FROM (SELECT `c` FROM `tbl0` WHERE (`c` BETWEEN 1 AND 10)) t0",
-                betweenSqlBuilder.build(List.of(t0c), List.of(), List.of()));
+        Assertions.assertEquals("SELECT sr_t0.`c` AS sr_c10 "
+                        + "FROM (SELECT `c` FROM `tbl0` WHERE (`c` BETWEEN 1 AND 10)) sr_t0",
+                JDBCPushDownSQLBuilder.buildJoinQuery(List.of(betweenScan), List.of(t0c), List.of()));
 
         ScalarOperator notBetweenPredicate = new BetweenPredicateOperator(true, t0c,
                 ConstantOperator.createInt(1), ConstantOperator.createInt(10));
         LogicalJDBCScanOperator notBetweenScan = newJDBCScan(table0, -1, notBetweenPredicate, t0Columns);
-        JDBCJoinPushDownSQLBuilder notBetweenSqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(table0, "t0", notBetweenScan)),
-                qualifiedNames);
-        Assertions.assertEquals("SELECT t0.`c` AS c10 "
-                        + "FROM (SELECT `c` FROM `tbl0` WHERE (`c` NOT BETWEEN 1 AND 10)) t0",
-                notBetweenSqlBuilder.build(List.of(t0c), List.of(), List.of()));
+        Assertions.assertEquals("SELECT sr_t0.`c` AS sr_c10 "
+                        + "FROM (SELECT `c` FROM `tbl0` WHERE (`c` NOT BETWEEN 1 AND 10)) sr_t0",
+                JDBCPushDownSQLBuilder.buildJoinQuery(List.of(notBetweenScan), List.of(t0c), List.of()));
+    }
+
+    @Test
+    public void testBuilderProjectQuery() throws Exception {
+        JDBCTable table0 = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
+        ColumnRefOperator t0c = new ColumnRefOperator(10, IntegerType.INT, "c", true);
+        Map<ColumnRefOperator, Column> t0Columns = new LinkedHashMap<>();
+        t0Columns.put(t0c, table0.getColumn("c"));
+        LogicalJDBCScanOperator scan = newJDBCScan(table0, -1, null, t0Columns);
+
+        String sql = JDBCPushDownSQLBuilder.buildScalarSelectQuery(scan,
+                List.of(new CallOperator(FunctionSet.ADD, IntegerType.INT, List.of(t0c, t0c))),
+                List.of("s"), List.of(), List.of());
+        Assertions.assertEquals("SELECT (`c` + `c`) AS `s` FROM `tbl0`", sql);
+    }
+
+    @Test
+    public void testProjectPushDownFoldsExpressionIntoScan() throws Exception {
+        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(true);
+        try {
+            String sql = "select c + c as s from jdbc0.partitioned_db0.tbl0";
+            String plan = getFragmentPlan(sql);
+            // The arithmetic projection is folded into the pushed JDBC SQL (dialect-rendered).
+            assertContains(plan, "(`c` + `c`)");
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
+        }
+    }
+
+    @Test
+    public void testProjectPushDownDisabledKeepsExpressionLocal() throws Exception {
+        // Flag off (default): the projection is not folded; the scan SELECTs the base column and
+        // the arithmetic is computed locally, so the dialect-rendered form never reaches the JDBC SQL.
+        String sql = "select c + c as s from jdbc0.partitioned_db0.tbl0";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "(`c` + `c`)");
     }
 
     // -----------------------------------------------------------------------
-    // PushDownJoinToJDBCRule: partitionPredicates — disqualification paths
+    // PushDownJoinToJDBCRule: routePredicates — groups that must not merge
     // -----------------------------------------------------------------------
 
     @Test
     public void testNonPushableOnPredicateDisqualifiesGroup() throws Exception {
-        // abs() is not in JDBCJoinPushDownSQLBuilder's pushable function set, so the owning JDBC
+        // abs() is not in JDBCPushDownSQLBuilder's pushable function set, so the owning JDBC
         // group is disqualified and the optimizer keeps the local HASH JOIN.
         String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
                 "join jdbc0.partitioned_db0.tbl1 t2 on abs(t1.c) = t2.c";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "HASH JOIN");
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
@@ -396,29 +611,29 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "where abs(t1.c) > 5";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "HASH JOIN");
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
     public void testNoCrossTableJoinPredicateNotMerged() throws Exception {
         // CROSS JOIN with only single-table WHERE filters. After MultiJoinNode flattening,
-        // all predicates belong to a single table → joinPredicates bucket stays empty →
-        // group is disqualified (line 368 of PushDownJoinToJDBCRule) → no push-down.
+        // all predicates belong to a single table → no cross-table join predicate → the
+        // group does not merge (see PushDownJoinToJDBCRule.routePredicates) → no push-down.
         String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
                 "cross join jdbc0.partitioned_db0.tbl1 t2 " +
                 "where t1.c > 5 and t2.c > 10";
         String plan = getFragmentPlan(sql);
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
     public void testSingleJdbcTableWithNativeTableNotMerged() throws Exception {
         // Only one JDBC atom is in the plan; the other table is a native OlapTable.
-        // No JDBC group has >= 2 atoms, so mergeableGroups is empty → rule returns empty.
+        // No JDBC group has >= 2 atoms, so there is no merge group → rule returns empty.
         String sql = "select t1.a from jdbc0.partitioned_db0.tbl0 t1 join t0 on t1.c = t0.v1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN JDBC");
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
@@ -429,27 +644,80 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc_postgres.partitioned_db0.tbl0 t2 on t1.a = t2.a";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "HASH JOIN");
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     // -----------------------------------------------------------------------
-    // JDBCJoinPushDownSQLBuilder: SQL generation — CROSS JOIN in pushed-down SQL
+    // JDBCPushDownSQLBuilder: SQL generation — comma join in pushed-down SQL
     // -----------------------------------------------------------------------
 
     @Test
     public void testCrossJoinInPushdownSQL() throws Exception {
         // Three JDBC tables: t1 CROSS JOIN t2 (no direct predicate between them), then t2
-        // JOIN t3 ON t2.a = t3.a. After flattening, the only join predicate is t2.a=t3.a.
-        // The SQL builder cannot attach a predicate to the t2 ON clause (t3 is not yet in
-        // scope) → it emits "CROSS JOIN t2" and defers the predicate to t3's ON clause.
+        // JOIN t3 ON t2.a = t3.a. t1 has no join predicate linking it to the rest, so it is
+        // left out of the merge (it would otherwise ride along as a remote Cartesian product)
+        // and stays a standalone scan joined locally; only t2 and t3, connected by t2.a = t3.a,
+        // are merged into one pushdown SQL.
         String sql = "select t1.a, t2.b, t3.a from jdbc0.partitioned_db0.tbl0 t1 " +
                 "cross join jdbc0.partitioned_db0.tbl1 t2 " +
                 "join jdbc0.partitioned_db0.tbl2 t3 on t2.a = t3.a";
         String plan = getFragmentPlan(sql);
         assertContainsInOrder(plan,
-                "FROM `tbl0` t0",
-                "CROSS JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) t1",
-                "INNER JOIN (SELECT `a` FROM `tbl2` WHERE (`a` IS NOT NULL)) t2 ON (t1.`a` = t2.`a`)");
+                "CROSS JOIN",
+                "FROM (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t0",
+                "INNER JOIN (SELECT `a` FROM `tbl2` WHERE (`a` IS NOT NULL)) sr_t1 ON (sr_t0.`a` = sr_t1.`a`)",
+                "TABLE: `tbl0`",
+                "QUERY: SELECT `a` FROM `tbl0`");
+    }
+
+    @Test
+    public void testCrossJoinedInlineAtomNotMerged() throws Exception {
+        // The relaxation lets inline (native_query / prior-pushdown) atoms join-merge, but ONLY when
+        // a join predicate connects them — splitConnectedComponents leaves a cross-joined atom in its
+        // own single-atom component, which is below the >= 2 merge threshold.
+        // A native_query CROSS JOIN'd (no connecting predicate) alongside a mergeable base-table pair
+        // must stay a standalone local scan: a single cross-joined table is never pushed into a remote
+        // Cartesian product, inline or not. Only the connected t2+t3 pair merges.
+        String sql = "select q.a, t2.b, t3.a from "
+                + "table(jdbc0.native_query('select a from remote_table')) q "
+                + "cross join jdbc0.partitioned_db0.tbl1 t2 "
+                + "join jdbc0.partitioned_db0.tbl2 t3 on t2.a = t3.a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CROSS JOIN");
+        // Only the connected base-table pair is merged (one uppercase-SELECT pushdown scan).
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        assertContains(plan,
+                "FROM (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a` FROM `tbl2` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline");
+        // The native_query stays a standalone scan — not absorbed into the merged Cartesian product.
+        assertContains(plan, "TABLE: (select a from remote_table) sr_inline");
+    }
+
+    @Test
+    public void testCrossJoinedComponentsNotMergedAcross() throws Exception {
+        // Two independently-connected pairs in the SAME catalog, cross-joined to each other with no
+        // predicate between them: (tbl0 JOIN tbl1) CROSS JOIN (tbl2 JOIN tbl3). Each connected
+        // component must merge into its OWN pushdown; the cross join between the two components must
+        // stay local. Pushing all four into one SQL would render a remote CROSS JOIN — a remote
+        // Cartesian product across the two pairs — which we never want.
+        String sql = "select t1.a, t2.b, t3.a, t4.b from jdbc0.partitioned_db0.tbl0 t1 " +
+                "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
+                "cross join jdbc0.partitioned_db0.tbl2 t3 " +
+                "join jdbc0.partitioned_db0.tbl3 t4 on t3.a = t4.a";
+        String plan = getFragmentPlan(sql);
+        // Two separate merged pushdowns, not one four-table Cartesian product.
+        Assertions.assertEquals(2, countOccurrences(plan, "TABLE: (SELECT "));
+        // The two components are cross-joined locally, never inside the pushed SQL.
+        assertContains(plan, "CROSS JOIN");
+        assertContains(plan,
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a`, `b` FROM `tbl1` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline");
+        assertContains(plan,
+                "FROM (SELECT `a` FROM `tbl2` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a`, `b` FROM `tbl3` WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline");
     }
 
     // -----------------------------------------------------------------------
@@ -463,7 +731,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.b is null";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `b` FROM `tbl0` WHERE (`b` IS NULL)) t0");
+        assertContains(plan, "FROM (SELECT `a`, `b` FROM `tbl0` WHERE (`b` IS NULL)) sr_t0");
     }
 
     @Test
@@ -473,7 +741,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.b is not null";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `b` FROM `tbl0` WHERE (`b` IS NOT NULL)) t0");
+        assertContains(plan, "FROM (SELECT `a`, `b` FROM `tbl0` WHERE (`b` IS NOT NULL)) sr_t0");
     }
 
     @Test
@@ -483,7 +751,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.c in (1, 2, 3)";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` IN (1, 2, 3))) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` IN (1, 2, 3))) sr_t0");
     }
 
     @Test
@@ -493,7 +761,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.c not in (1, 2, 3)";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` NOT IN (1, 2, 3))) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` NOT IN (1, 2, 3))) sr_t0");
     }
 
     @Test
@@ -503,7 +771,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.c between 1 and 10";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` >= 1) AND (`c` <= 10)) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` >= 1) AND (`c` <= 10)) sr_t0");
     }
 
     @Test
@@ -513,7 +781,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where t1.c not between 1 and 10";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE ((`c` < 1) OR (`c` > 10))) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE ((`c` < 1) OR (`c` > 10))) sr_t0");
     }
 
     @Test
@@ -522,7 +790,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where not (t1.c = 1)";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` != 1)) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (`c` != 1)) sr_t0");
     }
 
     @Test
@@ -531,7 +799,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on t1.a = t2.a " +
                 "where not (t1.c <=> 1)";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (NOT (`c` <=> 1))) t0");
+        assertContains(plan, "FROM (SELECT `a`, `c` FROM `tbl0` WHERE (NOT (`c` <=> 1))) sr_t0");
     }
 
     @Test
@@ -540,8 +808,8 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
                 "join jdbc0.partitioned_db0.tbl1 t2 on concat(t1.a, t2.a, t1.b) = t2.b";
         String plan = getFragmentPlan(sql);
         assertContains(plan,
-                "sr_merged",
-                "ON (CONCAT(t0.`a`, t1.`a`, t0.`b`) = t1.`b`)");
+                "sr_inline",
+                "ON (CONCAT(sr_t0.`a`, sr_t1.`a`, sr_t0.`b`) = sr_t1.`b`)");
     }
 
     @Test
@@ -562,7 +830,7 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         String sql = "select t1.a from jdbc_postgres.partitioned_db0.tbl0 t1 " +
                 "join jdbc_postgres.partitioned_db0.tbl1 t2 on concat(t1.a, t2.a, t1.b) = t2.b";
         String plan = getFragmentPlan(sql);
-        assertNotContains(plan, "sr_merged");
+        assertNotContains(plan, "sr_inline");
     }
 
     @Test
@@ -663,31 +931,49 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testCanPushExpressionOracleConstantsAndInLimit() {
+    public void testCanPushExpressionOracleConstants() {
         ConstantOperator trueLit = ConstantOperator.createBoolean(true);
         // Oracle SQL has no BOOLEAN type at all — gate must reject boolean constants.
         Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.ORACLE));
         Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.UNKNOWN));
         Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.MYSQL));
         Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(trueLit, JDBCTable.ProtocolType.POSTGRES));
+    }
 
-        // IN list of 1000 items is fine on Oracle; 1001 is not (ORA-01795).
+    @Test
+    public void testInListPushdownSizeLimitConfigurable() {
         ColumnRefOperator intCol = new ColumnRefOperator(2, IntegerType.INT, "c", true);
-        List<ScalarOperator> children1000 = new java.util.ArrayList<>();
-        children1000.add(intCol);
-        for (int i = 0; i < 1000; i++) {
-            children1000.add(ConstantOperator.createInt(i));
-        }
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
-                new InPredicateOperator(false, children1000), JDBCTable.ProtocolType.ORACLE));
+        InPredicateOperator in600 = inPredicateOf(intCol, 600);
+        InPredicateOperator in1001 = inPredicateOf(intCol, 1001);
 
-        List<ScalarOperator> children1001 = new java.util.ArrayList<>(children1000);
-        children1001.add(ConstantOperator.createInt(1001));
-        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(
-                new InPredicateOperator(false, children1001), JDBCTable.ProtocolType.ORACLE));
-        // Same predicate is fine on the other dialects.
-        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(
-                new InPredicateOperator(false, children1001), JDBCTable.ProtocolType.MYSQL));
+        // -1 = no limit: non-Oracle dialects push any size.
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, -1));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.MYSQL, -1));
+
+        // 0 = never push an IN list down, on any dialect.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 0));
+
+        // N > 0 = cap: a larger list stays local, a list within the cap pushes.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 500));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.POSTGRES, 500));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.MYSQL, 600));
+
+        // Oracle uses the same configurable cap as every dialect — no special hard floor.
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, -1));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, 5000));
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.ORACLE, 500));
+        // A cap can still be set to Oracle's per-version limit (e.g. 1000) when desired.
+        Assertions.assertFalse(CanPushDownPredicateVisitor.canPushDown(in1001, JDBCTable.ProtocolType.ORACLE, 1000));
+        Assertions.assertTrue(CanPushDownPredicateVisitor.canPushDown(in600, JDBCTable.ProtocolType.ORACLE, -1));
+    }
+
+    private static InPredicateOperator inPredicateOf(ColumnRefOperator col, int items) {
+        List<ScalarOperator> children = new java.util.ArrayList<>();
+        children.add(col);
+        for (int i = 0; i < items; i++) {
+            children.add(ConstantOperator.createInt(i));
+        }
+        return new InPredicateOperator(false, children);
     }
 
     @Test
@@ -719,11 +1005,11 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         names.put(b, "`b`");
 
         Assertions.assertEquals("(`a` <=> `b`)",
-                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+                nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("(`a` IS NOT DISTINCT FROM `b`)",
-                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+                nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
         Assertions.assertEquals("(`a` <=> `b`)",
-                nullSafe.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+                nullSafe.accept(new ScalarOperatorToJDBCSQLVisitor.ClickHouseSQLRenderer(names), null));
     }
 
     @Test
@@ -738,11 +1024,11 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         names.put(b, "`b`");
 
         Assertions.assertEquals("(`a` % `b`)",
-                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+                mod.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("(`a` % `b`)",
-                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+                mod.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
         Assertions.assertEquals("(`a` % `b`)",
-                mod.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+                mod.accept(new ScalarOperatorToJDBCSQLVisitor.ClickHouseSQLRenderer(names), null));
     }
 
     @Test
@@ -753,13 +1039,13 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         names.put(c, "`c`");
 
         Assertions.assertEquals("CAST(`c` AS date)",
-                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.MYSQL), null));
+                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(names), null));
         Assertions.assertEquals("CAST(`c` AS date)",
-                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.POSTGRES), null));
+                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.PostgresSQLRenderer(names), null));
         Assertions.assertEquals("CAST(`c` AS DATE)",
-                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.ORACLE), null));
+                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.OracleSQLRenderer(names), null));
         Assertions.assertEquals("CAST(`c` AS Date)",
-                toDate.accept(ScalarOperatorToJDBCSQLVisitor.forDialect(names, JDBCTable.ProtocolType.CLICKHOUSE), null));
+                toDate.accept(new ScalarOperatorToJDBCSQLVisitor.ClickHouseSQLRenderer(names), null));
     }
 
     @Test
@@ -767,9 +1053,9 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         ConstantOperator date = ConstantOperator.createDate(
                 java.time.LocalDateTime.of(2024, 1, 15, 0, 0, 0));
         ScalarOperatorToJDBCSQLVisitor oracle =
-                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.ORACLE);
+                new ScalarOperatorToJDBCSQLVisitor.OracleSQLRenderer(new HashMap<>());
         ScalarOperatorToJDBCSQLVisitor mysql =
-                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.MYSQL);
+                new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(new HashMap<>());
 
         // Oracle wraps in ANSI form so the literal is self-describing (NLS_DATE_FORMAT-safe).
         Assertions.assertTrue(date.accept(oracle, null).startsWith("DATE '"));
@@ -786,9 +1072,9 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
         CastOperator implicitToDate = new CastOperator(DateType.DATE, stringLiteral, true);
 
         ScalarOperatorToJDBCSQLVisitor oracle =
-                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.ORACLE);
+                new ScalarOperatorToJDBCSQLVisitor.OracleSQLRenderer(new HashMap<>());
         ScalarOperatorToJDBCSQLVisitor mysql =
-                ScalarOperatorToJDBCSQLVisitor.forDialect(new HashMap<>(), JDBCTable.ProtocolType.MYSQL);
+                new ScalarOperatorToJDBCSQLVisitor.MySQLLikeSQLRenderer(new HashMap<>());
 
         Assertions.assertEquals("DATE '2024-01-15'", implicitToDate.accept(oracle, null));
         Assertions.assertEquals("'2024-01-15'", implicitToDate.accept(mysql, null));
@@ -797,121 +1083,64 @@ public class JDBCJoinPushDownTest extends ConnectorPlanTestBase {
     @Test
     public void testOrJoinPredicatePushedDown() throws Exception {
         // An OR compound predicate that is cross-table is classified as a join predicate.
-        // JDBCJoinPushDownSQLBuilder pushes OR when all children are pushable, and
+        // JDBCPushDownSQLBuilder pushes OR when all children are pushable, and
         // visitCompoundPredicate(OR) emits "(child1 OR child2)".
         String sql = "select t1.a, t2.b from jdbc0.partitioned_db0.tbl0 t1 " +
                 "join jdbc0.partitioned_db0.tbl1 t2 on (t1.a = t2.a or t1.b = t2.b)";
         String plan = getFragmentPlan(sql);
         assertContains(plan,
-                "INNER JOIN `tbl1` t1 ON ((t0.`a` = t1.`a`) OR (t0.`b` = t1.`b`))");
+                " INNER JOIN `tbl1` sr_t1 ON ((sr_t0.`a` = sr_t1.`a`) OR (sr_t0.`b` = sr_t1.`b`))");
     }
 
     // -----------------------------------------------------------------------
-    // JDBCJoinPushDownSQLBuilder: static utility methods
+    // JDBCPushDownSQLBuilder: static utility methods
     // -----------------------------------------------------------------------
 
     @Test
     public void testOutputColumnAlias() {
-        Assertions.assertEquals("c0", JDBCJoinPushDownSQLBuilder.outputColumnAlias(0));
-        Assertions.assertEquals("c1", JDBCJoinPushDownSQLBuilder.outputColumnAlias(1));
-        Assertions.assertEquals("c42", JDBCJoinPushDownSQLBuilder.outputColumnAlias(42));
-        Assertions.assertEquals("c100", JDBCJoinPushDownSQLBuilder.outputColumnAlias(100));
-    }
-
-    // -----------------------------------------------------------------------
-    // PushDownJoinToJDBCRule: derived-table atoms (multi-stage pushdown)
-    // -----------------------------------------------------------------------
-
-    @Test
-    public void testBuilderDerivedAtomNoLimit() throws Exception {
-        // A derived-table atom — built by an earlier pushdown round — joined with a base atom.
-        // No limit, no predicate on the derived scan → SQL builder takes the early-return path
-        // and inlines as "(<inner>) t<alias>", peeling off the inner sr_merged via getPushDownQuery().
-        JDBCTable primary = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
-        JDBCTable derived = new JDBCTable(primary);
-        String innerSql = "SELECT t0.`a` AS c5 FROM `tbl0` t0 INNER JOIN `tbl1` t1 ON (t0.`a` = t1.`a`)";
-        derived.setPushDownQuery(innerSql);
-
-        // The derived scan exports c5 (matching the inner "AS c5") as its single output col.
-        ColumnRefOperator c5Ref = new ColumnRefOperator(5, VarcharType.VARCHAR, "c5", true);
-        Map<ColumnRefOperator, Column> derivedColumns = new LinkedHashMap<>();
-        derivedColumns.put(c5Ref, new Column("c5", VarcharType.VARCHAR));
-        LogicalJDBCScanOperator derivedScan = newJDBCScan(derived, -1, null, derivedColumns);
-
-        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME2);
-        ColumnRefOperator t1a = new ColumnRefOperator(20, VarcharType.VARCHAR, "a", true);
-        Map<ColumnRefOperator, Column> baseColumns = new LinkedHashMap<>();
-        baseColumns.put(t1a, base.getColumn("a"));
-        LogicalJDBCScanOperator baseScan = newJDBCScan(base, -1, null, baseColumns);
-
-        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
-        qualifiedNames.put(c5Ref, "t0.`c5`");
-        qualifiedNames.put(t1a, "t1.`a`");
-        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(derived, "t0", derivedScan),
-                        new JDBCJoinPushDownSQLBuilder.TableEntry(base, "t1", baseScan)),
-                qualifiedNames);
-
-        String sql = sqlBuilder.build(List.of(c5Ref, t1a),
-                List.of(new BinaryPredicateOperator(BinaryType.EQ, c5Ref, t1a)),
-                List.of());
-
-        Assertions.assertEquals("SELECT t0.`c5` AS c5, t1.`a` AS c20 "
-                + "FROM (" + innerSql + ") t0 "
-                + "INNER JOIN `tbl2` t1 ON (t0.`c5` = t1.`a`)", sql);
+        Assertions.assertEquals("sr_c0", JDBCPushDownSQLBuilder.outputColumnAlias(0));
+        Assertions.assertEquals("sr_c1", JDBCPushDownSQLBuilder.outputColumnAlias(1));
+        Assertions.assertEquals("sr_c42", JDBCPushDownSQLBuilder.outputColumnAlias(42));
+        Assertions.assertEquals("sr_c100", JDBCPushDownSQLBuilder.outputColumnAlias(100));
     }
 
     @Test
-    public void testBuilderDerivedAtomWithLimit() throws Exception {
-        // Same derived atom, but the scan has a LIMIT (the MERGE_LIMIT_RULES pass after JDBC
-        // pushdown can push an upstream Limit onto a derived scan). The early-return path no
-        // longer applies; SQL builder falls into the shared wrapping path, which produces
-        // "(SELECT cols FROM (<inner>) sr_merged LIMIT n) t<alias>". Note that the original
-        // sr_merged alias on the derived survives here because the wrapping path uses
-        // getCatalogTableName() as quotedTable — and the outer SELECT picks a different alias,
-        // so the two don't collide.
-        JDBCTable primary = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME0);
-        JDBCTable derived = new JDBCTable(primary);
-        String innerSql = "SELECT t0.`a` AS c5 FROM `tbl0` t0 INNER JOIN `tbl1` t1 ON (t0.`a` = t1.`a`)";
-        derived.setPushDownQuery(innerSql);
-
-        ColumnRefOperator c5Ref = new ColumnRefOperator(5, VarcharType.VARCHAR, "c5", true);
-        Map<ColumnRefOperator, Column> derivedColumns = new LinkedHashMap<>();
-        derivedColumns.put(c5Ref, new Column("c5", VarcharType.VARCHAR));
-        LogicalJDBCScanOperator derivedScan = newJDBCScan(derived, 10, null, derivedColumns);
-
-        JDBCTable base = getMockedJDBCTable(MockedJDBCMetadata.MOCKED_PARTITIONED_TABLE_NAME2);
-        ColumnRefOperator t1a = new ColumnRefOperator(20, VarcharType.VARCHAR, "a", true);
-        Map<ColumnRefOperator, Column> baseColumns = new LinkedHashMap<>();
-        baseColumns.put(t1a, base.getColumn("a"));
-        LogicalJDBCScanOperator baseScan = newJDBCScan(base, -1, null, baseColumns);
-
-        Map<ColumnRefOperator, String> qualifiedNames = new HashMap<>();
-        qualifiedNames.put(c5Ref, "t0.`c5`");
-        qualifiedNames.put(t1a, "t1.`a`");
-        JDBCJoinPushDownSQLBuilder sqlBuilder = new JDBCJoinPushDownSQLBuilder("`",
-                List.of(new JDBCJoinPushDownSQLBuilder.TableEntry(derived, "t0", derivedScan),
-                        new JDBCJoinPushDownSQLBuilder.TableEntry(base, "t1", baseScan)),
-                qualifiedNames);
-
-        String sql = sqlBuilder.build(List.of(c5Ref, t1a),
-                List.of(new BinaryPredicateOperator(BinaryType.EQ, c5Ref, t1a)),
-                List.of());
-
-        Assertions.assertEquals("SELECT t0.`c5` AS c5, t1.`a` AS c20 "
-                + "FROM (SELECT `c5` FROM (" + innerSql + ") sr_merged LIMIT 10) t0 "
-                + "INNER JOIN `tbl2` t1 ON (t0.`c5` = t1.`a`)", sql);
-    }
-
-    @Test
-    public void testQueryTableAtomBypassesMerging() throws Exception {
-        // One side of the JOIN is a JDBC native_query (queryTable). Step 3 filter excludes any
-        // group containing a queryTable atom, so the rule must not merge — plan stays as local
-        // HASH JOIN with two separate JDBC scans, neither wrapped in sr_merged.
+    public void testQueryTableAtomIsMerged() throws Exception {
+        // One side of the JOIN is a JDBC native_query (an inline table). collectMergeGroups now
+        // includes inline atoms, so the join is pushed down: the native_query is emitted as its own
+        // derived subquery — its raw body wrapped as (select ...) sr_inline and pre-filtered by the
+        // inner join's IS NOT NULL — and joined remotely, leaving a single JDBC scan, no HASH JOIN.
         String sql = "select t1.a, q.a from jdbc0.partitioned_db0.tbl0 t1 "
                 + "join table(jdbc0.native_query('select a from remote_table')) q on t1.a = q.a";
         String plan = getFragmentPlan(sql);
-        assertNotContains(plan, "sr_merged");
-        assertContains(plan, "HASH JOIN");
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        assertContains(plan,
+                "FROM (SELECT `a` FROM `tbl0` WHERE (`a` IS NOT NULL)) sr_t0"
+                        + " INNER JOIN (SELECT `a` FROM (select a from remote_table) sr_inline "
+                        + "WHERE (`a` IS NOT NULL)) sr_t1 "
+                        + "ON (sr_t0.`a` = sr_t1.`a`)) sr_inline");
+        assertNotContains(plan, "HASH JOIN");
+    }
+
+    @Test
+    public void testDerivedTableAtomIsMerged() throws Exception {
+        // The left atom is first turned into a derived (inline) scan by projection pushdown (concat
+        // is folded into its remote SQL), then joined with a base table. The relaxed rule merges the
+        // derived scan too, so the whole thing collapses to one pushed JDBC scan with no local HASH
+        // JOIN — proving prior-pushdown derived tables (synthesized column names included) flow
+        // through the join merge, not just native_query pass-throughs.
+        connectContext.getSessionVariable().setEnableJdbcProjectPushDown(true);
+        try {
+            String sql = "select x.e, t2.b from "
+                    + "(select a, concat(a, 'x') as e from jdbc0.partitioned_db0.tbl0) x "
+                    + "join jdbc0.partitioned_db0.tbl1 t2 on x.a = t2.a";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "sr_inline");
+            assertContains(plan, "CONCAT(");
+            assertNotContains(plan, "HASH JOIN");
+            Assertions.assertEquals(1, countOccurrences(plan, "TABLE: (SELECT "));
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcProjectPushDown(false);
+        }
     }
 }
