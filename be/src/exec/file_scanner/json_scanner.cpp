@@ -502,7 +502,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     // Hidden source-metadata columns are filled from the buffer's Kafka/Pulsar metadata (routine load),
     // never from the payload. If a payload field uses the same name as a metadata alias, the by-name
     // resolve below skips it so the metadata value wins.
+#if BE_TEST
+    const StreamMessageMeta* meta = _scanner->_test_meta;
+#else
     const StreamMessageMeta* meta = stream_source_meta_of(_file_stream_buffer);
+#endif
 
     faststring buffer;
     try {
@@ -633,7 +637,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
 Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
     size_t slot_size = _slot_descs.size();
     size_t jsonpath_size = _scanner->_json_paths.size();
+#if BE_TEST
+    const StreamMessageMeta* meta = _scanner->_test_meta;
+#else
     const StreamMessageMeta* meta = stream_source_meta_of(_file_stream_buffer);
+#endif
     // Hidden metadata columns carry no jsonpath, so they are transparent to the positional
     // slot->jsonpath mapping: a jsonpath maps to the i-th non-metadata slot. This keeps payload columns
     // aligned even when a metadata column sits before jsonpath-backed columns.

@@ -96,6 +96,66 @@ std::string pulsar_message_id_to_string(const pulsar::MessageId& id) {
 
 } // namespace
 
+void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, bool need_meta, bool need_key,
+                              bool need_headers, StreamMessageMeta* meta) {
+    // Always set: the scanner stamps partition/offset into error logs so rejected rows stay locatable
+    // even when the job selects no metadata column.
+    meta->set_partition(msg.partition());
+    meta->set_offset(msg.offset());
+    if (!need_meta) {
+        return;
+    }
+    meta->set_topic(topic);
+    // Leave the timestamp at its -1 sentinel when the broker reports none, so the column renders as
+    // NULL instead of a bogus epoch value.
+    auto timestamp = msg.timestamp();
+    if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
+        meta->set_timestamp(timestamp.timestamp);
+    }
+    if (need_key && msg.key_pointer() != nullptr) {
+        meta->set_key(std::string(static_cast<const char*>(msg.key_pointer()), msg.key_len()));
+    }
+    if (need_headers) {
+        // The Headers wrapper is owned by the message (its lifetime is the same as the Message, per
+        // RdKafka::Message::headers() docs); do NOT delete it here.
+        RdKafka::Headers* headers = msg.headers();
+        if (headers != nullptr) {
+            for (const auto& h : headers->get_all()) {
+                meta->add_header(h.key(), h.value() != nullptr
+                                                  ? std::string(static_cast<const char*>(h.value()), h.value_size())
+                                                  : std::string());
+            }
+        }
+    }
+}
+
+#ifndef __APPLE__
+void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
+                               bool need_key, bool need_headers, StreamMessageMeta* meta) {
+    // The TOPIC metadata exposes the configured logical topic; PARTITION surfaces the index parsed out
+    // of the per-message "<topic>-partition-N" name (message_topic). The full per-partition name stays
+    // the ack key.
+    meta->set_topic(topic);
+    int32_t partition_index = parse_pulsar_partition_index(topic, message_topic);
+    if (partition_index >= 0) {
+        meta->set_partition(partition_index);
+    }
+    meta->set_message_id(pulsar_message_id_to_string(msg.getMessageId()));
+    meta->set_timestamp(static_cast<int64_t>(msg.getPublishTimestamp()));
+    // Pulsar uses 0 for an unset event time; map it to -1 so the column renders as NULL.
+    int64_t event_ts = static_cast<int64_t>(msg.getEventTimestamp());
+    meta->set_event_timestamp(event_ts > 0 ? event_ts : -1);
+    if (need_key && msg.hasPartitionKey()) {
+        meta->set_key(msg.getPartitionKey());
+    }
+    if (need_headers) {
+        for (const auto& kv : msg.getProperties()) {
+            meta->add_header(kv.first, kv.second);
+        }
+    }
+}
+#endif
+
 Status KafkaDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
     DCHECK(ctx->kafka_info);
     DCHECK(_consumers.size() >= 1);
@@ -280,35 +340,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 Status st;
                 if (append_as_message) {
                     StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
-                    // Always set: the scanner stamps partition/offset into error logs so rejected rows
-                    // stay locatable even when the job selects no metadata column.
-                    meta.set_partition(msg->partition());
-                    meta.set_offset(msg->offset());
-                    if (need_meta) {
-                        meta.set_topic(ctx->kafka_info->topic);
-                        // Leave the timestamp at its -1 sentinel when the broker reports none, so the
-                        // column renders as NULL instead of a bogus epoch value.
-                        if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
-                            meta.set_timestamp(timestamp.timestamp);
-                        }
-                        if (need_key && msg->key_pointer() != nullptr) {
-                            meta.set_key(std::string(static_cast<const char*>(msg->key_pointer()), msg->key_len()));
-                        }
-                        if (need_headers) {
-                            // The Headers wrapper is owned by the message (its lifetime is the same as the
-                            // Message, per RdKafka::Message::headers() docs) and is freed when `msg` is
-                            // deleted below via msgDeleter. Do NOT delete it here, or it is a double free.
-                            RdKafka::Headers* headers = msg->headers();
-                            if (headers != nullptr) {
-                                for (const auto& h : headers->get_all()) {
-                                    meta.add_header(h.key(), h.value() != nullptr
-                                                                     ? std::string(static_cast<const char*>(h.value()),
-                                                                                   h.value_size())
-                                                                     : std::string());
-                                }
-                            }
-                        }
-                    }
+                    // The Headers wrapper the builder reads is owned by the message and freed when `msg`
+                    // is deleted below via msgDeleter; the builder does not take ownership of it.
+                    build_kafka_message_meta(*msg, ctx->kafka_info->topic, need_meta, need_key, need_headers, &meta);
                     st = kafka_pipe->append_json(static_cast<const char*>(msg->payload()),
                                                  static_cast<size_t>(msg->len()), &meta);
                 } else {
@@ -511,27 +545,9 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
                 const StreamMessageMeta* meta_ptr = nullptr;
                 if (need_meta) {
-                    // The TOPIC metadata exposes the configured logical topic; PARTITION surfaces the
-                    // index parsed out of the per-message "<topic>-partition-N" name. The full
-                    // per-partition name (`partition`) stays the ack key.
-                    meta.set_topic(ctx->pulsar_info->topic);
-                    int32_t partition_index = parse_pulsar_partition_index(ctx->pulsar_info->topic, partition);
-                    if (partition_index >= 0) {
-                        meta.set_partition(partition_index);
-                    }
-                    meta.set_message_id(pulsar_message_id_to_string(msg_id));
-                    meta.set_timestamp(static_cast<int64_t>(msg->getPublishTimestamp()));
-                    // Pulsar uses 0 for an unset event time; map it to -1 so the column renders as NULL.
-                    int64_t event_ts = static_cast<int64_t>(msg->getEventTimestamp());
-                    meta.set_event_timestamp(event_ts > 0 ? event_ts : -1);
-                    if (need_key && msg->hasPartitionKey()) {
-                        meta.set_key(msg->getPartitionKey());
-                    }
-                    if (need_headers) {
-                        for (const auto& kv : msg->getProperties()) {
-                            meta.add_header(kv.first, kv.second);
-                        }
-                    }
+                    // `partition` is msg->getTopicName(), read once above (unsafe to re-read inside the
+                    // builder in tests); it carries the "<topic>-partition-N" name for the index parse.
+                    build_pulsar_message_meta(*msg, ctx->pulsar_info->topic, partition, need_key, need_headers, &meta);
                     meta_ptr = &meta;
                 }
                 st = pulsar_pipe->append_json(static_cast<const char*>(msg->getData()), static_cast<size_t>(len),

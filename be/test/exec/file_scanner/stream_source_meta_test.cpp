@@ -104,6 +104,60 @@ TEST_F(StreamSourceMetaTest, fill_null_sentinels) {
     ASSERT_TRUE(topic->is_null(0));
 }
 
+TEST_F(StreamSourceMetaTest, fill_pulsar_scalars) {
+    StreamMessageMeta meta(ByteBufferMetaType::PULSAR);
+    meta.set_message_id("(1,2,3,-1)");
+    meta.set_event_timestamp(1700000000000L);
+
+    auto mid = varchar_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::MESSAGE_ID, &meta, mid.get()));
+    ASSERT_FALSE(mid->is_null(0));
+    ASSERT_EQ("(1,2,3,-1)", mid->get(0).get_slice().to_string());
+
+    auto evt = bigint_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::EVENT_TIME, &meta, evt.get()));
+    ASSERT_EQ(1700000000000L, evt->get(0).get_int64());
+
+    // to_string() renders the PULSAR branch (topic/partition/message_id).
+    meta.set_topic("t");
+    ASSERT_NE(std::string::npos, meta.to_string().find("pulsar"));
+}
+
+// Every kind renders SQL NULL from its absent-sentinel: empty topic/message_id, negative
+// offset/timestamp/event_time, and (from the KAFKA null test) partition/key.
+TEST_F(StreamSourceMetaTest, fill_all_null_sentinels) {
+    StreamMessageMeta meta(ByteBufferMetaType::PULSAR); // topic/message_id empty, all numerics -1, no key
+
+    auto topic = varchar_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::TOPIC, &meta, topic.get()));
+    ASSERT_TRUE(topic->is_null(0));
+
+    auto off = bigint_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::OFFSET, &meta, off.get()));
+    ASSERT_TRUE(off->is_null(0));
+
+    auto mid = varchar_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::MESSAGE_ID, &meta, mid.get()));
+    ASSERT_TRUE(mid->is_null(0));
+
+    auto ts = bigint_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::TIMESTAMP, &meta, ts.get()));
+    ASSERT_TRUE(ts->is_null(0));
+
+    auto evt = bigint_col();
+    ASSERT_OK(fill_stream_source_meta_column(TStreamSourceMetaKind::EVENT_TIME, &meta, evt.get()));
+    ASSERT_TRUE(evt->is_null(0));
+}
+
+// An unrecognized kind (e.g. a newer FE than BE) is a hard error rather than a silent NULL.
+TEST_F(StreamSourceMetaTest, fill_unknown_kind_errors) {
+    StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
+    auto col = varchar_col();
+    auto st = fill_stream_source_meta_column(static_cast<TStreamSourceMetaKind::type>(999), &meta, col.get());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
 TEST_F(StreamSourceMetaTest, headers_map_last_wins) {
     StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
     meta.add_header("h", "v1");

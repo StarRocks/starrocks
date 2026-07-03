@@ -66,6 +66,26 @@ namespace starrocks {
 // scanner renders -1 as SQL NULL).
 int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic);
 
+class StreamMessageMeta;
+
+// Populate a StreamMessageMeta from a Kafka message for the INCLUDE METADATA clause. partition/offset
+// are always set (the scanner stamps them into rejected-row error logs even when the job selects no
+// metadata column); topic/timestamp/key/headers are attached only when need_meta is set, and key/headers
+// are further gated by need_key/need_headers so a job that selects no KEY/HEADERS column never pays to
+// copy them. Extracted from start_all() so the message->meta mapping is unit-testable without a broker.
+void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, bool need_meta, bool need_key,
+                              bool need_headers, StreamMessageMeta* meta);
+
+#ifndef __APPLE__
+// Pulsar counterpart of build_kafka_message_meta, called only when the job declares a metadata column
+// (need_meta). topic is the configured logical topic (surfaced as TOPIC); message_topic is the
+// per-message topic name (the caller reads it via msg.getTopicName() -- passed in rather than read here
+// because getTopicName() dereferences a null impl on a locally-built pulsar::Message) and the PARTITION
+// index is parsed out of it. key/headers are gated by need_key/need_headers.
+void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
+                               bool need_key, bool need_headers, StreamMessageMeta* meta);
+#endif
+
 // data consumer group saves a group of data consumers.
 // These data consumers share the same stream load pipe.
 // This class is not thread safe.
