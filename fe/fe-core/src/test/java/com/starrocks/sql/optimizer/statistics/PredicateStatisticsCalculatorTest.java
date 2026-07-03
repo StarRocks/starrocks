@@ -387,7 +387,7 @@ public class PredicateStatisticsCalculatorTest {
                 new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(ifPredicate, statistics);
-        Assertions.assertEquals(17.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(16.0, (int) result.getOutputRowCount());
     }
 
     @Test
@@ -439,7 +439,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge20Condition, innerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(13.0, (int) result.getOutputRowCount());
 
         // IF ( c1 >= 30 , c2 = 50 , IF ( c1 >= 20 , c3 = 80 , c3 = 70 ) )
         innerIfPredicate =
@@ -530,7 +530,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(593.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(592.0, (int) result.getOutputRowCount());
 
         // IF ( c1 >= 20 , c4 = 10 AND IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
         BinaryPredicateOperator c4Eq10Predicate =
@@ -676,5 +676,44 @@ public class PredicateStatisticsCalculatorTest {
         double origNulls = 0.2 * origRowCount;
         double afterOrNulls = afterOr.getColumnStatistic(aColumn).getNullsFraction() * afterOr.getOutputRowCount();
         Assertions.assertTrue(afterOrNulls <= origNulls);
+    }
+
+    @Test
+    public void testOrPredicateShouldNotDoubleCountOverlappingNulls() {
+        // GIVEN a 1000-row table where:
+        //   - a has 20% nulls -> 200 rows have a = NULL
+        //   - b and c each match half the rows on "= 1" (2 distinct values 0/1, no nulls)
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var bColumn = new ColumnRefOperator(1, IntegerType.INT, "b", true);
+        final var cColumn = new ColumnRefOperator(2, IntegerType.INT, "c", true);
+
+        double rows = 1000;
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(rows)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.2).setDistinctValuesCount(100).setAverageRowSize(10).build())
+                .addColumnStatistic(bColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0).setMinValue(0).setMaxValue(1).setDistinctValuesCount(2).build())
+                .addColumnStatistic(cColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0).setMinValue(0).setMaxValue(1).setDistinctValuesCount(2).build())
+                .build();
+
+        // WHEN
+        // (a IS NULL AND b = 1) OR (c = 1)
+        final var leftArm = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                new IsNullPredicateOperator(false, aColumn),
+                new BinaryPredicateOperator(BinaryType.EQ, bColumn, ConstantOperator.createInt(1)));
+        final var rightArm = new BinaryPredicateOperator(BinaryType.EQ, cColumn, ConstantOperator.createInt(1));
+        final var or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, leftArm, rightArm);
+        final var afterOr = PredicateStatisticsCalculator.statisticsCalculate(or, statistics);
+
+        // THEN
+        // The two arms' null rows are unioned, counting the rows they share only once:
+        //   left arm  (a IS NULL AND b = 1): 100 null rows
+        //   right arm (c = 1):               100 null rows  (20% of its 500 rows)
+        //   shared    (both, b = 1 AND c = 1): 50 null rows
+        //   => 100 + 100 - 50 = 150 null rows
+        double nullRows = afterOr.getColumnStatistic(aColumn).getNullsFraction() * afterOr.getOutputRowCount();
+        Assertions.assertEquals(150, nullRows, 0.001);
     }
 }
