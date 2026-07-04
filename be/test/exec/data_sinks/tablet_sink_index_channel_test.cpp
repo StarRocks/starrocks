@@ -33,7 +33,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

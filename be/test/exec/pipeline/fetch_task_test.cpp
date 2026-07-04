@@ -34,7 +34,7 @@
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks::pipeline {
 namespace {

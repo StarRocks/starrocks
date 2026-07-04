@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/lake_file_name.h"
+#include "storage_primitive/lake_file_name.h"
 
 #include <gtest/gtest.h>
 

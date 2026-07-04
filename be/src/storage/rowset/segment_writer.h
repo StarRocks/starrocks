@@ -46,10 +46,10 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "io/input_stream.h"
-#include "storage/primitive/flat_json_config.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 

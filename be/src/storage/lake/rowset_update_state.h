@@ -23,9 +23,9 @@
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
 

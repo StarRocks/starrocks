@@ -30,7 +30,7 @@
 #include "formats/reserved_columns.h"
 #include "fs/hdfs_metrics.h"
 #include "io/compressed_input_stream.h"
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
 

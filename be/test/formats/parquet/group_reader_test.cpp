@@ -39,7 +39,7 @@
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/column_expr_predicate.h"
+#include "storage_primitive/column_expr_predicate.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks::parquet {

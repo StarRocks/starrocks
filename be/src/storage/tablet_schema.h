@@ -46,11 +46,11 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/primitive/aggregate_type.h"
-#include "storage/primitive/primary_key_encoding_types.h"
-#include "storage/primitive/tablet_column.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
+#include "storage_primitive/aggregate_type.h"
+#include "storage_primitive/primary_key_encoding_types.h"
+#include "storage_primitive/tablet_column.h"
 #include "types/agg_state_desc.h"
 
 namespace starrocks {

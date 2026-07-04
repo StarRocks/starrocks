@@ -18,8 +18,8 @@
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/chunk_iterator.h"
 #include "types_fwd.h"
 
 namespace starrocks {

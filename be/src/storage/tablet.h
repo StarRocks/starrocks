@@ -53,11 +53,11 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/base_tablet.h"
 #include "storage/data_dir.h"
-#include "storage/primitive/olap_tuple.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
+#include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {
 

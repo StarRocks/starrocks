@@ -39,10 +39,10 @@
 #include "base/string/slice.h"
 #include "column/column.h"
 #include "common/status.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
+#include "storage_primitive/range.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {

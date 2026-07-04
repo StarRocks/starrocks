@@ -59,7 +59,7 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_file_reader.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"

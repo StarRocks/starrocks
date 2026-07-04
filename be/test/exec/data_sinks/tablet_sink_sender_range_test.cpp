@@ -26,7 +26,7 @@
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 

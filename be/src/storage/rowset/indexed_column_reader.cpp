@@ -35,10 +35,10 @@
 #include "storage/rowset/indexed_column_reader.h"
 
 #include "fs/fs.h"
-#include "gutil/strings/substitute.h" // for Substitute
-#include "storage/primitive/key_coder.h"
+#include "gutil/strings/substitute.h"     // for Substitute
 #include "storage/rowset/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/page_io.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 
