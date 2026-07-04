@@ -143,6 +143,9 @@ public class PluginMgr implements Writable {
             }
 
             if (checkDynamicPluginNameExist(info.getName())) {
+                if (stmt.isIfNotExists()) {
+                    return null;
+                }
                 throw new StarRocksException("plugin " + info.getName() + " has already been installed.");
             }
 
@@ -169,6 +172,12 @@ public class PluginMgr implements Writable {
 
     public void uninstallPluginFromStmt(UninstallPluginStmt stmt) throws IOException, StarRocksException {
         String pluginName = stmt.getPluginName();
+        if (!checkDynamicPluginNameExist(pluginName)) {
+            if (stmt.isIfExists()) {
+                return;
+            }
+            throw new DdlException("Plugin " + pluginName + " does not exist");
+        }
         int typeId = uninstallPlugin(pluginName);
 
         GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(new UninstallPluginLog(pluginName), wal -> {

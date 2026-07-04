@@ -23,6 +23,7 @@ import com.starrocks.persist.UninstallPluginLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -292,6 +293,44 @@ public class PluginMgrEditLogTest {
             masterPluginMgr.uninstallPluginFromStmt(stmt);
         });
         Assertions.assertTrue(exception.getMessage().contains("does not exist"));
+    }
+
+    @Test
+    public void testInstallPluginIfNotExistsWhenAlreadyInstalled() throws Exception {
+        // Pre-register the plugin so it already exists
+        PluginInfo pluginInfo = createMockPluginInfo();
+        masterPluginMgr.replayLoadDynamicPlugin(pluginInfo);
+        Assertions.assertTrue(pluginExists(masterPluginMgr, TEST_PLUGIN_NAME, PluginInfo.PluginType.AUDIT));
+
+        // Build stmt with IF NOT EXISTS flag set
+        Map<String, String> properties = Maps.newHashMap();
+        InstallPluginStmt stmt = new InstallPluginStmt("http://test/test.zip", properties, true, NodePosition.ZERO);
+
+        new MockUp<DynamicPluginLoader>() {
+            @Mock
+            public PluginInfo getPluginInfo() throws IOException {
+                return pluginInfo;
+            }
+        };
+
+        // Should silently return null — no exception, no re-install
+        PluginInfo result = masterPluginMgr.installPlugin(stmt);
+        Assertions.assertNull(result);
+
+        // Plugin should still be registered (untouched)
+        Assertions.assertTrue(pluginExists(masterPluginMgr, TEST_PLUGIN_NAME, PluginInfo.PluginType.AUDIT));
+    }
+
+    @Test
+    public void testUninstallPluginIfExistsWhenNotInstalled() throws Exception {
+        String nonExistentPlugin = "non_existent_plugin_ifexists";
+        Assertions.assertFalse(pluginExists(masterPluginMgr, nonExistentPlugin, PluginInfo.PluginType.AUDIT));
+
+        // Build stmt with IF EXISTS flag set
+        UninstallPluginStmt stmt = new UninstallPluginStmt(nonExistentPlugin, true, NodePosition.ZERO);
+
+        // Should return silently — no exception
+        Assertions.assertDoesNotThrow(() -> masterPluginMgr.uninstallPluginFromStmt(stmt));
     }
 }
 

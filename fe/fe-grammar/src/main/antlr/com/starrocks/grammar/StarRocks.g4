@@ -2172,11 +2172,11 @@ showExportStatement
 // ------------------------------------------- Plugin Statement --------------------------------------------------------
 
 installPluginStatement
-    : INSTALL PLUGIN FROM identifierOrString properties?
+    : INSTALL PLUGIN (IF NOT EXISTS)? FROM identifierOrString properties?
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN identifierOrString
+    : UNINSTALL PLUGIN (IF EXISTS)? identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------

@@ -4632,14 +4632,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitInstallPluginStatement(com.starrocks.sql.parser.StarRocksParser.InstallPluginStatementContext context) {
         String pluginPath = ((Identifier) visit(context.identifierOrString())).getValue();
         Map<String, String> properties = getCaseSensitiveProperties(context.properties());
-        return new InstallPluginStmt(pluginPath, properties, createPos(context));
+        boolean ifNotExists = context.IF() != null;
+        return new InstallPluginStmt(pluginPath, properties, ifNotExists, createPos(context));
     }
 
     @Override
     public ParseNode visitUninstallPluginStatement(
             com.starrocks.sql.parser.StarRocksParser.UninstallPluginStatementContext context) {
         String pluginPath = ((Identifier) visit(context.identifierOrString())).getValue();
-        return new UninstallPluginStmt(pluginPath, createPos(context));
+        boolean ifExists = context.IF() != null;
+        return new UninstallPluginStmt(pluginPath, ifExists, createPos(context));
     }
 
     // ------------------------------------------------- File Statement ----------------------------------------------------------

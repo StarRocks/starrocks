@@ -34,11 +34,20 @@
 
 package com.starrocks.plugin;
 
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UninstallPluginLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,8 +55,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PluginMgrTest {
@@ -88,5 +100,54 @@ public class PluginMgrTest {
             e.printStackTrace();
             assert false;
         }
+    }
+
+    @Test
+    public void testInstallPluginIfNotExistsIdempotent() throws Exception {
+        String pluginName = "idempotent_install_plugin";
+        PluginInfo pluginInfo = new PluginInfo(pluginName, PluginType.AUDIT, "test");
+
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.replayLoadDynamicPlugin(pluginInfo);
+
+        new MockUp<DynamicPluginLoader>() {
+            @Mock
+            public PluginInfo getPluginInfo() throws IOException {
+                return pluginInfo;
+            }
+        };
+
+        Map<String, String> props = Maps.newHashMap();
+        InstallPluginStmt stmt = new InstallPluginStmt("http://dummy/test.zip", props, true, NodePosition.ZERO);
+        PluginInfo result = pluginMgr.installPlugin(stmt);
+        assertNull(result);
+    }
+
+    @Test
+    public void testUninstallPluginIfExistsIdempotent() {
+        PluginMgr pluginMgr = new PluginMgr();
+        UninstallPluginStmt stmt = new UninstallPluginStmt("nonexistent_plugin", true, NodePosition.ZERO);
+        assertDoesNotThrow(() -> pluginMgr.uninstallPluginFromStmt(stmt));
+    }
+
+    @Test
+    public void testUninstallPluginFromStmtNormal() throws Exception {
+        String pluginName = "normal_uninstall_plugin";
+        PluginInfo pluginInfo = new PluginInfo(pluginName, PluginType.AUDIT, "test");
+
+        PluginMgr pluginMgr = new PluginMgr();
+        pluginMgr.replayLoadDynamicPlugin(pluginInfo);
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUninstallPlugin(UninstallPluginLog log, WALApplier walApplier) {
+                walApplier.apply(log);
+            }
+        };
+
+        UninstallPluginStmt stmt = new UninstallPluginStmt(pluginName);
+        pluginMgr.uninstallPluginFromStmt(stmt);
+        assertFalse(pluginMgr.getAllDynamicPluginInfo()
+                .stream().anyMatch(p -> p.getName().equals(pluginName)));
     }
 }
