@@ -35,6 +35,11 @@ public class GetRemoteFilesParams {
     private boolean enableColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
+    // File-level sampling for background stats collection (e.g. Iceberg ANALYZE SAMPLE):
+    // each planned file is independently kept with probability fileSampleRatio.
+    // 1.0 (default) means no sampling, i.e. behavior is unchanged for normal queries.
+    private double fileSampleRatio = 1.0;
+    private long sampleSeed = 0;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -49,6 +54,8 @@ public class GetRemoteFilesParams {
         this.enableColumnStats = builder.enableColumnStats;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
+        this.fileSampleRatio = builder.fileSampleRatio;
+        this.sampleSeed = builder.sampleSeed;
     }
 
     public int getPartitionSize() {
@@ -73,7 +80,9 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
-                .setUsedForDelete(usedForDelete);
+                .setUsedForDelete(usedForDelete)
+                .setFileSampleRatio(fileSampleRatio)
+                .setSampleSeed(sampleSeed);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -144,6 +153,14 @@ public class GetRemoteFilesParams {
         this.tableVersionRange = tableVersionRange;
     }
 
+    public void setFileSampleRatio(double fileSampleRatio) {
+        this.fileSampleRatio = fileSampleRatio;
+    }
+
+    public void setSampleSeed(long sampleSeed) {
+        this.sampleSeed = sampleSeed;
+    }
+
     public boolean isCheckPartitionExistence() {
         return checkPartitionExistence;
     }
@@ -160,6 +177,14 @@ public class GetRemoteFilesParams {
         return usedForDelete;
     }
 
+    public double getFileSampleRatio() {
+        return fileSampleRatio;
+    }
+
+    public long getSampleSeed() {
+        return sampleSeed;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -173,6 +198,8 @@ public class GetRemoteFilesParams {
         private boolean enableColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
+        private double fileSampleRatio = 1.0;
+        private long sampleSeed = 0;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -231,6 +258,16 @@ public class GetRemoteFilesParams {
 
         public Builder setUsedForDelete(boolean usedForDelete) {
             this.usedForDelete = usedForDelete;
+            return this;
+        }
+
+        public Builder setFileSampleRatio(double fileSampleRatio) {
+            this.fileSampleRatio = fileSampleRatio;
+            return this;
+        }
+
+        public Builder setSampleSeed(long sampleSeed) {
+            this.sampleSeed = sampleSeed;
             return this;
         }
 

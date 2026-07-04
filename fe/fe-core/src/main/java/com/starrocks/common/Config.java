@@ -2660,6 +2660,31 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int statistic_sample_collect_partition_size = 300;
 
+    /**
+     * Hard cap on how many rows a single round of Iceberg external-table file-level sample
+     * ANALYZE (see ExternalSampleStatisticsCollectJob) is allowed to scan. The sample ratio for
+     * a round is derived as min(1.0, rowsThisRound / row_count), so this bounds wall-clock cost
+     * per round regardless of table size, instead of relying on a percentage alone (a fixed
+     * percentage of an astronomically large table can still mean scanning far too many rows).
+     * Row count (not file count) is used as the budget unit because Iceberg files can vary
+     * wildly in row count, so a file-count-based cap gives a much less predictable row volume
+     * per round than a row-count-based one -- row counts are just as cheap to read from
+     * manifest-list summary fields as file counts are. Successive rounds within one ANALYZE
+     * execution double the per-round row target (up to statistic_external_sample_max_rounds
+     * rounds) so accuracy improves without waiting on the external auto-collect schedule
+     * between rounds.
+     */
+    @ConfField(mutable = true)
+    public static long statistic_external_sample_max_rows_per_round = 2000000;
+
+    /**
+     * Max number of progressive rounds run inside a single Iceberg file-sample ANALYZE execution.
+     * Bounds total per-job cost to roughly (2^rounds - 1) * statistic_external_sample_max_rows_per_round
+     * rows in the worst case, even if the table never reaches full coverage.
+     */
+    @ConfField(mutable = true)
+    public static int statistic_external_sample_max_rounds = 4;
+
     @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
             "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
             "For first load: deltaRatio = loadRows / (totalRows + 1). " +

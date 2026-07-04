@@ -91,8 +91,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final String catalogName;
     protected List<String> partitionNames;
-    private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    // protected: reused by ExternalSampleStatisticsCollectJob's Iceberg file-sampling path, which
+    // needs to scale sampled row counts before buffering rows (this class's own
+    // collectStatisticSync buffers unscaled counts, so it can't be reused as-is for that path).
+    protected final List<String> sqlBuffer = Lists.newArrayList();
+    protected final List<List<Expr>> rowsBuffer = Lists.newArrayList();
     // Skip collecting statistics for default partition in iceberg table,
     // because we can not generate partition predicates for it.
     private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
@@ -424,7 +427,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, false);
     }
 
-    private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
+    protected void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistic_full_collect_buffer && !force) {
