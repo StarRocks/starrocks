@@ -554,16 +554,11 @@ set(STARROCKS_LINK_LIBS
     ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
-    Formats
     Orchestration
     DataWorkflows
     ${WL_END_GROUP}
     Storage
-    FormatAvro
-    FormatCsv
-    FormatJson
-    FormatOrc
-    FormatCore
+    Formats
     ExecRuntime
     ComputeEnv
     ExecPrimitive

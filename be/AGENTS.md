@@ -190,13 +190,13 @@ Core runtime building blocks and process-scoped runtime environment resources wi
 - Core tests: `runtime_test`
 - Remediation: Keep Runtime restricted to core runtime infrastructure and process-scoped runtime environment resources; move execution, service, storage, stream-load, and connector integration into higher modules.
 
-### FormatCore (`formatcore`)
-Format-oriented core primitives above ComputeEnv, ExecPrimitive, Expr, Runtime, FileSystem, ChunkCore, ColumnCore, and Types.
-- Targets: `FormatCore`
-- Allowed internal include prefixes: `formats/column_evaluator.h`, `formats/deletion_bitmap.h`, `formats/disk_range.hpp`, `formats/file_writer.h`, `formats/io/`, `formats/reserved_columns.h`, `formats/scan_context.h`, `formats/utils.h`, `exprs/`, `runtime/`, `fs/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ComputeEnv`, `ExecPrimitive`, `Expr`, `Runtime`, `FileSystem`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+### Format (`format`)
+Format module for core format primitives and concrete CSV, JSON, Avro, ORC, and Parquet implementations.
+- Targets: `Formats`, `FormatParquet`, `FormatOrc`, `FormatAvro`, `FormatJson`, `FormatCsv`, `FormatCore`
+- Allowed internal include prefixes: `formats/`, `cache/`, `compute_env/`, `exec/runtime_filter/`, `exprs/`, `runtime/`, `fs/`, `io/`, `storage/primitive/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `FileSystem`, `IO`, `Cache`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `orc`
 - Core tests: `format_test`
-- Remediation: Keep FormatCore limited to reusable format primitives; move connector orchestration and higher execution policy upward.
+- Remediation: Keep format code inside the Format module; move connector orchestration and higher execution policy upward.
 
 ### StoragePrimitive (`storageprimitive`)
 Primitive storage contracts, predicate contracts, predicate trees, and value types shared below ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
@@ -333,7 +333,7 @@ Orchestration layer below Service for query, fragment, and ingestion lifecycle e
 Diagnostic script execution and command dispatch layer below Service, HttpService, Tools, and AgentServer, and above the remaining reusable BE modules.
 - Targets: `Script`
 - Allowed internal include prefixes: `script/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `data_workflows/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `geo/`, `gutil/`, `io/`, `orchestration/`, `platform/`, `runtime/`, `storage/`, `types/`
-- Allowed target deps: `Base`, `Gutil`, `Common`, `Cache`, `IO`, `FileSystem`, `Platform`, `Types`, `ColumnCore`, `ChunkCore`, `ColumnSortCore`, `Runtime`, `Runtime`, `Runtime`, `FormatCore`, `FormatCsv`, `FormatJson`, `FormatAvro`, `FormatOrc`, `Formats`, `StoragePrimitive`, `StorageBase`, `Storage`, `ComputeEnv`, `DataWorkflows`, `Expr`, `ExprDict`, `ExprTableFunction`, `ExprUtility`, `ExecPrimitive`, `ExecRuntime`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecJoinCore`, `Exec`, `ConnectorPrimitive`, `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Orchestration`, `Geo`, `StarRocksGen`
+- Allowed target deps: `Base`, `Gutil`, `Common`, `Cache`, `IO`, `FileSystem`, `Platform`, `Types`, `ColumnCore`, `ChunkCore`, `ColumnSortCore`, `Runtime`, `Runtime`, `Runtime`, `Formats`, `StoragePrimitive`, `StorageBase`, `Storage`, `ComputeEnv`, `DataWorkflows`, `Expr`, `ExprDict`, `ExprTableFunction`, `ExprUtility`, `ExecPrimitive`, `ExecRuntime`, `ExecSchemaScannerCore`, `ExecSchemaScanners`, `ExecJoinCore`, `Exec`, `ConnectorPrimitive`, `Connector`, `ConnectorBenchmark`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Orchestration`, `Geo`, `StarRocksGen`
 - Core tests: `script_test`
 - Remediation: Keep Script below Service, HttpService, Tools, and AgentServer; lower reusable behavior can live in lower BE modules that Script is allowed to depend on.
 
@@ -341,7 +341,7 @@ Diagnostic script execution and command dispatch layer below Service, HttpServic
 Shared service-layer target above Script, runtime, cache, compute, and AgentServer without owning ServiceBE bootstrap code.
 - Targets: `Service`
 - Allowed internal include prefixes: `service/`, `script/`, `agent/`, `base/`, `cache/`, `column/`, `common/`, `connector/`, `compute_env/`, `exec/`, `exprs/`, `formats/`, `fs/`, `gen_cpp/`, `gutil/`, `http/`, `io/`, `platform/`, `orchestration/`, `runtime/`, `storage/`, `types/`
-- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `FormatCore`, `Formats`, `FormatOrc`, `ChunkCore`, `ColumnCore`, `Types`
+- Allowed target deps: `Script`, `Runtime`, `Orchestration`, `Runtime`, `Runtime`, `Cache`, `AgentServer`, `ComputeEnv`, `ExecRuntime`, `ExecPrimitive`, `Platform`, `Storage`, `StoragePrimitive`, `StorageBase`, `FileSystem`, `IO`, `HttpService`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Connector`, `ConnectorPrimitive`, `ConnectorBootstrap`, `ConnectorBuiltinRegistry`, `Exec`, `Formats`, `ChunkCore`, `ColumnCore`, `Types`
 - Remediation: Keep shared Service below ServiceBE and depend on checked module targets such as AgentServer instead of ad hoc lower-layer reach-through.
 <!-- END GENERATED: BE MODULE HARNESSES -->
 

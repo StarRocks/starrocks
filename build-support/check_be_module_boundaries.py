@@ -219,10 +219,10 @@ def parse_cmake_state(repo_root: Path) -> CMakeState:
                 target_name = tokens[0]
                 link_tokens = _expand_tokens([token for token in tokens[1:] if token not in LINK_SCOPE_KEYWORDS], variables)
                 if "be/test/" in cmake_path.as_posix():
-                    raw_test_links[target_name] = link_tokens
+                    raw_test_links.setdefault(target_name, []).extend(link_tokens)
                     target_definition_paths.setdefault(target_name, definition_path)
                 else:
-                    raw_target_links[target_name] = link_tokens
+                    raw_target_links.setdefault(target_name, []).extend(link_tokens)
 
     known_targets = set(target_sources)
     target_links = {target: [token for token in links if _is_internal_link_token(token, known_targets)] for target, links in raw_target_links.items()}
@@ -438,7 +438,7 @@ def check_includes_for_module(
 
 def check_target_links_for_module(module: ModuleSpec, cmake_state: CMakeState) -> list[Violation]:
     violations: list[Violation] = []
-    allowed_edges = set(module.allowed_target_deps)
+    allowed_edges = set(module.allowed_target_deps) | set(module.owned_targets)
     for target_name in module.owned_targets:
         for dep in cmake_state.target_links.get(target_name, []):
             if dep not in allowed_edges:

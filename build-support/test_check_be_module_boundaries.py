@@ -311,6 +311,10 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                 ["ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
                 cmake_state.test_target_links["column_test"],
             )
+            self.assertEqual(
+                ["Types", "ColumnCoreInternal", "Common"],
+                cmake_state.target_links["ColumnCore"],
+            )
 
     def test_changed_paths_limit_checked_modules(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -407,7 +411,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                         {
                             "id": "columncore",
                             "doc_label": "ColumnCore",
-                            "owned_targets": ["ColumnCore"],
+                            "owned_targets": ["ColumnCore", "ColumnCoreInternal"],
                             "owned_globs": ["be/src/column/**"],
                             "allowed_include_prefixes": [
                                 "column/",
@@ -470,10 +474,17 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         (repo / "be" / "src" / "column" / "CMakeLists.txt").write_text(
             textwrap.dedent(
                 """\
+                ADD_BE_LIB(ColumnCoreInternal
+                    internal.cpp
+                )
+
                 ADD_BE_LIB(ColumnCore
                     column.cpp
                     hash_set.cpp
                 )
+
+                target_link_libraries(ColumnCore PUBLIC Types)
+                target_link_libraries(ColumnCore PRIVATE ColumnCoreInternal Common)
                 """
             )
         )
@@ -528,6 +539,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         )
         (repo / "be" / "src" / "column" / "column.cpp").write_text('#include "column/column.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.cpp").write_text('#include "column/hash_set.h"\n')
+        (repo / "be" / "src" / "column" / "internal.cpp").write_text('#include "column/internal.h"\n')
         (repo / "be" / "src" / "io" / "io.cpp").write_text('#include "io/io.h"\n')
         (repo / "be" / "src" / "runtime" / "runtime.cpp").write_text('#include "runtime/runtime_state.h"\n')
         (repo / "be" / "src" / "column" / "hash_set.h").write_text(
