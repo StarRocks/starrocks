@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/cache_stats_connector.h"
+#include "connector/cache_stats/cache_stats_connector.h"
 
 #include "connector/connector.h"
-#include "exec/cache_stats_scanner.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -51,7 +50,7 @@ Status CacheStatsDataSource::open(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor for cache stats scan");
     }
 
-    _scanner = std::make_unique<starrocks::CacheStatsScanner>(_tuple_desc);
+    _scanner = std::make_unique<CacheStatsScanner>(_tuple_desc);
     RETURN_IF_ERROR(_scanner->init(state, _scan_range));
     RETURN_IF_ERROR(_scanner->open(state));
     return Status::OK();

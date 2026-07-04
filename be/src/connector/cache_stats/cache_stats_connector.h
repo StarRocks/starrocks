@@ -14,11 +14,8 @@
 
 #pragma once
 
+#include "connector/cache_stats/cache_stats_scanner.h"
 #include "connector/connector.h"
-
-namespace starrocks {
-class CacheStatsScanner;
-} // namespace starrocks
 
 namespace starrocks::connector {
 
@@ -68,7 +65,7 @@ public:
 private:
     const CacheStatsDataSourceProvider* _provider;
     TInternalScanRange _scan_range;
-    std::unique_ptr<starrocks::CacheStatsScanner> _scanner;
+    std::unique_ptr<CacheStatsScanner> _scanner;
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
 };

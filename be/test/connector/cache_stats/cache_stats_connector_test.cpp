@@ -12,63 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BE_TEST
-#define BE_TEST
-#endif
-
-#include "exec/cache_stats_scanner.h"
+#include "connector/cache_stats/cache_stats_connector.h"
 
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
+#include <memory>
+#include <string>
+
 #include "common/config_exec_fwd.h"
-#include "common/status.h"
-#include "connector/cache_stats_connector.h"
-#include "exec/exec_env.h"
-#include "fs/fs_util.h"
+#include "connector/cache_stats/cache_stats_scanner.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
-#include "storage/lake/tablet_manager.h"
-#include "storage/storage_env.h"
 
-namespace starrocks {
+namespace starrocks::connector {
 
-class CacheStatsScannerTest : public ::testing::Test {
+class CacheStatsConnectorTest : public ::testing::Test {
 public:
-    CacheStatsScannerTest() : _tablet_id(next_id()) {
-        _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
-        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
-
-        CHECK(FileSystem::Default()
-                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName))
-                      .ok());
-        CHECK(FileSystem::Default()
-                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName))
-                      .ok());
-        CHECK(FileSystem::Default()
-                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName))
-                      .ok());
-
-        TUniqueId query_id;
+    void SetUp() override {
+        TUniqueId fragment_id;
         TQueryOptions query_options;
         TQueryGlobals query_globals;
-        TUniqueId fragment_id;
-        auto* exec_env = ExecEnv::GetInstance();
-        _state = _pool.add(new RuntimeState(query_id, fragment_id, query_options, query_globals,
-                                            &exec_env->query_execution_services(), exec_env));
-        _state->init_mem_trackers(query_id);
-    }
-
-    ~CacheStatsScannerTest() override {
-        (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
-        (void)fs::remove_all(kRootLocation);
+        _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                        static_cast<const QueryExecutionServices*>(nullptr), nullptr);
+        TUniqueId query_id;
+        _runtime_state->init_mem_trackers(query_id);
+        _pool = _runtime_state->obj_pool();
     }
 
 protected:
@@ -109,26 +79,21 @@ protected:
         }
         tuple_desc_builder.build(&table_desc_builder);
 
-        CHECK(DescriptorTbl::create(_state, &_pool, table_desc_builder.desc_tbl(), &_desc_tbl,
-                                    config::vector_chunk_size)
-                      .ok());
-        _state->set_desc_tbl(_desc_tbl);
+        auto status = DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &_desc_tbl,
+                                            config::vector_chunk_size);
+        ASSERT_TRUE(status.ok()) << status.to_string();
+        _runtime_state->set_desc_tbl(_desc_tbl);
     }
 
     const TupleDescriptor* tuple_desc() { return _desc_tbl->get_tuple_descriptor(0); }
 
-    constexpr static const char* const kRootLocation = "./CacheStatsScannerTest";
-    lake::TabletManager* _tablet_mgr;
-    std::shared_ptr<lake::LocationProvider> _location_provider;
-    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
-    int64_t _tablet_id;
-
-    ObjectPool _pool;
-    RuntimeState* _state = nullptr;
+    std::shared_ptr<RuntimeState> _runtime_state = nullptr;
+    ObjectPool* _pool = nullptr;
     DescriptorTbl* _desc_tbl = nullptr;
+    int64_t _tablet_id = 12345;
 };
 
-TEST_F(CacheStatsScannerTest, test_init_invalid_version) {
+TEST_F(CacheStatsConnectorTest, InitInvalidVersion) {
     build_desc_tbl();
     CacheStatsScanner scanner(tuple_desc());
 
@@ -136,12 +101,12 @@ TEST_F(CacheStatsScannerTest, test_init_invalid_version) {
     scan_range.tablet_id = _tablet_id;
     scan_range.version = "abc";
 
-    auto st = scanner.init(nullptr, scan_range);
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.message().find("Invalid") != std::string::npos) << st.message();
+    auto status = scanner.init(nullptr, scan_range);
+    ASSERT_FALSE(status.ok());
+    ASSERT_NE(status.message().find("Invalid"), std::string::npos) << status.message();
 }
 
-TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported) {
+TEST_F(CacheStatsConnectorTest, GetChunkNotSupported) {
     build_desc_tbl();
     CacheStatsScanner scanner(tuple_desc());
 
@@ -154,13 +119,13 @@ TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported) {
 
     ChunkPtr chunk;
     bool eos = false;
-    auto st = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    auto status = scanner.get_chunk(nullptr, &chunk, &eos);
+    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk, nullptr);
 }
 
-TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported_with_unknown_slot) {
+TEST_F(CacheStatsConnectorTest, GetChunkNotSupportedWithUnknownSlot) {
     build_desc_tbl(true);
     CacheStatsScanner scanner(tuple_desc());
 
@@ -173,20 +138,20 @@ TEST_F(CacheStatsScannerTest, test_get_chunk_not_supported_with_unknown_slot) {
 
     ChunkPtr chunk;
     bool eos = false;
-    auto st = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    auto status = scanner.get_chunk(nullptr, &chunk, &eos);
+    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk, nullptr);
 
     scanner.close(nullptr);
 }
 
-TEST_F(CacheStatsScannerTest, test_connector_data_source) {
+TEST_F(CacheStatsConnectorTest, ConnectorDataSource) {
     const int64_t version = 4;
     build_desc_tbl();
 
-    connector::CacheStatsConnector connector;
-    ASSERT_EQ(connector.connector_type(), connector::ConnectorType::CACHE_STATS);
+    CacheStatsConnector connector;
+    ASSERT_EQ(connector.connector_type(), ConnectorType::CACHE_STATS);
 
     TCacheStatsScanNode scan_node;
     scan_node.__set_tuple_id(0);
@@ -198,7 +163,7 @@ TEST_F(CacheStatsScannerTest, test_connector_data_source) {
     ASSERT_NE(provider, nullptr);
     ASSERT_FALSE(provider->insert_local_exchange_operator());
     ASSERT_FALSE(provider->accept_empty_scan_ranges());
-    ASSERT_EQ(provider->tuple_descriptor(_state), _state->desc_tbl().get_tuple_descriptor(0));
+    ASSERT_EQ(provider->tuple_descriptor(_runtime_state.get()), _runtime_state->desc_tbl().get_tuple_descriptor(0));
 
     TInternalScanRange internal_scan_range;
     internal_scan_range.tablet_id = _tablet_id;
@@ -210,18 +175,18 @@ TEST_F(CacheStatsScannerTest, test_connector_data_source) {
     auto data_source = provider->create_data_source(scan_range);
     ASSERT_NE(data_source, nullptr);
     ASSERT_EQ(data_source->name(), "CacheStatsDataSource");
-    ASSERT_TRUE(data_source->open(_state).ok());
+    ASSERT_TRUE(data_source->open(_runtime_state.get()).ok());
 
     ChunkPtr chunk;
-    auto st = data_source->get_next(_state, &chunk);
-    ASSERT_TRUE(st.is_not_supported()) << st.to_string();
+    auto status = data_source->get_next(_runtime_state.get(), &chunk);
+    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
     ASSERT_EQ(chunk, nullptr);
     ASSERT_EQ(data_source->raw_rows_read(), 0);
     ASSERT_EQ(data_source->num_rows_read(), 0);
     ASSERT_EQ(data_source->num_bytes_read(), 0);
     ASSERT_EQ(data_source->cpu_time_spent(), 0);
 
-    data_source->close(_state);
+    data_source->close(_runtime_state.get());
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector
