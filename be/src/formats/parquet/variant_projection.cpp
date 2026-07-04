@@ -399,7 +399,7 @@ VariantProjectionHandler::~VariantProjectionHandler() = default;
 // ── _build_shredded_hints ────────────────────────────────────────────────────
 
 VariantShreddedReadHints VariantProjectionHandler::_build_shredded_hints(std::string_view column_name) const {
-    return build_variant_shredded_hints(&_param.scanner_ctx->format_scan_context.column_access_paths, column_name);
+    return build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column_name);
 }
 
 // ── setup_readers ────────────────────────────────────────────────────────────
@@ -499,8 +499,8 @@ std::unordered_set<SlotId> VariantProjectionHandler::deferred_conjunct_physical_
         }
     }
     // Also force physical sources of virtual slots referenced in compound (multi-slot) conjuncts.
-    if (_param.scanner_ctx != nullptr) {
-        for (SlotId vsid : referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs)) {
+    if (_param.scan_ctx != nullptr) {
+        for (SlotId vsid : referenced_variant_virtual_slot_ids(_param.scan_ctx->conjuncts.scanner_ctxs)) {
             auto proj_it = _projections.find(vsid);
             if (proj_it != _projections.end() && proj_it->second.source_slot_id >= 0) {
                 result.insert(proj_it->second.source_slot_id);
@@ -1003,12 +1003,11 @@ const cctz::time_zone& VariantProjectionHandler::projection_timezone() {
         return _timezone_obj;
     }
     _timezone_resolved = true;
-    if (_param.scanner_ctx->format_scan_context.timezone.empty()) {
+    if (_param.scan_ctx->timezone.empty()) {
         return _timezone_obj;
     }
-    if (!TimezoneUtils::find_cctz_time_zone(_param.scanner_ctx->format_scan_context.timezone, _timezone_obj)) {
-        LOG(WARNING) << "VariantProjectionHandler: fallback to UTC for invalid timezone: "
-                     << _param.scanner_ctx->format_scan_context.timezone;
+    if (!TimezoneUtils::find_cctz_time_zone(_param.scan_ctx->timezone, _timezone_obj)) {
+        LOG(WARNING) << "VariantProjectionHandler: fallback to UTC for invalid timezone: " << _param.scan_ctx->timezone;
         _timezone_obj = cctz::utc_time_zone();
     }
     return _timezone_obj;
