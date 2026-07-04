@@ -123,6 +123,8 @@ struct TableSpecificData {
 // (_scanner_ctx) and _init_scanner() assigns its pointer; per-range fields are
 // overwritten in-place without copying.
 struct HdfsScannerContext {
+    HdfsScannerContext() { format_scan_context.predicate_tree = &predicates.predicate_tree; }
+
     // ===== per-range fields =====
     const THdfsScanRange* scan_range = nullptr;
     FileSystem* fs = nullptr;

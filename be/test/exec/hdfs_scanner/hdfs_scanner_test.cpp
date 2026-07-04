@@ -332,7 +332,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithDefaultValue) {
     ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "42");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
-    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_OK(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("[42, NULL]", chunk->debug_row(0));
 }
@@ -346,7 +346,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNullable) {
     ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
-    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_OK(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("['']", chunk->debug_row(0));
 }
@@ -360,7 +360,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonNullable) {
     ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
-    ASSERT_OK(ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    ASSERT_OK(ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1));
     ASSERT_EQ(1, chunk->num_rows());
     EXPECT_EQ("['']", chunk->debug_row(0));
 }
@@ -373,7 +373,7 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     ctx.format_scan_context.materialize_slot_default_values.emplace(tuple_desc->slots()[0]->id(), "");
 
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
-    auto status = ctx.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    auto status = ctx.format_scan_context.append_or_update_not_existed_columns_to_chunk(&chunk, 1);
     EXPECT_FALSE(status.ok());
 }
 
@@ -390,7 +390,7 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     min_max_value.__set_min_int_value(-1);
     min_max_value.__set_max_int_value(0);
 
-    auto col = ctx.create_min_max_value_column(tuple_desc->slots()[0], min_max_value, 2);
+    auto col = ctx.format_scan_context.create_min_max_value_column(tuple_desc->slots()[0], min_max_value, 2);
     ASSERT_EQ(2, col->size());
     EXPECT_EQ("1969-12-31 23:59:59.999999", col->debug_item(0));
     EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
@@ -3327,7 +3327,7 @@ TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     _debug_rows_per_call = 10;
     Status status = scanner->init(_runtime_state, ctx);

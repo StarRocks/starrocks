@@ -2598,7 +2598,7 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
             {""},
     };
     auto ctx = _create_scan_context(slot_descs, min_max_slots, filepath);
-    _scanner_ctx.table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     std::vector<TExpr> t_conjuncts;
     ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
@@ -3533,7 +3533,7 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     ctx2->format_scan_context.stats->footer_cache_read_count = 0;
     ctx2->format_scan_context.stats->footer_cache_write_count = 0;
     ctx2->format_scan_context.stats->footer_cache_read_ns = 0;
-    Status status2 = file_reader2->init(ctx2);
+    Status status2 = file_reader2->init(&ctx2->format_scan_context);
     ASSERT_TRUE(status2.ok());
     ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_read_count, 1);
     ASSERT_EQ(ctx2->format_scan_context.stats->footer_cache_write_count, 0);

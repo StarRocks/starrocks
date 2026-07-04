@@ -158,7 +158,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -241,7 +241,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -304,7 +304,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -373,7 +373,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -450,7 +450,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -596,7 +596,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id, field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -661,7 +661,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -706,7 +706,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_id};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor rename_id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -762,7 +762,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     std::vector<TIcebergSchemaField> fields{field_col, field_id};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -820,7 +820,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     std::vector<TIcebergSchemaField> fields{field_col};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -880,7 +880,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     std::vector<TIcebergSchemaField> fields{field_c1, field_c2, field_c3};
     schema.__set_fields(fields);
-    ctx->table_specific.iceberg_schema = &schema;
+    ctx->format_scan_context.lake_schema = &schema;
 
     TypeDescriptor rename_c1 = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
     TypeDescriptor c2 = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
@@ -942,7 +942,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col};
         schema.__set_fields(fields);
-        ctx->table_specific.iceberg_schema = &schema;
+        ctx->format_scan_context.lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -1001,7 +1001,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_col};
         schema.__set_fields(fields);
-        ctx->table_specific.iceberg_schema = &schema;
+        ctx->format_scan_context.lake_schema = &schema;
 
         TypeDescriptor col = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
 
@@ -1159,7 +1159,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col};
         schema.__set_fields(fields);
-        ctx->table_specific.iceberg_schema = &schema;
+        ctx->format_scan_context.lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
@@ -1237,7 +1237,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         std::vector<TIcebergSchemaField> fields{field_id, field_col_map};
         schema.__set_fields(fields);
-        ctx->table_specific.iceberg_schema = &schema;
+        ctx->format_scan_context.lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
 
