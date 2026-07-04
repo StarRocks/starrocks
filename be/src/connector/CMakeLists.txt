@@ -37,7 +37,6 @@ ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
         lake_connector.cpp
-        cache_stats_connector.cpp
         file_connector.cpp
         file_scan_metrics.cpp
         iceberg_connector.cpp
@@ -57,6 +56,25 @@ ADD_BE_LIB(Connector
 
 target_link_libraries(Connector PUBLIC ConnectorPrimitive ComputeEnv Cache)
 target_link_libraries(Connector PRIVATE Platform)
+
+ADD_BE_LIB(ConnectorCacheStats
+        cache_stats/cache_stats_connector.cpp
+        cache_stats/cache_stats_scanner.cpp
+)
+
+target_link_libraries(ConnectorCacheStats PUBLIC
+        ConnectorPrimitive
+        Storage
+        Expr
+        Runtime
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
 
 if (WITH_CONNECTOR_ELASTICSEARCH)
     ADD_BE_LIB(ConnectorElasticsearch
@@ -172,6 +190,7 @@ target_link_libraries(ConnectorBootstrap PUBLIC
 
 target_link_libraries(ConnectorBootstrap PRIVATE
         Connector
+        ConnectorCacheStats
         Base
         Gutil
         StarRocksGen

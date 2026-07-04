@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/cache_stats_scanner.h"
+#include "connector/cache_stats/cache_stats_scanner.h"
 
 #include "base/string/string_parser.hpp"
 
-namespace starrocks {
+namespace starrocks::connector {
 
 CacheStatsScanner::CacheStatsScanner(const TupleDescriptor* tuple_desc) {
     (void)tuple_desc;
@@ -52,4 +52,4 @@ Status CacheStatsScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
     return Status::NotSupported("_CACHE_STATS_ is not implemented in BE");
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector
