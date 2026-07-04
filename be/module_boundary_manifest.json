@@ -1068,7 +1068,7 @@
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
       "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["module_bootstrap_test"],
-      "allowed_test_link_deps": ["ModuleBootstrap"],
+      "allowed_test_link_deps": ["ModuleBootstrap", "Connector", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."
     },
     {
