@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <cmath>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -19,6 +20,7 @@
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
 #include "storage/primitive/column_predicate_factory.h"
+#include "storage/primitive/zone_map_detail.h"
 
 namespace starrocks {
 
@@ -42,6 +44,109 @@ static inline std::string to_string(const std::vector<uint16_t>& values) {
     std::string s = ss.str();
     s.pop_back();
     return s;
+}
+
+// Fix B: a NaN ZoneMap endpoint is unorderable; every comparison predicate must
+// keep the page (conservative), because TypeInfo::cmp(finite, NaN) == 0 otherwise
+// makes GT/LT/EQ/NE prune pages that may hold matching rows (report §10/§11).
+TEST(ColumnPredicateNaNZoneMapTest, DoubleNaNEndpointKeepsPage) {
+    TypeInfoPtr ti = get_type_info(TYPE_DOUBLE);
+    double nan_v = std::nan("");
+    ZoneMapDetail nan_detail(Datum(nan_v), Datum(nan_v), false); // min=max=NaN, has_null=false
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> ge(new_column_ge_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> le(new_column_le_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> ne(new_column_ne_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    // NotIn has no explicit NaN-endpoint guard; it must still keep a pure-NaN [NaN,NaN] page
+    // (NaN is NOT IN any finite set) via its min==max float guard / fall-through keep.
+    std::unique_ptr<ColumnPredicate> not_in(
+            new_column_not_in_predicate_from_datum(ti, 0, std::vector<Datum>{Datum((double)3000.0)}));
+
+    ASSERT_TRUE(gt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(lt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(ge->zone_map_filter(nan_detail));
+    ASSERT_TRUE(le->zone_map_filter(nan_detail));
+    ASSERT_TRUE(eq->zone_map_filter(nan_detail));
+    ASSERT_TRUE(ne->zone_map_filter(nan_detail));
+    ASSERT_TRUE(not_in->zone_map_filter(nan_detail));
+}
+
+// Guard: finite endpoints must still prune normally (the NaN guard must not
+// over-keep). GT 3000 against [0,100] -> no row can match -> prune (false).
+TEST(ColumnPredicateNaNZoneMapTest, DoubleFiniteEndpointStillPrunes) {
+    TypeInfoPtr ti = get_type_info(TYPE_DOUBLE);
+    ZoneMapDetail finite_detail(Datum((double)0.0), Datum((double)100.0), false);
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((double)3000.0)));
+    std::unique_ptr<ColumnPredicate> lt(new_column_lt_predicate_from_datum(ti, 0, Datum((double)-1.0)));
+
+    ASSERT_FALSE(gt->zone_map_filter(finite_detail)); // 3000 > max(100) -> prune
+    ASSERT_FALSE(lt->zone_map_filter(finite_detail)); // -1 < min(0)   -> prune
+}
+
+// FLOAT mirror.
+TEST(ColumnPredicateNaNZoneMapTest, FloatNaNEndpointKeepsPage) {
+    TypeInfoPtr ti = get_type_info(TYPE_FLOAT);
+    float nan_v = std::nanf("");
+    ZoneMapDetail nan_detail(Datum(nan_v), Datum(nan_v), false);
+
+    std::unique_ptr<ColumnPredicate> gt(new_column_gt_predicate_from_datum(ti, 0, Datum((float)3000.0f)));
+    std::unique_ptr<ColumnPredicate> eq(new_column_eq_predicate_from_datum(ti, 0, Datum((float)3000.0f)));
+    std::unique_ptr<ColumnPredicate> not_in(
+            new_column_not_in_predicate_from_datum(ti, 0, std::vector<Datum>{Datum((float)3000.0f)}));
+
+    ASSERT_TRUE(gt->zone_map_filter(nan_detail));
+    ASSERT_TRUE(eq->zone_map_filter(nan_detail));
+    ASSERT_TRUE(not_in->zone_map_filter(nan_detail));
+}
+
+// A mixed FLOAT/DOUBLE page {NaN, c, c} is serialized by the zonemap writer as [c, c]
+// (NaN excluded from the orderable min/max), leaving NO NaN endpoint. Since NaN != c is
+// true, the hidden NaN row matches != / NOT IN, so single-value pruning would wrongly drop
+// the page. For float, NE/NotIn must KEEP a single-value zone (the NaN-endpoint guard cannot
+// fire here because both endpoints are finite).
+TEST(ColumnPredicateNaNZoneMapTest, DoubleCollapsedSingleValueZoneKeepsForNeAndNotIn) {
+    TypeInfoPtr ti = get_type_info(TYPE_DOUBLE);
+    ZoneMapDetail single_detail(Datum((double)1.0), Datum((double)1.0), false); // [1.0, 1.0], finite
+
+    std::unique_ptr<ColumnPredicate> ne(new_column_ne_predicate_from_datum(ti, 0, Datum((double)1.0)));
+    std::unique_ptr<ColumnPredicate> not_in(
+            new_column_not_in_predicate_from_datum(ti, 0, std::vector<Datum>{Datum((double)1.0)}));
+
+    ASSERT_TRUE(ne->zone_map_filter(single_detail));     // != 1.0 must KEEP (a hidden NaN matches)
+    ASSERT_TRUE(not_in->zone_map_filter(single_detail)); // NOT IN (1.0) must KEEP
+}
+
+// FLOAT mirror.
+TEST(ColumnPredicateNaNZoneMapTest, FloatCollapsedSingleValueZoneKeepsForNeAndNotIn) {
+    TypeInfoPtr ti = get_type_info(TYPE_FLOAT);
+    ZoneMapDetail single_detail(Datum((float)1.0f), Datum((float)1.0f), false);
+
+    std::unique_ptr<ColumnPredicate> ne(new_column_ne_predicate_from_datum(ti, 0, Datum((float)1.0f)));
+    std::unique_ptr<ColumnPredicate> not_in(
+            new_column_not_in_predicate_from_datum(ti, 0, std::vector<Datum>{Datum((float)1.0f)}));
+
+    ASSERT_TRUE(ne->zone_map_filter(single_detail));
+    ASSERT_TRUE(not_in->zone_map_filter(single_detail));
+}
+
+// Regression: non-float single-value pruning must be unchanged (NaN cannot occur for INT),
+// so the conservative float-only guard must not weaken integer NE/NotIn pruning.
+TEST(ColumnPredicateNaNZoneMapTest, IntSingleValueZoneStillPrunesNeAndNotIn) {
+    TypeInfoPtr ti = get_type_info(TYPE_INT);
+    ZoneMapDetail single_detail(Datum((int32_t)5), Datum((int32_t)5), false); // [5, 5]
+
+    std::unique_ptr<ColumnPredicate> ne_hit(new_column_ne_predicate_from_datum(ti, 0, Datum((int32_t)5)));
+    std::unique_ptr<ColumnPredicate> ne_miss(new_column_ne_predicate_from_datum(ti, 0, Datum((int32_t)7)));
+    std::unique_ptr<ColumnPredicate> not_in_hit(
+            new_column_not_in_predicate_from_datum(ti, 0, std::vector<Datum>{Datum((int32_t)5)}));
+
+    ASSERT_FALSE(ne_hit->zone_map_filter(single_detail));     // != 5 on [5,5] -> no match -> prune
+    ASSERT_TRUE(ne_miss->zone_map_filter(single_detail));     // != 7 on [5,5] -> all match -> keep
+    ASSERT_FALSE(not_in_hit->zone_map_filter(single_detail)); // NOT IN (5) on [5,5] -> prune
 }
 
 // NOLINTNEXTLINE

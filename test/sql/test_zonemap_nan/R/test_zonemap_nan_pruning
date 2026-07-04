@@ -1,0 +1,108 @@
+-- name: test_zonemap_nan_pruning
+CREATE TABLE t_zm_nan (
+    id BIGINT,
+    val DOUBLE
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_zm_nan VALUES
+  (1, (1e308*10)-(1e308*10)),
+  (2, (1e308*10)-(1e308*10)),
+  (3, (1e308*10)-(1e308*10)),
+  (4, 100.0),
+  (5, 200.0),
+  (6, 300.0),
+  (7, 400.0),
+  (8, 500.0);
+-- result:
+-- !result
+SELECT COUNT(*) FROM t_zm_nan;
+-- result:
+8
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val IS NULL;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val != val;
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val > 250;
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val < 250;
+-- result:
+2
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val = 300;
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val >= 300;
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val != 300;
+-- result:
+7
+-- !result
+SELECT COUNT(*) FROM t_zm_nan WHERE val IS NOT NULL;
+-- result:
+8
+-- !result
+DROP TABLE t_zm_nan;
+-- result:
+-- !result
+-- name: test_zonemap_all_nan
+CREATE TABLE t_zm_allnan (
+    id BIGINT,
+    val DOUBLE
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_zm_allnan VALUES
+  (1, (1e308*10)-(1e308*10)),
+  (2, (1e308*10)-(1e308*10)),
+  (3, (1e308*10)-(1e308*10)),
+  (4, (1e308*10)-(1e308*10));
+-- result:
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan;
+-- result:
+4
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val IS NULL;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val != val;
+-- result:
+4
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val = val;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val IS NOT NULL;
+-- result:
+4
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val > 100;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val < 100;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t_zm_allnan WHERE val != 100;
+-- result:
+4
+-- !result
+DROP TABLE t_zm_allnan;
+-- result:
+-- !result

@@ -50,6 +50,23 @@ TEST(LogicalTypeTest, TypePredicates) {
     EXPECT_FALSE(is_binary_type(TYPE_VARCHAR));
 }
 
+// Regression test for support_column_expr_predicate: the white-list used by
+// ChunkPredicateBuilder::build_column_expr_predicates() to decide whether a
+// predicate can be lowered into the segment-level pred_tree as a
+// ColumnExprPredicate. FLOAT/DOUBLE were previously excluded, blocking
+// zone-map pruning and late materialization on those columns even though
+// ColumnExprPredicate evaluation reuses the original ExprContext and has no
+// precision concern.
+TEST(LogicalTypeTest, SupportColumnExprPredicateForFloatAndDouble) {
+    EXPECT_TRUE(support_column_expr_predicate(TYPE_FLOAT));
+    EXPECT_TRUE(support_column_expr_predicate(TYPE_DOUBLE));
+
+    // Non per-row scalar types must still be rejected.
+    EXPECT_FALSE(support_column_expr_predicate(TYPE_HLL));
+    EXPECT_FALSE(support_column_expr_predicate(TYPE_JSON));
+    EXPECT_FALSE(support_column_expr_predicate(TYPE_ARRAY));
+}
+
 namespace {
 
 struct DispatchLogicalTypeFunctor {
