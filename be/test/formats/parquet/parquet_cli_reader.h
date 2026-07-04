@@ -18,6 +18,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "formats/parquet/file_reader.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
