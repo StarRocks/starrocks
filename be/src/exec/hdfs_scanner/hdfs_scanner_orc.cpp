@@ -144,9 +144,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         } else {
             // search partition columns.
             int part_idx = 0;
-            const int part_size = _scanner_ctx.partition_columns.size();
+            const int part_size = _scanner_ctx.format_scan_context.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
+                if (_scanner_ctx.format_scan_context.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -155,7 +155,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
                 max_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
             } else {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(
+                        _scanner_ctx.format_scan_context.partition_values[part_idx]);
                 ColumnPtr data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
@@ -205,7 +206,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
-        for (const auto& col : _scanner_ctx.materialized_columns) {
+        for (const auto& col : _scanner_ctx.format_scan_context.materialized_columns) {
             SlotDescriptor* slot = col.slot_desc;
             if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
@@ -413,7 +414,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     }
 
     int src_slot_index = 0;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         auto col_name = Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_ctx->is_lazy_materialization_slot(column.slot_id());
@@ -457,15 +458,15 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
         ctx->footer = footer;
         ctx->start_offset = info.offset();
         ctx->end_offset = info.offset() + info.length();
-        _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
+        _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split.split_tasks.size() <= 1) {
-        _scanner_ctx->split.split_tasks.clear();
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() <= 1) {
+        _scanner_ctx->format_scan_context.split.split_tasks.clear();
     }
     VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size();
+                  << ", split_tasks.size = " << _scanner_ctx->format_scan_context.split.split_tasks.size();
 
     return Status::OK();
 }
@@ -507,8 +508,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
-    if (_scanner_ctx->split.split_tasks.size() > 0) {
-        _scanner_ctx->split.has_split_tasks = true;
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
+        _scanner_ctx->format_scan_context.split.has_split_tasks = true;
         _should_skip_file = true;
         return Status::OK();
     }
@@ -527,7 +528,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
-    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->timezone));
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->format_scan_context.timezone));
     _orc_reader->set_hive_column_names(&_scanner_ctx->hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx->format_scan_context.options.case_sensitive);
     _orc_reader->set_use_orc_column_names(_scanner_ctx->format_scan_context.options.orc_use_column_names);

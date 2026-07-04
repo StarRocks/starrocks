@@ -73,8 +73,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_split_tasks());
-    if (_scanner_ctx->split.split_tasks.size() > 0) {
-        _scanner_ctx->split.has_split_tasks = true;
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
+        _scanner_ctx->format_scan_context.split.has_split_tasks = true;
         _is_file_filtered = true;
         return Status::OK();
     }
@@ -150,21 +150,22 @@ Status FileReader::_build_split_tasks() {
         split_ctx->end_offset = end_offset;
         split_ctx->file_metadata = _file_metadata;
         split_ctx->skip_rows_ctx = _skip_rows_ctx;
-        _scanner_ctx->split.split_tasks.emplace_back(std::move(split_ctx));
+        _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(split_ctx));
     }
     _scanner_ctx->merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split.split_tasks.size() <= 1) {
-        _scanner_ctx->split.split_tasks.clear();
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() <= 1) {
+        _scanner_ctx->format_scan_context.split.split_tasks.clear();
     }
 
     if (VLOG_OPERATOR_IS_ON) {
         std::stringstream ss;
-        for (const FileScanSplitContextPtr& ctx : _scanner_ctx->split.split_tasks) {
+        for (const FileScanSplitContextPtr& ctx : _scanner_ctx->format_scan_context.split.split_tasks) {
             ss << "[" << ctx->start_offset << "," << ctx->end_offset << "]";
         }
         VLOG_OPERATOR << "FileReader: do_open. split task for " << _file->filename()
-                      << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size() << ", range = " << ss.str();
+                      << ", split_tasks.size = " << _scanner_ctx->format_scan_context.split.split_tasks.size()
+                      << ", range = " << ss.str();
     }
     return Status::OK();
 }
@@ -203,7 +204,7 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     bool filter = false;
     if (_runtime_filter_scan_range_pruner != nullptr) {
         RETURN_IF_ERROR(_runtime_filter_scan_range_pruner->update_range_if_arrived(
-                _scanner_ctx->global_dictmaps,
+                _scanner_ctx->format_scan_context.global_dictmaps,
                 [this, &filter, &group_reader](auto cid, const PredicateList& predicates) {
                     PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
                     for (const auto& pred : predicates) {
@@ -237,10 +238,11 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
 }
 
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, &_scanner_ctx->column_access_paths,
+    _meta_helper->prepare_read_columns(_scanner_ctx->format_scan_context.materialized_columns,
+                                       &_scanner_ctx->format_scan_context.column_access_paths,
                                        _group_reader_param.read_cols, existed_column_names);
     _no_materialized_column_scan =
-            (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
+            (_group_reader_param.read_cols.empty() && _scanner_ctx->format_scan_context.reserved_field_slots.empty());
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {

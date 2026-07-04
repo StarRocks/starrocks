@@ -131,9 +131,9 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     iceberg_schema.__set_fields(schema_fields);
 
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
-    scanner_ctx->timezone = timezone;
+    scanner_ctx->format_scan_context.timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->materialized_columns = std::move(columns);
+    scanner_ctx->format_scan_context.materialized_columns = std::move(columns);
     scanner_ctx->format_scan_context.stats = &app_stats;
     scanner_ctx->fs = _ctx.fs;
     scanner_ctx->datacache_options = _ctx.datacache_options;

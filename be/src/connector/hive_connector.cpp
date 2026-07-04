@@ -761,7 +761,7 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerContext* ctx) {
 #endif
         }
     }
-    ctx->global_dictmaps = global_dict;
+    ctx->format_scan_context.global_dictmaps = global_dict;
     return Status::OK();
 }
 
@@ -793,13 +793,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
-    if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.column_access_paths.empty()) {
+    if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.format_scan_context.column_access_paths.empty()) {
         bool failed = false;
         auto path_resolver = make_column_access_path_resolver(state, &_pool);
         for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
             auto st = ColumnAccessPath::create(thrift_path, path_resolver);
             if (LIKELY(st.ok())) {
-                _scanner_ctx.column_access_paths.emplace_back(std::move(st.value()));
+                _scanner_ctx.format_scan_context.column_access_paths.emplace_back(std::move(st.value()));
             } else {
                 LOG(WARNING) << "Failed to create column access path: " << st.status();
                 failed = true;
@@ -807,7 +807,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             }
         }
         if (failed) {
-            _scanner_ctx.column_access_paths.clear();
+            _scanner_ctx.format_scan_context.column_access_paths.clear();
         }
     }
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
@@ -833,7 +833,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};
-    _scanner_ctx.split = {};
+    _scanner_ctx.format_scan_context.split = {};
     for (const auto& delete_file : scan_range.delete_files) {
         _scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
     }

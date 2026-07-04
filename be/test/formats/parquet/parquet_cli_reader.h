@@ -32,7 +32,7 @@ public:
               _scanner_ctx(std::make_shared<HdfsScannerContext>()),
               _scan_stats(std::make_shared<FormatScannerStats>()) {
         _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-        _scanner_ctx->timezone = "Asia/Shanghai";
+        _scanner_ctx->format_scan_context.timezone = "Asia/Shanghai";
         _scanner_ctx->format_scan_context.stats = _scan_stats.get();
     }
     ~ParquetCLIReader() {
@@ -79,7 +79,7 @@ public:
 
         TupleDescriptor* tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
         _scanner_ctx->slot_descs = tuple_desc->slots();
-        _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
+        _make_column_info_vector(tuple_desc, &_scanner_ctx->format_scan_context.materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));

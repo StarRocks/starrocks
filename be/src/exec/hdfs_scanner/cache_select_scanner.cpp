@@ -105,7 +105,7 @@ Status CacheSelectScanner::_fetch_orc() {
             return Status::EndOfFile("");
         }
 
-        for (const auto& column : _scanner_ctx->materialized_columns) {
+        for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
             const auto col_name =
                     Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
             if (known_column_names.contains(col_name)) {
