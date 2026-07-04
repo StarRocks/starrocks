@@ -306,7 +306,6 @@ set(EXEC_NON_PIPELINE_FILES
     short_circuit_hybrid.cpp
     olap_common.cpp
     write_combined_txn_log.cpp
-    cache_stats_scanner.cpp
     local_file_writer.cpp
     plain_text_builder.cpp
     agg_runtime_filter_builder.cpp

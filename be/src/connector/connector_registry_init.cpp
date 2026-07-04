@@ -16,8 +16,11 @@
 #include <string>
 
 #include "connector/builtin_connector_registry.h"
+<<<<<<< HEAD
 #include "connector/cache_stats_connector.h"
 #include "connector/changes_connector.h"
+=======
+>>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832)
 #include "connector/connector_registry.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
@@ -42,8 +45,11 @@ void install_if_absent(ConnectorRegistry* registry, const std::string& name) {
 Status install_builtin_connectors(ConnectorRegistry* registry) {
     DCHECK(registry != nullptr);
     install_if_absent<HiveConnector>(registry, Connector::HIVE);
+<<<<<<< HEAD
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
     install_if_absent<ChangesConnector>(registry, Connector::CHANGES);
+=======
+>>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832)
     install_if_absent<FileConnector>(registry, Connector::FILE);
     install_if_absent<LakeConnector>(registry, Connector::LAKE);
 #ifndef __APPLE__

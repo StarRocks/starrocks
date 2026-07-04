@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/cache_stats_scanner.h"
+#include "connector/cache_stats/cache_stats_scanner.h"
 
 #include "base/string/string_parser.hpp"
 #include "column/chunk.h"
@@ -25,7 +25,7 @@
 #include "storage/storage_env.h"
 #include "types/datum.h"
 
-namespace starrocks {
+namespace starrocks::connector {
 
 static constexpr std::string_view kCacheStatsTabletIdColumnName = "tablet_id";
 static constexpr std::string_view kCacheStatsCachedBytesColumnName = "cached_bytes";
@@ -150,4 +150,4 @@ Status CacheStatsScanner::_get_tablet_cache_stats(int64_t* cached_bytes, int64_t
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

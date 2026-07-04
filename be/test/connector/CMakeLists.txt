@@ -42,6 +42,24 @@ add_executable(connector_primitive_test ${BE_TEST_MACOS_LINK_STUBS} connector_pr
 target_link_libraries(connector_primitive_test ${CONNECTOR_PRIMITIVE_TEST_LINK_LIBS} gtest_main)
 set_target_properties(connector_primitive_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
+    ConnectorCacheStats
+    ${STARROCKS_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_cache_stats_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        cache_stats/cache_stats_connector_test.cpp
+)
+target_link_libraries(connector_cache_stats_test ${CONNECTOR_CACHE_STATS_TEST_LINK_LIBS} gtest_main)
+set_target_properties(connector_cache_stats_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 if (WITH_CONNECTOR_MYSQL)
     set(CONNECTOR_MYSQL_TEST_LINK_LIBS
         ConnectorMySQL

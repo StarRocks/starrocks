@@ -901,6 +901,37 @@
       "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
+      "id": "connectorcachestats",
+      "doc_label": "ConnectorCacheStats",
+      "summary": "Cache-stats connector implementation above connector contracts with storage access, without registry composition, service, cache, or full Exec coupling.",
+      "agents_path": "be/src/connector/cache_stats/AGENTS.md",
+      "owned_targets": ["ConnectorCacheStats"],
+      "allowed_include_prefixes": [
+        "connector/cache_stats/",
+        "connector/connector.h",
+        "connector/data_source.h",
+        "connector/data_source_provider.h",
+        "storage/",
+        "exprs/",
+        "runtime/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["exec/", "service/", "http/", "cache/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_cache_stats_test"],
+      "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ConnectorBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
+    },
+    {
       "id": "connectorjdbc",
       "doc_label": "ConnectorJDBC",
       "summary": "JDBC connector implementation, scanner, driver manager, and type checker above connector contracts without registry composition, storage, service, or full Exec coupling.",
@@ -1002,6 +1033,7 @@
       "allowed_include_prefixes": [
         "connector/connector_bootstrap.h",
         "connector/benchmark/",
+        "connector/cache_stats/",
         "connector/jdbc/",
         "connector/elasticsearch/",
         "connector/mysql/",
@@ -1017,7 +1049,7 @@
         "connector/builtin_connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
     },
     {
@@ -1214,6 +1246,7 @@
         "ConnectorPrimitive",
         "Connector",
         "ConnectorBenchmark",
+        "ConnectorCacheStats",
         "ConnectorElasticsearch",
         "ConnectorMySQL",
         "ConnectorBootstrap",

@@ -14,17 +14,16 @@
 
 #pragma once
 
-#include <memory>
-
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 
-class Chunk;
 class RuntimeState;
-class TupleDescriptor;
-using ChunkPtr = std::shared_ptr<Chunk>;
+
+namespace connector {
 
 class CacheStatsScanner {
 public:
@@ -46,4 +45,5 @@ private:
     bool _is_finished = false;
 };
 
+} // namespace connector
 } // namespace starrocks
