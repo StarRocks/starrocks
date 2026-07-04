@@ -179,7 +179,7 @@ protected:
     static void _append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk);
 
     THdfsScanRange* _create_scan_range(const std::string& file_path, size_t scan_length = 0);
-    static void _set_scan_range(HdfsScannerContext* ctx, THdfsScanRange* scan_range);
+    static void _set_scan_range(HdfsScannerContext* ctx, const THdfsScanRange* scan_range);
 
     // Description: A simple parquet file that all columns are null
     // one row group
@@ -443,7 +443,7 @@ std::shared_ptr<FileReader> FileReaderTest::_create_file_reader(const std::strin
     return std::make_shared<FileReader>(chunk_size, file_ptr, file_size, _mock_datacache_options());
 }
 
-void FileReaderTest::_set_scan_range(HdfsScannerContext* ctx, THdfsScanRange* scan_range) {
+void FileReaderTest::_set_scan_range(HdfsScannerContext* ctx, const THdfsScanRange* scan_range) {
     ctx->scan_range = scan_range;
     ctx->format_scan_context.scan_range_offset = scan_range->offset;
     ctx->format_scan_context.scan_range_length = scan_range->length;
