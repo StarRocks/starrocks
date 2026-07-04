@@ -1431,16 +1431,24 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             private void openPlannedTaskIterator(Scan tableScan) {
                 fileScanTaskIterable = normalizePlannedTaskIterable(tableScan.planFiles());
-                CloseableIterator<FileScanTask> plannedTaskIterator = fileScanTaskIterable.iterator();
-                if (fileSampleRatio > 0 && fileSampleRatio < 1.0) {
-                    // Drop files here, before splitting: the keep/drop decision is per physical
-                    // file, so a dropped file (and its bundled delete files, for V2 MOR tables)
-                    // never reaches split/scan-range construction and BE never opens it.
-                    plannedTaskIterator = new BernoulliFileScanTaskIterator(plannedTaskIterator, fileSampleRatio, sampleSeed);
-                }
-                fileScanTaskIterator = buildSplitFileScanTaskIterator(
-                        fileScanTaskIterable, plannedTaskIterator, tableScan.targetSplitSize(),
+                // Split first, sample second. Splitting is pure byte-offset metadata arithmetic
+                // (no file open), so a dropped unit still costs zero IO either way -- but sampling
+                // at split granularity instead of whole-file granularity bounds the sampled unit
+                // size at targetSplitSize. Raw Iceberg file sizes can vary widely even when writers
+                // target a size, and Bernoulli sampling variance in total sampled rows is driven by
+                // the sum of squared unit sizes, so capping unit size directly bounds that variance
+                // -- without resorting to per-file weighted probabilities, which would bias the
+                // expected sampled row count if done naively (see design doc). A kept/dropped split
+                // still carries its data file's associated delete files correctly scoped, since
+                // Iceberg's own split logic (splitFileScanTask) already handles delete-file scoping
+                // per split range for V2 MOR tables.
+                CloseableIterator<FileScanTask> splitIterator = buildSplitFileScanTaskIterator(
+                        fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize(),
                         dbName, tableName, snapshotId);
+                if (fileSampleRatio > 0 && fileSampleRatio < 1.0) {
+                    splitIterator = new BernoulliFileScanTaskIterator(splitIterator, fileSampleRatio, sampleSeed);
+                }
+                fileScanTaskIterator = splitIterator;
             }
 
             private void closePlannedTaskIterator() {
