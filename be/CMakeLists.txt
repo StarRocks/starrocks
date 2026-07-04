@@ -547,6 +547,8 @@ set(STARROCKS_LINK_LIBS
     AgentServer
     Script
     ModuleBootstrap
+    Orchestration
+    DataWorkflows
     ${WL_START_GROUP}
     Connector
     # Legacy connector registration pulls concrete connector objects that
@@ -554,8 +556,6 @@ set(STARROCKS_LINK_LIBS
     ConnectorBuiltinRegistry
     Exec
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
-    Orchestration
-    DataWorkflows
     ${WL_END_GROUP}
     Storage
     Formats
