@@ -1551,7 +1551,15 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 // When the ratio of cumulative level to base level is greater than this config, use base merge.
 CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Percentage of the lake update-memory budget used for the persistent-index block cache.
+// Raised from 10 to 40: under a skewed (zipf) realtime-ingest workload with a contiguous
+// PK layout (e.g. RANGE-distributed tables), the hot key head funnels ~half the writes onto
+// one tablet, whose persistent-index base level grows to several GB. At 10% the block cache
+// cannot hold that hot base, so every cold multi_get re-reads the base sstables from object
+// storage (observed multiget_t3 ~4s/publish), and those publishes serialize on the tablet
+// version chain into an ingest-latency tail. 40% keeps the hot base resident. Non-hot / HASH
+// tablets have small indexes that fit regardless, so this is a no-op for them.
+CONF_Int32(lake_pk_index_block_cache_limit_percent, "40");
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
