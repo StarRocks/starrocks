@@ -65,6 +65,8 @@ protected:
         parquet::Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = (_create_scan_range(_file_path, file_size));
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
         ctx->format_scan_context.timezone = "Asia/Shanghai";
         ctx->format_scan_context.stats = &g_hdfs_stats;
         ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;

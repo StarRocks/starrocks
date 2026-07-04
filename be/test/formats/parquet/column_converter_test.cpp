@@ -94,6 +94,8 @@ protected:
         Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
         // --------------finish init context---------------
 
         Status status = file_reader->init(&ctx->format_scan_context);

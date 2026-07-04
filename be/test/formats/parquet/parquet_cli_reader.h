@@ -58,6 +58,8 @@ public:
         FormatScannerStats stats;
         ctx.format_scan_context.stats = &stats;
         ctx.scan_range = scan_range;
+        ctx.format_scan_context.scan_range_offset = scan_range->offset;
+        ctx.format_scan_context.scan_range_length = scan_range->length;
         ctx.format_scan_context.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         ctx.format_scan_context.predicate_tree = &ctx.predicates.predicate_tree;
         std::shared_ptr<FileReader> reader =
@@ -84,6 +86,8 @@ public:
         _scanner_ctx->slot_descs = tuple_desc->slots();
         _make_column_info_vector(tuple_desc, &_scanner_ctx->format_scan_context.materialized_columns);
         _scanner_ctx->scan_range = scan_range;
+        _scanner_ctx->format_scan_context.scan_range_offset = scan_range->offset;
+        _scanner_ctx->format_scan_context.scan_range_length = scan_range->length;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
         RETURN_IF_ERROR(_file_reader->init(&_scanner_ctx->format_scan_context));

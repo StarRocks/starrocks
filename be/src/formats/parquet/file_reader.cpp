@@ -246,10 +246,7 @@ void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = ParquetUtils::get_row_group_start_offset(row_group);
     size_t scan_start = _scanner_ctx->scan_range_offset;
-    const size_t scan_length = _scanner_ctx->scan_range_length;
-    size_t scan_end = std::numeric_limits<size_t>::max() - scan_start <= scan_length
-                              ? std::numeric_limits<size_t>::max()
-                              : scan_start + scan_length;
+    size_t scan_end = _scanner_ctx->scan_range_length + scan_start;
     if (row_group_start >= scan_start && row_group_start < scan_end) {
         return true;
     }

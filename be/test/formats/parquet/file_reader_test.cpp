@@ -179,6 +179,7 @@ protected:
     static void _append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk);
 
     THdfsScanRange* _create_scan_range(const std::string& file_path, size_t scan_length = 0);
+    static void _set_scan_range(HdfsScannerContext* ctx, THdfsScanRange* scan_range);
 
     // Description: A simple parquet file that all columns are null
     // one row group
@@ -442,20 +443,26 @@ std::shared_ptr<FileReader> FileReaderTest::_create_file_reader(const std::strin
     return std::make_shared<FileReader>(chunk_size, file_ptr, file_size, _mock_datacache_options());
 }
 
+void FileReaderTest::_set_scan_range(HdfsScannerContext* ctx, THdfsScanRange* scan_range) {
+    ctx->scan_range = scan_range;
+    ctx->format_scan_context.scan_range_offset = scan_range->offset;
+    ctx->format_scan_context.scan_range_length = scan_range->length;
+}
+
 HdfsScannerContext* FileReaderTest::_create_scan_context(Utils::SlotDesc* slot_descs, const std::string& file_path,
                                                          int64_t scan_length) {
     auto* ctx = _pool.add(new HdfsScannerContext());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     _scanner_ctx.format_scan_context.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     _scanner_ctx.runtime_filter_collector = _rf_probe_collector;
-    _scanner_ctx.scan_range = _create_scan_range(file_path, scan_length);
+    _set_scan_range(&_scanner_ctx, _create_scan_range(file_path, scan_length));
     _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable = true;
     _scanner_ctx.format_scan_context.options.parquet_page_index_enable = true;
 
     ctx->format_scan_context.lazy_column_coalesce_counter =
             _scanner_ctx.format_scan_context.lazy_column_coalesce_counter;
     ctx->runtime_filter_collector = _scanner_ctx.runtime_filter_collector;
-    ctx->scan_range = _scanner_ctx.scan_range;
+    _set_scan_range(ctx, _scanner_ctx.scan_range);
     ctx->format_scan_context.options.parquet_bloom_filter_enable =
             _scanner_ctx.format_scan_context.options.parquet_bloom_filter_enable;
     ctx->format_scan_context.options.parquet_page_index_enable =
