@@ -15,7 +15,49 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/module")
 
 ADD_BE_LIB(ModuleBootstrap
+    connector_bootstrap.cpp
     fs_provider_bootstrap.cpp
 )
 
-target_link_libraries(ModuleBootstrap PUBLIC Common PRIVATE FileSystem HdfsFileSystem ComputeEnv)
+target_link_libraries(ModuleBootstrap PUBLIC
+        Common
+)
+
+target_link_libraries(ModuleBootstrap PRIVATE
+        FileSystem
+        HdfsFileSystem
+        ComputeEnv
+        Connector
+        ConnectorCacheStats
+        Base
+        Gutil
+        StarRocksGen
+)
+
+if (WITH_CONNECTOR_BENCHMARK)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorBenchmark
+    )
+endif()
+
+if (WITH_CONNECTOR_JDBC)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_JDBC)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorJDBC
+    )
+endif()
+
+if (WITH_CONNECTOR_ELASTICSEARCH)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorElasticsearch
+    )
+endif()
+
+if (WITH_CONNECTOR_MYSQL)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorMySQL
+    )
+endif()

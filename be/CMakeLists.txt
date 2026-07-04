@@ -874,7 +874,6 @@ set (TEST_LINK_LIBS
     Orchestration
     ${STARROCKS_LINK_LIBS}
     ConnectorBuiltinRegistry
-    ConnectorBootstrap
     TestUtil
     ${WL_START_GROUP}
     gmock
