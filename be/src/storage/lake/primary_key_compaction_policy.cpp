@@ -455,8 +455,8 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
                 VLOG(2) << strings::Substitute(
                         "lake PK compaction force-run chunked: tablet=$0 full_bytes=$1 chunk_bytes=$2 "
                         "kept=$3/$4 rowsets read_pressure=$5",
-                        tablet_metadata->id(), cur_compaction_result_bytes, acc, keep,
-                        rowset_indexes.size(), tablet_read_pressure);
+                        tablet_metadata->id(), cur_compaction_result_bytes, acc, keep, rowset_indexes.size(),
+                        tablet_read_pressure);
                 rowset_indexes.resize(keep);
                 if (has_dels != nullptr) {
                     has_dels->resize(keep);
