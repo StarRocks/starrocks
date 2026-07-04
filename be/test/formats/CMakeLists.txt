@@ -17,6 +17,7 @@ set(FORMAT_CORE_TEST_FILES
     disk_range_test.cpp
     io/async_flush_output_stream_test.cpp
     io/formatted_output_stream_file_test.cpp
+    jni_env_stub.cpp
 )
 
 set(FORMAT_CSV_TEST_FILES
@@ -66,11 +67,7 @@ set(FORMAT_ORC_TEST_FILES
 )
 
 set(FORMAT_TEST_LINK_LIBS
-    FormatOrc
-    FormatAvro
-    FormatJson
-    FormatCsv
-    FormatCore
+    Formats
     Expr
     Runtime
     FileSystem
