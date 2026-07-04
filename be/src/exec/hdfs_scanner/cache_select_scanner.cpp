@@ -98,8 +98,8 @@ Status CacheSelectScanner::_fetch_orc() {
         OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
                                               _scanner_ctx->format_scan_context.options.case_sensitive,
                                               _scanner_ctx->format_scan_context.options.orc_use_column_names);
-        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
-        ASSIGN_OR_RETURN(auto skip, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.update_materialized_columns(known_column_names));
+        ASSIGN_OR_RETURN(auto skip, _scanner_ctx->format_scan_context.should_skip_by_evaluating_not_existed_slots());
         if (skip) {
             LOG(INFO) << "CacheSelectScanner: orc skip file for non existed slot conjuncts.";
             return Status::EndOfFile("");
@@ -185,7 +185,7 @@ Status CacheSelectScanner::_fetch_parquet() {
             4096, _file.get(), _file->get_size().value(), _scanner_ctx->datacache_options,
             _shared_buffered_input_stream.get(), nullptr);
 
-    RETURN_IF_ERROR(reader->init(_scanner_ctx));
+    RETURN_IF_ERROR(reader->init(&_scanner_ctx->format_scan_context));
 
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
     RETURN_IF_ERROR(reader->collect_scan_io_ranges(&io_ranges));

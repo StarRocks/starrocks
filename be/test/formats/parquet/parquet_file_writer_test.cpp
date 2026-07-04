@@ -54,7 +54,7 @@ protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
 
-        ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
+        ctx->format_scan_context.lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
@@ -69,8 +69,11 @@ protected:
         ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = _create_scan_range(_file_path, file_size);
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
         ctx->format_scan_context.timezone = "Asia/Shanghai";
         ctx->format_scan_context.stats = &_hdfs_stats;
+        ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
 
         return ctx;
     }
@@ -99,7 +102,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
 
-        auto st = file_reader->init(ctx);
+        auto st = file_reader->init(&ctx->format_scan_context);
         if (!st.ok()) {
             std::cout << st.to_string() << std::endl;
             return nullptr;
@@ -825,7 +828,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsAllRequired) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check that both columns are REQUIRED
@@ -866,7 +869,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsMixed) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check first column is OPTIONAL
@@ -909,7 +912,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsDefaultEmpty) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check that both columns are OPTIONAL (default behavior)
@@ -953,7 +956,7 @@ TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Verify column names
@@ -1021,7 +1024,7 @@ TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingDisabled) {
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
 
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     ASSERT_EQ(file_metadata->t_metadata().row_groups.size(), 1);
@@ -1103,7 +1106,7 @@ TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingEnabledByDefault) {
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
 
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     const auto& row_group = file_metadata->t_metadata().row_groups[0];

@@ -51,9 +51,10 @@ protected:
         auto* ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
 
-        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+        ctx->format_scan_context.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
         ctx->format_scan_context.timezone = "Asia/Shanghai";
         ctx->format_scan_context.stats = &g_hdfs_stats;
+        ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
         return ctx;
     }
 
@@ -93,9 +94,11 @@ protected:
         Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (is_failed) {
             EXPECT_TRUE(!status.ok());
             return;

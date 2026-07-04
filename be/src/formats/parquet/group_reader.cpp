@@ -240,7 +240,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         //    slot is a partition/not-existed/extended side column that
         //    hasn't been populated yet.
         if ((*row_count) > 0) {
-            RETURN_IF_ERROR(_param.scanner_ctx->append_side_columns_to_chunk(chunk, (*row_count)));
+            RETURN_IF_ERROR(_param.scan_ctx->append_side_columns_to_chunk(chunk, (*row_count)));
         }
         break;
     }
@@ -286,7 +286,7 @@ StatusOr<bool> GroupReader::_read_and_filter_active_columns(const Range<uint64_t
 // ── 3. Evaluate compound predicates ──────
 
 StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>& r, RowGroupScanState& state) {
-    if (_param.scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+    if (_param.scan_ctx->conjuncts.scanner_ctxs.empty()) {
         return true;
     }
 
@@ -295,8 +295,7 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
     // virtual slot, fetch the needed hidden sources and project the virtual
     // slots early.  active_chunk is rebuilt per range so stale slots cannot leak.
     if (!_variant->empty()) {
-        auto early_projected =
-                _variant->referenced_variant_virtual_slot_ids(_param.scanner_ctx->conjuncts.scanner_ctxs);
+        auto early_projected = _variant->referenced_variant_virtual_slot_ids(_param.scan_ctx->conjuncts.scanner_ctxs);
         if (!early_projected.empty()) {
             RETURN_IF_ERROR(_variant->fetch_and_project_virtual_slots(early_projected, r, state.active_chunk,
                                                                       _variant->projection_timezone()));
@@ -307,7 +306,7 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
     // partition / not-existed / extended slots can be evaluated correctly.
     if (state.active_chunk->num_rows() > 0) {
         RETURN_IF_ERROR(
-                _param.scanner_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows()));
+                _param.scan_ctx->append_side_columns_to_chunk(&state.active_chunk, state.active_chunk->num_rows()));
     }
 
     // Finalize all active columns to logical form before compound conjunct eval.
@@ -316,9 +315,9 @@ StatusOr<bool> GroupReader::_evaluate_compound_predicates(const Range<uint64_t>&
         RETURN_IF_ERROR(_column_materializer->finalize_active_slot(slot_id, state.active_chunk));
     }
 
-    ASSIGN_OR_RETURN(size_t compound_hit, ChunkPredicateEvaluator::eval_conjuncts_into_filter(
-                                                  _param.scanner_ctx->conjuncts.scanner_ctxs, state.active_chunk.get(),
-                                                  &state.chunk_filter));
+    ASSIGN_OR_RETURN(size_t compound_hit,
+                     ChunkPredicateEvaluator::eval_conjuncts_into_filter(
+                             _param.scan_ctx->conjuncts.scanner_ctxs, state.active_chunk.get(), &state.chunk_filter));
     if (compound_hit == 0) {
         _param.stats->late_materialize_skip_rows += state.row_count;
         return false;
@@ -429,11 +428,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_reserved_iceberg_column_reader(co
 }
 
 StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
-    if (_param.scan_range == nullptr || !_param.scan_range->__isset.extended_columns) {
-        return Status::NotFound(fmt::format("Cannot find extended column for slot {}", slot_id));
-    }
-
-    const auto& extended_columns = _param.scan_range->extended_columns;
+    const auto& extended_columns = _param.scan_ctx->extended_column_exprs;
     auto it = extended_columns.find(slot_id);
     if (it == extended_columns.end()) {
         return Status::NotFound(fmt::format("Cannot find extended column value for slot {}", slot_id));
@@ -460,12 +455,12 @@ Status GroupReader::_create_column_readers() {
     _global_dict_applied_in_group = false;
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.file_meta_data = _param.file_metadata;
-    if (_param.scanner_ctx == nullptr) {
+    if (_param.scan_ctx == nullptr) {
         return Status::InternalError("GroupReader: scanner_ctx must not be null");
     }
-    opts.timezone = _param.scanner_ctx->format_scan_context.timezone;
-    opts.case_sensitive = _param.scanner_ctx->format_scan_context.options.case_sensitive;
-    opts.use_file_pagecache = _param.scanner_ctx->format_scan_context.options.use_file_pagecache;
+    opts.timezone = _param.scan_ctx->timezone;
+    opts.case_sensitive = _param.scan_ctx->options.case_sensitive;
+    opts.use_file_pagecache = _param.scan_ctx->options.use_file_pagecache;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.file = _param.file;
@@ -489,8 +484,8 @@ Status GroupReader::_create_column_readers() {
     _variant->register_zone_map_readers();
 
     // create for partition values
-    const auto& partition_columns = _param.scanner_ctx->format_scan_context.partition_columns;
-    const auto& partition_values = _param.scanner_ctx->format_scan_context.partition_values;
+    const auto& partition_columns = _param.scan_ctx->partition_columns;
+    const auto& partition_values = _param.scan_ctx->partition_values;
     for (size_t i = 0; i < partition_columns.size(); i++) {
         const auto& column = partition_columns[i];
         const auto* slot_desc = column.slot_desc;
@@ -499,11 +494,11 @@ Status GroupReader::_create_column_readers() {
     }
 
     // create for not existed column
-    for (const auto* slot : _param.scanner_ctx->format_scan_context.not_existed_slots) {
+    for (const auto* slot : _param.scan_ctx->not_existed_slots) {
         _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(kNullDatum));
     }
 
-    const auto& reserved_slots = _param.scanner_ctx->format_scan_context.reserved_field_slots;
+    const auto& reserved_slots = _param.scan_ctx->reserved_field_slots;
     if (!reserved_slots.empty()) {
         bool use_legacy_lookup_row_id =
                 std::any_of(reserved_slots.begin(), reserved_slots.end(), [](const SlotDescriptor* slot) {
@@ -515,14 +510,14 @@ Status GroupReader::_create_column_readers() {
                 ASSIGN_OR_RETURN(auto reader,
                                  _create_reserved_iceberg_column_reader(slot, formats::kIcebergRowIdColumnId));
                 std::optional<int64_t> first_row_id = std::nullopt;
-                if (_param.scan_range != nullptr && _param.scan_range->__isset.first_row_id) {
+                if (_param.scan_ctx->first_row_id.has_value()) {
                     // IcebergRowIdReader emits `first_row_id + i` where `i` is a file-local row
                     // index (it already includes the row-group start), so the base must be the
                     // file-level first_row_id. A row-group-level base double-counts the row-group
                     // start and shifts the emitted _row_id for every row group after the first,
                     // diverging from the physical _row_id column of compacted files. The file-level
                     // base also keeps the reader's zone-map filters (base + rg_first_row) correct.
-                    first_row_id = std::optional<int64_t>(_param.scan_range->first_row_id);
+                    first_row_id = _param.scan_ctx->first_row_id;
                 } else if (use_legacy_lookup_row_id) {
                     // Legacy (non-lineage) GLM keys rows by file-local position: the base is 0.
                     first_row_id = std::optional<int64_t>(0);
@@ -580,8 +575,8 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
             schema_node->type == ColumnType::STRUCT) {
             // Physical VARIANT columns use _get_variant_shredded_hints; this path
             // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints = build_variant_shredded_hints(
-                    &_param.scanner_ctx->format_scan_context.column_access_paths, column.slot_desc->col_name());
+            VariantShreddedReadHints hints =
+                    build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column.slot_desc->col_name());
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
         } else if (column.t_lake_schema_field == nullptr) {
@@ -592,7 +587,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));
         }
-        auto* global_dictmaps = _param.scanner_ctx->format_scan_context.global_dictmaps;
+        auto* global_dictmaps = _param.scan_ctx->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {
             GlobalDictReaderKind kind = GlobalDictReaderKind::kNone;
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create(
