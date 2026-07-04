@@ -358,10 +358,15 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
 
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
+    // Per-picked-rowset result bytes, parallel to rowset_indexes, so a force-run over-large
+    // compaction can be truncated to a bounded prefix (lake_pk_compaction_deferred_chunk_result_bytes).
+    std::vector<size_t> picked_read_bytes;
     bool reach_max_input_per_compaction = false;
     while (!pick_level_ptr->rowsets.empty()) {
         const auto& rowset_candidate = pick_level_ptr->rowsets.top();
-        cur_compaction_result_bytes += rowset_candidate.read_bytes();
+        const size_t rc_read_bytes = rowset_candidate.read_bytes();
+        cur_compaction_result_bytes += rc_read_bytes;
+        picked_read_bytes.push_back(rc_read_bytes);
         rowset_indexes.push_back(rowset_candidate.rowset_index);
         if (has_dels != nullptr) {
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
@@ -381,7 +386,9 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     if (is_real_time && !reach_max_input_per_compaction) {
         for (int i = 0; i < pick_level_ptr->other_level_rowsets.size(); i++) {
             const auto& rowset_candidate = pick_level_ptr->other_level_rowsets[i];
-            cur_compaction_result_bytes += rowset_candidate.read_bytes();
+            const size_t rc_read_bytes = rowset_candidate.read_bytes();
+            cur_compaction_result_bytes += rc_read_bytes;
+            picked_read_bytes.push_back(rc_read_bytes);
             rowset_indexes.push_back(rowset_candidate.rowset_index);
             if (has_dels != nullptr) {
                 has_dels->push_back(rowset_candidate.delete_bytes() > 0);
@@ -425,6 +432,36 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
                 has_dels->clear();
             }
             return rowset_indexes;
+        }
+        // Emergency force-run of the deferred over-large compaction. Optionally split it into a
+        // bounded chunk so its synchronous publish stays short: truncate the picked rowsets to
+        // the shortest prefix whose cumulative result bytes reach the chunk cap (>= 1 rowset);
+        // the remainder is left for a later round (which defers again until the next emergency).
+        // This only ever runs inside the defer branch, so non-hot tablets (compactions never
+        // exceeding the defer size) are never chunked -> no churn on them.
+        if (config::lake_pk_compaction_deferred_chunk_result_bytes > 0 &&
+            static_cast<int64_t>(cur_compaction_result_bytes) >
+                    config::lake_pk_compaction_deferred_chunk_result_bytes) {
+            size_t acc = 0;
+            size_t keep = 0;
+            for (size_t k = 0; k < picked_read_bytes.size(); ++k) {
+                acc += picked_read_bytes[k];
+                keep = k + 1;
+                if (static_cast<int64_t>(acc) > config::lake_pk_compaction_deferred_chunk_result_bytes) {
+                    break;
+                }
+            }
+            if (keep < rowset_indexes.size()) {
+                VLOG(2) << strings::Substitute(
+                        "lake PK compaction force-run chunked: tablet=$0 full_bytes=$1 chunk_bytes=$2 "
+                        "kept=$3/$4 rowsets read_pressure=$5",
+                        tablet_metadata->id(), cur_compaction_result_bytes, acc, keep,
+                        rowset_indexes.size(), tablet_read_pressure);
+                rowset_indexes.resize(keep);
+                if (has_dels != nullptr) {
+                    has_dels->resize(keep);
+                }
+            }
         }
     }
 

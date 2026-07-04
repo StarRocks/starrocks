@@ -1539,6 +1539,20 @@ CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 // Default 0 = disabled (legacy behavior; non-hot tablets whose compactions never reach this
 // size are unaffected even when set).
 CONF_mInt64(lake_pk_compaction_defer_large_result_bytes, "0");
+// When a compaction deferred by lake_pk_compaction_defer_large_result_bytes is finally
+// FORCE-RUN (its tablet read pressure crossed lake_pk_compaction_emergency_score), split
+// that one over-large compaction into bounded chunks of at most this many result bytes:
+// the picked input rowsets are truncated to the shortest prefix whose cumulative result
+// bytes reach this cap (at least one rowset), the remainder are left for the next round.
+// This turns a single ~O(GB) synchronous publish (~14s compact_mapper read + PK-index
+// apply) into several small publishes, each of which only briefly stalls the hot tablet's
+// serialized ingest version chain -> lower ingest P99 tail. It only ever engages inside
+// the defer branch (projected output > lake_pk_compaction_defer_large_result_bytes AND
+// emergency), so tablets whose compactions never reach the defer size (e.g. HASH-scattered
+// small tablets) are NEVER chunked -> no compaction churn on them, unlike the global
+// lake_pk_compaction_max_result_bytes. Default 0 = disabled (force-run the full compaction,
+// legacy defer behavior).
+CONF_mInt64(lake_pk_compaction_deferred_chunk_result_bytes, "0");
 // Enable cleanup of orphan delvec entries during compaction.
 // Orphan delvecs are leaked metadata entries from a historical bug that reference
 // non-existent segments and prevent delvec file garbage collection.
