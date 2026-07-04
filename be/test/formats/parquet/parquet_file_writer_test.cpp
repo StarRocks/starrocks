@@ -65,11 +65,11 @@ protected:
 
         TupleDescriptor* tuple_desc =
                 parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
-        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = _create_scan_range(_file_path, file_size);
-        ctx->timezone = "Asia/Shanghai";
+        ctx->format_scan_context.timezone = "Asia/Shanghai";
         ctx->format_scan_context.stats = &_hdfs_stats;
 
         return ctx;

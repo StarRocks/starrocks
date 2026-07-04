@@ -274,7 +274,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     // update materialized columns.
     {
         std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx->materialized_columns) {
+        for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
             if (column.name() == "___count___") continue;
             names.emplace(column.name());
         }
@@ -282,7 +282,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     }
 
     RETURN_IF_ERROR(_build_hive_column_name_2_index());
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         // We don't care about _invalid_field_as_null here, if get converter failed,
         // we use DefaultValueConverter instead.
         auto converter = csv::get_hive_converter(column.slot_type(), true);
@@ -361,11 +361,11 @@ Status HdfsTextScanner::_parse_csv(int chunk_size, ChunkPtr* chunk) {
         fields.resize(0);
         _reader->split_record(record, &fields);
 
-        size_t num_materialize_columns = _scanner_ctx->materialized_columns.size();
+        size_t num_materialize_columns = _scanner_ctx->format_scan_context.materialized_columns.size();
 
         // Fill materialize columns first, then fill partition column
         for (int j = 0; j < num_materialize_columns; j++) {
-            const auto& column_info = _scanner_ctx->materialized_columns[j];
+            const auto& column_info = _scanner_ctx->format_scan_context.materialized_columns[j];
 
             size_t chunk_index = column_info.idx_in_chunk;
             size_t csv_index = _materialize_slots_index_2_csv_column_index[j];
@@ -459,8 +459,9 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
     // For some table like file table, there is no hive_column_names at all.
     // So we use slot order defined in table schema.
     if (_scanner_ctx->hive_column_names.empty()) {
-        _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->materialized_columns.size());
-        for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
+        _materialize_slots_index_2_csv_column_index.resize(
+                _scanner_ctx->format_scan_context.materialized_columns.size());
+        for (size_t i = 0; i < _scanner_ctx->format_scan_context.materialized_columns.size(); i++) {
             _materialize_slots_index_2_csv_column_index[i] = i;
         }
         return Status::OK();
@@ -478,9 +479,9 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
     }
 
     // Assign csv column index
-    _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->materialized_columns.size());
-    for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
-        const auto& column = _scanner_ctx->materialized_columns[i];
+    _materialize_slots_index_2_csv_column_index.resize(_scanner_ctx->format_scan_context.materialized_columns.size());
+    for (size_t i = 0; i < _scanner_ctx->format_scan_context.materialized_columns.size(); i++) {
+        const auto& column = _scanner_ctx->format_scan_context.materialized_columns[i];
         const std::string formatted_slot_name = column.formatted_name(case_sensitive);
         const auto& it = formatted_hive_column_name_2_index.find(formatted_slot_name);
         if (it == formatted_hive_column_name_2_index.end()) {

@@ -74,7 +74,7 @@ HdfsScannerContext* PageIndexTest::_create_scan_context() {
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
-    ctx->timezone = "Asia/Shanghai";
+    ctx->format_scan_context.timezone = "Asia/Shanghai";
     ctx->format_scan_context.stats = &g_hdfs_stats;
     ctx->format_scan_context.options.parquet_page_index_enable = true;
     ctx->format_scan_context.options.parquet_bloom_filter_enable = true;
@@ -97,7 +97,7 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
     };
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
@@ -113,7 +113,7 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
             {""},
     };
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
@@ -131,7 +131,7 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
             {""},
     };
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
@@ -667,7 +667,7 @@ TEST_F(PageIndexTest, TestEmptyNullCountsInColumnIndex) {
     ctx->conjuncts.min_max_ctxs.clear();
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
     ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = _create_scan_range(file_path);
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);

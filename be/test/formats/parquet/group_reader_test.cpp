@@ -2376,8 +2376,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdColumnReaderCreation) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2399,8 +2399,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdReturnsNull) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2433,8 +2433,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdWithoutFirstRowIdUsesRowPositionForLooku
             new SlotDescriptor(101, "_scan_range_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(scan_range_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2470,8 +2470,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdSecondRowGroupUsesFileLevelFirstRowId) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     FileMetaData* file_meta;
     ASSERT_OK(_create_filemeta(&file_meta, param));
@@ -2504,8 +2504,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberColumnReaderCreation
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2541,8 +2541,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSequenceNumberNullExtendedLiteralR
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     std::map<int32_t, TExpr> extended_columns;
     TExpr expr;
@@ -2730,7 +2730,7 @@ TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     param->file = file;
     param->file_metadata = file_meta;
     param->chunk_size = config::vector_chunk_size;
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
@@ -2752,8 +2752,8 @@ TEST_F(GroupReaderTest, TestIcebergRowIdPhysicalColumnReaderCreation) {
     auto* row_id_slot = _pool.add(new SlotDescriptor(100, formats::kIcebergRowIdColumnName,
                                                      TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     // Build file metadata WITH physical _row_id column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -2781,8 +2781,8 @@ TEST_F(GroupReaderTest, TestIcebergLastUpdatedSeqNumPhysicalColumnReaderCreation
     auto* seq_slot = _pool.add(new SlotDescriptor(101, formats::kIcebergLastUpdatedSequenceNumberColumnName,
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     // Build file metadata WITH physical _last_updated_sequence_number column (field_id matches)
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -3258,8 +3258,8 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
                                                   TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
     reserved_slots->push_back(row_id_slot);
     reserved_slots->push_back(seq_slot);
-    param->scanner_ctx->reserved_field_slots = *_pool.add(reserved_slots);
-    param->scanner_ctx->timezone = "UTC";
+    param->scanner_ctx->format_scan_context.reserved_field_slots = *_pool.add(reserved_slots);
+    param->scanner_ctx->format_scan_context.timezone = "UTC";
 
     // Build file metadata with both physical iceberg columns
     auto t_file_meta = build_t_filemeta_with_iceberg_columns(&_pool, param,
@@ -4053,7 +4053,7 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) 
     field_arr->children().emplace_back(std::move(offset_0));
     root->children().emplace_back(std::move(field_arr));
     column_access_paths.emplace_back(std::move(root));
-    param->scanner_ctx->column_access_paths = std::move(column_access_paths);
+    param->scanner_ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
 
     SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
     auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));

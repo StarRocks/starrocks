@@ -163,25 +163,16 @@ struct HdfsScannerContext {
     const HiveTableDescriptor* hive_table = nullptr;
     std::vector<std::string> hive_column_names;
     std::string avro_schema_json;
-    std::vector<ColumnAccessPathPtr> column_access_paths;
 
     // ===== working state =====
     std::vector<SlotDescriptor*> slot_descs;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
-    // materialized column read from parquet file
-    std::vector<FormatColumnInfo> materialized_columns;
-
-    // partition column
-    std::vector<FormatColumnInfo> partition_columns;
-
     // ExprContexts for partition column values (evaluated from hdfs file path).
     // Filled by HiveDataSource before init(); evaluated once in _build_scanner_context()
-    // to produce partition_values below.  Lifetime is managed by HiveDataSource's ObjectPool.
+    // to produce format_scan_context.partition_values.  Lifetime is managed by
+    // HiveDataSource's ObjectPool.
     std::vector<ExprContext*> partition_expr_ctxs;
-
-    // Evaluated partition column values (constant columns, one per partition slot).
-    Columns partition_values;
 
     // Extended column metadata (iceberg data_seq_num, etc.).
     std::vector<FormatColumnInfo> extended_columns;
@@ -199,23 +190,15 @@ struct HdfsScannerContext {
     // and it returns EOF the next time.
     bool no_more_chunks = false;
 
-    std::string timezone;
-
-    std::vector<SlotDescriptor*> not_existed_slots;
-
     // ___count___ column for COUNT(*) optimization.
     // Separated from not_existed_slots because it is an execution marker,
     // not a schema-evolution missing column.
     std::optional<SlotDescriptor*> _count_slot;
 
-    // for iceberg reserved fields
-    std::vector<SlotDescriptor*> reserved_field_slots;
-
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // TODO: probably should be removed in later version.
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 
     // ===== infrastructure =====
     // ObjectPool for allocations built by _build_scanner_context().
@@ -225,12 +208,6 @@ struct HdfsScannerContext {
 
     // Embedded value structs: no pointers, no pool allocation.
     // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
-
-    struct SplitState {
-        std::vector<FileScanSplitContextPtr> split_tasks;
-        bool has_split_tasks = false;
-        size_t estimated_mem_usage_per_split_task = 0;
-    } split;
 
     // Destruction order within predicates matters (C++ reverse declaration):
     //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) is destroyed first

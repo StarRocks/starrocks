@@ -52,7 +52,7 @@ protected:
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
 
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
-        ctx->timezone = "Asia/Shanghai";
+        ctx->format_scan_context.timezone = "Asia/Shanghai";
         ctx->format_scan_context.stats = &g_hdfs_stats;
         return ctx;
     }
@@ -90,7 +90,7 @@ protected:
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------

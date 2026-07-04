@@ -369,8 +369,8 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
     }
     _app_stats.raw_rows_read += num_rows;
 
-    for (size_t col_idx = 0; col_idx < _scanner_ctx->materialized_columns.size(); col_idx++) {
-        SlotDescriptor* slot_desc = _scanner_ctx->materialized_columns[col_idx].slot_desc;
+    for (size_t col_idx = 0; col_idx < _scanner_ctx->format_scan_context.materialized_columns.size(); col_idx++) {
+        SlotDescriptor* slot_desc = _scanner_ctx->format_scan_context.materialized_columns[col_idx].slot_desc;
         const auto slot_name = std::string(slot_desc->col_name());
         const TypeDescriptor& slot_type = slot_desc->type();
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
@@ -460,7 +460,7 @@ Status JniScanner::update_jni_scanner_params() {
     // update materialized columns.
     {
         std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx->materialized_columns) {
+        for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
             if (column.name() == "___count___") continue;
             auto col_name = column.formatted_name(_scanner_ctx->format_scan_context.options.case_sensitive);
             names.insert(col_name);
@@ -469,7 +469,7 @@ Status JniScanner::update_jni_scanner_params() {
     }
 
     std::string required_fields;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         required_fields.append(column.name());
         required_fields.append(",");
     }
@@ -478,7 +478,7 @@ Status JniScanner::update_jni_scanner_params() {
     }
 
     std::string nested_fields;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         const TypeDescriptor& type = column.slot_type();
         if (type.is_complex_type()) {
             build_nested_fields(type, column.name(), &nested_fields);

@@ -50,7 +50,7 @@ Status HdfsAvroScanner::do_open(RuntimeState* state) {
     // TODO: open the file, extract the writer schema field-name set, then call
     // _scanner_ctx->update_materialized_columns() before building _column_readers to fully
     // support schema evolution defaults and not-existed-slot predicate short-circuiting.
-    for (const auto& col : _scanner_ctx->materialized_columns) {
+    for (const auto& col : _scanner_ctx->format_scan_context.materialized_columns) {
         _materialize_slot_descs.push_back(col.slot_desc);
         _column_readers.push_back(avrocpp::ColumnReader::get_nullable_column_reader(
                 col.slot_desc->col_name(), col.slot_desc->type(), _timezone, /*null_as_error=*/false));
@@ -85,8 +85,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     // Build a temporary chunk with only the materialized (Avro) columns.
     auto avro_chunk = std::make_shared<Chunk>();
-    for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
-        const auto& col_info = _scanner_ctx->materialized_columns[i];
+    for (size_t i = 0; i < _scanner_ctx->format_scan_context.materialized_columns.size(); i++) {
+        const auto& col_info = _scanner_ctx->format_scan_context.materialized_columns[i];
         auto column = ColumnHelper::create_column(col_info.slot_desc->type(), true, false, 0, true);
         avro_chunk->append_column(std::move(column), col_info.slot_desc->id());
     }
@@ -112,8 +112,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
         {
             SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
             _materialize_nullable_columns(avro_chunk);
-            for (size_t i = 0; i < _scanner_ctx->materialized_columns.size(); i++) {
-                const auto& col_info = _scanner_ctx->materialized_columns[i];
+            for (size_t i = 0; i < _scanner_ctx->format_scan_context.materialized_columns.size(); i++) {
+                const auto& col_info = _scanner_ctx->format_scan_context.materialized_columns[i];
                 ck->append_or_update_column(std::move(avro_chunk->get_column_by_slot_id(col_info.slot_desc->id())),
                                             col_info.slot_desc->id());
             }

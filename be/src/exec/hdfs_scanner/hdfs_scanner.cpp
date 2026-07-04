@@ -88,17 +88,17 @@ Status HdfsScanner::_build_scanner_context() {
 
     // Clear fields that this function populates so the call is idempotent
     // (same ctx pointer may be reused across scanners in tests).
-    ctx.partition_values.clear();
+    ctx.format_scan_context.partition_values.clear();
     ctx.extended_values.clear();
-    ctx.materialized_columns.clear();
-    ctx.partition_columns.clear();
+    ctx.format_scan_context.materialized_columns.clear();
+    ctx.format_scan_context.partition_columns.clear();
     ctx.extended_columns.clear();
-    ctx.reserved_field_slots.clear();
+    ctx.format_scan_context.reserved_field_slots.clear();
     ctx.conjunct_ctxs_by_slot.clear();
     ctx.can_use_file_record_count = false;
     ctx.is_first_split = false;
 
-    Columns& partition_values = ctx.partition_values;
+    Columns& partition_values = ctx.format_scan_context.partition_values;
 
     // evaluate partition values; ExprContexts are owned by HiveDataSource's
     // ObjectPool, made available via ctx.partition_expr_ctxs.
@@ -126,7 +126,7 @@ Status HdfsScanner::_build_scanner_context() {
     for (size_t i = 0; i < _scanner_ctx->materialize_slots.size(); i++) {
         auto* slot = _scanner_ctx->materialize_slots[i];
         if (formats::is_reserved_scan_column_name(slot->col_name())) {
-            ctx.reserved_field_slots.emplace_back(slot);
+            ctx.format_scan_context.reserved_field_slots.emplace_back(slot);
         } else {
             FormatColumnInfo column;
             column.slot_desc = slot;
@@ -135,7 +135,7 @@ Status HdfsScanner::_build_scanner_context() {
             // appears in a multi-field conjunct that the reader cannot push down.
             column.decode_needed =
                     slot->is_output_column() || _scanner_ctx->conjuncts.slots_of_multi_field.count(slot->id());
-            ctx.materialized_columns.emplace_back(column);
+            ctx.format_scan_context.materialized_columns.emplace_back(column);
         }
     }
 
@@ -144,7 +144,7 @@ Status HdfsScanner::_build_scanner_context() {
         FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_ctx->partition_index_in_chunk[i];
-        ctx.partition_columns.emplace_back(column);
+        ctx.format_scan_context.partition_columns.emplace_back(column);
     }
 
     for (size_t i = 0; i < _scanner_ctx->extended_col_slots.size(); i++) {
@@ -156,7 +156,7 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     ctx.slot_descs = _scanner_ctx->tuple_desc->slots();
-    ctx.timezone = _runtime_state->timezone();
+    ctx.format_scan_context.timezone = _runtime_state->timezone();
     ctx.format_scan_context.stats = &_app_stats;
 
     ScanConjunctsManagerOptions opts;
@@ -408,8 +408,8 @@ void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* paren
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_scanner_ctx != nullptr && _scanner_ctx->split.estimated_mem_usage_per_split_task != 0) {
-        return _scanner_ctx->split.estimated_mem_usage_per_split_task;
+    if (_scanner_ctx != nullptr && _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task != 0) {
+        return _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task;
     }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
@@ -551,13 +551,13 @@ void HdfsScanner::update_counter() {
 void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (_scanner_ctx == nullptr) return;
     size_t max_split_size = 0;
-    for (auto& t : _scanner_ctx->split.split_tasks) {
+    for (auto& t : _scanner_ctx->format_scan_context.split.split_tasks) {
         size_t size = (t->end_offset - t->start_offset);
         max_split_size = std::max(max_split_size, size);
         split_tasks->emplace_back(std::move(t));
     }
     if (split_tasks->size() > 0) {
-        _scanner_ctx->split.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+        _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
 }
 
