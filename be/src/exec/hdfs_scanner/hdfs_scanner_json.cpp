@@ -228,8 +228,8 @@ Status HdfsJsonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 
     if ((*chunk)->num_rows() > 0) {
         size_t rows_read = (*chunk)->num_rows();
-        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, rows_read));
-        RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, rows_read));
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     }
 
     return st;

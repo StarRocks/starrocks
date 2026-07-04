@@ -400,8 +400,8 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     // Partition and not-existed columns must be appended before predicate evaluation
     // because ctxs_by_slot may reference non-file or partition slots.
-    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, chunk_size));
-    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, chunk_size));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     return Status::OK();
 }
 
@@ -465,7 +465,7 @@ Status JniScanner::update_jni_scanner_params() {
             auto col_name = column.formatted_name(_scanner_ctx->format_scan_context.options.case_sensitive);
             names.insert(col_name);
         }
-        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.update_materialized_columns(names));
     }
 
     std::string required_fields;

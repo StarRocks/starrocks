@@ -97,8 +97,8 @@ Status HiveDataSource::_check_all_slots_nullable() {
         if (!slot->is_nullable()) {
             // Check if the non-nullable column has a default value
             // If it has a default value, allow scanning as old data files can be filled with the default
-            if (_scanner_ctx.materialize_slot_default_values.find(slot->id()) ==
-                _scanner_ctx.materialize_slot_default_values.end()) {
+            if (_scanner_ctx.format_scan_context.materialize_slot_default_values.find(slot->id()) ==
+                _scanner_ctx.format_scan_context.materialize_slot_default_values.end()) {
                 return Status::RuntimeError(fmt::format(
                         "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild "
                         "the"
@@ -258,7 +258,7 @@ void HiveDataSource::_init_global_late_materialization_context(RuntimeState* sta
                     ctx->hdfs_scan_node = hdfs_scan_node;
                     return ctx;
                 }));
-        _scanner_ctx.scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
+        _scanner_ctx.format_scan_context.scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
     }
 }
 
@@ -274,7 +274,8 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
         RETURN_IF_ERROR(ExprFactory::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts,
-                                                       &_scanner_ctx.conjuncts.min_max_ctxs, state));
+                                                       &_scanner_ctx.format_scan_context.conjuncts.min_max_ctxs,
+                                                       state));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
@@ -287,9 +288,9 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         _scanner_ctx.format_scan_context.options.case_sensitive = hdfs_scan_node.case_sensitive;
     }
 
-    RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_ctx.conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_ctx.format_scan_context.conjuncts.min_max_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_partition_filter.conjunct_ctxs, state));
-    RETURN_IF_ERROR(ExprExecutor::open(_scanner_ctx.conjuncts.min_max_ctxs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_scanner_ctx.format_scan_context.conjuncts.min_max_ctxs, state));
     RETURN_IF_ERROR(ExprExecutor::open(_partition_filter.conjunct_ctxs, state));
     _update_has_any_predicate();
 
@@ -298,11 +299,12 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     // Build all_ctxs: clone of (min_max_ctxs ∪ scan conjuncts), used to build
     // ScanConjunctsManager / PredicateTree inside each scanner's context.
     std::vector<ExprContext*> cloned;
-    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _scanner_ctx.conjuncts.min_max_ctxs, &cloned));
-    for (auto* ctx : cloned) _scanner_ctx.conjuncts.all_ctxs.emplace_back(ctx);
+    RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(
+            state, &_pool, _scanner_ctx.format_scan_context.conjuncts.min_max_ctxs, &cloned));
+    for (auto* ctx : cloned) _scanner_ctx.format_scan_context.conjuncts.all_ctxs.emplace_back(ctx);
     cloned.clear();
     RETURN_IF_ERROR(ExprExecutor::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned));
-    for (auto* ctx : cloned) _scanner_ctx.conjuncts.all_ctxs.emplace_back(ctx);
+    for (auto* ctx : cloned) _scanner_ctx.format_scan_context.conjuncts.all_ctxs.emplace_back(ctx);
 
     return Status::OK();
 }
@@ -348,8 +350,8 @@ Status HiveDataSource::_init_partition_values() {
     // back to the ordinary partition conjuncts — same behaviour as the old code.
     std::vector<ExprContext*> ctxs;
     for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-        auto it = _scanner_ctx.conjuncts.by_slot.find(slotId);
-        if (it != _scanner_ctx.conjuncts.by_slot.end()) {
+        auto it = _scanner_ctx.format_scan_context.conjuncts.by_slot.find(slotId);
+        if (it != _scanner_ctx.format_scan_context.conjuncts.by_slot.end()) {
             ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
         }
     }
@@ -451,7 +453,8 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             if (_scanner_ctx.hive_table != nullptr) {
                 auto default_value = _scanner_ctx.hive_table->get_column_default_value(slots[i]);
                 if (default_value.has_value()) {
-                    _scanner_ctx.materialize_slot_default_values.emplace(slots[i]->id(), *default_value);
+                    _scanner_ctx.format_scan_context.materialize_slot_default_values.emplace(slots[i]->id(),
+                                                                                             *default_value);
                 }
             }
         }
@@ -532,7 +535,7 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
         for (SlotId slot_id : slot_ids) {
-            _scanner_ctx.conjuncts.slots_in_conjunct.insert(slot_id);
+            _scanner_ctx.format_scan_context.conjuncts.slots_in_conjunct.insert(slot_id);
         }
 
         // For some conjunct like (a < 1) or (a > 7)
@@ -558,23 +561,23 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
             }
         }
         if (!single_slot || slot_ids.empty() || !single_field) {
-            _scanner_ctx.conjuncts.scanner_ctxs.emplace_back(ctx);
+            _scanner_ctx.format_scan_context.conjuncts.scanner_ctxs.emplace_back(ctx);
             for (SlotId slot_id : slot_ids) {
-                _scanner_ctx.conjuncts.slots_of_multi_field.insert(slot_id);
+                _scanner_ctx.format_scan_context.conjuncts.slots_of_multi_field.insert(slot_id);
             }
             continue;
         }
 
         SlotId slot_id = slot_ids[0];
         if (slot_by_id.find(slot_id) != slot_by_id.end()) {
-            _scanner_ctx.conjuncts.by_slot[slot_id].emplace_back(ctx);
+            _scanner_ctx.format_scan_context.conjuncts.by_slot[slot_id].emplace_back(ctx);
         }
     }
     // rewrite dict
     auto* fragment_dict_state = state->fragment_dict_state();
     DCHECK(fragment_dict_state != nullptr);
     RETURN_IF_ERROR(fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(
-            state, &_scanner_ctx.conjuncts.scanner_ctxs));
+            state, &_scanner_ctx.format_scan_context.conjuncts.scanner_ctxs));
     return Status::OK();
 }
 
@@ -816,7 +819,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table)) {
         _scanner_ctx.avro_schema_json = hdfs_desc->get_avro_schema_json();
     }
-    _scanner_ctx.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
+    _scanner_ctx.format_scan_context.lazy_column_coalesce_counter = &_provider->_lazy_column_coalesce_counter;
     if (state->query_options().__isset.connector_max_split_size) {
         _scanner_ctx.format_scan_context.options.connector_max_split_size =
                 state->query_options().connector_max_split_size;
@@ -833,6 +836,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     // Reset per-range table-specific state before populating.
     _scanner_ctx.table_specific = {};
+    _scanner_ctx.format_scan_context.lake_schema = nullptr;
     _scanner_ctx.format_scan_context.split = {};
     for (const auto& delete_file : scan_range.delete_files) {
         _scanner_ctx.table_specific.iceberg_delete_files.emplace_back(&delete_file);
@@ -845,12 +849,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     if (dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table);
-        _scanner_ctx.table_specific.iceberg_schema = tbl->get_iceberg_schema();
+        _scanner_ctx.format_scan_context.lake_schema = tbl->get_iceberg_schema();
     }
 
     if (dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table)) {
         auto tbl = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx.hive_table);
-        _scanner_ctx.table_specific.iceberg_schema = tbl->get_paimon_schema();
+        _scanner_ctx.format_scan_context.lake_schema = tbl->get_paimon_schema();
     }
 
     if (scan_range.__isset.paimon_deletion_file && !scan_range.paimon_deletion_file.path.empty()) {
@@ -988,12 +992,12 @@ void HiveDataSource::close(RuntimeState* state) {
     // (ExprContext::clone() shares _root, it does NOT deep-copy the tree).
     // Release predicates here while _pool is still alive.
     _scanner_ctx.predicates = {};
-    ExprExecutor::close(_scanner_ctx.conjuncts.min_max_ctxs, state);
+    ExprExecutor::close(_scanner_ctx.format_scan_context.conjuncts.min_max_ctxs, state);
     ExprExecutor::close(_partition_filter.conjunct_ctxs, state);
     ExprExecutor::close(_scanner_ctx.partition_expr_ctxs, state);
     ExprExecutor::close(_scanner_ctx.extended_col_expr_ctxs, state);
-    ExprExecutor::close(_scanner_ctx.conjuncts.scanner_ctxs, state);
-    for (auto& it : _scanner_ctx.conjuncts.by_slot) {
+    ExprExecutor::close(_scanner_ctx.format_scan_context.conjuncts.scanner_ctxs, state);
+    for (auto& it : _scanner_ctx.format_scan_context.conjuncts.by_slot) {
         ExprExecutor::close(it.second, state);
     }
 }

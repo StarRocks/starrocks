@@ -97,9 +97,10 @@ protected:
     HdfsScannerContext* _create_scan_context() {
         auto* ctx = _pool.add(new HdfsScannerContext());
         auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-        ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+        ctx->format_scan_context.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
         ctx->format_scan_context.stats = &g_hdfs_stats;
+        ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
         return ctx;
     }
 
@@ -183,7 +184,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -255,7 +256,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructEvolutionPadNull) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -323,7 +324,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -392,7 +393,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -475,7 +476,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -614,7 +615,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
         // create min max conjuncts
         // new_conjunct is null
-        _create_null_conjunct_ctxs(2, &ctx->conjuncts.min_max_ctxs, _pool, _runtime_state);
+        _create_null_conjunct_ctxs(2, &ctx->format_scan_context.conjuncts.min_max_ctxs, _pool, _runtime_state);
     }
 
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -623,7 +624,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -672,7 +673,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -717,7 +718,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -778,7 +779,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -834,7 +835,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
     ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -893,7 +894,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
     ctx->scan_range = (_create_scan_range(no_field_id_file_path));
     // --------------finish init context---------------
 
-    Status status = file_reader->init(ctx);
+    Status status = file_reader->init(&ctx->format_scan_context);
     if (!status.ok()) {
         std::cout << status.message() << std::endl;
     }
@@ -958,7 +959,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1015,7 +1016,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1059,7 +1060,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1099,7 +1100,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestHiveWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1181,7 +1182,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(struct_map_array_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1257,7 +1258,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(struct_map_array_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1305,7 +1306,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }
@@ -1348,7 +1349,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
         ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
         // --------------finish init context---------------
 
-        Status status = file_reader->init(ctx);
+        Status status = file_reader->init(&ctx->format_scan_context);
         if (!status.ok()) {
             std::cout << status.message() << std::endl;
         }

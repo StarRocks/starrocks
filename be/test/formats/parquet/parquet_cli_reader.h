@@ -31,9 +31,10 @@ public:
               _file(_create_file(filepath)),
               _scanner_ctx(std::make_shared<HdfsScannerContext>()),
               _scan_stats(std::make_shared<FormatScannerStats>()) {
-        _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        _scanner_ctx->format_scan_context.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         _scanner_ctx->format_scan_context.timezone = "Asia/Shanghai";
         _scanner_ctx->format_scan_context.stats = _scan_stats.get();
+        _scanner_ctx->format_scan_context.predicate_tree = &_scanner_ctx->predicates.predicate_tree;
     }
     ~ParquetCLIReader() {
         _file_reader = nullptr;
@@ -56,10 +57,11 @@ public:
         FormatScannerStats stats;
         ctx.format_scan_context.stats = &stats;
         ctx.scan_range = scan_range;
-        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx.format_scan_context.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        ctx.format_scan_context.predicate_tree = &ctx.predicates.predicate_tree;
         std::shared_ptr<FileReader> reader =
                 std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-        RETURN_IF_ERROR(reader->init(&ctx));
+        RETURN_IF_ERROR(reader->init(&ctx.format_scan_context));
         file_metadata = reader->get_file_metadata();
 
         std::vector<SlotDesc> slot_descs;
@@ -83,7 +85,7 @@ public:
         _scanner_ctx->scan_range = scan_range;
 
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-        RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
+        RETURN_IF_ERROR(_file_reader->init(&_scanner_ctx->format_scan_context));
 
         return Status::OK();
     }

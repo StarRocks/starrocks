@@ -119,8 +119,8 @@ Status HdfsAvroScanner::do_get_next(RuntimeState* state, ChunkPtr* chunk) {
             }
         }
     }
-    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(&ck, row_count));
-    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(&ck));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(&ck, row_count));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(&ck));
 
     // Note: _app_stats.rows_read is updated by the base class HdfsScanner::get_next
     // after do_get_next returns. Do NOT update it here to avoid double-counting.

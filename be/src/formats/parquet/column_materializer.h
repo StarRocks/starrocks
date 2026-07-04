@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/chunk.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
