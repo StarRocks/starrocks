@@ -1926,15 +1926,22 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     // Cheap file_count for the background sample-ANALYZE job's ratio decision (see
-    // ExternalSampleStatisticsCollectJob): sums addedFilesCount/existingFilesCount straight off
-    // the manifest-list entries. O(manifests), does not open a single manifest file and does not
-    // enumerate a single DataFile — cheaper than counting via planFiles(). No predicate: the
-    // sample job always scans the whole table in one pass, so pruning would not change the count.
+    // ExternalSampleStatisticsCollectJob). Snapshot.summary() already carries the live
+    // total-data-files count maintained incrementally by every snapshot producer (Spark/Trino/
+    // Flink/StarRocks writers all populate it) -- O(1), not even a manifest-list read. Only fall
+    // back to summing addedFilesCount/existingFilesCount across dataManifests() (O(manifests),
+    // still zero DataFile opens) when the summary field is absent, e.g. very old/non-standard
+    // table metadata. No predicate: the sample job always scans the whole table in one pass, so
+    // pruning would not change the count.
     public static long countIcebergFilesFromManifestList(IcebergTable icebergTable, long snapshotId) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Snapshot snapshot = nativeTbl.snapshot(snapshotId);
         if (snapshot == null) {
             return 0;
+        }
+        Long fromSummary = parseSummaryLong(snapshot, SnapshotSummary.TOTAL_DATA_FILES_PROP);
+        if (fromSummary != null) {
+            return fromSummary;
         }
         long count = 0;
         for (ManifestFile manifest : snapshot.dataManifests(nativeTbl.io())) {
@@ -1945,16 +1952,21 @@ public class IcebergMetadata implements ConnectorMetadata {
         return count;
     }
 
-    // Same shape as countIcebergFilesFromManifestList but sums row counts instead of file counts,
-    // so the sample job's ratio can target "roughly how many rows this round reads" rather than
-    // "roughly how many files" -- files can vary wildly in row count, so a file-count-based ratio
-    // gives a much less predictable row volume per round than a row-count-based one. Still O(manifests),
-    // zero data IO: addedRowsCount/existingRowsCount are manifest-list summary fields.
+    // Same shape as countIcebergFilesFromManifestList but for row counts, so the sample job's
+    // ratio can target "roughly how many rows this round reads" rather than "roughly how many
+    // files" -- files can vary wildly in row count, so a file-count-based ratio gives a much less
+    // predictable row volume per round than a row-count-based one. Prefers the live total-records
+    // field on Snapshot.summary() (O(1)); falls back to summing addedRowsCount/existingRowsCount
+    // across dataManifests() (O(manifests), zero data IO) when that field is absent.
     public static long countIcebergRowsFromManifestList(IcebergTable icebergTable, long snapshotId) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Snapshot snapshot = nativeTbl.snapshot(snapshotId);
         if (snapshot == null) {
             return 0;
+        }
+        Long fromSummary = parseSummaryLong(snapshot, SnapshotSummary.TOTAL_RECORDS_PROP);
+        if (fromSummary != null) {
+            return fromSummary;
         }
         long count = 0;
         for (ManifestFile manifest : snapshot.dataManifests(nativeTbl.io())) {
@@ -1963,6 +1975,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             count += (added != null ? added : 0) + (existing != null ? existing : 0);
         }
         return count;
+    }
+
+    private static Long parseSummaryLong(Snapshot snapshot, String key) {
+        String value = snapshot.summary() == null ? null : snapshot.summary().get(key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(
