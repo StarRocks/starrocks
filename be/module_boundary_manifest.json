@@ -929,13 +929,8 @@
       ],
       "allowed_target_deps": ["ConnectorPrimitive", "Storage", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_cache_stats_test"],
-<<<<<<< HEAD
       "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage and FileSystem; move registration into ConnectorBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
-=======
-      "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ModuleBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
->>>>>>> fbd09745d00... [Refactor] Move connector bootstrap into ModuleBootstrap (#75833)
+      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage and FileSystem; move registration into ModuleBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
     },
     {
       "id": "connectorjdbc",
