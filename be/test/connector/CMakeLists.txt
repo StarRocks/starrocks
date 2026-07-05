@@ -55,6 +55,7 @@ set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
 
 add_executable(connector_cache_stats_test
         ${BE_TEST_MACOS_LINK_STUBS}
+        ../formats/jni_env_stub.cpp
         cache_stats/cache_stats_connector_test.cpp
 )
 target_link_libraries(connector_cache_stats_test ${CONNECTOR_CACHE_STATS_TEST_LINK_LIBS} gtest_main)

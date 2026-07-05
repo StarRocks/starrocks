@@ -903,7 +903,7 @@
     {
       "id": "connectorcachestats",
       "doc_label": "ConnectorCacheStats",
-      "summary": "Cache-stats connector implementation above connector contracts with storage access, without registry composition, service, cache, or full Exec coupling.",
+      "summary": "Cache-stats connector implementation above connector contracts with storage and filesystem access, without registry composition, service, cache, or full Exec coupling.",
       "agents_path": "be/src/connector/cache_stats/AGENTS.md",
       "owned_targets": ["ConnectorCacheStats"],
       "allowed_include_prefixes": [
@@ -912,6 +912,7 @@
         "connector/data_source.h",
         "connector/data_source_provider.h",
         "storage/",
+        "fs/",
         "exprs/",
         "runtime/",
         "column/",
@@ -926,10 +927,10 @@
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ConnectorPrimitive", "Storage", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_cache_stats_test"],
-      "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ConnectorBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
+      "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage and FileSystem; move registration into ConnectorBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
     },
     {
       "id": "connectorjdbc",

@@ -66,6 +66,7 @@ ADD_BE_LIB(ConnectorCacheStats
 target_link_libraries(ConnectorCacheStats PUBLIC
         ConnectorPrimitive
         Storage
+        FileSystem
         Expr
         Runtime
         ChunkCore

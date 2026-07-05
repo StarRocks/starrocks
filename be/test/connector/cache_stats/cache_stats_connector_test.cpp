@@ -12,42 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef BE_TEST
+#define BE_TEST
+#endif
+
 #include "connector/cache_stats/cache_stats_connector.h"
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-=======
 #include <memory>
 #include <string>
 
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "column/chunk.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
 #include "connector/cache_stats/cache_stats_scanner.h"
+#include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "platform/store_path.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
 #include "storage/lake/filenames.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/storage_env.h"
-=======
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
 
 namespace starrocks::connector {
 
 class CacheStatsConnectorTest : public ::testing::Test {
 public:
+    CacheStatsConnectorTest() : _tablet_id(next_id()), _update_mem_tracker(-1, "cache_stats_connector_test") {}
+
+    static void SetUpTestSuite() { CpuInfo::init(); }
+
     void SetUp() override {
+        _old_compact_threads = config::compact_threads;
+        if (config::compact_threads <= 0) {
+            config::compact_threads = 1;
+        }
+
+        CHECK_OK(_store_path_registry.init({StorePath(kRootLocation)}));
+        StorageEnvOptions storage_env_options;
+        storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
+        storage_env_options.store_path_registry = &_store_path_registry;
+        storage_env_options.update_mem_tracker = &_update_mem_tracker;
+        storage_env_options.lake_metadata_cache_limit = 1024 * 1024;
+        CHECK_OK(StorageEnv::GetInstance()->init(storage_env_options));
+
+        _tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        CHECK(_tablet_mgr != nullptr);
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName))
+                      .ok());
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName))
+                      .ok());
+        CHECK(FileSystem::Default()
+                      ->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName))
+                      .ok());
+
         TUniqueId fragment_id;
         TQueryOptions query_options;
         TQueryGlobals query_globals;
@@ -56,6 +86,14 @@ public:
         TUniqueId query_id;
         _runtime_state->init_mem_trackers(query_id);
         _pool = _runtime_state->obj_pool();
+    }
+
+    void TearDown() override {
+        StorageEnv::GetInstance()->stop();
+        StorageEnv::GetInstance()->stop_lake_tablet_manager();
+        StorageEnv::GetInstance()->destroy();
+        config::compact_threads = _old_compact_threads;
+        (void)fs::remove_all(kRootLocation);
     }
 
 protected:
@@ -143,10 +181,16 @@ protected:
 
     const TupleDescriptor* tuple_desc() { return _desc_tbl->get_tuple_descriptor(0); }
 
+    constexpr static const char* const kRootLocation = "./CacheStatsConnectorTest";
+
+    int64_t _tablet_id;
+    StorePathRegistry _store_path_registry;
+    MemTracker _update_mem_tracker;
+    lake::TabletManager* _tablet_mgr = nullptr;
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ObjectPool* _pool = nullptr;
     DescriptorTbl* _desc_tbl = nullptr;
-    int64_t _tablet_id = 12345;
+    int32_t _old_compact_threads = 0;
 };
 
 TEST_F(CacheStatsConnectorTest, InitInvalidVersion) {
@@ -162,11 +206,7 @@ TEST_F(CacheStatsConnectorTest, InitInvalidVersion) {
     ASSERT_NE(status.message().find("Invalid"), std::string::npos) << status.message();
 }
 
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
-TEST_F(CacheStatsScannerTest, test_get_chunk_metadata_not_found) {
-=======
-TEST_F(CacheStatsConnectorTest, GetChunkNotSupported) {
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
+TEST_F(CacheStatsConnectorTest, GetChunkMetadataNotFound) {
     build_desc_tbl();
     CacheStatsScanner scanner(tuple_desc());
 
@@ -179,12 +219,11 @@ TEST_F(CacheStatsConnectorTest, GetChunkNotSupported) {
 
     ChunkPtr chunk;
     bool eos = false;
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
-    auto st = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_FALSE(st.ok());
+    auto status = scanner.get_chunk(nullptr, &chunk, &eos);
+    ASSERT_FALSE(status.ok());
 }
 
-TEST_F(CacheStatsScannerTest, test_basic) {
+TEST_F(CacheStatsConnectorTest, GetChunkCollectsTabletCacheStats) {
     const int64_t version = 2;
     const int64_t seg_size = 512;
     const int64_t seg_without_size = 64;
@@ -235,15 +274,6 @@ TEST_F(CacheStatsScannerTest, test_basic) {
     write_dummy_file(_tablet_mgr->sst_location(_tablet_id, sst_name), sst_size);
     write_dummy_file(_tablet_mgr->segment_location(_tablet_id, dcg_name), dcg_size);
 
-=======
-    auto status = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
-    ASSERT_FALSE(eos);
-    ASSERT_EQ(chunk, nullptr);
-}
-
-TEST_F(CacheStatsConnectorTest, GetChunkNotSupportedWithUnknownSlot) {
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
     build_desc_tbl(true);
     CacheStatsScanner scanner(tuple_desc());
 
@@ -256,12 +286,7 @@ TEST_F(CacheStatsConnectorTest, GetChunkNotSupportedWithUnknownSlot) {
 
     ChunkPtr chunk;
     bool eos = false;
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
     ASSERT_TRUE(scanner.get_chunk(nullptr, &chunk, &eos).ok());
-=======
-    auto status = scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
     ASSERT_FALSE(eos);
     ASSERT_EQ(chunk->num_rows(), 1);
 
@@ -280,9 +305,9 @@ TEST_F(CacheStatsConnectorTest, GetChunkNotSupportedWithUnknownSlot) {
     scan_range.version = "0";
     ASSERT_TRUE(invalid_version_scanner.init(nullptr, scan_range).ok());
     eos = false;
-    auto st = invalid_version_scanner.get_chunk(nullptr, &chunk, &eos);
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.message().find("Invalid cache stats scan range version") != std::string::npos) << st.message();
+    auto status = invalid_version_scanner.get_chunk(nullptr, &chunk, &eos);
+    ASSERT_FALSE(status.ok());
+    ASSERT_NE(status.message().find("Invalid cache stats scan range version"), std::string::npos) << status.message();
 }
 
 TEST_F(CacheStatsConnectorTest, ConnectorDataSource) {
@@ -319,9 +344,8 @@ TEST_F(CacheStatsConnectorTest, ConnectorDataSource) {
     ASSERT_TRUE(data_source->open(_runtime_state.get()).ok());
 
     ChunkPtr chunk;
-<<<<<<< HEAD:be/test/exec/cache_stats_scanner_test.cpp
-    auto st = data_source->get_next(_state, &chunk);
-    ASSERT_TRUE(st.ok()) << st.message();
+    auto status = data_source->get_next(_runtime_state.get(), &chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
     ASSERT_NE(chunk, nullptr);
     ASSERT_EQ(chunk->num_rows(), 1);
     ASSERT_EQ(data_source->raw_rows_read(), 1);
@@ -330,21 +354,10 @@ TEST_F(CacheStatsConnectorTest, ConnectorDataSource) {
     ASSERT_GT(data_source->num_bytes_read(), 0);
     ASSERT_EQ(data_source->cpu_time_spent(), 0);
 
-    st = data_source->get_next(_state, &chunk);
-    ASSERT_TRUE(st.is_end_of_file()) << st.to_string();
-
-    data_source->close(_state);
-=======
-    auto status = data_source->get_next(_runtime_state.get(), &chunk);
-    ASSERT_TRUE(status.is_not_supported()) << status.to_string();
-    ASSERT_EQ(chunk, nullptr);
-    ASSERT_EQ(data_source->raw_rows_read(), 0);
-    ASSERT_EQ(data_source->num_rows_read(), 0);
-    ASSERT_EQ(data_source->num_bytes_read(), 0);
-    ASSERT_EQ(data_source->cpu_time_spent(), 0);
+    status = data_source->get_next(_runtime_state.get(), &chunk);
+    ASSERT_TRUE(status.is_end_of_file()) << status.to_string();
 
     data_source->close(_runtime_state.get());
->>>>>>> 29d73238d55... [Refactor] Split cache stats connector into BE module (#75832):be/test/connector/cache_stats/cache_stats_connector_test.cpp
 }
 
 } // namespace starrocks::connector
