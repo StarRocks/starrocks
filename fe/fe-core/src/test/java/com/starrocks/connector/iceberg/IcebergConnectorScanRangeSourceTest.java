@@ -28,6 +28,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.DateType;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
@@ -776,10 +777,8 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
      * when scanning files.
      * Background: For V1 tables, Iceberg's `removeField` does NOT remove the field from the spec.
      * Instead, the field is kept with its transform rewritten to `VoidTransform` (always-null),
-     * and the field name stays the same as the source column. Such a void field would still pass
-     * the `desc.getColumnSlot(name) != null` check inside `getPartitionFieldIndexes`, but it is
-     * NOT in `indexToField` (which only holds identity fields), so `indexToField.inverse().get(x)`
-     * returns null and later triggers NPE on `field.sourceId()` in `getPartitionKey`.
+     * and the field name stays the same as the source column. This is why we need to check for
+     * `isIdentity` when adding partitions.
      */
     @Test
     public void testAddPartitionWithV1DroppedIdentityPartitionFieldDoesNotThrow() throws Exception {
@@ -816,11 +815,11 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         k1Slot.setColumn(new Column("k1", INT));
         localTuple.addSlot(k1Slot);
         SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
-        dtSlot.setType(INT);
-        dtSlot.setColumn(new Column("dt", INT));
+        dtSlot.setType(DateType.DATE);
+        dtSlot.setColumn(new Column("dt", DateType.DATE));
         localTuple.addSlot(dtSlot);
 
-        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", DateType.DATE));
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table_v1_drop_id", "iceberg_catalog",
                 "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
 
@@ -869,11 +868,11 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
             k1Slot.setColumn(new Column("k1", INT));
             localTuple.addSlot(k1Slot);
             SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
-            dtSlot.setType(INT);
-            dtSlot.setColumn(new Column("dt", INT));
+            dtSlot.setType(DateType.DATE);
+            dtSlot.setColumn(new Column("dt", DateType.DATE));
             localTuple.addSlot(dtSlot);
 
-            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", DateType.DATE));
             IcebergTable icebergTable = new IcebergTable(1, "iceberg_void_only", "iceberg_catalog",
                     "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
 
@@ -958,11 +957,11 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
             k1Slot.setColumn(new Column("k1", INT));
             localTuple.addSlot(k1Slot);
             SlotDescriptor dtSlot = new SlotDescriptor(new SlotId(2), localTuple);
-            dtSlot.setType(INT);
-            dtSlot.setColumn(new Column("dt", INT));
+            dtSlot.setType(DateType.DATE);
+            dtSlot.setColumn(new Column("dt", DateType.DATE));
             localTuple.addSlot(dtSlot);
 
-            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", INT));
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", DateType.DATE));
             IcebergTable icebergTable = new IcebergTable(1, "iceberg_reuse", "iceberg_catalog",
                     "resource", "db", "table", "", schema, v1Table, Maps.newHashMap());
 
