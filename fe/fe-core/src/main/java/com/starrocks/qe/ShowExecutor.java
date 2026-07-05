@@ -1288,13 +1288,8 @@ public class ShowExecutor {
                 hasLoadDesc = true;
             }
             if (routineLoadJob.getWhereExpr() != null) {
-<<<<<<< HEAD
-                createRoutineLoadSql.append(",\nWHERE ");
-                createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
-=======
                 createRoutineLoadSql.append(hasLoadDesc ? ",\n" : "\n").append("WHERE ");
-                createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
->>>>>>> 55a126a7ce ([BugFix] Fix spurious comma before first load-desc clause in SHOW CREATE ROUTINE LOAD (#75522))
+                createRoutineLoadSql.append(routineLoadJob.getWhereExpr().toSql());
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());
