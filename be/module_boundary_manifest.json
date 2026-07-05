@@ -898,7 +898,7 @@
         "exec/exec_env.h"
       ],
       "allowed_target_deps": ["ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+      "remediation": "Keep ConnectorBenchmark limited to the benchgen connector implementation; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectorcachestats",
@@ -929,7 +929,7 @@
       "allowed_target_deps": ["ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_cache_stats_test"],
       "allowed_test_link_deps": ["ConnectorCacheStats", "ConnectorPrimitive", "Storage", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ConnectorBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
+      "remediation": "Keep ConnectorCacheStats limited to the cache-stats connector and scanner implementation over Storage; move registration into ModuleBootstrap and avoid pulling Connector, service, cache, or full Exec code into the connector library."
     },
     {
       "id": "connectorjdbc",
@@ -961,7 +961,7 @@
       "allowed_target_deps": ["ConnectorPrimitive", "Platform", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_jdbc_test"],
       "allowed_test_link_deps": ["ConnectorJDBC", "ConnectorPrimitive", "Platform", "FileSystem", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorJDBC limited to JDBC read-side scan, driver management, and type checking; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+      "remediation": "Keep ConnectorJDBC limited to JDBC read-side scan, driver management, and type checking; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectorelasticsearch",
@@ -992,7 +992,7 @@
       "allowed_target_deps": ["ConnectorPrimitive", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_elasticsearch_test"],
       "allowed_test_link_deps": ["ConnectorElasticsearch", "ConnectorPrimitive", "Platform", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
+      "remediation": "Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectormysql",
@@ -1022,35 +1022,7 @@
       "allowed_target_deps": ["ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_mysql_test"],
       "allowed_test_link_deps": ["ConnectorMySQL", "ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
-    },
-    {
-      "id": "connectorbootstrap",
-      "doc_label": "ConnectorBootstrap",
-      "summary": "Connector-layer bootstrap for split connector libraries that install into the default registry without depending on the legacy built-in registry.",
-      "owned_targets": ["ConnectorBootstrap"],
-      "additional_owned_globs": ["be/src/connector/connector_bootstrap.h"],
-      "allowed_include_prefixes": [
-        "connector/connector_bootstrap.h",
-        "connector/benchmark/",
-        "connector/cache_stats/",
-        "connector/jdbc/",
-        "connector/elasticsearch/",
-        "connector/mysql/",
-        "connector/connector.h",
-        "connector/connector_registry.h",
-        "common/",
-        "base/",
-        "gutil/",
-        "gen_cpp/"
-      ],
-      "forbidden_include_prefixes": ["exec/", "runtime/", "storage/", "service/", "http/", "cache/", "util/"],
-      "forbidden_includes": [
-        "connector/builtin_connector_registry.h",
-        "exec/exec_env.h"
-      ],
-      "allowed_target_deps": ["Connector", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep split connector bootstrap independent from ConnectorBuiltinRegistry; add newly split connector libraries here and let service-level startup compose legacy registry plus this bootstrap."
+      "remediation": "Keep ConnectorMySQL limited to MySQL read-side scan and scanner logic; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library."
     },
     {
       "id": "connectorbuiltinregistry",
@@ -1068,16 +1040,23 @@
       ],
       "forbidden_include_prefixes": ["exec/", "runtime/", "storage/", "service/", "http/", "cache/", "util/"],
       "allowed_target_deps": ["Connector", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ConnectorBootstrap instead of depending back on this target."
+      "remediation": "Keep legacy built-in connector registration as top-level composition for unsplit connector libraries; split connector libraries register through ModuleBootstrap instead of depending back on this target."
     },
     {
       "id": "modulebootstrap",
       "doc_label": "ModuleBootstrap",
-      "summary": "Default BE module bootstrap composition for built-in module registration, currently filesystem provider registry installation.",
+      "summary": "Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and split connector registration.",
       "owned_targets": ["ModuleBootstrap"],
       "owned_roots": ["be/src/module"],
       "allowed_include_prefixes": [
         "module/",
+        "connector/benchmark/",
+        "connector/cache_stats/",
+        "connector/jdbc/",
+        "connector/elasticsearch/",
+        "connector/mysql/",
+        "connector/connector.h",
+        "connector/connector_registry.h",
         "fs/",
         "fs_ext/hdfs/",
         "compute_env/staros/starlet_filesystem.h",
@@ -1087,7 +1066,9 @@
         "gen_cpp/"
       ],
       "forbidden_include_prefixes": ["agent/", "cache/", "connector/", "data_workflows/", "exec/", "http/", "runtime/", "script/", "service/", "storage/", "util/"],
-      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Common"],
+      "allowed_target_deps": ["FileSystem", "HdfsFileSystem", "ComputeEnv", "Connector", "ConnectorBenchmark", "ConnectorCacheStats", "ConnectorJDBC", "ConnectorElasticsearch", "ConnectorMySQL", "ConnectorPrimitive", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["module_bootstrap_test"],
+      "allowed_test_link_deps": ["ModuleBootstrap"],
       "remediation": "Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly."
     },
     {
@@ -1249,7 +1230,6 @@
         "ConnectorCacheStats",
         "ConnectorElasticsearch",
         "ConnectorMySQL",
-        "ConnectorBootstrap",
         "ConnectorBuiltinRegistry",
         "Orchestration",
         "Geo",
@@ -1313,7 +1293,6 @@
         "StarRocksGen",
         "Connector",
         "ConnectorPrimitive",
-        "ConnectorBootstrap",
         "ConnectorBuiltinRegistry",
         "Exec",
         "Formats",

@@ -180,50 +180,6 @@ if (WITH_CONNECTOR_JDBC)
     )
 endif()
 
-ADD_BE_LIB(ConnectorBootstrap
-        connector_bootstrap.cpp
-)
-
-target_link_libraries(ConnectorBootstrap PUBLIC
-        Common
-)
-
-target_link_libraries(ConnectorBootstrap PRIVATE
-        Connector
-        ConnectorCacheStats
-        Base
-        Gutil
-        StarRocksGen
-)
-
-if (WITH_CONNECTOR_BENCHMARK)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorBenchmark
-    )
-endif()
-
-if (WITH_CONNECTOR_JDBC)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_JDBC)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorJDBC
-    )
-endif()
-
-if (WITH_CONNECTOR_ELASTICSEARCH)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorElasticsearch
-    )
-endif()
-
-if (WITH_CONNECTOR_MYSQL)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorMySQL
-    )
-endif()
-
 ADD_BE_LIB(ConnectorBuiltinRegistry
         connector_registry_init.cpp
 )
