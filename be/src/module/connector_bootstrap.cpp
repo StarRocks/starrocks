@@ -18,8 +18,8 @@
 #include <string>
 
 #include "connector/cache_stats/cache_stats_connector.h"
-#include "connector/connector.h"
 #include "connector/connector_registry.h"
+#include "connector_primitive/connector.h"
 
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
 #include "connector/benchmark/benchmark_connector.h"

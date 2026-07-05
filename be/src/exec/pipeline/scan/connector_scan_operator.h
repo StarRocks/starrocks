@@ -16,7 +16,7 @@
 
 #include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
