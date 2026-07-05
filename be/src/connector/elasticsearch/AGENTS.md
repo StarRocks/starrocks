@@ -11,5 +11,5 @@ Elasticsearch connector implementation above connector contracts without registr
 - Allowed internal include prefixes: `connector/elasticsearch/`, `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `platform/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ConnectorPrimitive`, `Platform`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_elasticsearch_test`
-- Remediation: Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ConnectorBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library.
+- Remediation: Keep ConnectorElasticsearch limited to Elasticsearch read-side scan, predicate pushdown, scroll query, and parser logic; move registration into ModuleBootstrap and avoid pulling Connector, storage, service, or full Exec code into the connector library.
 <!-- END GENERATED: BE MODULE HARNESSES -->
