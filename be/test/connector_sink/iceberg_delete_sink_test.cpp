@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -82,11 +83,16 @@ protected:
         _runtime_state = _fragment_context->runtime_state_ptr();
         _fragment_context->set_fragment_instance_id(fragment_id);
         _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergDeleteSinkTest");
+        _test_path = std::filesystem::temp_directory_path() / "iceberg_delete_sink_test";
+        std::filesystem::remove_all(_test_path);
+        std::filesystem::create_directories(_test_path);
     }
+
+    void TearDown() override { std::filesystem::remove_all(_test_path); }
 
     std::shared_ptr<IcebergDeleteSinkContext> create_delete_sink_context() {
         auto context = std::make_shared<IcebergDeleteSinkContext>();
-        context->path = "s3://test-bucket/test-table/";
+        context->path = _test_path.string() + "/";
         context->tuple_desc_id = 0;
         context->fragment_context = _fragment_context.get();
         context->max_file_size = 128 * 1024 * 1024;
@@ -126,6 +132,7 @@ protected:
     std::shared_ptr<RuntimeState> _runtime_state;
     std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::filesystem::path _test_path;
 };
 
 // Test that IcebergDeleteSinkProvider can create a valid IcebergDeleteSink
@@ -237,7 +244,8 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
 
     // Call the callback function with empty result
     CommitResult result_obj;
-    result_obj.location = "/test/path/delete_file.parquet"; // Provide a valid location to avoid PathUtils failure
+    // Provide a valid location to avoid PathUtils failure.
+    result_obj.file_result.location = "/test/path/delete_file.parquet";
 
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
@@ -253,7 +261,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
     const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
-    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
+    EXPECT_EQ(iceberg_data_file.path, result_obj.file_result.location);
     EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
 }
 
@@ -270,20 +278,20 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
 
     // Prepare a complete CommitResult with delete file information
     CommitResult result_obj;
-    result_obj.io_status = Status::OK();
-    result_obj.location = "/test/path/delete_file.parquet";
-    result_obj.format = "parquet";
-    result_obj.file_statistics.record_count = 100;
-    result_obj.file_statistics.file_size = 1024 * 1024;
-    result_obj.extra_data = "partition_null_fingerprint";
+    result_obj.file_result.io_status = Status::OK();
+    result_obj.file_result.location = "/test/path/delete_file.parquet";
+    result_obj.file_result.format = "parquet";
+    result_obj.file_result.file_statistics.record_count = 100;
+    result_obj.file_result.file_statistics.file_size = 1024 * 1024;
+    result_obj.partition_null_fingerprint = "partition_null_fingerprint";
     result_obj.referenced_data_file = "s3://test-bucket/test-table/data/data_file.parquet";
 
     // Set column statistics
-    result_obj.file_statistics.column_sizes = {{1, 1000}, {2, 2000}};
-    result_obj.file_statistics.value_counts = {{1, 100}, {2, 100}};
-    result_obj.file_statistics.null_value_counts = {{1, 0}, {2, 10}};
-    result_obj.file_statistics.lower_bounds = {{1, "min_val"}, {2, "min_val2"}};
-    result_obj.file_statistics.upper_bounds = {{1, "max_val"}, {2, "max_val2"}};
+    result_obj.file_result.file_statistics.column_sizes = {{1, 1000}, {2, 2000}};
+    result_obj.file_result.file_statistics.value_counts = {{1, 100}, {2, 100}};
+    result_obj.file_result.file_statistics.null_value_counts = {{1, 0}, {2, 10}};
+    result_obj.file_result.file_statistics.lower_bounds = {{1, "min_val"}, {2, "min_val2"}};
+    result_obj.file_result.file_statistics.upper_bounds = {{1, "max_val"}, {2, "max_val2"}};
 
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
@@ -300,11 +308,11 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
     const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
-    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
-    EXPECT_EQ(iceberg_data_file.format, result_obj.format);
-    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_statistics.record_count);
-    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_statistics.file_size);
-    EXPECT_EQ(iceberg_data_file.partition_null_fingerprint, result_obj.extra_data);
+    EXPECT_EQ(iceberg_data_file.path, result_obj.file_result.location);
+    EXPECT_EQ(iceberg_data_file.format, result_obj.file_result.format);
+    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_result.file_statistics.record_count);
+    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_result.file_statistics.file_size);
+    EXPECT_EQ(iceberg_data_file.partition_null_fingerprint, result_obj.partition_null_fingerprint);
     EXPECT_EQ(iceberg_data_file.referenced_data_file, result_obj.referenced_data_file);
     EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
 }
@@ -322,8 +330,8 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
 
     // Prepare a CommitResult with IO failure
     CommitResult result_obj;
-    result_obj.io_status = Status::IOError("Write failed");
-    result_obj.location = "/test/path/delete_file.parquet";
+    result_obj.file_result.io_status = Status::IOError("Write failed");
+    result_obj.file_result.location = "/test/path/delete_file.parquet";
 
     // Get the runtime state before the callback to check sink commit info
     auto runtime_state = _fragment_context->runtime_state_ptr();
@@ -350,14 +358,14 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
 
     // Prepare a CommitResult with partial statistics
     CommitResult result_obj;
-    result_obj.io_status = Status::OK();
-    result_obj.location = "/test/path/delete_file.parquet";
-    result_obj.format = "parquet";
-    result_obj.file_statistics.record_count = 50;
-    result_obj.file_statistics.file_size = 512 * 1024;
+    result_obj.file_result.io_status = Status::OK();
+    result_obj.file_result.location = "/test/path/delete_file.parquet";
+    result_obj.file_result.format = "parquet";
+    result_obj.file_result.file_statistics.record_count = 50;
+    result_obj.file_result.file_statistics.file_size = 512 * 1024;
     // Only set some statistics, not all
-    result_obj.file_statistics.value_counts = std::map<int, int64_t>{{1, 50}};
-    result_obj.file_statistics.null_value_counts = std::map<int, int64_t>{{1, 5}};
+    result_obj.file_result.file_statistics.value_counts = std::map<int, int64_t>{{1, 50}};
+    result_obj.file_result.file_statistics.null_value_counts = std::map<int, int64_t>{{1, 5}};
     // Lower and upper bounds not set
 
     // Get the runtime state before the callback to check sink commit info
@@ -374,10 +382,10 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
     ASSERT_TRUE(last_commit_info.__isset.iceberg_data_file);
     const auto& iceberg_data_file = last_commit_info.iceberg_data_file;
-    EXPECT_EQ(iceberg_data_file.path, result_obj.location);
-    EXPECT_EQ(iceberg_data_file.format, result_obj.format);
-    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_statistics.record_count);
-    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_statistics.file_size);
+    EXPECT_EQ(iceberg_data_file.path, result_obj.file_result.location);
+    EXPECT_EQ(iceberg_data_file.format, result_obj.file_result.format);
+    EXPECT_EQ(iceberg_data_file.record_count, result_obj.file_result.file_statistics.record_count);
+    EXPECT_EQ(iceberg_data_file.file_size_in_bytes, result_obj.file_result.file_statistics.file_size);
     EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
 }
 

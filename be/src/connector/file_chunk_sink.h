@@ -36,7 +36,7 @@ public:
 
     ~FileChunkSink() override = default;
 
-    void callback_on_commit(const formats::FileWriter::CommitResult& result) override;
+    void callback_on_commit(const CommitResult& result) override;
 };
 
 struct FileChunkSinkContext : public ConnectorChunkSinkContext {

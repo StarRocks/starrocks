@@ -38,20 +38,20 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, false) {}
 
 void HiveChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(result.rollback_action);
-    if (result.io_status.ok()) {
-        _state->update_num_rows_load_sink(result.file_statistics.record_count);
+    _rollback_actions.push_back(result.file_result.rollback_action);
+    if (result.file_result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
         THiveFileInfo hive_file_info;
-        hive_file_info.__set_file_name(PathUtils::get_filename(result.location));
-        hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.location));
-        hive_file_info.__set_record_count(result.file_statistics.record_count);
-        hive_file_info.__set_file_size_in_bytes(result.file_statistics.file_size);
+        hive_file_info.__set_file_name(PathUtils::get_filename(result.file_result.location));
+        hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.file_result.location));
+        hive_file_info.__set_record_count(result.file_result.file_statistics.record_count);
+        hive_file_info.__set_file_size_in_bytes(result.file_result.file_statistics.file_size);
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
         _state->add_sink_commit_info(commit_info);
         COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
-        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
-        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_result.file_statistics.file_size);
     }
 }
 

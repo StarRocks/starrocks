@@ -12,24 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/file_writer.h"
-
-#include <fmt/format.h>
+#include "connector_primitive/connector_sink_commit.h"
 
 #include <utility>
 
-#include "formats/io/async_flush_output_stream.h"
+namespace starrocks::connector {
 
-namespace starrocks::formats {
-
-UnknownFileWriterFactory::UnknownFileWriterFactory(std::string format) : _format(std::move(format)) {}
-
-Status UnknownFileWriterFactory::init() {
-    return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
+CommitResult& CommitResult::set_partition_null_fingerprint(std::string fingerprint) {
+    partition_null_fingerprint = std::move(fingerprint);
+    return *this;
 }
 
-StatusOr<WriterAndStream> UnknownFileWriterFactory::create(const std::string& path) const {
-    return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
+CommitResult& CommitResult::set_referenced_data_file(std::string referenced_file) {
+    referenced_data_file = std::move(referenced_file);
+    return *this;
 }
 
-} // namespace starrocks::formats
+} // namespace starrocks::connector
