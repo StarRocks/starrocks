@@ -37,7 +37,7 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 RUN apt-get update -y && \
     apt-get install --no-install-recommends -y \
     automake bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 make openjdk-17-jdk git patch lld bzip2 \
-    wget unzip curl vim tree net-tools openssh-client xz-utils gh locales && \
+    wget unzip curl vim tree net-tools openssh-client xz-utils gh locales less && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && \
     locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*

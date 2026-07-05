@@ -51,7 +51,7 @@ RUN dnf install -y 'dnf-command(config-manager)' && \
         dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
         dnf install -y epel-release && \
         dnf install -y gh wget unzip bzip2 xz patch bison byacc flex autoconf automake make \
-        gettext perl binutils-devel libtool which git ccache python3 java-17-openjdk-devel file less psmisc clang-tools-extra glibc-langpack-en && \
+        gettext perl binutils-devel libtool which git ccache python3 java-17-openjdk-devel file less psmisc clang-tools-extra lld glibc-langpack-en && \
         dnf clean all && rm -rf /var/cache/dnf
 
 # install gcc
@@ -72,4 +72,5 @@ RUN mkdir -p ${MAVEN_INSTALL_HOME} && cd ${MAVEN_INSTALL_HOME} && \
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 ENV MAVEN_HOME=${MAVEN_INSTALL_HOME}
+ENV STARROCKS_LINKER=lld
 ENV LANG=en_US.utf8
