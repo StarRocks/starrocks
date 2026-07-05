@@ -271,7 +271,7 @@ Operator-tree execution framework for query and fragment contexts, driver lifecy
 ### ConnectorPrimitive (`connectorprimitive`)
 Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorPrimitive`
-- Allowed internal include prefixes: `connector/connector.h`, `connector/data_source.h`, `connector/data_source_provider.h`, `exec_primitive/pipeline/scan/scan_morsel.h`, `exec_primitive/pipeline/scan/morsel_queue_builder.h`, `exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h`, `exec_primitive/runtime_filter/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_primitive_test`
 - Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
@@ -286,7 +286,7 @@ Top-level built-in connector registration composition above connector contracts 
 ### ModuleBootstrap (`modulebootstrap`)
 Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and split connector registration.
 - Targets: `ModuleBootstrap`
-- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/connector.h`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `module_bootstrap_test`
 - Remediation: Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly.
@@ -318,7 +318,7 @@ Reusable exec join hash table algorithms without join nodes, pipeline, storage, 
 ### Orchestration (`orchestration`)
 Orchestration layer below Service for query, fragment, and ingestion lifecycle entrypoints over concrete runtime and execution modules.
 - Targets: `Orchestration`
-- Allowed internal include prefixes: `orchestration/`, `data_workflows/`, `connector/data_source_provider.h`, `column/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
+- Allowed internal include prefixes: `orchestration/`, `data_workflows/`, `connector_primitive/`, `column/`, `exec/`, `exec_primitive/`, `runtime/`, `compute_env/`, `platform/`, `common/`, `base/`, `gutil/`, `gen_cpp/`, `types/`
 - Allowed target deps: `DataWorkflows`, `Runtime`, `Exec`, `ExecRuntime`, `ExecPrimitive`, `ComputeEnv`, `ConnectorPrimitive`, `Platform`, `ColumnCore`, `Runtime`, `Common`, `Base`, `Gutil`, `StarRocksGen`, `Types`
 - Core tests: `orchestration_test`
 - Remediation: Keep Orchestration below Service; move transport-specific RPC handling to Service and lower reusable execution/runtime or ingestion primitives to their owning modules.

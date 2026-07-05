@@ -34,7 +34,7 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/data_source_provider.h"
+#include "connector_primitive/data_source_provider.h"
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"

@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "common/statusor.h"
-#include "connector/data_source.h"
+#include "connector_primitive/data_source.h"
 #include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"

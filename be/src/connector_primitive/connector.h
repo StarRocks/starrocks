@@ -18,7 +18,7 @@
 #include <string>
 
 #include "common/logging.h"
-#include "connector/data_source_provider.h"
+#include "connector_primitive/data_source_provider.h"
 #include "gen_cpp/PlanNodes_types.h"
 
 namespace starrocks {

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector.h"
 #include "connector/connector_registry.h"
+#include "connector_primitive/connector.h"
 #include "gtest/gtest.h"
 #include "module/connector_bootstrap.h"
 

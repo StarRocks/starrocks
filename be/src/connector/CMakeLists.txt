@@ -14,25 +14,6 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
-ADD_BE_LIB(ConnectorPrimitive
-        connector.cpp
-        data_source.cpp
-        data_source_provider.cpp
-)
-
-target_link_libraries(ConnectorPrimitive PUBLIC
-        ExecPrimitive
-        Expr
-        Runtime
-        ChunkCore
-        ColumnCore
-        Types
-        Common
-        Base
-        Gutil
-        StarRocksGen
-)
-
 ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp

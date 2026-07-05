@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/data_source_provider.h"
+#include "connector_primitive/data_source_provider.h"
 
 #include <algorithm>
 #include <functional>

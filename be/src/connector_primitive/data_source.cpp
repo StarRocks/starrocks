@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/data_source.h"
+#include "connector_primitive/data_source.h"
 
 #include "exec_primitive/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"

@@ -14,8 +14,8 @@
 
 #include <gtest/gtest.h>
 
-#include "connector/connector.h"
-#include "connector/data_source_provider.h"
+#include "connector_primitive/connector.h"
+#include "connector_primitive/data_source_provider.h"
 
 namespace starrocks::connector {
 

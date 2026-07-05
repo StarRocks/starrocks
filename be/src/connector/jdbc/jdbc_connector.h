@@ -16,7 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks {
 
