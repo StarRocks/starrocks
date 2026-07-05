@@ -12,40 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(MODULE_BOOTSTRAP_TEST_LINK_LIBS
-    ModuleBootstrap
-    Connector
-    ConnectorCacheStats
-    Common
-    Base
-    Gutil
-    StarRocksGen
-    ${STARROCKS_DEPENDENCIES}
-    ${STARROCKS_STATIC_LINK_LIBS}
-    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
-    ${WL_START_GROUP}
-    gmock
-    gtest
-    ${WL_END_GROUP}
-)
-
-if (WITH_CONNECTOR_BENCHMARK)
-    list(APPEND MODULE_BOOTSTRAP_TEST_LINK_LIBS ConnectorBenchmark)
-endif()
-
-if (WITH_CONNECTOR_JDBC)
-    list(APPEND MODULE_BOOTSTRAP_TEST_LINK_LIBS ConnectorJDBC)
-endif()
-
-if (WITH_CONNECTOR_ELASTICSEARCH)
-    list(APPEND MODULE_BOOTSTRAP_TEST_LINK_LIBS ConnectorElasticsearch)
-endif()
-
-if (WITH_CONNECTOR_MYSQL)
-    list(APPEND MODULE_BOOTSTRAP_TEST_LINK_LIBS ConnectorMySQL)
-endif()
-
 add_executable(module_bootstrap_test module_bootstrap_test.cpp)
 target_link_be_test_cxa_throw_wrap(module_bootstrap_test)
-target_link_libraries(module_bootstrap_test ${MODULE_BOOTSTRAP_TEST_LINK_LIBS} gtest_main)
+target_link_libraries(module_bootstrap_test ModuleBootstrap ${TEST_LINK_LIBS} gtest_main)
 set_target_properties(module_bootstrap_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
