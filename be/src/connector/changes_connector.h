@@ -27,7 +27,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "storage/del_vector.h"
