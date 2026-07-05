@@ -1262,6 +1262,12 @@ CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
+// Maximum number of object storage clients (S3 and Azure Blob) cached per client factory.
+// Mutable at runtime: the value is snapshotted on each client creation, so a lowered value
+// takes effect as cached clients are evicted on subsequent creations. Values below 1 are
+// treated as 1.
+CONF_mInt64(object_storage_client_cache_size, "8");
+
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
