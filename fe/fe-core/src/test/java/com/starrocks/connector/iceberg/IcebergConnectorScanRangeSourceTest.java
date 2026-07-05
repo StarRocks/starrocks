@@ -28,10 +28,10 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.DateType;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.type.DateType;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
@@ -59,16 +59,16 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     public void setUp() {
         // Setup tuple descriptor
         tupleDescriptor = new TupleDescriptor(new TupleId(1));
-        
+
         // Setup slot descriptors
         SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), tupleDescriptor);
         idSlot.setType(INT);
         idSlot.setColumn(new Column("id", INT));
-        
+
         SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), tupleDescriptor);
         dataSlot.setType(VARCHAR);
         dataSlot.setColumn(new Column("data", VARCHAR));
-        
+
         tupleDescriptor.addSlot(idSlot);
         tupleDescriptor.addSlot(dataSlot);
     }
