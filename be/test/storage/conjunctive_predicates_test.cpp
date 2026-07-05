@@ -26,7 +26,7 @@
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/exec_env.h"
 #include "exec/olap_scan_prepare.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_executor.h"

@@ -37,7 +37,7 @@
 #include <vector>
 
 #include "common/runtime_profile.h"
-#include "exec/data_sink.h"
+#include "exec_primitive/data_sink.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_file.h"
 #include "fs/fs.h"

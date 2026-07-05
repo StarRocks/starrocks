@@ -26,9 +26,9 @@
 #include "common/statusor.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_state.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {

@@ -19,7 +19,7 @@
 #include <utility>
 
 #include "exec/chunk_buffer_memory_manager.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 class LocalExchanger;

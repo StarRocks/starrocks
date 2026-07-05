@@ -18,7 +18,7 @@
 
 #include <vector>
 
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_filter.h"

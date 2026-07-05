@@ -20,7 +20,7 @@
 #include "compute_env/query_cache/cache_manager.h"
 #include "compute_env/query_cache/cache_param.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "storage/rowset/rowset.h"
 namespace starrocks {
 namespace lake {

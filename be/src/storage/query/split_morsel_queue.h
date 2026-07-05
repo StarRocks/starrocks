@@ -16,7 +16,7 @@
 
 #include <mutex>
 
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "storage/query/olap_morsel_queue.h"

@@ -37,7 +37,7 @@
 #include "compute_env/spill/global_spill_manager.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks {

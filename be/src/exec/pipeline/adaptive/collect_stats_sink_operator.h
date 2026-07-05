@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/adaptive/adaptive_fwd.h"
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

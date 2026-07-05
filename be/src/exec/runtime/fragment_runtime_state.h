@@ -20,7 +20,7 @@
 #include "base/time/time.h"
 #include "common/status.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
 #include "gen_cpp/Types_types.h" // for TNetworkAddress, TUniqueId
 #include "storage_primitive/predicate_tree_params.h"
 

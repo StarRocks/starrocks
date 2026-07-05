@@ -40,7 +40,7 @@
 #include "common/thread/threadpool.h"
 #include "compute_env/query_cache/cache_manager_fwd.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/mem_tracker_fwd.h"
 #include "runtime/runtime_env.h"
 #include "runtime/service_contexts.h"

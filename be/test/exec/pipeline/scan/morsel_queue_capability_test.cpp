@@ -16,9 +16,9 @@
 
 #include <memory>
 
-#include "exec/pipeline/scan/dynamic_morsel_queue.h"
-#include "exec/pipeline/scan/fixed_morsel_queue.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/fixed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
 #include "storage/query/bucket_sequence_morsel_queue.h"
 #include "storage/query/olap_dynamic_morsel_queue.h"
 #include "storage/query/olap_fixed_morsel_queue.h"

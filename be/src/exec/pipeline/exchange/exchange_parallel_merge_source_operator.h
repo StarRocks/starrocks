@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "compute_env/sorting/merge_path.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks {
 class SortExecExprs;

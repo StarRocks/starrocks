@@ -43,7 +43,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/data_sink.h"
+#include "exec_primitive/data_sink.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 

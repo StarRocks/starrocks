@@ -28,7 +28,7 @@
 #include "base/hash/hash_std.hpp"
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
-#include "exec/pipeline/primitives/operator_exec_stats.h"
+#include "exec_primitive/pipeline/primitives/operator_exec_stats.h"
 #include "gen_cpp/InternalService_types.h" // for TPipelineProfileLevel, TTimeUnit
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 

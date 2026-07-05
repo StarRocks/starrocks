@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "exec/data_sink.h"
+#include "exec_primitive/data_sink.h"
 
 namespace starrocks {
 

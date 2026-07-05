@@ -25,8 +25,8 @@
 #include "common/config_exec_env_fwd.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "runtime/runtime_env.h"
 
 namespace starrocks {

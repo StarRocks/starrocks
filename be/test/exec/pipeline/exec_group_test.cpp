@@ -21,12 +21,12 @@
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/execution_group_lifecycle.h"
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/execution_group_lifecycle.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

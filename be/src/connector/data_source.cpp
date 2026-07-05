@@ -14,7 +14,7 @@
 
 #include "connector/data_source.h"
 
-#include "exec/runtime_filter/runtime_filter_helper.h"
+#include "exec_primitive/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
 

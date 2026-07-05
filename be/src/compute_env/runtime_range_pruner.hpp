@@ -20,7 +20,7 @@
 
 #include "column/global_dict/config.h"
 #include "compute_env/runtime_range_pruner.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_in_filter.h"
 #include "storage_primitive/column_and_predicate.h"

@@ -18,12 +18,12 @@
 
 #include "common/global_types.h"
 #include "exec/exec_env.h"
-#include "exec/exec_node.h"
 #include "exec/lookup_stream_mgr.h"
 #include "exec/pipeline/fetch_processor.h"
 #include "exec/pipeline/fetch_sink_operator.h"
 #include "exec/pipeline/fetch_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec_primitive/exec_node.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/tablet_info.h"

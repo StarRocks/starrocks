@@ -21,7 +21,7 @@
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

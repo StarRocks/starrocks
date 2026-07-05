@@ -20,7 +20,7 @@
 
 #include "common/statusor.h"
 #include "connector/data_source.h"
-#include "exec/pipeline/scan/morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state_fwd.h"

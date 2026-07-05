@@ -25,10 +25,10 @@
 #include "compute_env/query/connector_scan_mem_share_arbitrator.h"
 #include "compute_env/spill/query_spill_manager.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
-#include "exec/pipeline/primitives/query_lifecycle.h"
 #include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/fragment_lifecycle.h"
+#include "exec_primitive/pipeline/primitives/query_lifecycle.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/descriptors_fwd.h"

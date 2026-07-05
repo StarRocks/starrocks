@@ -55,7 +55,7 @@
 #include "compute_env/spill/spiller_factory.h"
 #include "compute_env/spill/task_executor.h"
 #include "compute_env/workgroup/scan_task.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
