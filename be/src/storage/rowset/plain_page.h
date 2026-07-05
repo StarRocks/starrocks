@@ -39,11 +39,11 @@
 #include "column/column.h"
 #include "column/container_resource.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
+#include "storage_primitive/range.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {

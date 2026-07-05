@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 #include <gtest/gtest.h>
 

@@ -21,10 +21,10 @@
 
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 

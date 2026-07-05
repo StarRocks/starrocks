@@ -20,7 +20,7 @@
 
 #include "column/fixed_length_column.h"
 #include "common/statusor.h"
-#include "storage/primitive/row_source_mask.h"
+#include "storage_primitive/row_source_mask.h"
 
 namespace starrocks {
 

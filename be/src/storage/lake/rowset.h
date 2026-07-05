@@ -23,9 +23,9 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::lake {
 

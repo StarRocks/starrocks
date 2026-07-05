@@ -36,7 +36,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

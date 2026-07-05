@@ -25,9 +25,9 @@
 #include "compute_env/query/global_late_materialization_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "storage/lake/types_fwd.h"
-#include "storage/primitive/storage_ids.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/rowset.h"
+#include "storage_primitive/storage_ids.h"
 
 namespace starrocks {
 class Rowset;

@@ -44,10 +44,10 @@
 #include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
 #include "runtime/type_info_allocator_adapter.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/logical_type.h"
 #include "types/olap_type_infra.h"
 #include "types/storage_type_traits.h"

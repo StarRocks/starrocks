@@ -48,12 +48,12 @@
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 

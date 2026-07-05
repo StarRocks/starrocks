@@ -39,7 +39,7 @@
 #include "runtime/chunk_accumulator.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::pipeline {
 

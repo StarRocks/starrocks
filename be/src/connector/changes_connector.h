@@ -34,9 +34,9 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class TabletMetadataPB;

@@ -54,6 +54,7 @@ INTERNAL_INCLUDE_PREFIXES = {
     "serde",
     "service",
     "storage",
+    "storage_primitive",
     "testutil",
     "tools",
     "types",

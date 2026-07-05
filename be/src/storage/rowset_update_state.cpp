@@ -31,12 +31,12 @@
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 

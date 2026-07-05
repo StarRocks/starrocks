@@ -20,11 +20,11 @@
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/conjunctive_predicates.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 

@@ -48,10 +48,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/vector_search_option.h"
 #include "test_util.h"
 
 namespace starrocks::lake {

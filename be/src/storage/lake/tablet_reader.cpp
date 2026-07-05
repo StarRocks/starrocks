@@ -41,10 +41,6 @@
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/conjunctive_predicates.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -53,6 +49,10 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks::lake {
 

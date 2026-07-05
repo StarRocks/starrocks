@@ -20,9 +20,9 @@
 #include <vector>
 
 #include "storage/olap_common.h"
-#include "storage/primitive/bitmap_index_iterator.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/bitmap_index_iterator.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 

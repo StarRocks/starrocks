@@ -19,7 +19,7 @@
 
 #include "roaring/roaring.hh"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

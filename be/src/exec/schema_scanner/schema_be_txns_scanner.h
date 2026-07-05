@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "exec/schema_scanner.h"
-#include "storage/primitive/txn_info.h"
+#include "storage_primitive/txn_info.h"
 
 namespace starrocks {
 

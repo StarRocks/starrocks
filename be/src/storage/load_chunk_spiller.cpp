@@ -30,8 +30,8 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/storage_metrics.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

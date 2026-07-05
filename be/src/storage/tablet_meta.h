@@ -50,10 +50,10 @@
 #include "storage/binlog_manager.h"
 #include "storage/delete_handler.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/flat_json_config.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/conjunctive_predicates.h"
+#include "storage_primitive/conjunctive_predicates.h"
 
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -38,10 +38,10 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_parser.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/logical_type.h"
 
 namespace starrocks {

@@ -37,9 +37,9 @@
 #include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_parser.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 

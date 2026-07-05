@@ -52,13 +52,13 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/query/olap_dynamic_morsel_queue_builder.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/vector_search_option.h"
 
 namespace starrocks::connector {
 

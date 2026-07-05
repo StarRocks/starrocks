@@ -27,7 +27,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace brpc {
 class Controller;

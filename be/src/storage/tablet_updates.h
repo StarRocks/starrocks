@@ -26,9 +26,9 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/edit_version.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage_primitive/edit_version.h"
 
 namespace starrocks {
 

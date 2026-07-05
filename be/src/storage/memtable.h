@@ -23,7 +23,7 @@
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
-#include "storage/primitive/primary_key_encoding_types.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks {
 

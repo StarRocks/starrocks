@@ -17,51 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-ADD_BE_LIB(StoragePrimitive
-    primitive/aggregate_type.cpp
-    primitive/chunk_iterator.cpp
-    primitive/column_and_predicate.cpp
-    primitive/column_expr_predicate.cpp
-    primitive/column_in_predicate.cpp
-    primitive/column_not_in_predicate.cpp
-    primitive/column_or_predicate.cpp
-    primitive/column_null_predicate.cpp
-    primitive/column_placeholder_predicate.cpp
-    primitive/column_predicate_cmp.cpp
-    primitive/column_predicate_dict_conjuct.cpp
-    primitive/column_value_range.cpp
-    primitive/conjunctive_predicates.cpp
-    primitive/disjunctive_predicates.cpp
-    primitive/edit_version.cpp
-    primitive/empty_iterator.cpp
-    primitive/flat_json_config.cpp
-    primitive/key_coder.cpp
-    primitive/projection_iterator.cpp
-    primitive/range.cpp
-    primitive/predicate_parser.cpp
-    primitive/primary_key_encoder.cpp
-    primitive/schema_helper.cpp
-    primitive/predicate_tree/predicate_tree.cpp
-    primitive/storage_ids.cpp
-    primitive/tablet_column.cpp
-    primitive/tablet_info.cpp
-    primitive/tablet_column_util.cpp
-    primitive/tablet_column_type_utils.cpp
-    primitive/union_iterator.cpp
-)
-
-target_link_libraries(StoragePrimitive PUBLIC
-    Expr
-    Runtime
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 ADD_BE_LIB(StorageBase
     base/merge_iterator.cpp
     base/row_source_mask.cpp

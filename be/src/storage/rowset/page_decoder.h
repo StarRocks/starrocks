@@ -38,7 +38,7 @@
 #include "column/nullable_column.h"
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class ColumnPredicate;

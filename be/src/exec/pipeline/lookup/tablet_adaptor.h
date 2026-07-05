@@ -20,9 +20,9 @@
 #include "common/object_pool.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

@@ -45,7 +45,7 @@
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/predicate_tree_params.h"
+#include "storage_primitive/predicate_tree_params.h"
 
 namespace starrocks {
 

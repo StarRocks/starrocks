@@ -17,7 +17,7 @@
 #include <string>
 #include <utility>
 
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/predicate_parser.h"
 #include "tablet_schema.h"
 
 namespace starrocks {

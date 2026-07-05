@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "storage/base/row_source_mask.h"
-#include "storage/primitive/chunk_iterator.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

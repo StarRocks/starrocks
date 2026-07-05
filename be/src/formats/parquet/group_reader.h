@@ -39,7 +39,7 @@
 #include "formats/scan_context.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class RandomAccessFile;

@@ -22,7 +22,7 @@
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/pipeline/runtime_filter_hub.h"
 #include "gen_cpp/Types_types.h" // for TNetworkAddress, TUniqueId
-#include "storage/primitive/predicate_tree_params.h"
+#include "storage_primitive/predicate_tree_params.h"
 
 namespace starrocks::pipeline {
 

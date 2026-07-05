@@ -34,7 +34,7 @@
 #include "fmt/format.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_pool.h"
-#include "storage/primitive/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/datum.h"
 #include "types/storage_type_traits.h"
 

@@ -25,8 +25,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
@@ -34,6 +32,8 @@
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type.h"
 #include "types/storage_type_traits.h"
 

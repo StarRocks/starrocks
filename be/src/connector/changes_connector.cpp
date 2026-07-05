@@ -35,11 +35,11 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/roaring2range.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_env.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/roaring2range.h"
 
 namespace starrocks::connector {
 

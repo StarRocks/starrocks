@@ -61,10 +61,10 @@
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 

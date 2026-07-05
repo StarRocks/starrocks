@@ -32,7 +32,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 #include "types/datum.h"
 
 namespace starrocks {

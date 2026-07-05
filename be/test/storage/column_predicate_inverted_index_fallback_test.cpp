@@ -24,11 +24,11 @@
 #include "roaring/roaring.hh"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
 #include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/types.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

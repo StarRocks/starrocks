@@ -36,8 +36,8 @@
 
 #include <cmath>
 
-#include "storage/primitive/filter_op.h"
-#include "storage/primitive/olap_tuple.h"
+#include "storage_primitive/filter_op.h"
+#include "storage_primitive/olap_tuple.h"
 
 namespace starrocks {
 
