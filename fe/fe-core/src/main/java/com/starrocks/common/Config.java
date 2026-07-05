@@ -2685,6 +2685,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int statistic_external_sample_max_rounds = 4;
 
+    /**
+     * If every column's NDV (distinct value estimate) changes by less than this fraction between
+     * two consecutive sample rounds, the round loop stops early instead of continuing to
+     * statistic_external_sample_max_rounds -- low-cardinality columns (e.g. booleans/enums)
+     * converge within the first round or two, so later rounds would just re-scan more rows for no
+     * accuracy gain. High-cardinality columns whose NDV keeps growing round over round are left to
+     * run the full round budget.
+     */
+    @ConfField(mutable = true)
+    public static double statistic_external_sample_ndv_convergence_threshold = 0.05;
+
     @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
             "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
             "For first load: deltaRatio = loadRows / (totalRows + 1). " +

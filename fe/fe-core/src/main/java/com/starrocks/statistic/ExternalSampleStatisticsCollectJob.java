@@ -63,6 +63,10 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     // rather than building one unbounded SELECT list.
     private static final int MAX_COLUMNS_PER_SINGLE_PASS_SQL = 200;
 
+    // Per-column aggregate count in buildSinglePassSQL's wide row: data_size, hll, null_count,
+    // max, min, ndv cardinality.
+    private static final int AGGREGATES_PER_COLUMN = 6;
+
     private final int allPartitionSize;
 
     public ExternalSampleStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
@@ -134,11 +138,16 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         String status = "SUCCESS";
         String failureReason = "";
         try {
+            // Compared against each round's cardinality to detect NDV convergence; null on the
+            // first round of this job run (warm-started rounds don't carry over the prior job
+            // run's per-column values, so convergence is only tracked within one job execution).
+            Map<String, Long> prevCardinalityByColumn = null;
+            double convergenceThreshold = Config.statistic_external_sample_ndv_convergence_threshold;
             for (; round < maxRounds; round++) {
                 long rowsThisRound = rowCount > 0 ? Math.min(rowCount, capPerRound << round) : rowCount;
                 ratio = rowCount > 0 ? Math.min(1.0, (double) rowsThisRound / rowCount) : 1.0;
 
-                runOneSampleRound(context, analyzeStatus, ratio);
+                Map<String, Long> cardinalityByColumn = runOneSampleRound(context, analyzeStatus, ratio);
 
                 LOG.info("[ExternalStats][Sample] round done | jobId={} catalog={} db={} table={} round={} " +
                                 "rowsThisRound={} ratio={}",
@@ -149,6 +158,15 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
                     // and would just waste a re-scan, so stop here.
                     break;
                 }
+
+                if (prevCardinalityByColumn != null
+                        && isNdvConverging(prevCardinalityByColumn, cardinalityByColumn, convergenceThreshold)) {
+                    LOG.info("[ExternalStats][Sample] NDV converged, stopping early | jobId={} catalog={} db={} " +
+                                    "table={} round={} threshold={}",
+                            jobId, getCatalogName(), db.getOriginName(), table.getName(), round, convergenceThreshold);
+                    break;
+                }
+                prevCardinalityByColumn = cardinalityByColumn;
             }
 
             // All rounds succeeded: this table's sampled stats for these columns are now
@@ -200,9 +218,12 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
 
     /**
      * Runs one whole-table sampled collection round at the given ratio and flushes it to
-     * external_column_statistics (overwriting the previous round's sentinel row).
+     * external_column_statistics (overwriting the previous round's sentinel row). Returns each
+     * collected column's NDV cardinality for this round, so the caller can track convergence
+     * across rounds.
      */
-    private void runOneSampleRound(ConnectContext context, AnalyzeStatus analyzeStatus, double ratio) throws Exception {
+    private Map<String, Long> runOneSampleRound(ConnectContext context, AnalyzeStatus analyzeStatus, double ratio)
+            throws Exception {
         // seed=0 tells BernoulliFileScanTaskIterator to use a fresh, unseeded Random, so successive
         // rounds don't keep re-sampling the same files.
         context.getSessionVariable().setExternalStatsFileSampleRatio(ratio);
@@ -213,19 +234,43 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
                     MAX_COLUMNS_PER_SINGLE_PASS_SQL);
             long totalBatches = columnBatches.size();
             long finishedBatches = 0;
+            Map<String, Long> cardinalityByColumn = new LinkedHashMap<>();
             for (List<Integer> columnBatch : columnBatches) {
                 String sql = buildSinglePassSQL(columnBatch);
-                collectSinglePassStatisticSync(sql, columnBatch, context, analyzeStatus, ratio);
+                cardinalityByColumn.putAll(collectSinglePassStatisticSync(sql, columnBatch, context, analyzeStatus, ratio));
                 finishedBatches++;
                 analyzeStatus.setProgress(finishedBatches * 100 / totalBatches);
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
             }
             flushInsertStatisticsData(context, true);
+            return cardinalityByColumn;
         } finally {
             // Never let sampling leak onto later, unrelated queries sharing this ConnectContext.
             context.getSessionVariable().setExternalStatsFileSampleRatio(1.0);
             context.getSessionVariable().setExternalStatsSampleSeed(0);
         }
+    }
+
+    /**
+     * True when every column's NDV cardinality changed by less than {@code threshold} (relative)
+     * between two consecutive rounds. A single still-changing column (typically a high-cardinality
+     * one) is enough to keep sampling going -- stopping early on ratio alone would compound the
+     * NDV underestimation that already applies to high-cardinality columns under sampling.
+     */
+    static boolean isNdvConverging(Map<String, Long> prev, Map<String, Long> curr, double threshold) {
+        for (Map.Entry<String, Long> entry : curr.entrySet()) {
+            Long prevValue = prev.get(entry.getKey());
+            if (prevValue == null) {
+                return false;
+            }
+            long currValue = entry.getValue();
+            double denominator = Math.max(currValue, 1L);
+            double relativeChange = Math.abs(currValue - prevValue) / denominator;
+            if (relativeChange >= threshold) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -273,10 +318,13 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
 
     /**
      * Builds one single-pass SQL covering every column in {@code columnBatch}: a single scan
-     * producing one wide row of {@code COUNT(1)} (shared row count) followed by 5 aggregates
-     * (data_size, hll, null_count, max, min) per column, in column order. Replaces the previous
-     * per-column SELECT ... UNION ALL ... approach so a round does exactly one planFiles()/scan
-     * (per batch) instead of N, and every column's stats come from the exact same sampled rows.
+     * producing one wide row of {@code COUNT(1)} (shared row count) followed by 6 aggregates
+     * (data_size, hll, null_count, max, min, ndv cardinality) per column, in column order.
+     * Replaces the previous per-column SELECT ... UNION ALL ... approach so a round does exactly
+     * one planFiles()/scan (per batch) instead of N, and every column's stats come from the exact
+     * same sampled rows. The ndv cardinality aggregate is a plain scalar (not the serialized HLL
+     * sketch) so the round loop can compare it across rounds in-memory without needing to
+     * deserialize an HLL sketch on the FE side -- see isNdvConverging.
      */
     private String buildSinglePassSQL(List<Integer> columnBatch) {
         StringBuilder sql = new StringBuilder("SELECT CAST(COUNT(1) AS BIGINT)");
@@ -291,12 +339,15 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
                 sql.append(", CAST(0 AS BIGINT)");
                 sql.append(", ''");
                 sql.append(", ''");
+                sql.append(", CAST(0 AS BIGINT)");
             } else {
                 sql.append(", CAST(").append(fullAnalyzeGetDataSize(quoteColumnName, columnType)).append(" AS BIGINT)");
                 sql.append(", hex(hll_serialize(IFNULL(hll_raw(").append(quoteColumnName).append("), hll_empty())))");
                 sql.append(", CAST(COUNT(1) - COUNT(").append(quoteColumnName).append(") AS BIGINT)");
                 sql.append(", ").append(getMinMaxFunction(columnType, quoteColumnName, true));
                 sql.append(", ").append(getMinMaxFunction(columnType, quoteColumnName, false));
+                sql.append(", CAST(hll_cardinality(IFNULL(hll_raw(").append(quoteColumnName)
+                        .append("), hll_empty())) AS BIGINT)");
             }
         }
         sql.append(" FROM `").append(getCatalogName()).append("`.`").append(db.getOriginName())
@@ -311,10 +362,13 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
      * up to a full-table estimate. NDV (HLL) and min/max are NOT rescaled: HLL directly measures
      * distinct values in the sampled rows (assumed representative of the whole table per
      * random-wide-sampling); min/max are kept as the sampled rows' true values, which is a safe
-     * (conservative) direction for range-predicate selectivity.
+     * (conservative) direction for range-predicate selectivity. Returns each column's NDV
+     * cardinality (unscaled, same sample-local estimate as everything else here) so the caller can
+     * compare it against the previous round's value to detect convergence.
      */
-    private void collectSinglePassStatisticSync(String sql, List<Integer> columnBatch, ConnectContext context,
-                                                 AnalyzeStatus analyzeStatus, double ratio) throws Exception {
+    private Map<String, Long> collectSinglePassStatisticSync(String sql, List<Integer> columnBatch,
+                                                               ConnectContext context, AnalyzeStatus analyzeStatus,
+                                                               double ratio) throws Exception {
         calculateAndSetRemainingTimeout(context, analyzeStatus);
 
         LOG.debug("statistics collect sql : " + sql);
@@ -323,7 +377,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
 
         List<JsonArray> rows = executor.executeWideRowDQL(context, sql);
         if (rows.isEmpty()) {
-            return;
+            return Map.of();
         }
         JsonArray data = rows.get(0);
         long sampledRowCount = data.get(0).getAsLong();
@@ -334,14 +388,17 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         // which does the same for the FULL path. Iceberg's long catalog.db.table.<uuid> identifiers
         // are exactly the case that hashing exists to protect.
         String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
+        Map<String, Long> cardinalityByColumn = new LinkedHashMap<>();
         for (int i = 0; i < columnBatch.size(); i++) {
             String columnName = columnNames.get(columnBatch.get(i));
-            int base = 1 + i * 5;
+            int base = 1 + i * AGGREGATES_PER_COLUMN;
             long dataSize = data.get(base).getAsLong();
             String hllHex = data.get(base + 1).getAsString();
             long nullCount = data.get(base + 2).getAsLong();
             String max = data.get(base + 3).getAsString();
             String min = data.get(base + 4).getAsString();
+            long cardinality = data.get(base + 5).getAsLong();
+            cardinalityByColumn.put(columnName, cardinality);
 
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
@@ -378,5 +435,6 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
             sqlBuffer.add("(" + String.join(", ", params) + ")");
         }
         flushInsertStatisticsData(context, false);
+        return cardinalityByColumn;
     }
 }
