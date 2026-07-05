@@ -16,10 +16,9 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <azure/identity.hpp>
 #include <azure/storage/blobs.hpp>
-
-#include <algorithm>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "base/random/random.h"
