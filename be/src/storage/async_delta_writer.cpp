@@ -16,12 +16,27 @@
 
 #include <fmt/format.h>
 
+#include "common/util/bthreads/executor.h"
 #include "runtime/current_thread.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks {
+
+namespace {
+// Returns true when the shared async delta writer thread pool is saturated and has made
+// no progress for be_exit_after_disk_write_hang_second (a slow or hung disk). Used to fail
+// load writes fast with a retryable error instead of letting them pile up in the queue.
+bool async_delta_writer_overloaded() {
+    auto* engine = StorageEngine::instance();
+    if (engine == nullptr) {
+        return false;
+    }
+    auto* executor = static_cast<bthreads::ThreadPoolExecutor*>(engine->async_delta_writer_executor());
+    return executor != nullptr && executor->is_overloaded();
+}
+} // namespace
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     _close();
@@ -124,6 +139,15 @@ Status AsyncDeltaWriter::_init() {
 
 void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWriterCallback* cb) {
     DCHECK(cb != nullptr);
+    if (async_delta_writer_overloaded()) {
+        LOG_EVERY_N(WARNING, 100) << "Reject write because async delta writer thread pool is overloaded, tablet_id: "
+                                  << _writer->tablet()->tablet_id();
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        cb->run(Status::ServiceUnavailable("async delta writer thread pool is overloaded, the disk may be slow or "
+                                           "hung; please retry the load"),
+                nullptr, &failed_info);
+        return;
+    }
     Task task;
     task.chunk = req.chunk;
     task.indexes = req.indexes;
@@ -159,6 +183,15 @@ void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req) 
 
 void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     DCHECK(cb != nullptr);
+    if (async_delta_writer_overloaded()) {
+        LOG_EVERY_N(WARNING, 100) << "Reject commit because async delta writer thread pool is overloaded, tablet_id: "
+                                  << _writer->tablet()->tablet_id();
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        cb->run(Status::ServiceUnavailable("async delta writer thread pool is overloaded, the disk may be slow or "
+                                           "hung; please retry the load"),
+                nullptr, &failed_info);
+        return;
+    }
     Task task;
     task.chunk = nullptr;
     task.indexes = nullptr;
