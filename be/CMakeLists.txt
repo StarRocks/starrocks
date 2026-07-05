@@ -558,7 +558,19 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} ${EXPR_EXTENSION_LIBS} ${WL_WHOLE_ARCHIVE_SUFFIX}
     ${WL_END_GROUP}
     Storage
+    # The concrete format libraries must be linked ahead of the thirdparty
+    # dependency group below (which owns avro/avrocpp/arrow/orc). Linking only
+    # the Formats aggregate lets CMake append its concrete members after that
+    # group as transitive deps, which leaves FormatAvro's avro/avrocpp
+    # references unresolved. List the members explicitly, with FormatCore last,
+    # to keep them ahead of their thirdparty archives.
     Formats
+    FormatParquet
+    FormatOrc
+    FormatAvro
+    FormatJson
+    FormatCsv
+    FormatCore
     ExecRuntime
     ComputeEnv
     ExecPrimitive
