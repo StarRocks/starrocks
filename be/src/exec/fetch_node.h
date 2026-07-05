@@ -16,7 +16,7 @@
 
 #include "common/global_types.h"
 #include "common/statusor.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "runtime/descriptors.h"
 #include "storage_primitive/tablet_info.h"
 

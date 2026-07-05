@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::pipeline {

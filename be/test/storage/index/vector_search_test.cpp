@@ -36,7 +36,7 @@
 #include "common/config_vector_index_fwd.h"
 #include "common/object_pool.h"
 #include "compute_env/runtime_range_pruner.hpp"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"

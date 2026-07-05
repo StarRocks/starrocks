@@ -15,7 +15,7 @@
 #include "exec/except_hash_set.h"
 
 #include "exec/aggregate/agg_hash_set.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"

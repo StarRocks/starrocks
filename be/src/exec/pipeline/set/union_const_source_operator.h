@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/exec_node.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 

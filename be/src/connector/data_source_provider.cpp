@@ -17,8 +17,8 @@
 #include <algorithm>
 #include <functional>
 
-#include "exec/pipeline/scan/dynamic_morsel_queue_builder.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/dynamic_morsel_queue_builder.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 
 namespace starrocks::connector {
 

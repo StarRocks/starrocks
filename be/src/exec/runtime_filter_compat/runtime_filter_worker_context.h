@@ -17,7 +17,7 @@
 #include <memory>
 #include <utility>
 
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 
 namespace starrocks {

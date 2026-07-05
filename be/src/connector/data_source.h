@@ -20,8 +20,8 @@
 
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/runtime_state_fwd.h"
 

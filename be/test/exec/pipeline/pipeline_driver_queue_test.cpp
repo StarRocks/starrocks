@@ -25,9 +25,9 @@
 #include "compute_env/workgroup/work_group_manager.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
 #include "exec/exec_env.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 
 namespace starrocks::pipeline {
 
