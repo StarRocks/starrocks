@@ -27,7 +27,7 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/stl_util.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"

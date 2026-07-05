@@ -19,12 +19,12 @@
 #include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {

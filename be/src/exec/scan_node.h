@@ -43,8 +43,8 @@
 
 #include "column/column_access_path.h"
 #include "common/runtime_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/scan/morsel_queue_factory_base.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {

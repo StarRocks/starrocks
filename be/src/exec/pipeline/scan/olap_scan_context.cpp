@@ -23,7 +23,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"
 #endif

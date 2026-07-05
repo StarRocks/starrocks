@@ -21,8 +21,8 @@
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/scan_task_queue.h"
 #include "compute_env/workgroup/work_group_scan_task_queue.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "glog/logging.h"
 
 namespace starrocks::workgroup {

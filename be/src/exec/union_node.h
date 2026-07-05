@@ -15,8 +15,8 @@
 #pragma once
 
 #include "common/statusor.h"
-#include "exec/exec_node.h"
 #include "exec/pipeline/set/union_passthrough_operator.h"
+#include "exec_primitive/exec_node.h"
 #include "pipeline/exchange/local_exchange.h"
 #include "runtime/runtime_state.h"
 

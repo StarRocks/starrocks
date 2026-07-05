@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/versioned_tablet.h"

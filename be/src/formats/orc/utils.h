@@ -21,7 +21,7 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "formats/orc/orc_mapping.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "types/date_value.h"

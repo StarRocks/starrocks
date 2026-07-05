@@ -44,7 +44,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "module/connector_bootstrap.h"
 #include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
