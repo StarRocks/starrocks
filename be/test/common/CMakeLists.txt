@@ -31,6 +31,7 @@ set(COMMON_TEST_FILES
     system/cpu_info_test.cpp
     system/master_info_test.cpp
     table_metrics_mgr_test.cpp
+    thread_pool_metrics_test.cpp
     thrift_client_test.cpp
     thread/cpu_usage_info_test.cpp
     thread/priority_thread_pool_test.cpp

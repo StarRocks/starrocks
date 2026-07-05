@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metrics.h"
 
 namespace starrocks {
 
@@ -198,11 +199,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
 private:
-    struct PendingThreadPoolMetrics {
-        std::string name;
-        ThreadPool* threadpool;
-    };
-
     struct PendingIntGaugeHook {
         std::string name;
         IntGauge* metric;
@@ -215,12 +211,11 @@ private:
         std::function<uint64_t()> value_fn;
     };
 
-    void _register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
     void _register_int_gauge_hook(const std::string& name, IntGauge* metric, std::function<int64_t()> value_fn);
     void _register_uint_gauge_hook(const std::string& name, UIntGauge* metric, std::function<uint64_t()> value_fn);
 
     MetricRegistry* _registry = nullptr;
-    std::vector<PendingThreadPoolMetrics> _pending_thread_pool_metrics;
+    ThreadPoolMetricsRegistrar _thread_pool_metrics;
     std::vector<PendingIntGaugeHook> _pending_int_gauge_hooks;
     std::vector<PendingUIntGaugeHook> _pending_uint_gauge_hooks;
 };

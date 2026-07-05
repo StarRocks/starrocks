@@ -14,60 +14,9 @@
 
 #include "agent/agent_metrics.h"
 
-#include "common/thread/threadpool.h"
 #include "gutil/macros.h"
 
 namespace starrocks {
-
-namespace {
-
-void register_thread_pool_metric_group(MetricRegistry* registry, const std::string& name, ThreadPool* threadpool,
-                                       UIntGauge* threadpool_size, UIntGauge* executed_tasks_total,
-                                       UIntGauge* pending_time_ns_total, UIntGauge* execute_time_ns_total,
-                                       UIntGauge* queue_count, UIntGauge* running_threads, UIntGauge* active_threads) {
-    DCHECK(registry != nullptr);
-    DCHECK(threadpool != nullptr);
-
-    const auto threadpool_size_name = name + "_threadpool_size";
-    registry->register_metric(threadpool_size_name, threadpool_size);
-    registry->register_hook(threadpool_size_name,
-                            [threadpool_size, threadpool] { threadpool_size->set_value(threadpool->max_threads()); });
-
-    const auto executed_tasks_total_name = name + "_executed_tasks_total";
-    registry->register_metric(executed_tasks_total_name, executed_tasks_total);
-    registry->register_hook(executed_tasks_total_name, [executed_tasks_total, threadpool] {
-        executed_tasks_total->set_value(threadpool->total_executed_tasks());
-    });
-
-    const auto pending_time_ns_total_name = name + "_pending_time_ns_total";
-    registry->register_metric(pending_time_ns_total_name, pending_time_ns_total);
-    registry->register_hook(pending_time_ns_total_name, [pending_time_ns_total, threadpool] {
-        pending_time_ns_total->set_value(threadpool->total_pending_time_ns());
-    });
-
-    const auto execute_time_ns_total_name = name + "_execute_time_ns_total";
-    registry->register_metric(execute_time_ns_total_name, execute_time_ns_total);
-    registry->register_hook(execute_time_ns_total_name, [execute_time_ns_total, threadpool] {
-        execute_time_ns_total->set_value(threadpool->total_execute_time_ns());
-    });
-
-    const auto queue_count_name = name + "_queue_count";
-    registry->register_metric(queue_count_name, queue_count);
-    registry->register_hook(queue_count_name,
-                            [queue_count, threadpool] { queue_count->set_value(threadpool->num_queued_tasks()); });
-
-    const auto running_threads_name = name + "_running_threads";
-    registry->register_metric(running_threads_name, running_threads);
-    registry->register_hook(running_threads_name,
-                            [running_threads, threadpool] { running_threads->set_value(threadpool->num_threads()); });
-
-    const auto active_threads_name = name + "_active_threads";
-    registry->register_metric(active_threads_name, active_threads);
-    registry->register_hook(active_threads_name,
-                            [active_threads, threadpool] { active_threads->set_value(threadpool->active_threads()); });
-}
-
-} // namespace
 
 void AgentIntGaugeMetricsMap::set_metric(const std::string& key, int64_t val) {
     auto metric = _metrics.find(key);
@@ -131,10 +80,7 @@ void AgentMetrics::install(MetricRegistry* registry) {
     registry->register_metric("clone_task_copy_duration_ms", MetricLabels().add("type", "INTRA_NODE"),
                               &clone_task_intra_node_copy_duration_ms);
 
-    for (const auto& pending : _pending_thread_pool_metrics) {
-        _register_thread_pool_metrics(pending.name, pending.threadpool);
-    }
-    _pending_thread_pool_metrics.clear();
+    _thread_pool_metrics.install(_registry);
 }
 
 void AgentMetrics::install_disk_path_metrics(MetricRegistry* registry, const std::vector<std::string>& paths) {
@@ -161,25 +107,12 @@ void AgentMetrics::set_disk_metrics(const std::string& path, int64_t total_capac
 
 void AgentMetrics::register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
     DCHECK(threadpool != nullptr);
-    if (_registry == nullptr) {
-        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, threadpool});
-        return;
-    }
-    _register_thread_pool_metrics(name, threadpool);
-}
 
-void AgentMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
-    DCHECK(_registry != nullptr);
-    DCHECK(threadpool != nullptr);
-
-#define REGISTER_AGENT_THREAD_POOL_METRICS(threadpool_name)                                                         \
-    if (name == #threadpool_name) {                                                                                 \
-        register_thread_pool_metric_group(_registry, name, threadpool, &threadpool_name##_threadpool_size,          \
-                                          &threadpool_name##_executed_tasks_total,                                  \
-                                          &threadpool_name##_pending_time_ns_total,                                 \
-                                          &threadpool_name##_execute_time_ns_total, &threadpool_name##_queue_count, \
-                                          &threadpool_name##_running_threads, &threadpool_name##_active_threads);   \
-        return;                                                                                                     \
+#define REGISTER_AGENT_THREAD_POOL_METRICS(threadpool_name)                                               \
+    if (name == #threadpool_name) {                                                                       \
+        _thread_pool_metrics.register_metrics(_registry, name, threadpool,                                \
+                                              STARROCKS_THREAD_POOL_METRIC_GROUP(this, threadpool_name)); \
+        return;                                                                                           \
     }
 
     REGISTER_AGENT_THREAD_POOL_METRICS(publish_version);

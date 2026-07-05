@@ -15,29 +15,33 @@
 #pragma once
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metrics.h"
 
 namespace starrocks {
+
+namespace thread_pool_metrics_detail {
+
+inline ThreadPool* thread_pool_ptr(ThreadPool* threadpool) {
+    return threadpool;
+}
+
+template <typename ThreadPoolPtr>
+ThreadPool* thread_pool_ptr(const ThreadPoolPtr& threadpool) {
+    return threadpool.get();
+}
+
+} // namespace thread_pool_metrics_detail
 
 #define REGISTER_GAUGE_RUNTIME_METRIC(registry, name, func)                \
     (registry)->register_metric(#name, &RuntimeMetrics::instance()->name); \
     (registry)->register_hook(#name, [&]() { RuntimeMetrics::instance()->name.set_value(func()); });
 
-#define REGISTER_THREAD_POOL_RUNTIME_METRICS(registry, name, threadpool)                        \
-    do {                                                                                        \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_threadpool_size,                         \
-                                      [this]() { return threadpool->max_threads(); })           \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_executed_tasks_total,                    \
-                                      [this]() { return threadpool->total_executed_tasks(); })  \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_pending_time_ns_total,                   \
-                                      [this]() { return threadpool->total_pending_time_ns(); }) \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_execute_time_ns_total,                   \
-                                      [this]() { return threadpool->total_execute_time_ns(); }) \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_queue_count,                             \
-                                      [this]() { return threadpool->num_queued_tasks(); })      \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_running_threads,                         \
-                                      [this]() { return threadpool->num_threads(); })           \
-        REGISTER_GAUGE_RUNTIME_METRIC(registry, name##_active_threads,                          \
-                                      [this]() { return threadpool->active_threads(); })        \
+#define REGISTER_THREAD_POOL_RUNTIME_METRICS(registry, name, threadpool)                                           \
+    do {                                                                                                           \
+        auto* runtime_metrics = ::starrocks::RuntimeMetrics::instance();                                           \
+        auto* thread_pool = ::starrocks::thread_pool_metrics_detail::thread_pool_ptr(threadpool);                  \
+        ::starrocks::register_thread_pool_metric_group((registry), #name, thread_pool,                             \
+                                                       STARROCKS_THREAD_POOL_METRIC_GROUP(runtime_metrics, name)); \
     } while (false)
 
 class RuntimeMetrics {

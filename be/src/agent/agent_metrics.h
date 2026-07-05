@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metrics.h"
 
 namespace starrocks {
 
@@ -101,15 +102,8 @@ public:
     METRICS_DEFINE_THREAD_POOL(replicate_file);
 
 private:
-    struct PendingThreadPoolMetrics {
-        std::string name;
-        ThreadPool* threadpool;
-    };
-
-    void _register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
-
     MetricRegistry* _registry = nullptr;
-    std::vector<PendingThreadPoolMetrics> _pending_thread_pool_metrics;
+    ThreadPoolMetricsRegistrar _thread_pool_metrics;
 
     AgentIntGaugeMetricsMap _disks_total_capacity;
     AgentIntGaugeMetricsMap _disks_avail_capacity;
