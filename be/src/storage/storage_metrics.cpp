@@ -188,7 +188,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(push_request_write_bytes_per_second);
 
     for (const auto& pending : _pending_thread_pool_metrics) {
-        _register_thread_pool_metrics(pending.name, pending.threadpool);
+        _register_thread_pool_metrics(pending.name, pending.metric_group, pending.threadpool);
     }
     _pending_thread_pool_metrics.clear();
 
@@ -206,13 +206,15 @@ void StorageMetrics::install(MetricRegistry* registry) {
 #undef REGISTER_STORAGE_METRIC
 }
 
-void StorageMetrics::register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
+void StorageMetrics::register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                                  ThreadPool* threadpool) {
+    DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
     if (_registry == nullptr) {
-        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, threadpool});
+        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, metric_group, threadpool});
         return;
     }
-    _register_thread_pool_metrics(name, threadpool);
+    _register_thread_pool_metrics(name, metric_group, threadpool);
 }
 
 void StorageMetrics::register_metadata_cache_bytes_total_hook(std::function<int64_t()> value_fn) {
@@ -243,34 +245,13 @@ void StorageMetrics::register_rowset_count_generated_and_in_use_hook(std::functi
                               std::move(value_fn));
 }
 
-void StorageMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
+void StorageMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                                   ThreadPool* threadpool) {
     DCHECK(_registry != nullptr);
+    DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
 
-#define REGISTER_STORAGE_THREAD_POOL_METRICS(threadpool_name)          \
-    if (name == #threadpool_name) {                                    \
-        threadpool_name.register_metrics(_registry, name, threadpool); \
-        return;                                                        \
-    }
-
-    REGISTER_STORAGE_THREAD_POOL_METRICS(async_delta_writer);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(load_spill_block_merge);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(memtable_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_memtable_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(storage_cleanup);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_schema_change);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(segment_replicate);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(segment_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(update_apply);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(pk_index_compaction);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(compact_pool);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(pindex_load);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(cloud_native_pk_index_compact);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(tablet_internal_parallel_merge);
-
-#undef REGISTER_STORAGE_THREAD_POOL_METRICS
-
-    DCHECK(false) << "unknown storage thread pool metric group: " << name;
+    metric_group->register_metrics(_registry, name, threadpool);
 }
 
 void StorageMetrics::_register_int_gauge_hook(const std::string& name, IntGauge* metric,

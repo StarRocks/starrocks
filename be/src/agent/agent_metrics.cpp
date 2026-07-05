@@ -82,7 +82,7 @@ void AgentMetrics::install(MetricRegistry* registry) {
                               &clone_task_intra_node_copy_duration_ms);
 
     for (const auto& pending : _pending_thread_pool_metrics) {
-        _register_thread_pool_metrics(pending.name, pending.threadpool);
+        _register_thread_pool_metrics(pending.name, pending.metric_group, pending.threadpool);
     }
     _pending_thread_pool_metrics.clear();
 }
@@ -109,50 +109,24 @@ void AgentMetrics::set_disk_metrics(const std::string& path, int64_t total_capac
     _disks_state.set_metric(path, state);
 }
 
-void AgentMetrics::register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
+void AgentMetrics::register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                                ThreadPool* threadpool) {
+    DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
     if (_registry == nullptr) {
-        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, threadpool});
+        _pending_thread_pool_metrics.emplace_back(PendingThreadPoolMetrics{name, metric_group, threadpool});
         return;
     }
-    _register_thread_pool_metrics(name, threadpool);
+    _register_thread_pool_metrics(name, metric_group, threadpool);
 }
 
-void AgentMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool) {
+void AgentMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                                 ThreadPool* threadpool) {
     DCHECK(_registry != nullptr);
+    DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
 
-#define REGISTER_AGENT_THREAD_POOL_METRICS(threadpool_name)            \
-    if (name == #threadpool_name) {                                    \
-        threadpool_name.register_metrics(_registry, name, threadpool); \
-        return;                                                        \
-    }
-
-    REGISTER_AGENT_THREAD_POOL_METRICS(publish_version);
-    REGISTER_AGENT_THREAD_POOL_METRICS(drop);
-    REGISTER_AGENT_THREAD_POOL_METRICS(create_tablet);
-    REGISTER_AGENT_THREAD_POOL_METRICS(alter_tablet);
-    REGISTER_AGENT_THREAD_POOL_METRICS(clear_transaction);
-    REGISTER_AGENT_THREAD_POOL_METRICS(storage_medium_migrate);
-    REGISTER_AGENT_THREAD_POOL_METRICS(check_consistency);
-    REGISTER_AGENT_THREAD_POOL_METRICS(manual_compaction);
-    REGISTER_AGENT_THREAD_POOL_METRICS(compaction_control);
-    REGISTER_AGENT_THREAD_POOL_METRICS(update_schema);
-    REGISTER_AGENT_THREAD_POOL_METRICS(upload);
-    REGISTER_AGENT_THREAD_POOL_METRICS(download);
-    REGISTER_AGENT_THREAD_POOL_METRICS(make_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(release_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(move_dir);
-    REGISTER_AGENT_THREAD_POOL_METRICS(update_tablet_meta_info);
-    REGISTER_AGENT_THREAD_POOL_METRICS(drop_auto_increment_map_dir);
-    REGISTER_AGENT_THREAD_POOL_METRICS(clone);
-    REGISTER_AGENT_THREAD_POOL_METRICS(remote_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(replicate_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(replicate_file);
-
-#undef REGISTER_AGENT_THREAD_POOL_METRICS
-
-    DCHECK(false) << "unknown agent thread pool metric group: " << name;
+    metric_group->register_metrics(_registry, name, threadpool);
 }
 
 } // namespace starrocks

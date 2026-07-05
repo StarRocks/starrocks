@@ -122,7 +122,7 @@ Status UpdateManager::init() {
                     .set_min_threads(config::transaction_apply_thread_pool_num_min)
                     .set_max_threads(max_thread_cnt)
                     .build(&_apply_thread_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("update_apply", _apply_thread_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), update_apply, _apply_thread_pool.get());
 
     int max_get_thread_cnt =
             config::get_pindex_worker_count > max_thread_cnt ? config::get_pindex_worker_count : max_thread_cnt * 2;
