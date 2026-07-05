@@ -269,12 +269,12 @@ Operator-tree execution framework for query and fragment contexts, driver lifecy
 - Remediation: Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
 
 ### ConnectorPrimitive (`connectorprimitive`)
-Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+Connector contracts, DataSource, DataSourceProvider default mechanics, and primitive connector sink commit/profile types without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorPrimitive`
-- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `formats/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FormatCore`, `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_primitive_test`
-- Remediation: Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward.
+- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and primitive sink commit/profile types; move concrete connectors, concrete sinks, registry wiring, storage, service, and full Exec integration upward.
 
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
 Top-level built-in connector registration composition above connector contracts and concrete connector libraries.

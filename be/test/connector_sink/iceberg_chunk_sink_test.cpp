@@ -37,7 +37,7 @@
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
+using FileCommitResult = formats::FileCommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
@@ -75,7 +75,7 @@ public:
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
     MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
-    MOCK_METHOD(CommitResult, close, (), (override));
+    MOCK_METHOD(FileCommitResult, close, (), (override));
 };
 
 class MockFile final : public WritableFile {
@@ -138,15 +138,18 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto ret = sink->add(chunk);
         EXPECT_EQ(ret.ok(), true);
         sink->callback_on_commit(CommitResult{
-                .io_status = Status::OK(),
-                .format = formats::PARQUET,
-                .file_statistics =
+                .file_result =
                         {
-                                .record_count = 100,
+                                .io_status = Status::OK(),
+                                .format = formats::PARQUET,
+                                .file_statistics =
+                                        {
+                                                .record_count = 100,
+                                        },
+                                .location = "path/to/directory/data.parquet",
                         },
-                .location = "path/to/directory/data.parquet",
         }
-                                         .set_extra_data("0"));
+                                         .set_partition_null_fingerprint("0"));
         sink->set_status(Status::OK());
 
         EXPECT_EQ(sink->is_finished(), true);
