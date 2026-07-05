@@ -20,9 +20,9 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 

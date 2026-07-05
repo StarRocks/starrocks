@@ -23,8 +23,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 

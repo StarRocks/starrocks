@@ -38,10 +38,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/rowid_types.h"
 #include "test_util.h"
 
 namespace starrocks::lake {

@@ -48,15 +48,15 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/column_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::lake {
 

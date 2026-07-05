@@ -37,13 +37,13 @@
 #include "storage/lake/vacuum.h"
 #include "storage/manual_compaction.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/tablet_basic_info.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;

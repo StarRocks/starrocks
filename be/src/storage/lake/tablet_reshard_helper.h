@@ -22,7 +22,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/primitive/range.h" // Range<rowid_t>, rowid_t
+#include "storage_primitive/range.h" // Range<rowid_t>, rowid_t
 
 namespace roaring {
 class Roaring;

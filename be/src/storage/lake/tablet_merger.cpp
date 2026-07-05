@@ -49,7 +49,6 @@
 #include "storage/lake/utils.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/schema_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
@@ -60,6 +59,7 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace {
 

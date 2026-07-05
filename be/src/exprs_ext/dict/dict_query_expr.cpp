@@ -24,9 +24,9 @@
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "platform/thrift_rpc_helper.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/tablet_info.h"
 #include "storage/table_reader.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

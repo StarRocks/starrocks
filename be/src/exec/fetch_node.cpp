@@ -26,7 +26,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 FetchNode::FetchNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

@@ -49,7 +49,7 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/column_predicate.h"
+#include "storage_primitive/column_predicate.h"
 #include "storage/tablet_schema.h"
 #include "util/thrift_util.h"
 #include "util/url_coding.h"

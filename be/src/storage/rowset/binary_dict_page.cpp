@@ -49,10 +49,10 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/common.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

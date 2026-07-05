@@ -27,9 +27,9 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/primary_index.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

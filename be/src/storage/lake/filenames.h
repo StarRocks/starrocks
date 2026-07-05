@@ -24,7 +24,7 @@
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
-#include "storage/primitive/lake_file_name.h"
+#include "storage_primitive/lake_file_name.h"
 
 namespace starrocks::lake {
 

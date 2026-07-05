@@ -30,9 +30,9 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/tablet_info.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/tablet_info.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 

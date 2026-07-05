@@ -53,9 +53,9 @@
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
