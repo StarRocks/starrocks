@@ -1,12 +1,19 @@
 # Build toolchains on rockylinux9, dev-env image can be built based on this image for rocky9
 # NOTE: build context MUST be set to `docker/dockerfiles/toolchains/`
 #  DOCKER_BUILDKIT=1 docker build --rm=true -f docker/dockerfiles/toolchains/toolchains-rocky9.Dockerfile -t toolchains-rocky9:latest docker/dockerfiles/toolchains/
+#
+# Key toolchain versions:
+#   gcc           14.3.0   built from source, pinned via GCC_DOWNLOAD_URL
+#   jdk           21       distro java-21-openjdk-devel (currently 21.0.11)
+#   cmake         3.31.x   distro cmake (currently 3.31.8)
+#   maven         3.6.3    distro maven-openjdk21 (maven 3.6.3 bound to jdk21)
+#   lld           21.1.8   distro lld (STARROCKS_LINKER=lld)
+#   clang-format  21.1.8   distro clang-tools-extra
+#   binutils      2.35.2   distro binutils (as/ld)
+#   glibc         2.34     distro glibc (glibc-langpack-en)
 
 ARG GCC_INSTALL_HOME=/opt/gcc-toolset-14
 ARG GCC_DOWNLOAD_URL=https://ftp.gnu.org/gnu/gcc/gcc-14.3.0/gcc-14.3.0.tar.gz
-ARG CMAKE_INSTALL_HOME=/opt/cmake
-ARG MAVEN_VERSION=3.6.3
-ARG MAVEN_INSTALL_HOME=/opt/maven
 ARG COMMIT_ID=unset
 
 
@@ -36,9 +43,6 @@ RUN cd /workspace/gcc && mkdir -p /workspace/installed && make DESTDIR=/workspac
 FROM rockylinux:9
 
 ARG GCC_INSTALL_HOME
-ARG CMAKE_INSTALL_HOME
-ARG MAVEN_VERSION
-ARG MAVEN_INSTALL_HOME
 ARG COMMIT_ID
 
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
@@ -46,31 +50,18 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 
 # Note: these packages are not part of rocky9's minimal base image, but are required to build
 # StarRocks: xz for .tar.xz extraction, gettext for autotools, perl (FindBin and friends) for
-# OpenSSL's Configure script, and binutils-devel for libiberty.a needed when linking the backend.
+# OpenSSL's Configure script, and binutils for the assembler/linker (as/ld) used by gcc.
 RUN dnf install -y 'dnf-command(config-manager)' && \
         dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
         dnf install -y epel-release && \
-        dnf install -y gh wget unzip bzip2 xz patch bison byacc flex autoconf automake make \
-        gettext perl binutils-devel libtool which git ccache python3 java-17-openjdk-devel file less psmisc clang-tools-extra lld glibc-langpack-en && \
+        dnf install -y gh wget unzip bzip2 xz pigz patch bison byacc flex autoconf automake make cmake maven-openjdk21 \
+        gettext perl binutils libtool which git ccache python3 java-21-openjdk-devel file less psmisc clang-tools-extra lld glibc-langpack-en && \
         dnf clean all && rm -rf /var/cache/dnf
 
 # install gcc
 COPY --from=gcc-builder /workspace/installed/ /
-# install cmake
-RUN ARCH=`uname -m` && mkdir -p $CMAKE_INSTALL_HOME && cd $CMAKE_INSTALL_HOME && \
-    curl -s -k https://cmake.org/files/v3.31/cmake-3.31.9-linux-${ARCH}.tar.gz | tar -xzf - --strip-components=1 && \
-    ln -s $CMAKE_INSTALL_HOME/bin/cmake /usr/bin/cmake
-
-# jdk17 is provided by the distro `java-17-openjdk-devel` package (installed above), no external download needed
-
-# install maven
-RUN mkdir -p ${MAVEN_INSTALL_HOME} && cd ${MAVEN_INSTALL_HOME} && \
-    curl -s -k https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz | tar -xzf - --strip-components=1 && \
-    ln -s ${MAVEN_INSTALL_HOME}/bin/mvn /usr/bin/mvn
-# clang-format is provided by the distro `clang-tools-extra` package (installed above), no external download needed
 
 ENV STARROCKS_GCC_HOME=${GCC_INSTALL_HOME}
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-ENV MAVEN_HOME=${MAVEN_INSTALL_HOME}
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 ENV STARROCKS_LINKER=lld
 ENV LANG=en_US.utf8
