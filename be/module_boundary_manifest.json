@@ -770,7 +770,7 @@
     {
       "id": "connectorprimitive",
       "doc_label": "ConnectorPrimitive",
-      "summary": "Read-side connector contracts, DataSource, and DataSourceProvider default mechanics without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.",
+      "summary": "Connector contracts, DataSource, DataSourceProvider default mechanics, and primitive connector sink commit/profile types without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.",
       "owned_targets": ["ConnectorPrimitive"],
       "owned_roots": ["be/src/connector_primitive"],
       "allowed_include_prefixes": [
@@ -778,6 +778,7 @@
         "exec_primitive/",
         "exprs/",
         "runtime/",
+        "formats/",
         "column/",
         "types/",
         "common/",
@@ -791,10 +792,10 @@
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["FormatCore", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_primitive_test"],
-      "allowed_test_link_deps": ["ConnectorPrimitive", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorPrimitive limited to read-side connector contracts and default scan-range-to-morsel mechanics; move concrete connectors, sinks, registry wiring, storage, service, and full Exec integration upward."
+      "allowed_test_link_deps": ["ConnectorPrimitive", "FormatCore", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and primitive sink commit/profile types; move concrete connectors, concrete sinks, registry wiring, storage, service, and full Exec integration upward."
     },
     {
       "id": "connectorbenchmark",

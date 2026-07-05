@@ -123,13 +123,16 @@ Status PartitionChunkWriter::commit_file() {
         return Status::OK();
     }
     SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
-    auto result = _file_writer->close();
-    _commit_callback(result.set_extra_data(_commit_extra_data));
+    auto file_result = _file_writer->close();
+    const auto io_status = file_result.io_status;
+    const auto file_size = file_result.file_statistics.file_size;
+    CommitResult result{.file_result = std::move(file_result)};
+    result.set_partition_null_fingerprint(_commit_extra_data);
+    _commit_callback(result);
     _file_writer = nullptr;
-    VLOG(3) << "commit to remote file, filename: " << _out_stream->filename()
-            << ", size: " << result.file_statistics.file_size;
+    VLOG(3) << "commit to remote file, filename: " << _out_stream->filename() << ", size: " << file_size;
     _out_stream = nullptr;
-    return result.io_status;
+    return io_status;
 }
 
 Status BufferPartitionChunkWriter::init() {
