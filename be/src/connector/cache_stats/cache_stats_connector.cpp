@@ -14,7 +14,7 @@
 
 #include "connector/cache_stats/cache_stats_connector.h"
 
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 

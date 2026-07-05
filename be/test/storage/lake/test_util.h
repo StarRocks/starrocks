@@ -26,7 +26,7 @@
 #include "base/testutil/id_generator.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"

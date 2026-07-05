@@ -26,7 +26,7 @@
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/result/result_buffer_mgr.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/data_sinks/memory_scratch_sink.h"
 #include "exec/data_sinks/result_sink.h"
 #include "exec/exec_env.h"

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "connector/cache_stats/cache_stats_scanner.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks::connector {
 

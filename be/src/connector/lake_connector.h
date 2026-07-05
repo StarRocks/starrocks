@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
