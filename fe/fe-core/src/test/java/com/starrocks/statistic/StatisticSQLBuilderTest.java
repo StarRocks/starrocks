@@ -19,6 +19,7 @@ import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 // external_column_statistics / external_histogram_statistics store table_uuid hashed
@@ -144,5 +145,40 @@ class StatisticSQLBuilderTest {
         Assertions.assertTrue(sql.contains("TABLE_UUID = 'iceberg.db.o''brien\\\\table.uuid'"), sql);
         Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p''1')"), sql);
         Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('c\\\\1')"), sql);
+    }
+
+    // --- Iceberg SAMPLE sentinel-row cleanup (FULL/SAMPLE double-counting fix) ---
+    // buildDropExternalStatExcludingPartitionSQL / buildDropExternalStatForPartitionSQL also match
+    // both the hashed and raw table_uuid (buildTableUUIDInPredicateQuoted), for the same reason as
+    // every other predicate in this class: the rows being cleaned up may have been written before
+    // or after the hashing migration.
+
+    @Test
+    void testBuildDropExternalStatExcludingPartitionSQL() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage("uuid-1");
+        String sql = StatisticSQLBuilder.buildDropExternalStatExcludingPartitionSQL(
+                "uuid-1", "$FILE_SAMPLE$", List.of("c1", "c2"));
+        Assertions.assertTrue(sql.contains("DELETE FROM external_column_statistics"));
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', 'uuid-1')"));
+        Assertions.assertTrue(sql.contains("PARTITION_NAME != '$FILE_SAMPLE$'"));
+        Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('c1', 'c2')"));
+    }
+
+    @Test
+    void testBuildDropExternalStatExcludingPartitionSQLNoColumns() {
+        String sql = StatisticSQLBuilder.buildDropExternalStatExcludingPartitionSQL(
+                "uuid-1", "$FILE_SAMPLE$", Collections.emptyList());
+        Assertions.assertTrue(sql.contains("PARTITION_NAME != '$FILE_SAMPLE$'"));
+        Assertions.assertFalse(sql.contains("COLUMN_NAME"));
+    }
+
+    @Test
+    void testBuildDropExternalStatForPartitionSQL() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage("uuid-1");
+        String sql = StatisticSQLBuilder.buildDropExternalStatForPartitionSQL(
+                "uuid-1", "$FILE_SAMPLE$", List.of("c1"));
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', 'uuid-1')"));
+        Assertions.assertTrue(sql.contains("PARTITION_NAME = '$FILE_SAMPLE$'"));
+        Assertions.assertTrue(sql.contains("COLUMN_NAME IN ('c1')"));
     }
 }

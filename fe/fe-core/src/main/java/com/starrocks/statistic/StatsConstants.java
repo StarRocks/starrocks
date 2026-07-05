@@ -40,7 +40,12 @@ public class StatsConstants {
     public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
     public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
 
-
+    // external_column_statistics is keyed by (table_uuid, partition_name, column_name); a
+    // whole-table Iceberg file sample has no real partition to attach its row to, so it uses this
+    // fixed sentinel instead. Must never collide with a real Iceberg partition name. Shared between
+    // ExternalSampleStatisticsCollectJob (writes/reads it) and ExternalFullStatisticsCollectJob
+    // (cleans it up after a FULL collection, in case a prior SAMPLE run left one behind).
+    public static final String EXTERNAL_SAMPLE_PARTITION_NAME_SENTINEL = "$FILE_SAMPLE$";
 
     public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
             ImmutableSet.<Integer>builder()

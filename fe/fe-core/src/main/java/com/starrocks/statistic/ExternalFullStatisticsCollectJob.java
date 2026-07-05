@@ -189,6 +189,24 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
             flushInsertStatisticsData(context, true);
             cleanupStaleRawKeyedRows(context, jobId);
+
+            // Only for a genuine FULL run (this method is also reused by Hive's SAMPLE path via
+            // ExternalSampleStatisticsCollectJob#collectWithPartitionSampling, which never writes a
+            // sentinel row, so the cleanup would just be a no-op DELETE there): clean up a stale
+            // whole-table sample sentinel row left behind by a prior Iceberg SAMPLE collection, in
+            // case FULL is run manually afterward. Best-effort, mirrors the SAMPLE-side cleanup in
+            // ExternalSampleStatisticsCollectJob#cleanupStaleFullCollectionRows. Matches both the
+            // hashed and raw table_uuid (see StatisticUtils#hashTableUuidForPkStorage) since the
+            // sentinel row may have been written before or after the hashing migration.
+            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+                try {
+                    new StatisticExecutor().dropExternalTableStatisticsForPartition(context, table.getUUID(),
+                            StatsConstants.EXTERNAL_SAMPLE_PARTITION_NAME_SENTINEL, columnNames);
+                } catch (Exception e) {
+                    LOG.warn("[ExternalStats] failed to clean up stale SAMPLE sentinel row | catalog={} db={} table={}",
+                            catalogName, db.getOriginName(), table.getName(), e);
+                }
+            }
         } catch (Exception e) {
             status = "FAILED";
             failureReason = e.getMessage();
