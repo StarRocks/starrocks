@@ -139,6 +139,38 @@ public class LeaderTaskExecutorTest {
     }
 
     @Test
+    public void testCloseInterruptsInFlightTaskFast() throws Exception {
+        // Demotion-drain contract: close() uses shutdownNow() so an in-flight task blocked in
+        // an interruptible wait is cancelled immediately instead of waiting out its own await.
+        LeaderTaskExecutor target = new LeaderTaskExecutor("leader_task_executor_interrupt_test", 1, 10, false);
+        target.start();
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        LeaderTask blocked = new LeaderTask() {
+            {
+                this.signature = 7L;
+            }
+
+            @Override
+            protected void exec() {
+                entered.countDown();
+                try {
+                    new java.util.concurrent.CountDownLatch(1).await();
+                } catch (InterruptedException e) {
+                    interrupted.set(true);
+                }
+            }
+        };
+        Assertions.assertTrue(target.submit(blocked));
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        target.close(5000L);
+
+        Assertions.assertTrue(interrupted.get(), "shutdownNow must interrupt the in-flight task");
+        Assertions.assertTrue(target.executor.isTerminated());
+    }
+
+    @Test
     public void testStartRefusesToRestartBeforePoolTerminates() {
         // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
         // underlying executor has not yet terminated (in-flight task ignoring interrupt),

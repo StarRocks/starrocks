@@ -171,7 +171,8 @@ public class RoutineLoadTaskScheduler extends LeaderDaemon {
         }
     }
 
-    private void process() throws InterruptedException {
+    // Package-private so same-package tests can verify interrupt propagation without reflection.
+    void process() throws InterruptedException {
         updateBackendSlotIfNecessary();
 
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();

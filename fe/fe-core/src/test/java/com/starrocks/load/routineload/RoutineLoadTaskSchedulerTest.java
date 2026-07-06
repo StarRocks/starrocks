@@ -81,6 +81,30 @@ public class RoutineLoadTaskSchedulerTest {
     }
 
     @Test
+    public void testProcessPropagatesInterruptFromPoll() throws Exception {
+        // Leader demotion interrupts the scheduler worker. The interrupt surfacing from the
+        // needScheduleTasksQueue.poll must PROPAGATE out of process() (so the LeaderDaemon
+        // loop exits promptly) instead of being swallowed by the broad catch(Exception).
+        new Expectations() {
+            {
+                routineLoadManager.getClusterIdleSlotNum();
+                minTimes = 0;
+                result = 1;
+                routineLoadManager.updateBeTaskSlot();
+                minTimes = 0;
+            }
+        };
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        try {
+            Thread.currentThread().interrupt();
+            Assertions.assertThrows(InterruptedException.class, scheduler::process);
+        } finally {
+            // Clear the flag so it cannot leak into other tests on this worker thread.
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     public void testRunOneCycle(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob1,
                                 @Injectable KafkaRoutineLoadJob routineLoadJob) {
         long beId = 100L;

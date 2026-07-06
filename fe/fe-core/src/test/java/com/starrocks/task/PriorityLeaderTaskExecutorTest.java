@@ -142,6 +142,39 @@ public class PriorityLeaderTaskExecutorTest {
     }
 
     @Test
+    public void testCloseInterruptsInFlightTaskFast() throws Exception {
+        // Demotion-drain contract: close() uses shutdownNow() so an in-flight task blocked in
+        // an interruptible wait is cancelled immediately instead of waiting out its own await.
+        PriorityLeaderTaskExecutor target =
+                new PriorityLeaderTaskExecutor("priority_task_executor_interrupt_test", 1, 100, false);
+        target.start();
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        PriorityLeaderTask blocked = new PriorityLeaderTask() {
+            {
+                this.signature = 8L;
+            }
+
+            @Override
+            protected void exec() {
+                entered.countDown();
+                try {
+                    new java.util.concurrent.CountDownLatch(1).await();
+                } catch (InterruptedException e) {
+                    interrupted.set(true);
+                }
+            }
+        };
+        Assertions.assertTrue(target.submit(blocked));
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+        target.close(5000L);
+
+        Assertions.assertTrue(interrupted.get(), "shutdownNow must interrupt the in-flight task");
+        Assertions.assertTrue(target.executor.isTerminated());
+    }
+
+    @Test
     public void testStartRefusesToRestartBeforePoolTerminates() {
         // Mirror of BatchWriteMgr / AlterHandler restart guard. If close() returns but the
         // underlying executor has not yet terminated, start() must throw IllegalStateException

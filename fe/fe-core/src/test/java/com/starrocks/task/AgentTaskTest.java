@@ -59,6 +59,8 @@ import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
+import com.starrocks.thrift.TPriority;
+import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -525,5 +527,43 @@ public class AgentTaskTest {
         // started after the drain fails fast instead of hanging on a never-marked latch.
         Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
         Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
+    public void testCancelPendingWaiterReleasesLatchOfEveryLatchHolder() {
+        Status demoting = new Status(TStatusCode.CANCELLED, "leader is demoting");
+
+        // DropAutoIncrementMapTask
+        DropAutoIncrementMapTask dropAiTask = new DropAutoIncrementMapTask(backendId1, tableId, 1L);
+        MarkedCountDownLatch<Long, Long> dropAiLatch = new MarkedCountDownLatch<>(1);
+        dropAiLatch.addMark(backendId1, -1L);
+        dropAiTask.setLatch(dropAiLatch);
+        dropAiTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, dropAiLatch.getCount());
+        Assertions.assertFalse(dropAiLatch.getStatus().ok());
+
+        // TabletMetadataUpdateAgentTask
+        Set<Long> tablets = new HashSet<>();
+        tablets.add(tabletId1);
+        MarkedCountDownLatch<Long, Set<Long>> metaLatch = new MarkedCountDownLatch<>(1);
+        metaLatch.addMark(backendId1, tablets);
+        TabletMetadataUpdateAgentTask metaTask = TabletMetadataUpdateAgentTaskFactory
+                .createEnablePersistentIndexUpdateTask(backendId1, tablets, true);
+        metaTask.setLatch(metaLatch);
+        metaTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, metaLatch.getCount());
+
+        // PushTask
+        PushTask pushTask = new PushTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1,
+                replicaId1, 0, 1L, 100, 1L, TPushType.LOAD_V2, TPriority.NORMAL, 1L, 1L,
+                null, null, "UTC", com.starrocks.thrift.TTabletType.TABLET_TYPE_DISK, null);
+        MarkedCountDownLatch<Long, Long> pushLatch = new MarkedCountDownLatch<>(1);
+        pushLatch.addMark(backendId1, tabletId1);
+        pushTask.setCountDownLatch(pushLatch);
+        pushTask.cancelPendingWaiter(demoting);
+        Assertions.assertEquals(0, pushLatch.getCount());
+
+        // A task with no latch attached must be a no-op, not an NPE.
+        new DropAutoIncrementMapTask(backendId1, tableId, 2L).cancelPendingWaiter(demoting);
     }
 }
