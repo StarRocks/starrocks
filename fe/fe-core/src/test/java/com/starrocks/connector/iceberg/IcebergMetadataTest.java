@@ -4468,8 +4468,8 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
                 "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableC.schema(), mockedNativeTableC),
                 mockedNativeTableC, Maps.newHashMap());
-        // Ordinary read: no time-travel read schema, so getReadSchema() is the current schema (has k3).
-        Assertions.assertFalse(icebergTable.hasReadSchema());
+        // Ordinary read: no time-travel read view, so getReadSchema() is the current schema (has k3).
+        Assertions.assertFalse(icebergTable.isTimeTravelRead());
         Assertions.assertNotNull(icebergTable.getReadSchema().findField("k3"));
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);

@@ -1553,7 +1553,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
         // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
         Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-        if (icebergTable.hasReadSchema()) {
+        if (icebergTable.isTimeTravelRead()) {
             scanContext.setReadSchema(icebergTable.getReadSchema());
         } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
             scanContext.setReadSchema(nativeTbl.schema());

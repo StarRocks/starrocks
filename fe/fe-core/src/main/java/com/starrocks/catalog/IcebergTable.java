@@ -128,8 +128,10 @@ public class IcebergTable extends Table {
     private Map<String, String> icebergProperties = Maps.newHashMap();
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
-    private transient Schema readSchema;
-    private transient Map<Integer, PartitionSpec> readSpecsById;
+    // Per-query read view of a targeted snapshot for time travel; null means an ordinary read of the
+    // current table state. Bundles the snapshot schema and the partition specs its manifests reference
+    // so the two are always pinned and dropped together.
+    private transient SnapshotReadView readView;
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
@@ -442,6 +444,18 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
+    // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    private static class SnapshotReadView {
+        private final Schema schema;
+        private final Map<Integer, PartitionSpec> specsById;
+
+        SnapshotReadView(Schema schema, Map<Integer, PartitionSpec> specsById) {
+            this.schema = schema;
+            this.specsById = specsById;
+        }
+    }
+
     // Return a per-query copy bound to the given read metadata (a targeted snapshot's schema and the
     // partition specs its manifests reference, for time travel), with the StarRocks full schema
     // rebuilt from the read schema.
@@ -449,8 +463,7 @@ public class IcebergTable extends Table {
         IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
                 comment, IcebergApiConverter.toFullSchemas(readSchema, getNativeTable()), getNativeTable(),
                 icebergProperties);
-        table.readSchema = readSchema;
-        table.readSpecsById = readSpecsById;
+        table.readView = new SnapshotReadView(readSchema, readSpecsById);
         table.setUniqueConstraints(getUniqueConstraints());
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         table.metricsReporter = metricsReporter;
@@ -470,7 +483,7 @@ public class IcebergTable extends Table {
     // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
     // time-travel read (bound via withReadMetadata), otherwise the current table schema.
     public Schema getReadSchema() {
-        return readSchema != null ? readSchema : getNativeTable().schema();
+        return readView != null ? readView.schema : getNativeTable().schema();
     }
 
     // The partition spec this table instance is read with. For a time-travel read this is derived
@@ -479,19 +492,21 @@ public class IcebergTable extends Table {
     // partition-metadata optimizations are disabled and correctness is preserved (scan planning still
     // uses each file's own spec). Ordinary reads use the current table spec.
     public PartitionSpec getReadSpec() {
-        if (readSpecsById == null) {
+        Map<Integer, PartitionSpec> specsById = readView != null ? readView.specsById : null;
+        if (specsById == null) {
             return getNativeTable().spec();
         }
-        if (readSpecsById.size() == 1) {
-            return readSpecsById.values().iterator().next();
+        if (specsById.size() == 1) {
+            return specsById.values().iterator().next();
         }
         return PartitionSpec.unpartitioned();
     }
 
-    // True when a time-travel read has pinned explicit read metadata via withReadMetadata. Lets
-    // callers tell a time-travel read (keep the snapshot schema/spec) from an ordinary read.
-    public boolean hasReadSchema() {
-        return readSchema != null;
+    // True when this is a time-travel read that pinned an explicit snapshot read view via
+    // withReadMetadata. Lets callers tell a time-travel read (keep the snapshot schema/spec) from an
+    // ordinary read of the current table state.
+    public boolean isTimeTravelRead() {
+        return readView != null;
     }
 
     @Override
