@@ -32,6 +32,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.ColumnStatisticDump;
 import com.starrocks.system.BackendResourceStat;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -162,7 +163,8 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                columnStatistics.addProperty(columnEntry.getKey(), columnEntry.getValue().toString());
+                columnStatistics.add(columnEntry.getKey(),
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(columnEntry.getValue())));
             }
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
@@ -262,9 +264,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
             for (Map.Entry<String, ColumnStatistic> columnEntry : entry.getValue().entrySet()) {
-                columnStatistics.addProperty(
+                columnStatistics.add(
                         DesensitizedSQLBuilder.desensitizeColName(columnEntry.getKey(), dict),
-                        columnEntry.getValue().toString()
+                        GsonUtils.GSON.toJsonTree(ColumnStatisticDump.from(columnEntry.getValue()))
                 );
             }
             String[] splits = entry.getKey().split("\\.");

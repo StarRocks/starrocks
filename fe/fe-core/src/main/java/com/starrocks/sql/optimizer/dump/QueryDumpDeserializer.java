@@ -27,6 +27,8 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.ColumnStatisticDump;
+import com.starrocks.sql.optimizer.statistics.LegacyColumnStatisticParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -117,8 +119,16 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         for (String tableKey : tableColumnStatistics.keySet()) {
             JsonObject columnStatistics = tableColumnStatistics.get(tableKey).getAsJsonObject();
             for (String columnKey : columnStatistics.keySet()) {
-                String columnStatistic = columnStatistics.get(columnKey).getAsString();
-                dumpInfo.addTableStatistics(tableKey, columnKey, ColumnStatistic.buildFrom(columnStatistic).build());
+                final var columnStatisticElement = columnStatistics.get(columnKey);
+                ColumnStatistic columnStatistic;
+                if (columnStatisticElement.isJsonObject()) {
+                    columnStatistic = GsonUtils.GSON.fromJson(columnStatisticElement, ColumnStatisticDump.class)
+                            .toColumnStatistic();
+                } else {
+                    // Legacy text format written by older versions
+                    columnStatistic = LegacyColumnStatisticParser.parse(columnStatisticElement.getAsString()).build();
+                }
+                dumpInfo.addTableStatistics(tableKey, columnKey, columnStatistic);
             }
         }
         // BE number

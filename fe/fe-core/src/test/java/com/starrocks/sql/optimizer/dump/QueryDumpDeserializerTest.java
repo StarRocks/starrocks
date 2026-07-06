@@ -248,4 +248,65 @@ public class QueryDumpDeserializerTest {
         assertThat(nameStats.getNullsFraction()).isEqualTo(0.1);
         assertThat(nameStats.getDistinctValuesCount()).isEqualTo(500.0);
     }
+
+    @Test
+    public void testDeserializeStructuredObjectStatistics() {
+        // New structured (name-keyed) format written by the current serializer.
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": {\"version\": 1, \"min\": \"1.0\", \"max\": \"100.0\", \"nullsFraction\": \"0.0\","
+                + "             \"averageRowSize\": \"4.0\", \"distinctValuesCount\": \"100.0\","
+                + "             \"collectionSize\": \"7.0\", \"type\": \"ESTIMATE\"}"
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(1.0);
+        assertThat(stats.getMaxValue()).isEqualTo(100.0);
+        assertThat(stats.getNullsFraction()).isEqualTo(0.0);
+        assertThat(stats.getAverageRowSize()).isEqualTo(4.0);
+        assertThat(stats.getDistinctValuesCount()).isEqualTo(100.0);
+        assertThat(stats.getCollectionSize()).isEqualTo(7.0);
+        assertThat(stats.getType()).isEqualTo(ColumnStatistic.StatisticType.ESTIMATE);
+    }
+
+    @Test
+    public void testDeserializeStructuredObjectWithInfinities() {
+        // Infinities are stored as strings so the JSON stays valid; verify they parse back.
+        String queryDumpJson = "{"
+                + "\"statement\": \"select * from t1\","
+                + "\"table_meta\": {\"test.t1\": \"CREATE TABLE t1 (id INT)\"},"
+                + "\"table_row_count\": {\"test.t1\": {\"t1\": 1000}},"
+                + "\"column_statistics\": {"
+                + "  \"test.t1\": {"
+                + "    \"id\": {\"version\": 1, \"min\": \"-Infinity\", \"max\": \"Infinity\", \"nullsFraction\": \"0.0\","
+                + "             \"averageRowSize\": \"1.0\", \"distinctValuesCount\": \"1.0\", \"type\": \"UNKNOWN\"}"
+                + "  }"
+                + "},"
+                + "\"be_number\": 3"
+                + "}";
+
+        Gson gson = new GsonBuilder()
+                .registerTypeAdapter(QueryDumpInfo.class, new QueryDumpDeserializer())
+                .create();
+
+        QueryDumpInfo dumpInfo = gson.fromJson(queryDumpJson, QueryDumpInfo.class);
+
+        ColumnStatistic stats = dumpInfo.getTableStatisticsMap().get("test.t1").get("id");
+        assertThat(stats.getMinValue()).isEqualTo(Double.NEGATIVE_INFINITY);
+        assertThat(stats.getMaxValue()).isEqualTo(Double.POSITIVE_INFINITY);
+        assertThat(stats.getType()).isEqualTo(ColumnStatistic.StatisticType.UNKNOWN);
+    }
 }
