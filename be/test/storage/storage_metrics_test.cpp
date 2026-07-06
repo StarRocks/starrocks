@@ -232,8 +232,12 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
+<<<<<<< HEAD
     metrics.register_thread_pool_metrics("pindex_load", threadpool.get());
     metrics.register_thread_pool_metrics("snapshot_file_syncer", threadpool.get());
+=======
+    metrics.register_thread_pool_metrics("pindex_load", &metrics.pindex_load, threadpool.get());
+>>>>>>> f7a57837907... [Refactor] Introduce ThreadPoolMetricGroup for thread-pool metrics (#75853)
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
@@ -255,7 +259,7 @@ TEST(StorageMetricsTest, RegisterStorageCleanupThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
-    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
+    metrics.register_thread_pool_metrics("storage_cleanup", &metrics.storage_cleanup, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

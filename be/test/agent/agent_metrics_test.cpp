@@ -108,7 +108,11 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetrics) {
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
+<<<<<<< HEAD
     metrics.register_thread_pool_metrics("cluster_snapshot", threadpool.get());
+=======
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
+>>>>>>> f7a57837907... [Refactor] Introduce ThreadPoolMetricGroup for thread-pool metrics (#75853)
     registry.trigger_hook();
 
     assert_metric_value(&registry, "cluster_snapshot_threadpool_size", "3");
@@ -125,7 +129,7 @@ TEST(AgentMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
                           .build(&threadpool);
     ASSERT_TRUE(status.ok()) << status;
 
-    metrics.register_thread_pool_metrics("clone", threadpool.get());
+    metrics.register_thread_pool_metrics("clone", &metrics.clone, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

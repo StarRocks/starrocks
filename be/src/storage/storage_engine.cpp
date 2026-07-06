@@ -248,29 +248,29 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-    StorageMetrics::instance()->register_thread_pool_metrics(
-            "async_delta_writer",
+    REGISTER_STORAGE_THREAD_POOL_METRICS(
+            StorageMetrics::instance(), async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
 
     _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
     RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
-    StorageMetrics::instance()->register_thread_pool_metrics("load_spill_block_merge",
-                                                             _load_spill_block_merge_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), load_spill_block_merge,
+                                         _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("memtable_flush",
-                                                             _memtable_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), memtable_flush,
+                                         _memtable_flush_executor->get_thread_pool());
 
     _lake_memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_lake_memtable_flush_executor->init_for_lake_table(dirs),
                               "init lake MemTableFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("lake_memtable_flush",
-                                                             _lake_memtable_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), lake_memtable_flush,
+                                         _lake_memtable_flush_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_storage_cleanup_executor->init(), "init StorageCleanupExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("storage_cleanup",
-                                                             _storage_cleanup_executor->thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), storage_cleanup,
+                                         _storage_cleanup_executor->thread_pool());
 
     // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
     // index building inside a single ADD INDEX job). Physically isolated
@@ -287,18 +287,18 @@ Status StorageEngine::_open(const EngineOptions& options) {
                             .set_max_threads(calc_lake_schema_change_thread_pool_max_threads())
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_schema_change_thread_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("lake_schema_change",
-                                                             _lake_schema_change_thread_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), lake_schema_change,
+                                         _lake_schema_change_thread_pool.get());
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("segment_flush",
-                                                             _segment_flush_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), segment_flush,
+                                         _segment_flush_executor->get_thread_pool());
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
-    StorageMetrics::instance()->register_thread_pool_metrics("segment_replicate",
-                                                             _segment_replicate_executor->get_thread_pool());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), segment_replicate,
+                                         _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
