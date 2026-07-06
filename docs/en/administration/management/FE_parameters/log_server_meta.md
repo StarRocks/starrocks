@@ -1387,10 +1387,10 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. Currently, table names are case-sensitive by default.
-  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
-  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
-  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- Description: Whether to enable case-insensitive processing on catalog names, database names, table names, view names, and materialized view names. By default, this feature is disabled and these names are case-sensitive. When enabled, StarRocks stores these names in lowercase and forcibly converts every such name to lowercase during **both query and write (DDL/DML) processing**. This feature can be enabled only when creating a cluster. **We strongly recommend that you keep it disabled unless you have a specific, well-understood reason to enable it**, for the following reasons:
+  - **It can make external tables and external catalogs unusable.** Different external catalog services follow different naming and case-sensitivity conventions. If an external schema, database, or table name is not already in lowercase, StarRocks lowercases the name in your SQL before passing it to the connector and then looks up a name that does not exist in the source, so the query fails with a "not found" error.
+  - **It cannot be changed after the cluster is created.** After the cluster is started, the value cannot be modified by any means; any attempt to modify it results in an error, and FE fails to start if the value is inconsistent with the value used when the cluster was first started.
+  - Only enable this feature on a new cluster where you are certain that all object names — including those in every external data source you plan to access — are already in lowercase.
 - Introduced in: v4.0
 
 ### `enable_task_history_archive`
