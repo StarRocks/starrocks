@@ -419,17 +419,9 @@ Status CSVReader::more_rows() {
             parsed_end = _buff.position_offset();
             // push row
             if (LIKELY(status.ok() || status.is_end_of_file())) {
-                // Empty row: skip it by default; when keep_empty_row is set (Hive reader)
-                // enqueue a zero-column row so the scanner emits an all-null row -- matching
-                // Hive, which turns a blank line into an all-null row -- instead of dropping it.
+                // For empty row, skip it. And restart state machine.
                 if (UNLIKELY(_columns.size() == 0 &&
                              _buff.position_offset() - _row_delimiter_length - column_start == 0)) {
-                    if (_parse_options.keep_empty_row) {
-                        CSVRow emptyRow;
-                        emptyRow.parsed_start = parsed_start;
-                        emptyRow.parsed_end = parsed_end;
-                        _csv_buff.push(emptyRow);
-                    }
                     curState = START;
                     is_enclose_column = false;
                     is_escape_column = false;
