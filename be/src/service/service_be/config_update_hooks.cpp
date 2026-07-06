@@ -25,6 +25,7 @@
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
 #include "cache/mem_cache/page_cache.h"
+#include "common/compiler_util.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_compaction_fwd.h"
@@ -44,6 +45,8 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
 #include "compute_env/workgroup/work_group_manager.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
@@ -58,7 +61,6 @@
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/persistent_index_compaction_manager.h"
 #include "storage/persistent_index_load_executor.h"
@@ -453,16 +455,20 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return Status::OK();
     });
-    registry->register_callback("load_spill_merge_memory_limit_percent", [=]() -> Status {
+    auto refresh_load_spill_block_merge_executor = [=]() -> Status {
         // The change of load spill merge memory will be reflected in the max thread cnt of load spill merge pool.
-        return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
-    });
-    registry->register_callback("load_spill_merge_max_thread", [=]() -> Status {
-        return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
-    });
-    registry->register_callback("load_spill_memory_usage_per_merge", [=]() -> Status {
-        return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
-    });
+        if (UNLIKELY(exec_env->compute_env() == nullptr)) {
+            return Status::InternalError("ComputeEnv is NULL");
+        }
+        auto* executor = exec_env->compute_env()->load_spill_block_merge_executor();
+        if (UNLIKELY(executor == nullptr)) {
+            return Status::InternalError("LoadSpillBlockMergeExecutor init failed");
+        }
+        return executor->refresh_max_thread_num();
+    };
+    registry->register_callback("load_spill_merge_memory_limit_percent", refresh_load_spill_block_merge_executor);
+    registry->register_callback("load_spill_merge_max_thread", refresh_load_spill_block_merge_executor);
+    registry->register_callback("load_spill_memory_usage_per_merge", refresh_load_spill_block_merge_executor);
     registry->register_callback("merge_commit_txn_state_cache_capacity", [=]() -> Status {
         LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
         auto batch_write_mgr = exec_env->batch_write_mgr();

@@ -857,6 +857,8 @@ int main(int argc, char** argv) {
 #endif
     CHECK_OK(starrocks::StorageEnv::GetInstance()->init(storage_env_options));
     starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    starrocks::StorageEnv::GetInstance()->set_load_spill_block_merge_executor(
+            compute_env->load_spill_block_merge_executor());
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -878,6 +880,7 @@ int main(int argc, char** argv) {
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
     starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    starrocks::StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
     starrocks::StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     compute_env->destroy();

@@ -34,6 +34,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
@@ -45,6 +46,7 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -681,7 +683,7 @@ void LakeAsyncDeltaWriterTest::do_block_merger(bool use_profile) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -727,7 +729,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -785,7 +787,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_race_with_finish_submit_merge_task) 
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -851,7 +853,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch flush_latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;

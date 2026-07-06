@@ -199,6 +199,7 @@ int init_test_env(int argc, char** argv) {
     st = StorageEnv::GetInstance()->init(storage_env_options);
     CHECK(st.ok()) << st;
     StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(compute_env->load_spill_block_merge_executor());
 
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
@@ -251,6 +252,7 @@ int init_test_env(int argc, char** argv) {
     data_workflows_env.reset();
     delete engine;
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
     StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     compute_env->destroy();

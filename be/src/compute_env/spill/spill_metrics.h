@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metric_group.h"
 
 namespace starrocks {
 
@@ -53,6 +54,9 @@ public:
     // this is a DCHECK instead. A non-zero value means the wakeup table has a gap: the operator may sleep
     // with nobody left to wake it. This is the counter to alert on.
     IntCounter* parked_with_uncovered_reason_total() { return _parked_with_uncovered_reason_total.get(); }
+
+    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
+    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
 private:
     LabeledCounters _local;

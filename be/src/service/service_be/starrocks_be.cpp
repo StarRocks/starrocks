@@ -148,6 +148,7 @@ Status init_storage_env(RuntimeEnv* runtime_env, PlatformEnv* platform_env, Comp
     RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(make_storage_env_options(runtime_env, platform_env)),
                               "init StorageEnv failed");
     StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(compute_env->load_spill_block_merge_executor());
     return Status::OK();
 }
 
@@ -514,6 +515,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
 
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
     StorageEnv::GetInstance()->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
 
