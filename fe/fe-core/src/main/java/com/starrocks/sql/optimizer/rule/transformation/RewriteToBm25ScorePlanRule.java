@@ -126,9 +126,11 @@ public class RewriteToBm25ScorePlanRule extends TransformationRule {
         newScanOp.setBm25ScoreSlotId(scoreColRef.getId());
         // 5. Push the LIMIT into the scored GIN query so tantivy returns only the
         // top-k rows by score (WAND pruning), mirroring the vector ANN top-k path.
-        // Only valid for ORDER BY score() DESC (TopDocs keeps highest scores); for
-        // ASC, leave the limit at 0 so the BE scores every matched row.
-        if (!ordering.isAscending()) {
+        // Requires ORDER BY score() DESC (TopDocs keeps the highest scores) and MATCH
+        // as the whole filter: a post-scan predicate would drop rows after the top-k
+        // and could shrink the result below the limit. Otherwise the BE scores every
+        // matched row and the TopN above applies the limit.
+        if (!ordering.isAscending() && scanOp.getPredicate() instanceof MatchExprOperator) {
             newScanOp.setBm25ScoreLimit(topNOp.getLimit() + Math.max(0L, topNOp.getOffset()));
         }
 
