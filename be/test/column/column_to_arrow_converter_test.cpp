@@ -42,7 +42,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 #endif
 
-#include <arrow/ipc/json_simple.h>
+#include <arrow/testing/gtest_util.h>
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
 
@@ -528,7 +528,7 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     std::shared_ptr<arrow::Array> array;
     convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
 
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
+    auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
@@ -554,7 +554,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
+    auto s = arrow::ArrayFromJSON(arrow_type,
                                                        "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
@@ -581,7 +581,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::shared_ptr<arrow::Array> array;
     convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &array);
 
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
+    auto s = arrow::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
@@ -615,7 +615,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &array);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
+    auto s = arrow::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         null,
                         {"id": null, "name": "test2"},
