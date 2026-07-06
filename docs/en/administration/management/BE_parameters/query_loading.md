@@ -89,6 +89,15 @@ This topic introduces the following types of BE configurations:
   - The default value of this item has been changed from `true` to `false` since StarRocks v2.4.
 - Introduced in: -
 
+### enable_glm_lookup_http_fallback
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the HTTP fallback RPC for GLM lookup responses. Keep this disabled during rolling upgrades or downgrades until all BE and CN nodes support `lookup_via_http`. When disabled, GLM lookup fetches use the regular `lookup` RPC.
+- Introduced in: -
+
 ### enable_bitmap_index_memory_page_cache
 
 - Default: true 

@@ -19,7 +19,9 @@
 #include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "common/global_types.h"
+#include "runtime/descriptors_fwd.h"
 #include "runtime/runtime_fwd.h"
+
 namespace starrocks::pipeline {
 
 class FetchProcessor;
@@ -76,11 +78,22 @@ public:
     // Check if the task is done
     virtual bool is_done() const { return _is_done; }
     FetchTaskContextPtr get_ctx() const { return _ctx; }
+#ifdef BE_TEST
+    static bool should_use_lookup_http_rpc_for_test(
+            RuntimeState* state, TupleId request_tuple_id,
+            const phmap::flat_hash_map<TupleId, RowPositionDescriptor*>& row_pos_descs) {
+        return _should_use_lookup_http_rpc(state, request_tuple_id, row_pos_descs);
+    }
+#endif
 
 protected:
     virtual Status _submit_remote_task(RuntimeState* state);
     FetchTaskContextPtr _ctx;
     std::atomic_bool _is_done = false;
+
+private:
+    static bool _should_use_lookup_http_rpc(RuntimeState* state, TupleId request_tuple_id,
+                                            const phmap::flat_hash_map<TupleId, RowPositionDescriptor*>& row_pos_descs);
 };
 
 class LookUpCloseTask {

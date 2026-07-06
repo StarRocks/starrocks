@@ -15,8 +15,10 @@
 #include "exec/pipeline/lookup_request.h"
 
 #include <brpc/controller.h>
+#include <butil/iobuf.h>
 
 #include <memory>
+#include <string>
 
 #include "base/container/raw_container.h"
 #include "base/failpoint/fail_point.h"
@@ -44,6 +46,119 @@
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(lookup_request_failed);
+
+Status decode_lookup_request_columns_from_iobuf(butil::IOBuf* input, PLookUpRequest* request) {
+    for (size_t i = 0; i < request->request_columns_size(); i++) {
+        auto pcolumn = request->mutable_request_columns(i);
+        if (UNLIKELY(input->size() < pcolumn->data_size())) {
+            return Status::InternalError(fmt::format("io_buf size {} is less than column data size {}", input->size(),
+                                                     pcolumn->data_size()));
+        }
+        size_t size = input->cutn(pcolumn->mutable_data(), pcolumn->data_size());
+        if (UNLIKELY(size != pcolumn->data_size())) {
+            return Status::InternalError(fmt::format("iobuf read {} != expected {}", size, pcolumn->data_size()));
+        }
+    }
+    return Status::OK();
+}
+
+Status LookUpHttpCodec::encode_request(const PLookUpRequest& request, const void* attachment_data,
+                                       size_t attachment_size, butil::IOBuf* output) {
+    butil::IOBuf protobuf_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&protobuf_iobuf);
+    if (UNLIKELY(!request.SerializeToZeroCopyStream(&wrapper))) {
+        return Status::InternalError("failed to serialize lookup http request protobuf");
+    }
+
+    size_t protobuf_size = protobuf_iobuf.size();
+    output->append(&protobuf_size, sizeof(protobuf_size));
+    output->append(protobuf_iobuf);
+    output->append(&attachment_size, sizeof(attachment_size));
+    if (attachment_size > 0) {
+        output->append(attachment_data, attachment_size);
+    }
+    return Status::OK();
+}
+
+Status LookUpHttpCodec::decode_request(butil::IOBuf* input, PLookUpRequest* request) {
+    size_t protobuf_size = 0;
+    if (UNLIKELY(input->cutn(&protobuf_size, sizeof(protobuf_size)) != sizeof(protobuf_size))) {
+        return Status::InternalError("failed to read lookup http request protobuf size");
+    }
+    if (UNLIKELY(input->size() < protobuf_size)) {
+        return Status::InternalError(fmt::format("lookup http request protobuf size {} exceeds iobuf size {}",
+                                                 protobuf_size, input->size()));
+    }
+
+    butil::IOBuf protobuf_iobuf;
+    input->cutn(&protobuf_iobuf, protobuf_size);
+    butil::IOBufAsZeroCopyInputStream wrapper(protobuf_iobuf);
+    if (UNLIKELY(!request->ParseFromZeroCopyStream(&wrapper))) {
+        return Status::InternalError("failed to parse lookup http request protobuf");
+    }
+
+    size_t attachment_size = 0;
+    if (UNLIKELY(input->cutn(&attachment_size, sizeof(attachment_size)) != sizeof(attachment_size))) {
+        return Status::InternalError("failed to read lookup http request attachment size");
+    }
+    if (UNLIKELY(attachment_size != input->size())) {
+        return Status::InternalError(fmt::format("{} != {} during lookup http request attachment deserialization",
+                                                 attachment_size, input->size()));
+    }
+
+    RETURN_IF_ERROR(decode_lookup_request_columns_from_iobuf(input, request));
+    if (UNLIKELY(!input->empty())) {
+        return Status::InternalError(
+                fmt::format("lookup http request has {} trailing attachment bytes", input->size()));
+    }
+    return Status::OK();
+}
+
+Status LookUpHttpCodec::encode_response(const PLookUpResponse& response, butil::IOBuf* attachment,
+                                        butil::IOBuf* output) {
+    butil::IOBuf protobuf_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&protobuf_iobuf);
+    if (UNLIKELY(!response.SerializeToZeroCopyStream(&wrapper))) {
+        return Status::InternalError("failed to serialize lookup http response protobuf");
+    }
+
+    size_t protobuf_size = protobuf_iobuf.size();
+    output->append(&protobuf_size, sizeof(protobuf_size));
+    output->append(protobuf_iobuf);
+
+    size_t attachment_size = attachment->size();
+    output->append(&attachment_size, sizeof(attachment_size));
+    output->append(*attachment);
+    return Status::OK();
+}
+
+Status LookUpHttpCodec::decode_response(butil::IOBuf* input, PLookUpResponse* response) {
+    size_t protobuf_size = 0;
+    if (UNLIKELY(input->cutn(&protobuf_size, sizeof(protobuf_size)) != sizeof(protobuf_size))) {
+        return Status::InternalError("failed to read lookup http response protobuf size");
+    }
+    if (UNLIKELY(input->size() < protobuf_size)) {
+        return Status::InternalError(fmt::format("lookup http response protobuf size {} exceeds iobuf size {}",
+                                                 protobuf_size, input->size()));
+    }
+
+    butil::IOBuf protobuf_iobuf;
+    input->cutn(&protobuf_iobuf, protobuf_size);
+    butil::IOBufAsZeroCopyInputStream wrapper(protobuf_iobuf);
+    if (UNLIKELY(!response->ParseFromZeroCopyStream(&wrapper))) {
+        return Status::InternalError("failed to parse lookup http response protobuf");
+    }
+
+    size_t attachment_size = 0;
+    if (UNLIKELY(input->cutn(&attachment_size, sizeof(attachment_size)) != sizeof(attachment_size))) {
+        return Status::InternalError("failed to read lookup http response attachment size");
+    }
+    if (UNLIKELY(attachment_size != input->size())) {
+        return Status::InternalError(fmt::format("{} != {} during lookup http response attachment deserialization",
+                                                 attachment_size, input->size()));
+    }
+    return Status::OK();
+}
 
 // Deserialize remote request payload into a reusable chunk for processing.
 Status RemoteLookUpRequestContext::collect_input_columns(ChunkPtr chunk) {
@@ -112,6 +227,19 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
 void RemoteLookUpRequestContext::callback(const Status& status) {
     VLOG_FILE << "RemoteLookUpRequestContext callback: " << status.to_string();
     status.to_protobuf(response->mutable_status());
+    auto* brpc_cntl = static_cast<brpc::Controller*>(cntl);
+    if (brpc_cntl->request_protocol() == brpc::PROTOCOL_HTTP) {
+        butil::IOBuf column_attachment;
+        brpc_cntl->response_attachment().swap(column_attachment);
+
+        auto encode_st =
+                LookUpHttpCodec::encode_response(*response, &column_attachment, &brpc_cntl->response_attachment());
+        if (UNLIKELY(!encode_st.ok())) {
+            cntl->SetFailed(std::string(encode_st.message()));
+            done->Run();
+            return;
+        }
+    }
     done->Run();
 }
 

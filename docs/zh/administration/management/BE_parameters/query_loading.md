@@ -86,6 +86,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
   - 自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。自 3.1 版本起，该参数由静态变为动态。
 - 引入版本：-
 
+### enable_glm_lookup_http_fallback
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 GLM lookup 响应启用 HTTP fallback RPC。滚动升级或降级期间，在所有 BE 和 CN 节点都支持 `lookup_via_http` 前，应保持关闭。关闭时，GLM lookup fetch 使用普通 `lookup` RPC。
+- 引入版本：-
+
 ### enable_bitmap_index_memory_page_cache
 
 - 默认值：true

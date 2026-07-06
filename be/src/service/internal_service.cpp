@@ -1397,30 +1397,56 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
     });
 
     if (cntl->request_attachment().size() > 0) {
-        // parse chunk
-        butil::IOBuf& io_buf = cntl->request_attachment();
-        for (size_t i = 0; i < request->request_columns_size(); i++) {
-            auto pcolumn = req->mutable_request_columns(i);
-            if (UNLIKELY(io_buf.size() < pcolumn->data_size())) {
-                auto msg = fmt::format("io_buf size {} is less than column data size {}", io_buf.size(),
-                                       pcolumn->data_size());
-                LOG(WARNING) << msg;
-                st = Status::InternalError(msg);
-                return;
-            }
-            size_t size = io_buf.cutn(pcolumn->mutable_data(), pcolumn->data_size());
-            if (UNLIKELY(size != pcolumn->data_size())) {
-                auto msg = fmt::format("iobuf read {} != expected {}", size, pcolumn->data_size());
-                LOG(WARNING) << msg;
-                st = Status::InternalError(msg);
-                return;
-            }
+        st = pipeline::decode_lookup_request_columns_from_iobuf(&cntl->request_attachment(), req);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            return;
         }
     } else {
         st = Status::InternalError("no attachment in lookup request");
         return;
     }
     auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::lookup_via_http(google::protobuf::RpcController* cntl_base,
+                                                  const PHttpRequest* /*request*/, PLookUpResponse* response,
+                                                  google::protobuf::Closure* done) {
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto req = std::make_shared<PLookUpRequest>();
+    pipeline::RemoteLookUpRequestContextPtr request_ctx;
+
+    Status st;
+    DeferOp defer([&]() {
+        if (!st.ok()) {
+            LOG(WARNING) << "lookup via http rpc failed, message=" << st.message();
+            // Before request_ctx is created, the HTTP body is not a valid lookup request,
+            // so fail the RPC directly. After request_ctx exists, callback() must
+            // finish the lookup response, including HTTP response framing.
+            if (request_ctx != nullptr) {
+                request_ctx->callback(st);
+            } else {
+                cntl->SetFailed(std::string(st.message()));
+                done->Run();
+            }
+        }
+    });
+
+    st = pipeline::LookUpHttpCodec::decode_request(&cntl->request_attachment(), req.get());
+    if (!st.ok()) {
+        return;
+    }
+
+    request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req.get(), response, done);
+    /*
+     * This is a big difference between lookup via HTTP and lookup via brpc. In the brpc case, the request is owned by the brpc
+     * controller, and will be destroyed when the controller is destroyed. In the HTTP case, the request is a temp variable created
+     * in lookup_via_http. So we need to move the request to the RemoteLookUpRequestContext to make sure the request is not destroyed
+     * before the lookup is finished.
+    */
+    request_ctx->owned_request = std::move(req);
     st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
 }
 

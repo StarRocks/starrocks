@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <cstddef>
+#include <memory>
+
 #include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "column/sorting/sort_permute.h"
@@ -26,7 +29,24 @@
 #include "storage_primitive/range.h"
 #include "storage_primitive/rowid_types.h"
 
+namespace butil {
+class IOBuf;
+}
+
 namespace starrocks::pipeline {
+
+Status decode_lookup_request_columns_from_iobuf(butil::IOBuf* input, PLookUpRequest* request);
+
+class LookUpHttpCodec {
+public:
+    static constexpr const char* kContentType = "application/proto";
+
+    static Status encode_request(const PLookUpRequest& request, const void* attachment_data, size_t attachment_size,
+                                 butil::IOBuf* output);
+    static Status decode_request(butil::IOBuf* input, PLookUpRequest* request);
+    static Status encode_response(const PLookUpResponse& response, butil::IOBuf* attachment, butil::IOBuf* output);
+    static Status decode_response(butil::IOBuf* input, PLookUpResponse* response);
+};
 
 // Describes the lifecycle of a single lookup request, regardless of whether
 // it is served locally or remotely. Implementations collect the columns needed
@@ -64,6 +84,7 @@ public:
     PLookUpResponse* response = nullptr;
     ::google::protobuf::Closure* done = nullptr;
     ChunkPtr request_chunk;
+    std::shared_ptr<PLookUpRequest> owned_request;
 };
 using RemoteLookUpRequestContextPtr = std::shared_ptr<RemoteLookUpRequestContext>;
 

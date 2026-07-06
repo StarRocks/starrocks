@@ -106,6 +106,10 @@ CONF_mBool(pipeline_timeout_diagnostic, "false");
 // disabled even if the session variable `enable_pipeline_event_scheduler` is true.
 CONF_mBool(enable_pipeline_event_scheduler, "true");
 
+// Whether to use the HTTP fallback RPC for GLM lookup responses. Keep this disabled during rolling upgrades
+// until all BE/CN nodes support lookup_via_http.
+CONF_mBool(enable_glm_lookup_http_fallback, "true");
+
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
 CONF_Int64(pipeline_driver_queue_level_time_slice_base_ns, "200000000");

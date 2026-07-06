@@ -15,6 +15,7 @@
 #include "exec/pipeline/fetch_task.h"
 
 #include <arpa/inet.h>
+#include <butil/iobuf.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -22,19 +23,25 @@
 #include <chrono>
 #include <memory>
 #include <ranges>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #include "base/utility/defer_op.h"
+#include "common/config_exec_flow_fwd.h"
+#include "exec/pipeline/lookup_request.h"
 #define private public
 #include "exec/pipeline/fetch_processor.h"
 #undef private
 #include "exec/exec_env.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/Status_types.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/tablet_info.h"
+#include "testutil/desc_tbl_builder.h"
 
 namespace starrocks::pipeline {
 namespace {
@@ -92,6 +99,35 @@ std::unique_ptr<RuntimeState> create_runtime_state(int query_timeout_s) {
                                           &exec_env->query_execution_services(), exec_env);
 }
 
+std::unique_ptr<RuntimeState> create_runtime_state_with_descs(const std::vector<TypeDescriptor>& slot_types) {
+    auto state = create_runtime_state(1);
+    DescriptorTblBuilder builder(state.get(), state->obj_pool());
+    auto& tuple_builder = builder.declare_tuple();
+    for (const auto& slot_type : slot_types) {
+        tuple_builder << slot_type;
+    }
+    state->set_desc_tbl(builder.build());
+    return state;
+}
+
+phmap::flat_hash_map<TupleId, RowPositionDescriptor*> create_row_pos_descs(RowPositionDescriptor* row_pos_desc) {
+    phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs;
+    row_pos_descs.emplace(0, row_pos_desc);
+    return row_pos_descs;
+}
+
+class ScopedLookupHttpFallbackConfig {
+public:
+    explicit ScopedLookupHttpFallbackConfig(bool enabled) : _old(config::enable_glm_lookup_http_fallback) {
+        config::enable_glm_lookup_http_fallback = enabled;
+    }
+
+    ~ScopedLookupHttpFallbackConfig() { config::enable_glm_lookup_http_fallback = _old; }
+
+private:
+    bool _old;
+};
+
 bool wait_task_done(const FetchTaskPtr& task, int timeout_ms) {
     constexpr int kCheckIntervalMs = 10;
     int elapsed = 0;
@@ -105,7 +141,190 @@ bool wait_task_done(const FetchTaskPtr& task, int timeout_ms) {
     return task->is_done();
 }
 
+void append_size_to_iobuf(butil::IOBuf* output, size_t value) {
+    output->append(&value, sizeof(value));
+}
+
+template <typename Message>
+void append_http_frame_for_test(const Message& message, size_t attachment_size, std::string_view attachment,
+                                butil::IOBuf* output) {
+    const std::string protobuf = message.SerializeAsString();
+    append_size_to_iobuf(output, protobuf.size());
+    output->append(protobuf.data(), protobuf.size());
+    append_size_to_iobuf(output, attachment_size);
+    if (!attachment.empty()) {
+        output->append(attachment.data(), attachment.size());
+    }
+}
+
 } // namespace
+
+TEST(LookUpHttpCodecTest, request_round_trip_preserves_column_attachment) {
+    PLookUpRequest request;
+    request.set_lookup_node_id(17);
+    request.set_request_tuple_id(3);
+    auto* column = request.add_request_columns();
+    column->set_slot_id(5);
+    column->set_data_size(3);
+
+    const std::string payload = "abc";
+    butil::IOBuf encoded;
+    ASSERT_TRUE(LookUpHttpCodec::encode_request(request, payload.data(), payload.size(), &encoded).ok());
+
+    PLookUpRequest decoded;
+    ASSERT_TRUE(LookUpHttpCodec::decode_request(&encoded, &decoded).ok());
+
+    EXPECT_TRUE(encoded.empty());
+    EXPECT_EQ(17, decoded.lookup_node_id());
+    EXPECT_EQ(3, decoded.request_tuple_id());
+    ASSERT_EQ(1, decoded.request_columns_size());
+    EXPECT_EQ(5, decoded.request_columns(0).slot_id());
+    EXPECT_EQ(payload, decoded.request_columns(0).data());
+}
+
+TEST(LookUpHttpCodecTest, response_round_trip_leaves_column_attachment_for_deserialization) {
+    PLookUpResponse response;
+    response.mutable_status()->set_status_code(TStatusCode::OK);
+    auto* column = response.add_columns();
+    column->set_slot_id(7);
+    column->set_data_size(3);
+
+    const std::string payload = "xyz";
+    butil::IOBuf attachment;
+    attachment.append(payload.data(), payload.size());
+
+    butil::IOBuf encoded;
+    ASSERT_TRUE(LookUpHttpCodec::encode_response(response, &attachment, &encoded).ok());
+
+    PLookUpResponse decoded;
+    ASSERT_TRUE(LookUpHttpCodec::decode_response(&encoded, &decoded).ok());
+
+    EXPECT_EQ(TStatusCode::OK, decoded.status().status_code());
+    ASSERT_EQ(1, decoded.columns_size());
+    EXPECT_EQ(7, decoded.columns(0).slot_id());
+    EXPECT_EQ(3, decoded.columns(0).data_size());
+    ASSERT_EQ(payload.size(), encoded.size());
+
+    std::string decoded_payload(payload.size(), char{0});
+    ASSERT_EQ(payload.size(), encoded.cutn(decoded_payload.data(), decoded_payload.size()));
+    EXPECT_EQ(payload, decoded_payload);
+}
+
+TEST(LookUpHttpCodecTest, decode_request_columns_rejects_short_attachment) {
+    PLookUpRequest request;
+    auto* column = request.add_request_columns();
+    column->set_slot_id(1);
+    column->set_data_size(3);
+
+    const std::string payload = "a";
+    butil::IOBuf input;
+    input.append(payload.data(), payload.size());
+
+    auto st = decode_lookup_request_columns_from_iobuf(&input, &request);
+    EXPECT_FALSE(st.ok());
+}
+
+TEST(LookUpHttpCodecTest, decode_request_rejects_malformed_frames) {
+    {
+        butil::IOBuf input;
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+    {
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, 3);
+        const std::string payload = "a";
+        input.append(payload.data(), payload.size());
+
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+    {
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, 1);
+        const char invalid_protobuf = static_cast<char>(0);
+        input.append(&invalid_protobuf, 1);
+        append_size_to_iobuf(&input, 0);
+
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+    {
+        PLookUpRequest encoded_request;
+        const std::string protobuf = encoded_request.SerializeAsString();
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, protobuf.size());
+        input.append(protobuf.data(), protobuf.size());
+
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+    {
+        PLookUpRequest encoded_request;
+        butil::IOBuf input;
+        append_http_frame_for_test(encoded_request, 1, "", &input);
+
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+    {
+        PLookUpRequest encoded_request;
+        auto* column = encoded_request.add_request_columns();
+        column->set_slot_id(3);
+        column->set_data_size(1);
+
+        butil::IOBuf input;
+        append_http_frame_for_test(encoded_request, 2, "ab", &input);
+
+        PLookUpRequest request;
+        EXPECT_FALSE(LookUpHttpCodec::decode_request(&input, &request).ok());
+    }
+}
+
+TEST(LookUpHttpCodecTest, decode_response_rejects_malformed_frames) {
+    {
+        butil::IOBuf input;
+        PLookUpResponse response;
+        EXPECT_FALSE(LookUpHttpCodec::decode_response(&input, &response).ok());
+    }
+    {
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, 3);
+        const std::string payload = "a";
+        input.append(payload.data(), payload.size());
+
+        PLookUpResponse response;
+        EXPECT_FALSE(LookUpHttpCodec::decode_response(&input, &response).ok());
+    }
+    {
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, 1);
+        const char invalid_protobuf = static_cast<char>(0);
+        input.append(&invalid_protobuf, 1);
+        append_size_to_iobuf(&input, 0);
+
+        PLookUpResponse response;
+        EXPECT_FALSE(LookUpHttpCodec::decode_response(&input, &response).ok());
+    }
+    {
+        PLookUpResponse encoded_response;
+        const std::string protobuf = encoded_response.SerializeAsString();
+        butil::IOBuf input;
+        append_size_to_iobuf(&input, protobuf.size());
+        input.append(protobuf.data(), protobuf.size());
+
+        PLookUpResponse response;
+        EXPECT_FALSE(LookUpHttpCodec::decode_response(&input, &response).ok());
+    }
+    {
+        PLookUpResponse encoded_response;
+        butil::IOBuf input;
+        append_http_frame_for_test(encoded_response, 1, "", &input);
+
+        PLookUpResponse response;
+        EXPECT_FALSE(LookUpHttpCodec::decode_response(&input, &response).ok());
+    }
+}
 
 // Verify the shared_ptr cycle between BatchUnit and FetchTaskContext is broken
 // after changing FetchTaskContext::unit to weak_ptr.
@@ -214,6 +433,54 @@ TEST(FetchTaskTest, submit_remote_rpc_failure_handles_expired_unit) {
     ASSERT_TRUE(wait_task_done(task, 5000));
 
     EXPECT_TRUE(task->is_done());
+}
+
+TEST(FetchTaskTest, lookup_http_fallback_returns_false_without_row_position_descriptor) {
+    ScopedLookupHttpFallbackConfig config_guard(true);
+    auto state = create_runtime_state(1);
+    phmap::flat_hash_map<TupleId, RowPositionDescriptor*> row_pos_descs;
+
+    EXPECT_FALSE(FetchTask::should_use_lookup_http_rpc_for_test(state.get(), 0, row_pos_descs));
+}
+
+TEST(FetchTaskTest, lookup_http_fallback_disabled_by_config) {
+    ScopedLookupHttpFallbackConfig config_guard(false);
+    auto state =
+            create_runtime_state_with_descs({TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)});
+    RowPositionDescriptor row_pos_desc(RowPositionDescriptor::OLAP_SCAN, 1, -1, {}, {});
+    auto row_pos_descs = create_row_pos_descs(&row_pos_desc);
+
+    EXPECT_FALSE(FetchTask::should_use_lookup_http_rpc_for_test(state.get(), 0, row_pos_descs));
+}
+
+TEST(FetchTaskTest, lookup_http_fallback_enabled_for_max_varchar_fetch_slot) {
+    ScopedLookupHttpFallbackConfig config_guard(true);
+    auto state = create_runtime_state_with_descs(
+            {TYPE_INT_DESC, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)});
+    RowPositionDescriptor row_pos_desc(RowPositionDescriptor::OLAP_SCAN, 1, -1, {}, {0});
+    auto row_pos_descs = create_row_pos_descs(&row_pos_desc);
+
+    EXPECT_TRUE(FetchTask::should_use_lookup_http_rpc_for_test(state.get(), 0, row_pos_descs));
+}
+
+TEST(FetchTaskTest, lookup_http_fallback_rejects_small_varchar_fetch_slot) {
+    ScopedLookupHttpFallbackConfig config_guard(true);
+    auto state = create_runtime_state_with_descs(
+            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH - 1)});
+    RowPositionDescriptor row_pos_desc(RowPositionDescriptor::OLAP_SCAN, 1, -1, {}, {});
+    auto row_pos_descs = create_row_pos_descs(&row_pos_desc);
+
+    EXPECT_FALSE(FetchTask::should_use_lookup_http_rpc_for_test(state.get(), 0, row_pos_descs));
+}
+
+TEST(FetchTaskTest, lookup_http_fallback_skips_lookup_ref_slots) {
+    ScopedLookupHttpFallbackConfig config_guard(true);
+    auto state = create_runtime_state_with_descs(
+            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_INT_DESC});
+    RowPositionDescriptor row_pos_desc(RowPositionDescriptor::OLAP_SCAN, 1, -1, {}, {0});
+    auto row_pos_descs = create_row_pos_descs(&row_pos_desc);
+
+    EXPECT_FALSE(FetchTask::should_use_lookup_http_rpc_for_test(state.get(), 0, row_pos_descs));
 }
 
 } // namespace starrocks::pipeline

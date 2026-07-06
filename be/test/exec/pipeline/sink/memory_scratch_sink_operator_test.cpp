@@ -122,7 +122,7 @@ TEST(MemoryScratchSinkOperatorTest, test_cancel) {
 
     Status result_st;
     std::shared_ptr<arrow::RecordBatch> record_batch;
-    bool eos;
+    bool eos = true;
     std::thread t([&] { result_st = _exec_env->result_queue_mgr()->fetch_result(fragment_id, &record_batch, &eos); });
 
     Operators ops = {factory1.create(1, 1), factory2.create(1, 2)};

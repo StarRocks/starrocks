@@ -90,6 +90,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
   - この項目のデフォルト値は、StarRocks v2.4以降、`true`から`false`に変更されました。
 - 導入バージョン: -
 
+### enable_glm_lookup_http_fallback
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: GLM lookup 応答で HTTP fallback RPC を有効にするかどうかを制御します。ローリングアップグレードまたはダウングレード中は、すべての BE と CN ノードが `lookup_via_http` をサポートするまで無効のままにしてください。無効な場合、GLM lookup fetch は通常の `lookup` RPC を使用します。
+- 導入バージョン: -
+
 ### enable_bitmap_index_memory_page_cache
 
 - デフォルト: true
