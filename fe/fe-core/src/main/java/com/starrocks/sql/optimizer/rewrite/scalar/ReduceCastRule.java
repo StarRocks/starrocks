@@ -89,7 +89,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                     && operator.getType().equals(operator.getChild(0).getType())) {
                 return inheritVarcharLengthAfterReduceCast(operator);
             }
-        } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
+        } else if (operator.getType().matchesType(operator.getChild(0).getType())
+                && !isTruncatingCharCast(operator.getType(), operator.getChild(0).getType())) {
             return inheritVarcharLengthAfterReduceCast(operator);
         }
 
@@ -203,6 +204,21 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return Integer.MAX_VALUE;
         }
         return (slotSize << 3) - 1;
+    }
+
+    // A cast to a bounded CHAR(N) truncates its input to the first N characters (MySQL semantics),
+    // so it is not a no-op and must not be reduced away when the source string could exceed N.
+    private static boolean isTruncatingCharCast(Type target, Type source) {
+        if (!target.isChar() || !source.isStringType()) {
+            return false;
+        }
+        int targetLen = ((ScalarType) target).getLength();
+        if (targetLen < 0) {
+            return false; // wildcard CHAR: no truncation
+        }
+        int sourceLen = ((ScalarType) source).getLength();
+        // A source no longer than N can never be truncated, so the cast is still a no-op.
+        return sourceLen < 0 || sourceLen > targetLen;
     }
 
     private ScalarOperator inheritVarcharLengthAfterReduceCast(CastOperator operator) {
