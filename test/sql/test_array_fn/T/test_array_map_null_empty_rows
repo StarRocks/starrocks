@@ -1,0 +1,24 @@
+-- name: test_array_map_null_empty_rows
+-- description: array_map/transform must preserve NULL input rows even when, within a chunk, no
+--              row is fully-null but every non-null input array is empty. The total_elements_num
+--              == 0 fast path returned a const empty-array column without the null mask, so NULL
+--              rows were silently rendered as [] (and the row count was wrong). array_filter uses
+--              a different path and was already correct; the result must match it.
+
+CREATE DATABASE IF NOT EXISTS test_array_map_null_empty_rows_db;
+USE test_array_map_null_empty_rows_db;
+
+CREATE TABLE amt (id INT, arr ARRAY<INT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- chunk where the only non-null arrays are empty: NULL must stay NULL, not become []
+INSERT INTO amt VALUES (1, NULL), (2, []), (3, []);
+SELECT id, array_map(x -> x + 1, arr) AS am, array_filter(x -> x > 0, arr) AS af FROM amt ORDER BY id;
+SELECT sum(if(array_map(x -> x + 1, arr) IS NULL, 1, 0)) AS am_nullcnt,
+       sum(if(arr IS NULL, 1, 0)) AS real_nullcnt FROM amt;
+
+-- control: mixing in a non-empty array takes the general path and was already correct
+CREATE TABLE amt2 (id INT, arr ARRAY<INT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO amt2 VALUES (1, NULL), (2, []), (3, [5]);
+SELECT id, array_map(x -> x + 1, arr) AS am FROM amt2 ORDER BY id;
