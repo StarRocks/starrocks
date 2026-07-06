@@ -737,17 +737,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
+`ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
+
+- 表必须为明细表（Duplicate Key）或聚合表（Aggregate），不支持主键表（Primary Key）。
+- 表不能为 Colocate 表，且不能包含 AUTO_INCREMENT 列。
+- 仅当表尚无其他 Rollup 或同步物化视图时，才能添加该 Rollup。
+
 示例：
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+示例：在存算分离集群的 Range 分布表上创建一个具有独立排序键的 Rollup。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### 批量创建 Rollup

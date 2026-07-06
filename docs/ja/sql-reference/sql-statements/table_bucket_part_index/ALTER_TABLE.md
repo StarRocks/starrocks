@@ -738,17 +738,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: タイムアウト時間を設定することをサポートしています。デフォルトのタイムアウト時間は1日です。
 
+`ORDER BY`: ベーステーブルのソートキーとは異なる、ロールアップ独自のソートキーを定義します。共有データクラスタの Range 分散テーブルでのみサポートされます（v4.2 以降）。ロールアップの先頭ソートキー列でフィルタまたは集計を行うクエリがロールアップで処理されるようになります。以下の制限があります。
+
+- テーブルは重複キー（Duplicate Key）テーブルまたは集計（Aggregate）テーブルである必要があります。主キー（Primary Key）テーブルはサポートされません。
+- テーブルは Colocate テーブルであってはならず、AUTO_INCREMENT 列を含めることはできません。
+- ロールアップは、テーブルに他のロールアップまたは同期マテリアライズドビューが存在しない場合にのみ追加できます。
+
 例:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+例: 共有データクラスタの Range 分散テーブルに、独立したソートキーを持つロールアップを作成します。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### バッチでロールアップを作成する
