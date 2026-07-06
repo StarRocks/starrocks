@@ -23,6 +23,7 @@
 
 #include "column/global_dict/types.h"
 #include "compute_env/runtime_range_pruner.h"
+#include "roaring/roaring.hh"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/runtime_filter_predicate.h"
@@ -106,6 +107,12 @@ public:
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+
+    // Rowid set produced upstream by a secondary index lookup. When non-null
+    // the segment iterator intersects this bitmap with _scan_range
+    // immediately after the bitmap-index filter and before delvec subtraction
+    // -- DelVec filtering still applies for free downstream.
+    const roaring::Roaring* presupplied_rowid_filter = nullptr;
 
     RuntimeScanRangePruner runtime_range_pruner;
 

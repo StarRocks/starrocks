@@ -433,6 +433,28 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             seg_options.is_first_split_of_segment = true;
         }
 
+        // Thread per-segment secondary index lookup result into the segment
+        // iterator. nullptr (no entry for this seg_id) leaves the normal
+        // scan path untouched.
+        if (options.presupplied_rowid_filter_per_segment != nullptr) {
+            auto it = options.presupplied_rowid_filter_per_segment->find(static_cast<uint32_t>(i));
+            if (it != options.presupplied_rowid_filter_per_segment->end()) {
+                // Index-resolved segment. An empty filter means the secondary
+                // index matched no rows in this segment, so skip iterator
+                // creation entirely: otherwise new_iterator() opens the segment
+                // and builds its column readers only for _apply_presupplied_
+                // rowid_filter() to return EOF. This metadata-stage skip mirrors
+                // zone-map segment skipping on the ORDER BY path and keeps the
+                // readback's SegmentsReadCount proportional to matched segments
+                // instead of the whole tablet (the dominant cost at low
+                // selectivity, where most segments have zero matches).
+                if (it->second.isEmpty()) {
+                    continue;
+                }
+                seg_options.presupplied_rowid_filter = &it->second;
+            }
+        }
+
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

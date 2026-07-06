@@ -115,6 +115,13 @@ struct TabletReaderParams {
     // segment-level ANN k-limit cannot under-return. See design doc §7.
     bool has_predicate_above_iterator = false;
 
+    // When true, TabletReader will look up any registered secondary index
+    // for the tablet and feed per-segment rowid filters into the rowset
+    // scan. Effective only on Lake PK tables that actually have built
+    // index files in their rowset metadata. Defaults off so the normal
+    // scan path stays untouched.
+    bool use_secondary_index = false;
+
 public:
     std::string to_string() const;
 };

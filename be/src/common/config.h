@@ -498,6 +498,42 @@ CONF_mBool(enable_pk_index_eager_build, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+
+// ============================================================================
+// Secondary index for Lake PK table (rowset-level lightweight sorted idx)
+// ============================================================================
+// Enable building secondary index files during load and compaction.
+CONF_mBool(enable_secondary_index_write, "false");
+// Enable using secondary index files during query.
+CONF_mBool(enable_secondary_index_read, "false");
+// Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries during build.
+CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
+// Per-(tablet,index) in-memory write buffer size (MB). When a buffer reaches
+// this size during load/compaction it is flushed into one sorted run file,
+// bounding build memory and producing multiple runs per (rowset, index).
+CONF_mInt64(secondary_index_buffer_mb, "100");
+// Per-BE index registry while the FE-side DDL is not yet wired.
+// Format: "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
+// Multiple indexes for the same tablet allowed by repeating the tablet_id
+// prefix.
+CONF_mString(secondary_index_defs, "");
+// Max number of opened SecondaryIndexReader instances kept in the process-
+// wide LRU cache. Each entry retains an opened Segment (footer + column
+// readers + zone-map index) for a single .idx file. Default 256 covers
+// 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
+CONF_mInt64(secondary_index_reader_cache_capacity, "256");
+// Enable the covering-index fast path: predicate AND output columns all in
+// the index -> answer from .idx (DelVec-filtered), no base-table readback.
+CONF_mBool(enable_secondary_index_covering, "true");
+// Multi-index AND selectivity cost gate (mirrors config_secondary_index_fwd.h).
+// An AND index whose estimated match ratio exceeds this percent is left as a
+// residual predicate instead of materialized.
+CONF_mInt64(secondary_index_and_skip_broad_pct, "10");
+// If even the most selective applicable index matches more than this percent of
+// the rowset, skip the index path entirely and full-scan.
+CONF_mInt64(secondary_index_skip_fullscan_pct, "20");
+// Stop intersecting further indexes once the candidate set is at/below this many rows.
+CONF_mInt64(secondary_index_and_stop_rows, "262144");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

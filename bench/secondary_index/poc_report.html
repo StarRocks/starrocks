@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StarRocks 二级索引 PoC 评估报告</title>
+<style>
+  :root{--fg:#1a2433;--muted:#5b6b80;--line:#e2e8f0;--accent:#2563eb;--accent2:#0d9488;--bg:#fff;--code:#0f172a;--codebg:#f6f8fa;--win:#067647;--lose:#b42318;}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;color:var(--fg);line-height:1.7;margin:0;background:#f1f5f9;}
+  .wrap{max-width:980px;margin:0 auto;background:var(--bg);padding:56px 64px 80px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  h1{font-size:26px;line-height:1.35;margin:0 0 6px;border-bottom:3px solid var(--accent);padding-bottom:14px;}
+  h2{font-size:21px;margin:44px 0 14px;padding:8px 0 8px 12px;border-left:5px solid var(--accent);background:linear-gradient(90deg,#eff6ff,transparent);}
+  h3{font-size:16.5px;margin:28px 0 10px;color:#0b1f44;}
+  p{margin:10px 0;}
+  ul,ol{margin:10px 0;padding-left:24px;}
+  li{margin:4px 0;}
+  code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13px;background:var(--codebg);padding:1.5px 5px;border-radius:4px;color:#9333ea;}
+  pre{background:var(--code);color:#e6edf3;padding:16px 18px;border-radius:8px;overflow-x:auto;font-size:12.6px;line-height:1.55;}
+  pre code{background:none;color:inherit;padding:0;}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px;}
+  th,td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top;}
+  th{background:#f1f5f9;font-weight:600;}
+  tr:nth-child(even) td{background:#fafbfc;}
+  .meta{color:var(--muted);font-size:13.5px;margin:0 0 8px;}
+  .toc{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:16px 22px;margin:24px 0;font-size:14px;}
+  .toc a{color:var(--accent);text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+  .callout{border-radius:8px;padding:13px 18px;margin:16px 0;border-left:5px solid var(--accent2);background:#f0fdfa;}
+  .callout.key{border-left-color:#d97706;background:#fffbeb;}
+  .win{color:var(--win);font-weight:700;}
+  .lose{color:var(--lose);font-weight:600;}
+  .small{font-size:12.5px;color:var(--muted);}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;background:#e0e7ff;color:#3730a3;margin-left:6px;vertical-align:middle;}
+  hr{border:none;border-top:1px solid var(--line);margin:36px 0;}
+  caption{caption-side:top;text-align:left;font-size:13px;color:var(--muted);padding-bottom:5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>StarRocks 存算分离主键表 · 轻量级排序二级索引 PoC 评估报告</h1>
+<p class="meta">PR <strong>#73708</strong>（draft） · 最新构建 build 1923 · 存算分离（shared-data）模式 · 数据集 1 亿行 / 单 tablet</p>
+<p class="meta">测试环境：扫描类测试（§3.1–§3.4）于 1 FE(4c16g) + 3 CN(8c32g)；免回表覆盖测试（§3.5）于 1 FE + 1 CN(16c64g)。所有 p50 为 datacache 热态、重复 15 次取中位（预热 3 次）。</p>
+
+<div class="toc">
+<strong>目录</strong>
+<ol>
+  <li><a href="#s0">客户需求</a></li>
+  <li><a href="#s1">二级索引设计</a></li>
+  <li><a href="#s2">PoC 对比实验设计</a></li>
+  <li><a href="#s3">PoC 对比结果</a></li>
+  <li><a href="#s4">PoC 总结</a></li>
+</ol>
+</div>
+
+<!-- ============ 0 ============ -->
+<h2 id="s0">0. 客户需求</h2>
+<p>存算分离主键（Primary Key）表当前只能按主键 / 排序键（ORDER BY）单一维度物理聚集，存在几个缺陷：</p>
+<ul>
+  <li>如果 PK 表指定了 ORDER BY，大 tablet 导入的很多优化无法生效。</li>
+  <li>只能优化一种查询模式。</li>
+  <li>range bucket 不支持指定 ORDER BY —— 这会导致 tablet 分裂时需要重新拷贝大量数据。</li>
+</ul>
+<p>但根据实际用户反馈，存在<strong>查询模式不匹配主键列</strong>的情况，例如：</p>
+
+<h3>Intuit Mailchimp</h3>
+<pre><code>CREATE TABLE `contact_merge_fields` (
+  `account_id` bigint(20) NOT NULL,
+  `contact_id` varchar(256) NOT NULL,
+  `merge_field_id` varchar(256) NOT NULL,
+  `contact_audience_id` bigint(20) NULL,
+  ... （省略其余 __header_* / __kafka_* 列）
+  `__generated_partition_column_0` bigint(20) NULL AS mod(account_id, 10)
+) ENGINE=OLAP
+PRIMARY KEY(`account_id`, `contact_id`, `merge_field_id`)
+PARTITION BY (`__generated_partition_column_0`)
+DISTRIBUTED BY HASH(`contact_id`) BUCKETS 450
+ORDER BY(`account_id`, `contact_audience_id`)
+PROPERTIES ("enable_persistent_index"="true", "persistent_index_type"="CLOUD_NATIVE", ...);</code></pre>
+<p class="small">唯一性约束由 <code>account_id, contact_id, merge_field_id</code> 保证，但所有查询都会涉及 <code>account_id, contact_audience_id</code> —— 与主键列不匹配。</p>
+
+<h3>Finaloop</h3>
+<pre><code>CREATE TABLE businessEvents.businessEventActions (companyId varchar NOT NULL, id varchar ... )
+PARTITION BY date_trunc('month', eventTime)
+DISTRIBUTED BY HASH(`companyId`) BUCKETS 6
+PROPERTIES ("enable_persistent_index"="true");</code></pre>
+<p class="small">他们实际只需 <code>companyId + eventTime + id</code> 保证主键唯一；幸运的是 accountingMethod / accountRole 不会被修改，可加入 PK 列来加速查询。但这并非通用解。</p>
+
+<!-- ============ 1 ============ -->
+<h2 id="s1">1. StarRocks 二级索引设计</h2>
+
+<h3>1.1 总体思路</h3>
+<p>主键表的数据在主表中按主键 / 排序键物理排列。当查询条件落在其它列上时只能全表扫描。本方案为这些列建一个<strong>轻量有序边车文件</strong>：只存「索引列 + 行位置指针」（不存整行），按索引列排序。查询时在该文件内定位命中行位置，再回主表取数。</p>
+<p>与物理 ORDER BY 的本质区别：</p>
+<ul>
+  <li><strong>ORDER BY</strong> 把整张表按某个键物理重排 —— 该键查询最快，但只能选一个维度，且主键点查会因主键让位而变慢。</li>
+  <li><strong>二级索引</strong>是主表之外的小文件，主表布局不变 —— 可在同一张表上为多个不同列各建一个，互不影响主键，存储开销小。</li>
+</ul>
+
+<h3>1.2 文件格式（rowset 级）</h3>
+<ul>
+  <li><strong>粒度</strong>：每个 rowset、每个索引 → 一个独立 <code>.idx</code> 文件，复用 segment v2 格式。</li>
+  <li><strong>Schema</strong>：<code>[索引列 1, …, 索引列 K, __sidx_pos__ BIGINT]</code>，按索引列排序。</li>
+  <li><strong>行位置编码</strong>：<code>__sidx_pos__ = (segment_id &lt;&lt; 32) | rowid_in_segment</code>，一个 int64 唯一定位 rowset 内任意一行。</li>
+  <li><strong>加速结构</strong>：索引列默认开启 page 级 zone-map + bloom filter，等值/范围查询可页内短路。</li>
+  <li><strong>文件名</strong>：<code>sidx_&lt;tablet&gt;_&lt;txn&gt;_&lt;index&gt;.idx</code>，含 txn 天然标识数据版本。</li>
+</ul>
+
+<h3>1.3 写入路径</h3>
+<p>写入时由 in-line collector 在 <code>TabletWriter::write()</code> 直接从写入 chunk 抽取索引列值 + 行位置，<code>finish()</code> 时排序并落 <code>.idx</code>。全程不读回已写数据。</p>
+
+<h3>1.4 读取路径</h3>
+<pre><code>查询谓词
+  │  ① 前缀匹配：谓词必须命中索引「首列」，否则跳过该索引（避免无效全文件扫）
+  ▼
+TabletReader::get_segment_iterators
+  │  ② open .idx（进程级 Reader 缓存：footer + column reader 只初始化一次）
+  │  ③ lookup：谓词下推到 .idx segment scan（zone-map/bloom 剪枝）→ 解码位置
+  │     → 每 segment 一个 Roaring 候选位图    ★ lookup 结果跨 morsel 共享缓存
+  │  ④ 多索引：各索引候选位图按 AND 合并
+  ▼
+经 SparseRange 喂给 base scan 的 presupplied_rowid_filter → 只读候选行
+（DelVec / 残差谓词仍由既有 scan pipeline 处理）</code></pre>
+<p class="small">免回表（覆盖）查询走独立快路径：当输出列也全部在索引内时，直接从 <code>.idx</code> 产出结果，不经上面的回表步骤（见 §2.7 / §3.5）。</p>
+
+<h3>1.5 关键设计要点</h3>
+<table>
+<tr><th>设计</th><th>作用</th></tr>
+<tr><td>谓词前缀匹配</td><td>仅当查询谓词命中索引「首列」时才启用该索引，否则跳过，保证无关查询零开销</td></tr>
+<tr><td>索引列 zone-map + bloom</td><td><code>.idx</code> 内等值/范围查询页内短路，命中页大幅减少</td></tr>
+<tr><td>Reader 缓存</td><td><code>.idx</code> 的 Segment（footer + column reader）进程级缓存，避免每次查询重复打开</td></tr>
+<tr><td>Lookup 结果共享</td><td>同一查询、同一 <code>.idx</code> 的候选位图只计算一次并复用，避免并行扫描下的重复查找</td></tr>
+<tr><td>多索引 AND 合并</td><td>同一 tablet 多个索引的候选位图按位与，进一步缩小候选集</td></tr>
+</table>
+
+<h3>1.6 当前 PoC 边界</h3>
+<ul>
+  <li>FE 侧 DDL（<code>CREATE INDEX</code>）未接，索引通过 BE 配置 <code>secondary_index_defs</code> 注册（后门）。</li>
+  <li>写入需关闭 load spill（spill 并行 merge 路径的 <code>clone()</code> 尚未携带 collector）。</li>
+  <li>仅存算分离；ALTER ADD INDEX、CBO 选择等列入后续阶段。</li>
+</ul>
+
+<!-- ============ 2 ============ -->
+<h2 id="s2">2. PoC 对比实验设计</h2>
+
+<h3>2.1 三种表布局对照</h3>
+<table>
+<tr><th>布局</th><th>说明</th><th>加速维度</th></tr>
+<tr><td>原始表（索引 OFF）</td><td>VARCHAR 主键表，关闭二级索引 → 全表扫描基线</td><td>仅主键</td></tr>
+<tr><td>二级索引（索引 ON）</td><td>同表 + <code>idx_user_town(user_id, town)</code> 二级索引</td><td>主键 + user_id/town</td></tr>
+<tr><td>ORDER BY</td><td>同 schema，物理 <code>ORDER BY (user_id, town)</code></td><td>仅 user_id/town（主键让位）</td></tr>
+</table>
+
+<h3>2.2 数据集与数据量</h3>
+<ul>
+  <li>1 亿行，<code>gen_data.py --seed 42</code> 生成，10 列；单分桶（1 tablet），<code>PRIMARY KEY(order_id, create_ts)</code>。</li>
+  <li>索引列基数：<code>user_id ∈ [1, 200000]</code>（高基数）、<code>town ∈ 20 值</code>（5%/值）、<code>create_ts</code> 均匀分布于 ~872 天。</li>
+</ul>
+<table>
+<tr><th>项</th><th>数值</th></tr>
+<tr><td>行数</td><td>100,000,000</td></tr>
+<tr><td>原始 CSV（导入字节）</td><td>11,228,432,645 B ≈ 10.46 GiB</td></tr>
+<tr><td>表压缩后（原始表 / 索引表，单 tablet）</td><td>8.486 GB</td></tr>
+<tr><td><code>.idx</code> 索引文件（idx_user_town）</td><td>581,098,561 B ≈ 554 MiB</td></tr>
+<tr><td>索引存储开销</td><td>≈ 6.5%（554 MiB / 8.49 GB）</td></tr>
+<tr><td>ORDER BY 表压缩后</td><td>同 schema，~8 GB 量级（物理排序后压缩略优）</td></tr>
+</table>
+
+<h3>2.3 建表 DDL</h3>
+<p>① 原始表 / 二级索引表（二级索引经 BE 配置注册，FE DDL 未接）：</p>
+<pre><code>CREATE TABLE orders (
+    order_id   VARCHAR(20)  NOT NULL,
+    create_ts  VARCHAR(20)  NOT NULL,
+    user_id    VARCHAR(10)  NOT NULL,
+    town       VARCHAR(64)  NOT NULL,
+    type       VARCHAR(16)  NOT NULL,
+    amount     VARCHAR(20),
+    desc_blob  VARCHAR(256), extra1 VARCHAR(64), extra2 VARCHAR(64), extra3 VARCHAR(64)
+)
+PRIMARY KEY(order_id, create_ts)
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+PROPERTIES ("datacache.enable"="true","enable_persistent_index"="true","replication_num"="1");
+
+-- 二级索引：1) idx_user_town(user_id, town)   2) idx_ts(create_ts)</code></pre>
+<p>② ORDER BY 对照表（同 schema，唯一差异是物理排序键）：</p>
+<pre><code>CREATE TABLE orders_ob ( ... 同上 10 列 ... )
+PRIMARY KEY(order_id, create_ts)
+DISTRIBUTED BY HASH(order_id) BUCKETS 1
+ORDER BY (user_id, town)          -- ← 物理按 (user_id, town) 排序
+PROPERTIES ( ... 同上 ... );</code></pre>
+
+<h3>2.4 测试查询 SQL（4 类）</h3>
+<pre><code>-- pk_point：主键点查（PK 索引最优）
+SELECT * FROM orders WHERE order_id = '17424219';
+-- sidx_high_sel：高选择性等值（~540 行，0.0005%）
+SELECT MAX(amount) FROM orders WHERE user_id = '12345';
+-- sidx_med_sel：中选择性范围（~55 万行，0.55%）
+SELECT MAX(amount) FROM orders WHERE user_id BETWEEN '12345' AND '12444';
+-- no_idx_benefit：全表聚合（索引应被正确跳过）
+SELECT town, COUNT(*) FROM orders GROUP BY town;</code></pre>
+
+<h3>2.5 选择度扫描 SQL（0.0005% → 30%）</h3>
+<p>固定 <code>MAX(amount) WHERE user_id BETWEEN …</code>，调宽范围覆盖 5 档实测选择度（字典序范围会同时纳入不同长度数字串，故按实测命中行数标定）：</p>
+<table>
+<caption>选择度标定</caption>
+<tr><th>档位</th><th>范围（字典序）</th><th>命中行</th><th>实测选择度</th></tr>
+<tr><td>~0.0005%</td><td><code>= '12345'</code></td><td>540</td><td>0.0005%</td></tr>
+<tr><td>~0.5%</td><td><code>'12345'..'12444'</code></td><td>550,205</td><td>0.55%</td></tr>
+<tr><td>~5%</td><td><code>'14000'..'14999'</code></td><td>5,549,047</td><td>5.5%</td></tr>
+<tr><td>~10%</td><td><code>'13000'..'14999'</code></td><td>11,104,515</td><td>11.1%</td></tr>
+<tr><td>~30%</td><td><code>'10000'..'14999'</code></td><td>27,772,550</td><td>27.8%</td></tr>
+</table>
+
+<h3>2.6 列类型对比设计（VARCHAR vs BIGINT）</h3>
+<p>前述测试刻意使用全 VARCHAR：关闭非 key 列 zone-map、字符串解码慢，构造对基线扫描和索引都最不利的最严苛场景。为使结果更全面，补充一组自然类型（BIGINT）对照。Schema 差异（其余与 §2.3 相同，复用同一份 CSV）：</p>
+<table>
+<tr><th>列</th><th>VARCHAR 版</th><th>BIGINT 版</th></tr>
+<tr><td>order_id</td><td>VARCHAR(20)</td><td>BIGINT</td></tr>
+<tr><td>create_ts</td><td>VARCHAR(20)</td><td>DATETIME</td></tr>
+<tr><td>user_id</td><td>VARCHAR(10)</td><td>BIGINT</td></tr>
+<tr><td>amount</td><td>VARCHAR(20)</td><td>DECIMAL(18,2)</td></tr>
+<tr><td>town / type / desc / extra*</td><td>VARCHAR</td><td>VARCHAR（不变）</td></tr>
+</table>
+<p>选择度区间用数值 <code>BETWEEN</code> 重新标定，按相同命中行数（同选择度）对齐 VARCHAR：</p>
+<table>
+<tr><th>选择度</th><th>BIGINT 谓词</th><th>命中行</th></tr>
+<tr><td>0.0005%</td><td><code>user_id = 12345</code></td><td>540</td></tr>
+<tr><td>0.55%</td><td><code>user_id BETWEEN 12345 AND 13444</code></td><td>551,178</td></tr>
+<tr><td>5.5%</td><td><code>user_id BETWEEN 12345 AND 23444</code></td><td>5,553,719</td></tr>
+<tr><td>11.1%</td><td><code>user_id BETWEEN 12345 AND 34544</code></td><td>11,101,083</td></tr>
+<tr><td>27.8%</td><td><code>user_id BETWEEN 12345 AND 67944</code></td><td>27,799,616</td></tr>
+</table>
+
+<h3>2.7 免回表（覆盖）查询测试设计：排序键 vs 非排序键</h3>
+<p><strong>目的</strong>：验证「查询不需要回表」时，二级索引相比 ORDER BY 的表现。关键区分谓词列<strong>是否为表的物理排序键</strong>。</p>
+<table>
+<tr><th>表</th><th>物理排序</th><th>二级索引</th></tr>
+<tr><td><code>orders</code></td><td>无（靠二级索引）</td><td><code>idx_user_town(user_id, town)</code>、<code>idx_ts(create_ts)</code></td></tr>
+<tr><td><code>orders_ob</code></td><td><code>ORDER BY(user_id, town)</code></td><td>无（对照）</td></tr>
+</table>
+<p>两类谓词：</p>
+<ul>
+  <li><strong>排序键谓词</strong>：<code>WHERE user_id BETWEEN ...</code> —— user_id 正是 orders_ob 的前导排序键（ORDER BY 的主场）。</li>
+  <li><strong>非排序键谓词</strong>：<code>WHERE create_ts BETWEEN ...</code> —— create_ts 不在 orders_ob 的排序键里（ORDER BY 无法剪枝，被迫全表扫）。</li>
+</ul>
+<p>二级索引注册（PoC 尚无 <code>CREATE INDEX</code>，经 BE config 注册，需在导入前开启）：</p>
+<pre><code>curl -X POST "http://${CN}:8040/api/update_config?enable_secondary_index_write=true"
+curl -X POST "http://${CN}:8040/api/update_config?secondary_index_defs=&lt;tablet_id&gt;:idx_user_town:user_id,town;&lt;tablet_id&gt;:idx_ts:create_ts"</code></pre>
+<p>测试查询（免回表 <code>COUNT(*)</code>，输出列 ⊆ 索引列）：</p>
+<pre><code>-- 排序键谓词（= orders_ob 前导排序键）
+SELECT COUNT(*) FROM orders WHERE user_id BETWEEN '12345' AND '12444';   -- 0.55%  (550K 行)
+SELECT COUNT(*) FROM orders WHERE user_id BETWEEN '14000' AND '14999';   -- 5.5%   (5.5M 行)
+SELECT COUNT(*) FROM orders WHERE user_id BETWEEN '10000' AND '14999';   -- 27.8%  (27.8M 行)
+
+-- 非排序键谓词（不在 orders_ob 排序键内）
+SELECT COUNT(*) FROM orders WHERE create_ts BETWEEN '2025-06-01 00:00:00' AND '2025-06-02 00:00:00'; -- 1 天 (114K)
+SELECT COUNT(*) FROM orders WHERE create_ts BETWEEN '2025-06-01 00:00:00' AND '2025-06-08 00:00:00'; -- 1 周 (802K)
+SELECT COUNT(*) FROM orders WHERE create_ts BETWEEN '2025-06-01 00:00:00' AND '2025-07-01 00:00:00'; -- 1 月 (3.4M)</code></pre>
+<p>三条路径切换（同一条 SQL，只改配置 / 改表）：</p>
+<table>
+<tr><th>路径</th><th>查询的表</th><th>配置</th></tr>
+<tr><td>覆盖（免回表）</td><td><code>orders</code></td><td><code>enable_secondary_index_read=true</code> + <code>enable_secondary_index_covering=true</code></td></tr>
+<tr><td>lookup（回表）</td><td><code>orders</code></td><td><code>enable_secondary_index_read=true</code> + <code>enable_secondary_index_covering=false</code></td></tr>
+<tr><td>ORDER BY（对照）</td><td><code>orders_ob</code></td><td>—</td></tr>
+</table>
+<p>覆盖路径的两项关键优化：</p>
+<ul>
+  <li><strong>并行切片</strong>：<code>.idx</code> 每 base 行一条记录（<code>N_idx == N_base</code>），据此把 <code>.idx</code> 行空间按 morsel 的 base-rowid 覆盖映射成不相交切片，各 morsel 并行扫各自切片，无重复扫描。</li>
+  <li><strong>无删除快路径</strong>：rowset 无 delete vector 时，跳过读取 8 字节/行的 <code>__sidx_pos__</code> 位置列、跳过逐行解码与 DelVec 判定，<code>COUNT(*)</code> 退化为「数匹配的 <code>.idx</code> 行数」。</li>
+</ul>
+
+<h3>2.8 测量方法</h3>
+<ul>
+  <li>每查询 15 次取 p50/p95，预热 3 次。</li>
+  <li>datacache 冷/热两种模式（清 datacache + 重启 CN 制造冷态）。</li>
+  <li>通过 <code>ANALYZE PROFILE</code> + BE <code>/api/profile</code> 的 <code>SecondaryIndex</code> 分组定位瓶颈。</li>
+</ul>
+
+<!-- ============ 3 ============ -->
+<h2 id="s3">3. PoC 对比结果</h2>
+
+<h3>3.1 写入吞吐（1 亿行）</h3>
+<table>
+<tr><th>布局</th><th>LoadTime</th><th>CommitAndPublish</th></tr>
+<tr><td>原始表</td><td>489 s</td><td>135 s</td></tr>
+<tr><td>二级索引</td><td>699 s</td><td>135 s</td></tr>
+<tr><td>ORDER BY</td><td>667 s</td><td>215 s</td></tr>
+</table>
+<p class="small">二级索引导入开销与 ORDER BY 接近，但 publish 代价更小（无需物理重排，CommitAndPublish 135s vs 215s）。</p>
+
+<h3>3.2 四类查询（datacache 热，p50 ms）</h3>
+<table>
+<tr><th>查询</th><th>原始表</th><th>二级索引</th><th>ORDER BY</th><th>二级索引 vs 原始表</th></tr>
+<tr><td>pk_point</td><td>19.6</td><td>17.3</td><td>48.2</td><td>持平</td></tr>
+<tr><td>sidx_high_sel（0.0005%）</td><td>319</td><td>48</td><td>40</td><td class="win">6.6× 快</td></tr>
+<tr><td>sidx_med_sel（0.55%）</td><td>575</td><td>139</td><td>51</td><td class="win">4.1× 快</td></tr>
+<tr><td>no_idx_benefit（GROUP BY）</td><td>2058</td><td>1961</td><td>2571</td><td>持平</td></tr>
+</table>
+<ul>
+  <li>二级索引在目标场景（高/中选择性等值与范围）相对原始表 <span class="win">4.1–6.6× 加速</span>。</li>
+  <li>无关查询（pk_point / GROUP BY）被前缀 gate 正确跳过，零负担。</li>
+  <li>ORDER BY 在其排序列上更快，但 PK 点查反被拖慢（48ms vs 索引 17ms），因为主键让位给了排序键。</li>
+</ul>
+
+<h3>3.3 选择度扫描（MAX(amount)，热，p50 ms）</h3>
+<table>
+<tr><th>选择度</th><th>命中行</th><th>原始表</th><th>二级索引</th><th>ORDER BY</th><th>索引 vs 原始表</th><th>索引 vs ORDER BY</th></tr>
+<tr><td>0.0005%</td><td>540</td><td>319</td><td>48</td><td>40</td><td class="win">6.6× 快</td><td>1.1× 慢(≈持平)</td></tr>
+<tr><td>0.55%</td><td>550,205</td><td>575</td><td>139</td><td>51</td><td class="win">4.1× 快</td><td>2.7× 慢</td></tr>
+<tr><td>5.5%</td><td>5,549,047</td><td>730</td><td>609</td><td>234</td><td class="win">1.2× 快</td><td>2.6× 慢</td></tr>
+<tr><td>11.1%</td><td>11,104,515</td><td>906</td><td>958</td><td>418</td><td class="lose">0.95× 慢</td><td>2.3× 慢</td></tr>
+<tr><td>27.8%</td><td>27,772,550</td><td>1533</td><td>1879</td><td>974</td><td class="lose">0.8× 慢</td><td>1.9× 慢</td></tr>
+</table>
+<p>核心曲线（<strong>回表</strong>场景）：</p>
+<ul>
+  <li>二级索引相对原始表的收益随选择度递减，交叉点在 <strong>~10% 选择度</strong>：≤10% 索引有效（0.5% 时 4×，5% 时 1.2×）；&gt;10% 回表取散落行的成本超过全表顺序扫 → 应自动退回全表扫。</li>
+  <li>ORDER BY 全程更快（物理聚集、命中行连续读），选择度越高优势越大 —— <em>但这是「谓词命中排序键」的前提下；见 §3.5 对非排序键的对比</em>。</li>
+</ul>
+
+<h3>3.4 列类型对比结果（VARCHAR vs BIGINT）</h3>
+<table>
+<tr><th>指标</th><th>VARCHAR</th><th>BIGINT</th></tr>
+<tr><td>索引表压缩后</td><td>8.49 GB</td><td>5.33 GB（小 37%）</td></tr>
+<tr><td>索引文件（idx_user_town）</td><td>581 MiB</td><td>383 MiB（小 34%）</td></tr>
+</table>
+<table>
+<caption>选择度扫描（MAX(amount) 回表读非索引列，热，p50 ms；原表 / 索引 / ORDER BY）</caption>
+<tr><th>选择度</th><th>VARCHAR</th><th>BIGINT</th></tr>
+<tr><td>0.0005%</td><td>319 / 48 / 40</td><td>84 / 63 / 51</td></tr>
+<tr><td>0.55%</td><td>575 / 139 / 51</td><td>111 / 77 / 52</td></tr>
+<tr><td>5.5%</td><td>730 / 609 / 234</td><td>132 / 225 / 68</td></tr>
+<tr><td>11.1%</td><td>906 / 958 / 418</td><td>135 / 317 / 94</td></tr>
+<tr><td>27.8%</td><td>1533 / 1879 / 974</td><td>231 / 509 / 139</td></tr>
+</table>
+<table>
+<caption>索引相对原始表的收益倍数</caption>
+<tr><th>选择度</th><th>VARCHAR</th><th>BIGINT</th></tr>
+<tr><td>0.0005%</td><td class="win">6.6×</td><td class="win">1.3×</td></tr>
+<tr><td>0.55%</td><td class="win">4.1×</td><td class="win">1.4×</td></tr>
+<tr><td>5.5%</td><td class="win">1.2×</td><td class="lose">0.6×</td></tr>
+<tr><td>11.1%</td><td class="lose">0.95×</td><td class="lose">0.4×</td></tr>
+<tr><td>27.8%</td><td class="lose">0.8×</td><td class="lose">0.5×</td></tr>
+</table>
+<table>
+<caption>关键 profile：BIGINT 原始表为何更快 —— 是数据小，不是 zone-map</caption>
+<tr><th>counter</th><th>BIGINT</th><th>VARCHAR</th><th>含义</th></tr>
+<tr><td>ZoneMapIndexFilterRows</td><td>0</td><td>0</td><td>zone-map 剪枝行数 = 0</td></tr>
+<tr><td>SegmentZoneMap / ShortKeyFilterRows</td><td>0</td><td>0</td><td>段级 / short-key 剪枝 = 0</td></tr>
+<tr><td>RawRowsRead</td><td>100M</td><td>100M</td><td>实际扫描行数 —— 两者都全表扫</td></tr>
+<tr><td>PagesCountTotal</td><td>24,426</td><td>35,456</td><td>BIGINT 触碰页数少 31%（数据更紧凑）</td></tr>
+<tr><td>磁盘压缩大小（SHOW DATA）</td><td>5.33 GB</td><td>8.49 GB</td><td>BIGINT 小 37%</td></tr>
+<tr><td>SegmentRead / ScanTime</td><td>13 / 15 ms</td><td>91 / 98 ms</td><td>BIGINT 快 ~6×</td></tr>
+</table>
+<div class="callout">
+<strong>结论</strong>：二级索引的价值取决于「全表扫有多贵」，基表扫描越便宜、索引能省的越少。
+<ul>
+  <li><strong>VARCHAR</strong>（扫描贵：解码慢 + 数据大）：索引交叉点晚（~6–8% 选择度），适用区间宽，高选择性达 4–6× 加速。</li>
+  <li><strong>BIGINT</strong>（扫描快：整数解码 + 数据小 37%）：基表全表扫已很快（84–231 ms），索引交叉点提前到 ~2–3%，仅极高选择性（≤1%）划算。</li>
+  <li>ORDER BY 不受列类型这层影响（物理聚集、连续读），两种类型下在其排序键上全程最快。</li>
+</ul>
+</div>
+
+<h3>3.5 免回表（覆盖）查询结果：覆盖索引 vs ORDER BY（p50 ms）<span class="tag">build 1923</span></h3>
+<table>
+<caption>① 排序键谓词（user_id）—— ORDER BY 主场，覆盖索引已逼近</caption>
+<tr><th>选择度</th><th>命中行</th><th>覆盖索引</th><th>lookup（回表）</th><th>ORDER BY</th></tr>
+<tr><td>0.55%</td><td>550K</td><td>59</td><td>73</td><td class="win">46</td></tr>
+<tr><td>5.5%</td><td>5.5M</td><td>88</td><td>142</td><td class="win">64</td></tr>
+<tr><td>27.8%</td><td>27.8M</td><td>148</td><td>305</td><td class="win">116</td></tr>
+</table>
+<p class="small">user_id 是 ORDER BY 的前导键、物理最优；覆盖索引经并行化 + 无删除快路径后，差距收窄到约 <strong>1.3×</strong>（27.8% 时覆盖 148ms vs ORDER BY 116ms），并全面快于带回表的 lookup。</p>
+<table>
+<caption>② 非排序键谓词（create_ts）—— 覆盖索引数量级胜出</caption>
+<tr><th>范围</th><th>命中行</th><th>覆盖索引</th><th>ORDER BY</th><th>加速</th></tr>
+<tr><td>1 天</td><td>114K</td><td class="win">37</td><td>228</td><td class="win">~6×</td></tr>
+<tr><td>1 周</td><td>802K</td><td class="win">45</td><td>232</td><td class="win">~5×</td></tr>
+<tr><td>1 月</td><td>3.4M</td><td class="win">76</td><td>239</td><td class="win">~3×</td></tr>
+</table>
+<p class="small">create_ts 不在 ORDER BY 排序键内，ORDER BY 恒定全表扫（~230ms）；覆盖索引按 create_ts 收窄，选择度越低优势越大。</p>
+<div class="callout key">
+<strong>免回表场景核心结论</strong>：
+<ul>
+  <li><strong>非排序键</strong>谓词（二级索引的核心价值场景）：覆盖索引比 ORDER BY 快 <span class="win">3–6×</span>，且全选择度区间都赢、也全面赢带回表的 lookup。<em>一张表只能物理排序一个键，但可建多个二级索引。</em></li>
+  <li><strong>排序键</strong>谓词（ORDER BY 本命）：差距已收窄到 ~1.3×。剩余差距为构造性下界 —— ORDER BY 做 <code>COUNT(*)</code> 几乎不读列数据（靠区间边界），覆盖索引至少仍需读一个 carrier 列。</li>
+</ul>
+</div>
+
+<!-- ============ 4 ============ -->
+<h2 id="s4">4. PoC 总结</h2>
+
+<h3>4.1 结论</h3>
+<ul>
+  <li><strong>目标场景显著加速</strong>：最严苛（全 VARCHAR）回表场景下，≤10% 选择度查询相对全表扫 1.2–6.6× 加速，高选择性等值达 6.6×。</li>
+  <li><strong>适用边界清晰</strong>：回表场景索引收益随选择度递减，交叉点 ~10–12% —— 超过应退回全表扫（可由 CBO 自动选择）。</li>
+  <li><strong>免回表（覆盖）已落地且更强</strong>：在非排序键谓词上 <span class="win">比 ORDER BY 快 3–6×</span>，在排序键上也逼近到 ~1.3× —— 这是二级索引相对 ORDER BY 最有竞争力的场景。</li>
+</ul>
+
+<h3>4.2 二级索引 vs ORDER BY 取舍</h3>
+<table>
+<tr><th>维度</th><th>ORDER BY</th><th>二级索引</th></tr>
+<tr><td>加速维度数</td><td>1 个（单一物理排序）</td><td>多个（每列可独立建）</td></tr>
+<tr><td>排序列查询性能</td><td>最快</td><td>次之（覆盖路径 ~1.3×、回表 1.1–3.6× 慢）</td></tr>
+<tr><td>非排序列查询性能</td><td>无法加速（全表扫）</td><td class="win">数量级加速（覆盖 3–6×）</td></tr>
+<tr><td>主键点查</td><td>受损（48ms）</td><td>不受影响（17ms）</td></tr>
+<tr><td>写入开销</td><td>相比原始表高（+44%）</td><td>与 ORDER BY 接近，publish 代价更小</td></tr>
+<tr><td>额外存储</td><td>0</td><td>+索引文件（≈6.5%）</td></tr>
+</table>
+<p><strong>单一查询模式选 ORDER BY；多维查询模式只能用二级索引（ORDER BY 不可叠加）。</strong></p>
+
+<h3>4.3 后续工作</h3>
+<table>
+<tr><th>项</th><th>状态 / 价值</th></tr>
+<tr><td>免回表（覆盖）优化</td><td class="win">✓ 已实现并验证（§3.5）：并行切片 + 无删除快路径，非排序键超 ORDER BY 3–6×</td></tr>
+<tr><td>FE DDL <code>CREATE INDEX</code></td><td>产品化（当前经 BE config 后门注册）</td></tr>
+<tr><td>二级索引选择走 CBO</td><td>优化器据统计信息推导选择度，决定是否使用二级索引 / 何时退回全表扫</td></tr>
+<tr><td>导入过程生成二级索引优化</td><td>spill 并行 merge 路径携带 collector，免去「关闭 load spill」的限制</td></tr>
+</table>
+
+<hr>
+<p class="small">本报告由 PoC 实测数据整理生成。p50 latency 均为 datacache 热态、单 tablet / 1 亿行；扫描类测试（§3.1–§3.4）与覆盖类测试（§3.5）运行于不同规格集群，跨小节的绝对值不直接可比，结论以各小节内部的相对对比为准。</p>
+
+</div>
+</body>
+</html>

@@ -31,6 +31,7 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
+#include "storage/index/secondary_sorted/collector.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
@@ -170,8 +171,22 @@ Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, Segmen
         RETURN_IF_ERROR(flush_segment_writer(segment));
         RETURN_IF_ERROR(reset_segment_writer(eos));
     }
+    // Snapshot the segment id + base rowid *before* the chunk is appended;
+    // the secondary-index collector pairs these with each row so the index
+    // file can later decode (seg_id, rowid_in_segment) at lookup time.
+    const uint32_t collector_seg_id = _seg_writer->segment_id();
+    const uint32_t collector_base_rowid = _seg_writer->num_rows_written();
     RETURN_IF_ERROR(_seg_writer->append_chunk(data));
     _num_rows += data.num_rows();
+    if (_sidx_collector && !_sidx_collector->empty()) {
+        RETURN_IF_ERROR(_sidx_collector->add_chunk(data, collector_seg_id, collector_base_rowid));
+        // Bound build memory: when any index buffer reaches the configured
+        // size, flush it into a sorted run file. Index data for one
+        // (rowset, index) therefore spans multiple run files.
+        if (_sidx_collector->should_flush()) {
+            RETURN_IF_ERROR(_sidx_collector->flush_ready(_fs, _tablet_mgr));
+        }
+    }
     return Status::OK();
 }
 
@@ -181,6 +196,15 @@ Status HorizontalGeneralTabletWriter::flush(SegmentPB* segment) {
 
 Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
     RETURN_IF_ERROR(flush_segment_writer(segment));
+    // Drain the secondary-index collector AFTER the last segment finalises:
+    // we want every row to have already been counted by add_chunk() before
+    // we sort and write the index files. Index files are written directly
+    // (no bundle), so they become OSS-visible at finalize() time and can
+    // be referenced from the rowset PB immediately.
+    if (_sidx_collector && !_sidx_collector->empty()) {
+        ASSIGN_OR_RETURN(auto pbs, _sidx_collector->finalize(_fs, _tablet_mgr));
+        _sidx_files.insert(_sidx_files.end(), std::make_move_iterator(pbs.begin()), std::make_move_iterator(pbs.end()));
+    }
     _finished = true;
     return Status::OK();
 }

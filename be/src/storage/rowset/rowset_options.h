@@ -21,6 +21,7 @@
 #include "column/column_access_path.h"
 #include "column/global_dict/types.h"
 #include "compute_env/runtime_range_pruner.h"
+#include "roaring/roaring.hh"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/runtime_filter_predicate.h"
@@ -102,6 +103,11 @@ public:
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+
+    // Per-segment rowid candidate set produced by a secondary index lookup
+    // for this rowset. Keyed by the segment's ordinal in the rowset.
+    // Segments not present in the map fall back to the normal full scan.
+    const std::unordered_map<uint32_t, roaring::Roaring>* presupplied_rowid_filter_per_segment = nullptr;
     bool has_predicate_above_iterator = false;
 };
 

@@ -447,6 +447,10 @@ private:
 
     Status _apply_del_vector();
 
+    // Intersect _scan_range with the rowid set produced upstream by a
+    // secondary index lookup. No-op when SegmentReadOptions doesn't carry one.
+    Status _apply_presupplied_rowid_filter();
+
     Status _init_inverted_index_iterators();
 
     Status _apply_inverted_index();
@@ -943,6 +947,10 @@ Status SegmentIterator::_init_internal() {
     }
     // Support prefilter for now
     RETURN_IF_ERROR(_apply_bitmap_index());
+    // Secondary index narrows scan_range right after bitmap index so
+    // downstream zone-map / bloom / inverted index see the smaller range.
+    // DelVec subtraction at the end still applies on top.
+    RETURN_IF_ERROR(_apply_presupplied_rowid_filter());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
     RETURN_IF_ERROR(_apply_inverted_index());
@@ -3980,6 +3988,33 @@ Status SegmentIterator::_apply_del_vector() {
         _scan_range = roaring2range(row_bitmap);
         size_t filtered_rows = row_bitmap.cardinality();
         _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_presupplied_rowid_filter() {
+    RETURN_IF(_scan_range.empty(), Status::OK());
+    if (_opts.presupplied_rowid_filter == nullptr) return Status::OK();
+    if (_opts.presupplied_rowid_filter->isEmpty()) {
+        // Index reported zero candidates for this segment -- the entire
+        // segment can be skipped.
+        _scan_range.clear();
+        return Status::OK();
+    }
+    const size_t before = _scan_range.span_size();
+    // Intersect _scan_range with the supplied rowid bitmap. We convert
+    // through SparseRange so the existing _scan_range semantics (ordering,
+    // splitting) stay intact.
+    SparseRange<> filter_range = roaring2range(*_opts.presupplied_rowid_filter);
+    _scan_range = _scan_range.intersection(filter_range);
+    if (_opts.stats != nullptr) {
+        // intersection() can only shrink the range, so after <= before always.
+        const size_t after = _scan_range.span_size();
+        _opts.stats->secondary_index_filtered_rows += (before - after);
+        // Candidate rows that survived pruning and are read back through the
+        // index, counted here (per segment, per morsel) so the total is
+        // partitioned by scan range rather than inflated by the morsel count.
+        _opts.stats->secondary_index_candidate_rows += after;
     }
     return Status::OK();
 }

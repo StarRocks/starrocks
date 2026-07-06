@@ -1,0 +1,70 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Forward declarations for the lake PK secondary index configs. Mirrors
+// the canonical declarations in be/src/common/config.h so that translation
+// units in the secondary_sorted module and the hook sites (delta_writer /
+// horizontal_compaction / vertical_compaction / tablet_reader) can pull
+// just these symbols without dragging in the full config.h.
+
+#pragma once
+
+#include "common/configbase.h"
+
+namespace starrocks::config {
+
+// Enable building secondary index files during load and compaction.
+CONF_mBool(enable_secondary_index_write, "false");
+// Enable using secondary index files during query.
+CONF_mBool(enable_secondary_index_read, "false");
+// Memory limit (in MB) for sorting (idx_cols, seg_id, rowid) entries.
+CONF_mInt64(secondary_index_build_mem_limit_mb, "512");
+// Per-(tablet,index) in-memory write buffer size (MB). When a buffer reaches
+// this size during load/compaction it is flushed into one sorted run file,
+// bounding build memory and producing multiple runs per (rowset, index).
+CONF_mInt64(secondary_index_buffer_mb, "100");
+// Per-BE index registry while the FE-side DDL is not yet wired. Format:
+//   "tablet_id:index_name:col1,col2;tablet_id:index_name:col"
+CONF_mString(secondary_index_defs, "");
+// Max number of opened SecondaryIndexReader instances kept in the process-
+// wide LRU cache. Each entry retains an opened Segment (footer + column
+// readers + zone-map index) for a single .idx file. Default 256 covers
+// 256 distinct (tablet, index) pairs at <~100 MB resident metadata.
+CONF_mInt64(secondary_index_reader_cache_capacity, "256");
+// Enable the covering-index fast path: predicate AND output columns all in
+// the index -> answer from .idx (DelVec-filtered), no base-table readback.
+CONF_mBool(enable_secondary_index_covering, "true");
+
+// Multi-index AND selectivity cost gate ("plan A" -- bypass materializing the
+// broadest predicate's position set). Before materializing per-index position
+// sets, a cheap count-probe estimates each index's match ratio; indexes are
+// then ANDed most-selective-first.
+//   * A secondary AND index whose estimated match ratio exceeds this percent
+//     is NOT materialized -- its predicate is left as a residual the base scan
+//     evaluates on the already-narrowed candidate rows (avoids decoding a huge
+//     __sidx_pos__ set + building a huge Roaring for a predicate that barely
+//     narrows the AND).
+CONF_mInt64(secondary_index_and_skip_broad_pct, "10");
+//   * If even the MOST selective applicable index matches more than this
+//     percent of the rowset, skip the index path entirely and full-scan --
+//     a broad single predicate loses to a plain scan (scattered readback).
+//     Empirically a >~10-20% match already makes the index's scattered
+//     readback lose badly to a sequential scan, so the default is 20; tune
+//     per workload (raise it if queries are covering / COUNT-only).
+CONF_mInt64(secondary_index_skip_fullscan_pct, "20");
+//   * Stop intersecting further indexes once the running candidate set is at
+//     or below this many rows -- residual predicates on so few rows are cheap.
+CONF_mInt64(secondary_index_and_stop_rows, "262144");
+
+} // namespace starrocks::config
