@@ -1198,9 +1198,33 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         String dbName = table.getCatalogDBName();
         String tableName = table.getCatalogTableName();
+
+        // File-level sampling is an internal-only knob driven by the background external-table
+        // sample ANALYZE job (see ExternalSampleStatisticsCollectJob), set via the invisible
+        // external_stats_file_sample_ratio/seed session variables on the job's own ConnectContext.
+        // Ordinary user queries never set these, so this is a no-op for them.
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            double ratio = ctx.getSessionVariable().getExternalStatsFileSampleRatio();
+            if (ratio > 0 && ratio < 1.0) {
+                // Mutate in place rather than params.copy(): params may actually be an
+                // IcebergGetRemoteFilesParams (MOR-specific fields), and the base class's
+                // copy() only reconstructs a plain GetRemoteFilesParams, which would silently
+                // drop those subclass fields.
+                params.setFileSampleRatio(ratio);
+                params.setSampleSeed(ctx.getSessionVariable().getExternalStatsSampleSeed());
+            }
+        }
+
         PredicateSearchKey predicateSearchKey = PredicateSearchKey.of(dbName, tableName, params);
         RemoteFileInfoSource baseSource;
-        if (splitTasks.containsKey(predicateSearchKey)) {
+        // File-sampled requests (background ANALYZE SAMPLE) must never read from or write to
+        // splitTasks/scannedTables: that cache is shared across all queries against this table
+        // and is keyed without the sampling ratio, so reusing it here would either serve a
+        // sampled file list to a normal query or silently skip sampling for this request by
+        // reusing a full list cached by cost-estimation-time planning of the same statement.
+        boolean sampled = params.getFileSampleRatio() > 0 && params.getFileSampleRatio() < 1.0;
+        if (!sampled && splitTasks.containsKey(predicateSearchKey)) {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
@@ -1242,7 +1266,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        GetRemoteFilesParams params) {
         CloseableIterator<FileScanTask> iterator =
                 buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
-                        params.isEnableColumnStats(), params.getFieldNames());
+                        params.isEnableColumnStats(), params.getFieldNames(),
+                        params.getFileSampleRatio(), params.getSampleSeed());
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
@@ -1289,6 +1314,21 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                                       ConnectContext connectContext,
                                                                       boolean enableCollectColumnStats,
                                                                       List<String> fieldNames) {
+        // Cost-estimation / metadata-prep callers (collectTableStatisticsAndCacheIcebergSplit)
+        // never sample: file-level sampling only applies to the background sample-ANALYZE
+        // execution path (buildRemoteInfoSource), which passes an explicit ratio below.
+        return buildFileScanTaskIterator(icebergTable, icebergPredicate, tvrVersionRange, connectContext,
+                enableCollectColumnStats, fieldNames, 1.0, 0);
+    }
+
+    private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
+                                                                      Expression icebergPredicate,
+                                                                      TvrVersionRange tvrVersionRange,
+                                                                      ConnectContext connectContext,
+                                                                      boolean enableCollectColumnStats,
+                                                                      List<String> fieldNames,
+                                                                      double fileSampleRatio,
+                                                                      long sampleSeed) {
         if (tvrVersionRange.isEmpty()) {
             return new CloseableIterator<>() {
                 @Override
@@ -1391,9 +1431,24 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             private void openPlannedTaskIterator(Scan tableScan) {
                 fileScanTaskIterable = normalizePlannedTaskIterable(tableScan.planFiles());
-                fileScanTaskIterator = buildSplitFileScanTaskIterator(
+                // Split first, sample second. Splitting is pure byte-offset metadata arithmetic
+                // (no file open), so a dropped unit still costs zero IO either way -- but sampling
+                // at split granularity instead of whole-file granularity bounds the sampled unit
+                // size at targetSplitSize. Raw Iceberg file sizes can vary widely even when writers
+                // target a size, and Bernoulli sampling variance in total sampled rows is driven by
+                // the sum of squared unit sizes, so capping unit size directly bounds that variance
+                // -- without resorting to per-file weighted probabilities, which would bias the
+                // expected sampled row count if done naively (see design doc). A kept/dropped split
+                // still carries its data file's associated delete files correctly scoped, since
+                // Iceberg's own split logic (splitFileScanTask) already handles delete-file scoping
+                // per split range for V2 MOR tables.
+                CloseableIterator<FileScanTask> splitIterator = buildSplitFileScanTaskIterator(
                         fileScanTaskIterable, fileScanTaskIterable.iterator(), tableScan.targetSplitSize(),
                         dbName, tableName, snapshotId);
+                if (fileSampleRatio > 0 && fileSampleRatio < 1.0) {
+                    splitIterator = new BernoulliFileScanTaskIterator(splitIterator, fileSampleRatio, sampleSeed);
+                }
+                fileScanTaskIterator = splitIterator;
             }
 
             private void closePlannedTaskIterator() {
@@ -1868,6 +1923,70 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Both row counts are null. If the manifest has any live files, the count would be
         // a severe under-estimate → caller must fall back to planFiles for exact cardinality.
         return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
+    }
+
+    // Cheap file_count for the background sample-ANALYZE job's ratio decision (see
+    // ExternalSampleStatisticsCollectJob). Snapshot.summary() already carries the live
+    // total-data-files count maintained incrementally by every snapshot producer (Spark/Trino/
+    // Flink/StarRocks writers all populate it) -- O(1), not even a manifest-list read. Only fall
+    // back to summing addedFilesCount/existingFilesCount across dataManifests() (O(manifests),
+    // still zero DataFile opens) when the summary field is absent, e.g. very old/non-standard
+    // table metadata. No predicate: the sample job always scans the whole table in one pass, so
+    // pruning would not change the count.
+    public static long countIcebergFilesFromManifestList(IcebergTable icebergTable, long snapshotId) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTbl.snapshot(snapshotId);
+        if (snapshot == null) {
+            return 0;
+        }
+        Long fromSummary = parseSummaryLong(snapshot, SnapshotSummary.TOTAL_DATA_FILES_PROP);
+        if (fromSummary != null) {
+            return fromSummary;
+        }
+        long count = 0;
+        for (ManifestFile manifest : snapshot.dataManifests(nativeTbl.io())) {
+            Integer added = manifest.addedFilesCount();
+            Integer existing = manifest.existingFilesCount();
+            count += (added != null ? added : 0) + (existing != null ? existing : 0);
+        }
+        return count;
+    }
+
+    // Same shape as countIcebergFilesFromManifestList but for row counts, so the sample job's
+    // ratio can target "roughly how many rows this round reads" rather than "roughly how many
+    // files" -- files can vary wildly in row count, so a file-count-based ratio gives a much less
+    // predictable row volume per round than a row-count-based one. Prefers the live total-records
+    // field on Snapshot.summary() (O(1)); falls back to summing addedRowsCount/existingRowsCount
+    // across dataManifests() (O(manifests), zero data IO) when that field is absent.
+    public static long countIcebergRowsFromManifestList(IcebergTable icebergTable, long snapshotId) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTbl.snapshot(snapshotId);
+        if (snapshot == null) {
+            return 0;
+        }
+        Long fromSummary = parseSummaryLong(snapshot, SnapshotSummary.TOTAL_RECORDS_PROP);
+        if (fromSummary != null) {
+            return fromSummary;
+        }
+        long count = 0;
+        for (ManifestFile manifest : snapshot.dataManifests(nativeTbl.io())) {
+            Long added = manifest.addedRowsCount();
+            Long existing = manifest.existingRowsCount();
+            count += (added != null ? added : 0) + (existing != null ? existing : 0);
+        }
+        return count;
+    }
+
+    private static Long parseSummaryLong(Snapshot snapshot, String key) {
+        String value = snapshot.summary() == null ? null : snapshot.summary().get(key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private IcebergSplitScanTask buildIcebergSplitScanTask(

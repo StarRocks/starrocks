@@ -91,8 +91,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final String catalogName;
     protected List<String> partitionNames;
-    private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    // protected: reused by ExternalSampleStatisticsCollectJob's Iceberg file-sampling path, which
+    // needs to scale sampled row counts before buffering rows (this class's own
+    // collectStatisticSync buffers unscaled counts, so it can't be reused as-is for that path).
+    protected final List<String> sqlBuffer = Lists.newArrayList();
+    protected final List<List<Expr>> rowsBuffer = Lists.newArrayList();
     // Skip collecting statistics for default partition in iceberg table,
     // because we can not generate partition predicates for it.
     private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
@@ -186,6 +189,24 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
             flushInsertStatisticsData(context, true);
             cleanupStaleRawKeyedRows(context, jobId);
+
+            // Only for a genuine FULL run (this method is also reused by Hive's SAMPLE path via
+            // ExternalSampleStatisticsCollectJob#collectWithPartitionSampling, which never writes a
+            // sentinel row, so the cleanup would just be a no-op DELETE there): clean up a stale
+            // whole-table sample sentinel row left behind by a prior Iceberg SAMPLE collection, in
+            // case FULL is run manually afterward. Best-effort, mirrors the SAMPLE-side cleanup in
+            // ExternalSampleStatisticsCollectJob#cleanupStaleFullCollectionRows. Matches both the
+            // hashed and raw table_uuid (see StatisticUtils#hashTableUuidForPkStorage) since the
+            // sentinel row may have been written before or after the hashing migration.
+            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+                try {
+                    new StatisticExecutor().dropExternalTableStatisticsForPartition(context, table.getUUID(),
+                            StatsConstants.EXTERNAL_SAMPLE_PARTITION_NAME_SENTINEL, columnNames);
+                } catch (Exception e) {
+                    LOG.warn("[ExternalStats] failed to clean up stale SAMPLE sentinel row | catalog={} db={} table={}",
+                            catalogName, db.getOriginName(), table.getName(), e);
+                }
+            }
         } catch (Exception e) {
             status = "FAILED";
             failureReason = e.getMessage();
@@ -424,7 +445,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, false);
     }
 
-    private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
+    protected void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistic_full_collect_buffer && !force) {

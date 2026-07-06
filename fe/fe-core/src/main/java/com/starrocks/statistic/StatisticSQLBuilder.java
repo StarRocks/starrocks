@@ -360,6 +360,45 @@ public class StatisticSQLBuilder {
                 " AND DB_NAME = '" + dbName + "' AND TABLE_NAME = '" + tableName + "'";
     }
 
+    // Deletes rows for the given columns whose partition_name is NOT the given sentinel value.
+    // Used by Iceberg sample collection to clean up stale real-partition rows left behind by a
+    // prior FULL collection on the same table, once the sample's sentinel row is a fresh,
+    // authoritative replacement -- otherwise the read path's sum(row_count)/sum(data_size)/
+    // sum(null_count) (grouped by column_name only, see QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE)
+    // would double-count the old FULL rows alongside the new sentinel row. Matches both the hashed
+    // and raw table_uuid (see buildTableUUIDInPredicateQuoted) since the rows being cleaned up may
+    // have been written before or after the hashing migration.
+    public static String buildDropExternalStatExcludingPartitionSQL(String tableUUID, String excludedPartitionName,
+                                                                     List<String> columnNames) {
+        StringBuilder sql = new StringBuilder("DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND PARTITION_NAME != '" + SqlUtils.escapeSqlString(excludedPartitionName) + "'");
+        appendColumnNameFilter(sql, columnNames);
+        return sql.toString();
+    }
+
+    // Deletes rows for the given columns whose partition_name IS the given sentinel value. Used by
+    // ExternalFullStatisticsCollectJob to clean up a stale whole-table sample sentinel row left
+    // behind by a prior SAMPLE collection, in case FULL is run manually afterward. Matches both the
+    // hashed and raw table_uuid, same rationale as buildDropExternalStatExcludingPartitionSQL.
+    public static String buildDropExternalStatForPartitionSQL(String tableUUID, String partitionName,
+                                                               List<String> columnNames) {
+        StringBuilder sql = new StringBuilder("DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND PARTITION_NAME = '" + SqlUtils.escapeSqlString(partitionName) + "'");
+        appendColumnNameFilter(sql, columnNames);
+        return sql.toString();
+    }
+
+    private static void appendColumnNameFilter(StringBuilder sql, List<String> columnNames) {
+        if (columnNames != null && !columnNames.isEmpty()) {
+            String cols = columnNames.stream()
+                    .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'")
+                    .collect(Collectors.joining(", "));
+            sql.append(" AND COLUMN_NAME IN (").append(cols).append(")");
+        }
+    }
+
     public static String buildDropPartitionSQL(List<Long> pids) {
         return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
                 " PARTITION_ID IN (" +

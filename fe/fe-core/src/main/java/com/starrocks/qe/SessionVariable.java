@@ -624,6 +624,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
+    // Internal-only knobs used by the background external-table sample ANALYZE job to drive
+    // file-level Bernoulli sampling in the Iceberg connector. Not user-facing.
+    public static final String EXTERNAL_STATS_FILE_SAMPLE_RATIO = "external_stats_file_sample_ratio";
+    public static final String EXTERNAL_STATS_SAMPLE_SEED = "external_stats_sample_seed";
+
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
@@ -3279,6 +3284,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
     private boolean enableReadIcebergPuffinNdv = true;
 
+    @VarAttr(name = EXTERNAL_STATS_FILE_SAMPLE_RATIO, flag = VariableMgr.INVISIBLE)
+    private double externalStatsFileSampleRatio = 1.0;
+
+    @VarAttr(name = EXTERNAL_STATS_SAMPLE_SEED, flag = VariableMgr.INVISIBLE)
+    private long externalStatsSampleSeed = 0;
+
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
 
@@ -3433,6 +3444,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
         this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public double getExternalStatsFileSampleRatio() {
+        return externalStatsFileSampleRatio;
+    }
+
+    public void setExternalStatsFileSampleRatio(double externalStatsFileSampleRatio) {
+        this.externalStatsFileSampleRatio = externalStatsFileSampleRatio;
+    }
+
+    public long getExternalStatsSampleSeed() {
+        return externalStatsSampleSeed;
+    }
+
+    public void setExternalStatsSampleSeed(long externalStatsSampleSeed) {
+        this.externalStatsSampleSeed = externalStatsSampleSeed;
     }
 
     public boolean enableDeltaLakeColumnStatistics() {

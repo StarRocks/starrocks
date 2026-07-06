@@ -19,6 +19,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -61,6 +63,8 @@ import com.starrocks.thrift.TStatisticData;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -71,7 +75,9 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -305,6 +311,33 @@ public class StatisticExecutor {
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(rawTableUUID, Lists.newArrayList(columnName));
         LOG.debug("Cleanup stale raw-keyed external histogram row SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
+    }
+
+    // See StatisticSQLBuilder#buildDropExternalStatExcludingPartitionSQL. Best-effort: a failure
+    // here leaves the pre-existing double-counting in place (not made worse) rather than failing
+    // the caller's otherwise-successful collection.
+    public void dropExternalTableStatisticsExcludingPartition(ConnectContext statsConnectCtx, String tableUUID,
+                                                               String excludedPartitionName, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatExcludingPartitionSQL(tableUUID, excludedPartitionName,
+                columnNames);
+        LOG.debug("Cleanup stale external statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute stale external statistic cleanup fail, tableUUID={}", tableUUID);
+        }
+    }
+
+    // See StatisticSQLBuilder#buildDropExternalStatForPartitionSQL.
+    public void dropExternalTableStatisticsForPartition(ConnectContext statsConnectCtx, String tableUUID,
+                                                        String partitionName, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatForPartitionSQL(tableUUID, partitionName, columnNames);
+        LOG.debug("Cleanup sentinel external statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute sentinel external statistic cleanup fail, tableUUID={}", tableUUID);
+        }
     }
 
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
@@ -736,12 +769,32 @@ public class StatisticExecutor {
     }
 
     public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
-        List<TResultBatch> sqlResult = executeDQL(context, sql);
+        List<TResultBatch> sqlResult = executeDQL(context, sql, TResultSinkType.STATISTIC);
         try {
             return deserializerStatisticData(sqlResult);
         } catch (TException e) {
             throw new SemanticException(e.getMessage());
         }
+    }
+
+    /**
+     * Executes a query whose row shape isn't the fixed 9-field {@link TStatisticData} struct (e.g. a
+     * single-pass wide row covering many columns' worth of aggregates). Uses the HTTP/JSON result
+     * protocol, which serializes each row as {@code {"data": [col1, col2, ...]}} regardless of width,
+     * and returns each row's decoded JSON array positionally -- the caller maps array indices back to
+     * its own column layout.
+     */
+    public List<JsonArray> executeWideRowDQL(ConnectContext context, String sql) {
+        List<TResultBatch> sqlResult = executeDQL(context, sql, TResultSinkType.HTTP_PROTOCAL);
+        List<JsonArray> rows = new ArrayList<>();
+        for (TResultBatch batch : ListUtils.emptyIfNull(sqlResult)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                rows.add(JsonParser.parseString(jsonString).getAsJsonObject().get("data").getAsJsonArray());
+            }
+        }
+        return rows;
     }
 
     /**
@@ -770,7 +823,7 @@ public class StatisticExecutor {
                 tableId, sourcePartition, targetPartition);
     }
 
-    private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+    private List<TResultBatch> executeDQL(ConnectContext context, String sql, TResultSinkType resultSinkType) {
         context.setQueryId(UUIDUtil.genUUID());
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);
@@ -780,7 +833,7 @@ public class StatisticExecutor {
         }
         Stopwatch watch = Stopwatch.createStarted();
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, resultSinkType);
         StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
