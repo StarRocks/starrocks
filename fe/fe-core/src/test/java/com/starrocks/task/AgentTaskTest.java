@@ -530,6 +530,23 @@ public class AgentTaskTest {
     }
 
     @Test
+    public void testAddTaskRejectedAfterDemotionCompleted() {
+        AgentTaskQueue.clearAllTasks();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public com.starrocks.ha.FrontendNodeType getFeType() {
+                return com.starrocks.ha.FrontendNodeType.FOLLOWER;
+            }
+        };
+        // A straggling leader-session thread (e.g. a DDL that passed admission before the
+        // demotion) must not enqueue AFTER the demotion completed either - otherwise it waits
+        // out its full timeout and leaves a stale entry in the follower's queue that could
+        // shadow a same-signature task after re-election.
+        Assertions.assertThrows(IllegalStateException.class, () -> AgentTaskQueue.addTask(createReplicaTask));
+        Assertions.assertEquals(0, AgentTaskQueue.getTaskNum());
+    }
+
+    @Test
     public void testCancelPendingWaiterReleasesLatchOfEveryLatchHolder() {
         Status demoting = new Status(TStatusCode.CANCELLED, "leader is demoting");
 

@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
 import com.starrocks.common.Status;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPushType;
@@ -76,13 +77,25 @@ public class AgentTaskQueue {
     }
 
     public static synchronized boolean addTask(AgentTask task) {
-        // Source guard for leader demotion: once demoting, refuse to enqueue new agent tasks.
-        // Together with abandonInFlightTasks() (which drains what is already queued) this closes the
-        // TOCTOU where a create-tablet started just after the drain would otherwise wait out its
-        // timeout. The throw fails the doomed operation fast (its journal write would be fenced anyway).
-        if (GlobalStateMgr.getCurrentState().isLeaderDemoting()) {
+        // Source guard for leader demotion: refuse to enqueue new agent tasks once this node is
+        // demoting OR has already finished demoting to a non-leader role. Together with
+        // abandonInFlightTasks() (which drains what is already queued) this closes both windows
+        // where a straggling leader-session thread (e.g. a user DDL that passed its admission
+        // checks before the demotion began) would otherwise enqueue after the drain and wait out
+        // its full timeout, leaving a stale entry in a non-leader's queue that could shadow a
+        // same-signature task after re-election. The throw fails the doomed operation fast (its
+        // journal write would be fenced anyway). Every legitimate enqueue happens with
+        // feType == LEADER (activation flips feType to LEADER before leader-only daemons start,
+        // and the replay paths never enqueue); INIT stays admitted so bootstrap, checkpoint-image
+        // GlobalStateMgr instances, and plain unit tests are unaffected.
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        FrontendNodeType feType = globalStateMgr.getFeType();
+        if (globalStateMgr.isLeaderDemoting()
+                || feType == FrontendNodeType.FOLLOWER
+                || feType == FrontendNodeType.OBSERVER
+                || feType == FrontendNodeType.UNKNOWN) {
             throw new IllegalStateException(
-                    "leader is demoting, refuse to enqueue agent task: " + task);
+                    "node is demoting or not the leader (" + feType + "), refuse to enqueue agent task: " + task);
         }
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();
