@@ -394,8 +394,8 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
                                                       : data_col[i]._timestamp;
 
         if constexpr (use_int96_timestamp_encoding) {
-            auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
-            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
+            auto date = reinterpret_cast<int32_t*>(values[i].value.data() + 2);
+            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value.data());
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
