@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {

@@ -15,12 +15,17 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeInfo;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -30,6 +35,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 public class LowCardinalityTest2 extends PlanTestBase {
@@ -1238,6 +1244,42 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testNestedNullSensitiveDictKeepsIntermediate() throws Exception {
+        // A NULL-sensitive outer expression (IS NULL) over a derived dict (the inner CASE result)
+        // must keep the intermediate dict instead of being flattened through the child define.
+        // Flattening would drop the derived dict's synthetic NULL code and the query would fail at
+        // runtime with "Dict Decode failed, Dict can't take cover all key".
+        String sql = "select distinct case when subq.x is null then '-' else subq.x end as x "
+                + "from (select distinct case when S_ADDRESS = 'a' then 'A' else 'B' end as x "
+                + "from supplier_nullable) subq";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "if(<place-holder> = 'a', 'A', 'B')");
+        assertContains(plan, "if(<place-holder> IS NULL, '-', <place-holder>)");
+        assertNotContains(plan, "if(if(");
+    }
+
+    @Test
+    public void testDictMappingGroupByReservesExtraCode() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            // A value-adding dict-mapping group-by key (e.g. `case when x is null then '-'`,
+            // ifnull, coalesce) can grow the derived dict to base dict size + 1 codes. The
+            // compressed group-by key range must reserve that extra code, otherwise the code
+            // overflows the packed key width and decode fails with "Dict can't take cover all key".
+            String sql = "select count(*) from supplier group by "
+                    + "case when S_ADDRESS is null then '-' else S_ADDRESS end";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+
+            sql = "select count(*) from supplier group by ifnull(S_ADDRESS, 'x')";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "group by min-max stats:\n" + "  |  - 0:2");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
     public void testGroupByWithOrderBy() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
@@ -1279,7 +1321,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "result: VARBINARY; args nullable: false; result nullable: false]\n" +
                     "  |  group by: [12: upper, INT, true]\n" +
                     "  |  group by min-max stats:\n" +
-                    "  |  - 0:1\n" +
+                    "  |  - 0:2\n" +
                     "  |  cardinality: 1\n");
             assertContains(plan, "Global Dict Exprs:\n" +
                     "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])");
@@ -3067,5 +3109,62 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  16 <-> DictDefine([15: c_user, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
                 "VARCHAR; args nullable: true; result nullable: true]])\n" +
                 "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    void testWindowSkewWithLowCardStringPassthrough() throws Exception {
+        starRocksAssert.withTable(
+                    "CREATE TABLE IF NOT EXISTS window_skew_lc (" +
+                            "  p int NULL, c varchar(50) NULL) " +
+                            "ENGINE=OLAP DUPLICATE KEY(p) " +
+                            "DISTRIBUTED BY HASH(p) BUCKETS 3 PROPERTIES (\"replication_num\"=\"1\");");
+        StatisticStorage prevStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        try {
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
+            FeConstants.runningUnitTest = true;
+            if (!starRocksAssert.databaseExist("_statistics_")) {
+                StatisticsMetaManager m = new StatisticsMetaManager();
+                m.createStatisticsTablesForTest();
+            }
+            final OlapTable t = getOlapTable("window_skew_lc");
+            setTableStatistics(t, 1000);
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            final List<String> cols = List.of("p", "c");
+            storage.refreshColumnStatistics(t, cols, true);
+            storage.addColumnStatistic(t, "c", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.addColumnStatistic(t, "p", ColumnStatistic.builder().setNullsFraction(0.3).build());
+            storage.getColumnStatistics(t, cols);
+            connectContext.getGlobalStateMgr().setStatisticStorage(storage);
+
+            String sql = """
+                    WITH T AS (
+                      SELECT
+                        c,
+                        ROW_NUMBER()  over (PARTITION BY (CASE WHEN p IS NULL THEN 1 ELSE 0 END) ORDER BY p DESC )
+                      FROM
+                        window_skew_lc
+                    )
+                    SELECT c FROM T
+                    UNION ALL
+                    SELECT NULL FROM T
+                    """;
+
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "24:Decode\n" +
+                    "  |  <dict id 36> : <string id 21>\n" +
+                    "  |  cardinality: 2000\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [36, INT, true]\n" +
+                    "  |  child exprs:\n" +
+                    "  |      [37: c, INT, true]\n" +
+                    "  |      [39: expr, INT, true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+            starRocksAssert.dropTable("window_skew_lc");
+            connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(false);
+            connectContext.getGlobalStateMgr().setStatisticStorage(prevStorage);
+        }
     }
 }

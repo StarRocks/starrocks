@@ -912,6 +912,14 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 int64_t seconds = src_data[i] / _second_mask;
                 int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+                // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
+                // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
+                // floor split the FE boundary computation uses. Without this, of_epoch_second packs
+                // a negative microsecond into the timestamp and corrupts the value.
+                if (nanoseconds < 0) {
+                    seconds -= 1;
+                    nanoseconds += NANOSECS_PER_SEC;
+                }
 
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;

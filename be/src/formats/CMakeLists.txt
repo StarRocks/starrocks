@@ -22,6 +22,7 @@ ADD_BE_LIB(FormatCore
         io/async_flush_output_stream.cpp
         io/formatted_output_stream_file.cpp
         reserved_columns.h
+        scan_context.cpp
         scan_context.h
         utils.h
         )
@@ -29,9 +30,9 @@ ADD_BE_LIB(FormatCore
 target_link_libraries(FormatCore PUBLIC
         ComputeEnv
         ExecPrimitive
-        ExprCore
-        RuntimeCore
-        FSCore
+        Expr
+        Runtime
+        FileSystem
         ChunkCore
         ColumnCore
         Types
@@ -111,7 +112,7 @@ ADD_BE_LIB(FormatOrc
 
 target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatParquet
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_materializer.cpp
@@ -147,7 +148,13 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore StoragePrimitive Cache)
+target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
+
+ADD_BE_LIB(Formats
+        formats_aggregate.cpp
+        )
+
+target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)
 
 add_subdirectory(orc/apache-orc)
 target_link_libraries(FormatOrc PUBLIC orc)

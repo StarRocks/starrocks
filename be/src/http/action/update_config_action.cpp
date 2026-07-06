@@ -43,10 +43,10 @@
 #include "common/config_update_registry.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 namespace starrocks {
 

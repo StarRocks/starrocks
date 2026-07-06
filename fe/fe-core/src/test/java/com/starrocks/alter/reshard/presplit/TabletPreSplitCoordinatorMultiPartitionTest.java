@@ -99,14 +99,20 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
 
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
+    private long savedConfigReshardMinSplitSize;
 
     @BeforeEach
     public void setUp() {
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
+        savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         Config.tablet_reshard_target_size = 50L * DebugUtil.MEGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
+        // These tests exercise per-partition K selection and orchestration at MB scale, not the
+        // min-split-size bound (covered in TabletPreSplitCoordinatorTest). Disable it (1 byte) so
+        // compute-node alignment still drives K as the assertions below expect.
+        Config.tablet_reshard_min_split_size = 1L;
 
         // Wire a fresh PARTITIONS_TOTAL counter; MetricRepo.init() is not run inside unit
         // tests so the static field is otherwise null and a hasInit=true bump would NPE.
@@ -143,6 +149,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL = savedPartitionsTotal;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
+        Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
     }
 
     // ---------- Tests ----------
@@ -169,7 +176,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, /*activeComputeNodeCount*/ 3, freshConnectContext());
+                    database, table, entries, /*activeComputeNodeCount*/ 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(3, mapCaptor.getValue().size());
@@ -214,7 +221,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, addPartitionsCalls.get());
@@ -249,7 +256,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, mapCaptor.getValue().size(), "only pGood feeds the combined submit");
@@ -279,7 +286,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     .thenThrow(new StarRocksException("synthetic factory rejection"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), never())
@@ -307,7 +314,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
             doThrow(new StarRocksException("capacity exceeded")).when(mgr).addTabletReshardJob(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
         }
@@ -334,7 +341,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(1, mapCaptor.getValue().size());
@@ -350,10 +357,10 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
     public void selectsPerPartitionKIndependently() throws Exception {
         // Two existing partitions with different estimatedBytes -> selector picks K_i
         // independently for each. With 12 CNs and target_size=50MB:
-        //   p1: 1000MB -> max(12, ceil(1000/50)=20) = 20 (byte target dominates)
-        //   p2:   10MB -> max(12, ceil(10/50)=1)   = 12 (CN floor dominates)
+        //   p1: 1000MB -> ceil(1000/50)=20, rounded up to a multiple of 12 -> 24
+        //   p2:   10MB -> ceil(10/50)=1,  rounded up / CN floor -> 12
         // A bug that ignored estimatedBytes would pick K=12 for both, so the differing
-        // K_1=20 vs K_2=12 catches it. Provide 100 distinct ascending samples (max
+        // K_1=24 vs K_2=12 catches it. Provide 100 distinct ascending samples (max
         // useful cuts ~=99) so the planner does not duplicate-collapse below the
         // requested counts.
         installExistingPartition("p1", 11_001L, 21_001L, 0L);
@@ -373,15 +380,15 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, /*activeComputeNodeCount*/ 12, freshConnectContext());
+                    database, table, entries, /*activeComputeNodeCount*/ 12, freshConnectContext(), null);
 
             Map<Long, List<TabletRange>> map = mapCaptor.getValue();
-            // K_1 = 20 (byte target dominates over CN floor of 12) -> 20 ranges.
+            // K_1 = 24 (ceil(1000MB/50MB)=20 rounded up to a multiple of 12) -> 24 ranges.
             // K_2 = 12 (CN floor dominates over byte target of 1) -> 12 ranges.
             // The two are intentionally different: equal K's would mask a bug that
             // ignores estimatedBytes and just uses activeComputeNodeCount everywhere.
-            Assertions.assertEquals(20, map.get(21_001L).size(),
-                    "p1 should pick K_1=20 from ceil(1000MB/50MB) > CN floor of 12");
+            Assertions.assertEquals(24, map.get(21_001L).size(),
+                    "p1 should pick K_1=24 from ceil(1000MB/50MB)=20 rounded up to a multiple of 12 CNs");
             Assertions.assertEquals(12, map.get(21_002L).size(),
                     "p2 should pick K_2=12 from CN floor > byte target of 1");
         }
@@ -431,7 +438,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertEquals(3, lockCalls.get(), "one intensive READ lock per partition");
             Assertions.assertEquals(3, unlockCalls.get(), "lock must be released after each partition");
@@ -451,7 +458,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.TABLE_NOT_NORMAL);
             factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
@@ -482,7 +489,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     .thenReturn(combinedJob);
 
             TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertEquals(baseline + 3L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL.getValue().longValue(),
@@ -509,7 +516,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     .thenThrow(new IllegalArgumentException("synthetic bad ranges"));
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.SUBMIT_FAILED);
             verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr(), never())
@@ -531,7 +538,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
             factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
@@ -562,7 +569,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             Assertions.assertEquals(0, addPartitionsCalls.get(),
@@ -587,7 +594,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             // Single entry dropped as PARTITION_NOT_ELIGIBLE_POST_CREATE -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
@@ -620,7 +627,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             // Only the single-tablet partition feeds the combined submit.
@@ -646,7 +653,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             // Single non-empty partition dropped -> overall NO_USEFUL_CUTS.
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
@@ -669,7 +676,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
             factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
@@ -695,7 +702,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 MockedConstruction<Locker> ignored = noopLockerCtor()) {
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
             factory.verify(() -> SplitTabletJobFactory.forExternalBoundariesMultiTablet(any(), any(), any()),
@@ -733,7 +740,7 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
 
             PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    database, table, entries, 3, freshConnectContext());
+                    database, table, entries, 3, freshConnectContext(), null);
 
             Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
             // Only pGood feeds the combined submit; pBoom was dropped.

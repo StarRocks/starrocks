@@ -25,13 +25,13 @@
 #include "common/runtime_profile.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
-#include "runtime/exec_env.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -45,7 +45,7 @@ public:
         auto fs = FileSystem::Default();
         ASSERT_OK(fs->create_dir_recursive(path));
         LOG(INFO) << "path: " << path;
-        auto parent = GlobalEnv::GetInstance()->query_pool_mem_tracker_shared();
+        auto parent = RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared();
         dummy_wg = std::make_shared<workgroup::WorkGroup>(
                 "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0,
                 1.0, workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);

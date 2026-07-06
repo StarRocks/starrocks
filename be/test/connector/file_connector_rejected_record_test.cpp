@@ -22,11 +22,11 @@
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/file_connector.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {

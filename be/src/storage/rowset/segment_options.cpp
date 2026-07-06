@@ -14,7 +14,7 @@
 
 #include "segment_options.h"
 
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 

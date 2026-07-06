@@ -428,8 +428,19 @@ public class QueryAnalyzer {
     private class Visitor implements AstVisitorExtendInterface<Scope, Scope> {
         // for recursive cte analyze
         private String currentRecursiveCTE = null;
+        // Fallback for cyclic view detection when there is no session; the shared path lives on the
+        // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
+        // scalar/IN/EXISTS subquery spawns.
+        private final Set<String> localViewExpansionStack = new HashSet<>();
 
         public Visitor() {
+        }
+
+        // Stable keys of the views currently being expanded on the resolution path. Shared via the
+        // session so a cycle routed through a subquery (which gets its own QueryAnalyzer/Visitor) is
+        // still observed; only when session is null do we fall back to the per-Visitor set.
+        private Set<String> viewExpansionStack() {
+            return session != null ? session.getViewExpansionPath() : localViewExpansionStack;
         }
 
         public Scope process(ParseNode node, Scope scope) {
@@ -1569,6 +1580,14 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
+            // Views have no CREATE-time cycle check (ALTER VIEW can close a cycle), so guard
+            // here to avoid unbounded recursion -> StackOverflowError during analysis.
+            String viewKey = viewExpansionKey(node);
+            Set<String> viewExpansionStack = viewExpansionStack();
+            if (!viewExpansionStack.add(viewKey)) {
+                throw new CyclicViewException(
+                        "View " + node.getName() + " contains a cycle in its definition");
+            }
             boolean isRelationAliasCaseInSensitive = false;
             if (ConnectContext.get() != null) {
                 isRelationAliasCaseInSensitive = ConnectContext.get().isRelationAliasCaseInsensitive();
@@ -1580,10 +1599,15 @@ public class QueryAnalyzer {
             Scope queryOutputScope;
             try {
                 queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (CyclicViewException e) {
+                // Let the cycle error surface as-is; re-wrapping it at every enclosing view would
+                // bury the real reason behind a misleading "references invalid table(s)" prefix.
+                throw e;
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             } finally {
+                viewExpansionStack.remove(viewKey);
                 if (ConnectContext.get() != null && node.getView().isHiveView()) {
                     ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
                 }
@@ -1619,6 +1643,21 @@ public class QueryAnalyzer {
             collector.process(node, viewScope);
 
             return viewScope;
+        }
+
+        // Returns a key that is stable across re-resolutions of the same logical view, for cycle
+        // detection. Internal (olap) views carry a persistent catalog id, so the id is used.
+        // Connector views (hive/iceberg/paimon) are rebuilt with a freshly generated id on every
+        // metadata lookup (see IcebergApiConverter.toView), so their id changes on each expansion
+        // and cannot detect re-entry; their fully-qualified name is stable instead, because
+        // connector view bodies qualify their table references (ConnectorView.formatRelations).
+        private String viewExpansionKey(ViewRelation node) {
+            View view = node.getView();
+            if (view.isOlapView()) {
+                return "id:" + view.getId();
+            }
+            TableName name = node.getName();
+            return "name:" + (name == null ? view.getName() : name.toString());
         }
 
         @Override

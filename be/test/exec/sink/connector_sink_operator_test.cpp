@@ -27,15 +27,14 @@
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "formats/io/async_flush_output_stream.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
 using Stream = formats::AsyncFlushOutputStream;
 
 class NoopWritableFile : public WritableFile {
@@ -87,12 +86,20 @@ public:
     }
 };
 
+class NoopConnectorSinkOperatorFactory final : public OperatorFactory {
+public:
+    NoopConnectorSinkOperatorFactory()
+            : OperatorFactory(0, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
+};
+
 class TestConnectorChunkSink final : public connector::ConnectorChunkSink {
 public:
     explicit TestConnectorChunkSink(RuntimeState* state)
             : ConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {}
 
-    void callback_on_commit(const CommitResult& result) override {}
+    void callback_on_commit(const connector::CommitResult& result) override {}
 
     Status finish() override {
         _finished = true;
@@ -150,7 +157,7 @@ protected:
     void TearDown() override {}
 
     void init_mem_trackers() {
-        auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+        auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
         _query_pool_tracker =
                 std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 100, "query_pool_ut", process_tracker);
         _query_tracker =
@@ -190,7 +197,7 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
 }
 
 TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instance_tracker) {
-    auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 100;
@@ -206,11 +213,12 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
     auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
-    ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const CommitResult&) {}));
+    ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const connector::CommitResult&) {}));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(
-            nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
+            &factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
             std::make_unique<connector::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
 
     {
@@ -223,7 +231,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
 }
 
 TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_instance_tracker) {
-    auto* process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 64;
@@ -245,11 +253,12 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
     std::vector<connector::PartitionChunkWriterPtr> writers;
     connector::AsyncFlushStreamPoller empty_poller;
-    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const CommitResult&) {}));
+    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const connector::CommitResult&) {}));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
     chunk_sink->set_finished(true);
-    auto op = std::make_shared<ConnectorSinkOperator>(nullptr, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+    NoopConnectorSinkOperatorFactory factory;
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
                                                       std::move(chunk_sink), std::move(io_poller), sink_mem_mgr,
                                                       op_mem_mgr, _fragment_context);
     ASSERT_OK(op->set_finishing(_runtime_state));

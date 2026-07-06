@@ -17,52 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-ADD_BE_LIB(StoragePrimitive
-    primitive/aggregate_type.cpp
-    primitive/chunk_iterator.cpp
-    primitive/column_and_predicate.cpp
-    primitive/column_expr_predicate.cpp
-    primitive/column_in_predicate.cpp
-    primitive/column_not_in_predicate.cpp
-    primitive/column_or_predicate.cpp
-    primitive/column_null_predicate.cpp
-    primitive/column_placeholder_predicate.cpp
-    primitive/column_predicate_cmp.cpp
-    primitive/column_predicate_dict_conjuct.cpp
-    primitive/column_value_range.cpp
-    primitive/conjunctive_predicates.cpp
-    primitive/disjunctive_predicates.cpp
-    primitive/edit_version.cpp
-    primitive/empty_iterator.cpp
-    primitive/flat_json_config.cpp
-    primitive/key_coder.cpp
-    primitive/projection_iterator.cpp
-    primitive/range.cpp
-    primitive/predicate_parser.cpp
-    primitive/primary_key_encoder.cpp
-    primitive/schema_helper.cpp
-    primitive/predicate_tree/predicate_tree.cpp
-    primitive/storage_define.cpp
-    primitive/storage_ids.cpp
-    primitive/tablet_column.cpp
-    primitive/tablet_info.cpp
-    primitive/tablet_column_util.cpp
-    primitive/tablet_column_type_utils.cpp
-    primitive/union_iterator.cpp
-)
-
-target_link_libraries(StoragePrimitive PUBLIC
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 ADD_BE_LIB(StorageBase
     base/merge_iterator.cpp
     base/row_source_mask.cpp
@@ -72,8 +26,7 @@ ADD_BE_LIB(StorageBase
 target_link_libraries(StorageBase PUBLIC
     ComputeEnv
     StoragePrimitive
-    Serde
-    RuntimeCore
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore
@@ -343,6 +296,7 @@ set(STORAGE_FILES
     index/inverted/clucene/match_operator.cpp
     index/vector/empty_index_reader.cpp
     index/vector/vector_index_cache.cpp
+    index/vector/vector_index_cache_metrics.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
@@ -373,4 +327,4 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache HttpCore)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)

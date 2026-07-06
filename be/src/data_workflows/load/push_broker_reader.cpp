@@ -18,10 +18,10 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/config_exec_fwd.h"
+#include "exec/exec_env.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/file_scanner/parquet_scanner.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 

@@ -38,9 +38,9 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/primitive/primary_key_encoding_types.h"
 #include "storage/segment_stream_converter.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 #include "types/logical_type.h"
 #include "vacuum.h"
 

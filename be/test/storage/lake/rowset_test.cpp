@@ -39,11 +39,11 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "test_util.h"
 #include "types/type_descriptor.h"
 
@@ -1422,9 +1422,11 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
     meta_seg1->set_filename("seg1.dat");
     meta_seg1->add_vector_index_ids(100);
     meta_seg1->add_vector_index_ids(200);
+    meta_seg1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
     meta_seg2->set_filename("seg2.dat");
     meta_seg2->add_vector_index_ids(100);
+    meta_seg2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1440,9 +1442,9 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
     EXPECT_TRUE(contains("seg1.dat"));
     EXPECT_TRUE(contains("seg2.dat"));
     EXPECT_TRUE(contains("del1.del"));
-    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 100)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", 200)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("seg2.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg1.dat", _tablet_metadata->id(), 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg2.dat", _tablet_metadata->id(), 100)));
 }
 
 // Test: collect_files_in_log collects .vi files only for new segments in op_compaction abort
@@ -1461,16 +1463,20 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
     auto* meta_a = output_rowset->add_segment_metas();
     meta_a->set_filename("reused_a.dat");
     meta_a->add_vector_index_ids(100);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_x = output_rowset->add_segment_metas();
     meta_x->set_filename("new_x.dat");
     meta_x->add_vector_index_ids(100);
     meta_x->add_vector_index_ids(200);
+    meta_x->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_y = output_rowset->add_segment_metas();
     meta_y->set_filename("new_y.dat");
     meta_y->add_vector_index_ids(100);
+    meta_y->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_b = output_rowset->add_segment_metas();
     meta_b->set_filename("reused_b.dat");
     meta_b->add_vector_index_ids(100);
+    meta_b->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1486,15 +1492,15 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
     // New segments and their vi files should be collected
     EXPECT_TRUE(contains("new_x.dat"));
     EXPECT_TRUE(contains("new_y.dat"));
-    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 100)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", 200)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("new_y.dat", 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_x.dat", _tablet_metadata->id(), 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("new_y.dat", _tablet_metadata->id(), 100)));
 
     // Reused segments and their vi files must NOT be collected
     EXPECT_FALSE(contains("reused_a.dat"));
     EXPECT_FALSE(contains("reused_b.dat"));
-    EXPECT_FALSE(contains(gen_vector_index_filename("reused_a.dat", 100)));
-    EXPECT_FALSE(contains(gen_vector_index_filename("reused_b.dat", 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_a.dat", _tablet_metadata->id(), 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused_b.dat", _tablet_metadata->id(), 100)));
 }
 
 // Test: collect_files_in_log collects .vi files for op_schema_change abort
@@ -1510,10 +1516,12 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
     auto* meta_sc1 = rowset->add_segment_metas();
     meta_sc1->set_filename("sc_seg1.dat");
     meta_sc1->add_vector_index_ids(300);
+    meta_sc1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_sc2 = rowset->add_segment_metas();
     meta_sc2->set_filename("sc_seg2.dat");
     meta_sc2->add_vector_index_ids(300);
     meta_sc2->add_vector_index_ids(400);
+    meta_sc2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1527,9 +1535,9 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
     };
     EXPECT_TRUE(contains("sc_seg1.dat"));
     EXPECT_TRUE(contains("sc_seg2.dat"));
-    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg1.dat", 300)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 300)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", 400)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg1.dat", _tablet_metadata->id(), 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", _tablet_metadata->id(), 300)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("sc_seg2.dat", _tablet_metadata->id(), 400)));
 }
 
 // Test: collect_files_in_log collects .vi files for op_replication abort
@@ -1545,6 +1553,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
     auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
     meta_repl->set_filename("repl_seg1.dat");
     meta_repl->add_vector_index_ids(500);
+    meta_repl->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1558,7 +1567,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
     };
     EXPECT_TRUE(contains("repl_seg1.dat"));
     EXPECT_TRUE(contains("repl_del1.del"));
-    EXPECT_TRUE(contains(gen_vector_index_filename("repl_seg1.dat", 500)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("repl_seg1.dat", _tablet_metadata->id(), 500)));
 }
 
 // Test: collect_files_in_log handles empty vector_index_ids gracefully
@@ -1595,6 +1604,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
     meta_a->set_filename("seg_a.dat");
     meta_a->add_vector_index_ids(100);
     meta_a->add_vector_index_ids(200);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
 
@@ -1611,8 +1621,8 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
     EXPECT_TRUE(contains("seg_a.dat"));
     EXPECT_TRUE(contains("seg_b.dat"));
     EXPECT_TRUE(contains("seg_c.dat"));
-    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 100)));
-    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", 200)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", _tablet_metadata->id(), 100)));
+    EXPECT_TRUE(contains(gen_vector_index_filename("seg_a.dat", _tablet_metadata->id(), 200)));
     // No phantom .vi entries fabricated for seg_b / seg_c which lack metas.
     EXPECT_FALSE(contains("seg_b.dat_"));
     EXPECT_FALSE(contains("seg_c.dat_"));
@@ -1639,6 +1649,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     auto* meta_reused = output_rowset->add_segment_metas();
     meta_reused->set_filename("reused.dat");
     meta_reused->add_vector_index_ids(100);
+    meta_reused->set_segment_vector_index_uid(_tablet_metadata->id());
     output_rowset->add_segment_metas()->set_filename("new_a.dat");
     output_rowset->add_segment_metas()->set_filename("new_b.dat");
 
@@ -1658,7 +1669,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     EXPECT_FALSE(contains("reused.dat"));
     // The one segment_meta entry sits at index 0; the new-segment window starts
     // at idx=1 and never reads segment_metas(0), so no spurious .vi paths.
-    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", 100)));
+    EXPECT_FALSE(contains(gen_vector_index_filename("reused.dat", _tablet_metadata->id(), 100)));
 }
 
 // Regression: the lake read-options propagation chain must carry has_predicate_above_iterator

@@ -18,8 +18,8 @@
 
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
-#include "connector/connector.h"
 #include "connector/hive_chunk_sink.h"
+#include "connector_primitive/connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 

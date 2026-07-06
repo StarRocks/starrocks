@@ -1091,6 +1091,12 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 ctx.getSessionVariable().getSqlMode(),
                 alterViewClause.getComment(),
                 alterViewClause.getOriginalViewDefineSql());
+        // For CREATE OR REPLACE VIEW, redefine the SQL SECURITY characteristic atomically with the definition.
+        // A null value (plain ALTER VIEW ... AS) leaves the view's existing characteristic unchanged.
+        if (alterViewClause.getSecurity() != null) {
+            alterViewInfo.setUpdateSecurity(true);
+            alterViewInfo.setSecurity(alterViewClause.getSecurity());
+        }
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;

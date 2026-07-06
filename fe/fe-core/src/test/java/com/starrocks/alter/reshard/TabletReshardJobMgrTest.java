@@ -20,6 +20,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -37,8 +38,24 @@ import org.junit.jupiter.api.Test;
 public class TabletReshardJobMgrTest {
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
+        private long tableId = 0;
+
         public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
             super(jobId, jobType);
+        }
+
+        public void setTableId(long tableId) {
+            this.tableId = tableId;
+        }
+
+        public void markFinished(long finishedTimeMs) {
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = finishedTimeMs;
+        }
+
+        @Override
+        public long getTableId() {
+            return tableId;
         }
 
         @Override
@@ -262,6 +279,100 @@ public class TabletReshardJobMgrTest {
         jobMgr.addTabletReshardJob(job2);
 
         Assertions.assertEquals(2, jobMgr.getAllJobsInfo().getItems().size());
+    }
+
+    @Test
+    public void testIsTableSafeToDeleteTabletWithReshardJob() {
+        long tableId = 918273L;
+
+        // Use a local mgr injected via GlobalStateMgr so the shared singleton's background daemon
+        // does not reap the job under test.
+        TabletReshardJobMgr localMgr = new TabletReshardJobMgr();
+        TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
+        job.setTableId(tableId);
+        job.jobState = TabletReshardJob.JobState.FINISHED;
+        job.finishedTimeMs = 1000L;
+        localMgr.tabletReshardJobs.put(job.getJobId(), job);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return localMgr;
+            }
+        };
+
+        final boolean[] automatedOn = {false};
+        final long[] boundary = {0L};
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public boolean isAutomatedSnapshotOn() {
+                return automatedOn[0];
+            }
+
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return boundary[0];
+            }
+        };
+
+        ClusterSnapshotMgr csMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
+
+        // Automated snapshot off: no behavior change, always safe.
+        automatedOn[0] = false;
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // Automated on, reshard finished at/after the safe-deletion boundary (a snapshot covers the
+        // pre-reshard state): the table's tablets must not be reclaimed.
+        automatedOn[0] = true;
+        boundary[0] = 1000L;
+        Assertions.assertFalse(csMgr.isTableSafeToDeleteTablet(tableId));
+        // A different table with no reshard job is unaffected.
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId + 1));
+
+        // Automated on, reshard finished before the boundary (every covering snapshot expired): safe.
+        boundary[0] = 2000L;
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // A still-running reshard job keeps the table unsafe while automated snapshot is on.
+        job.jobState = TabletReshardJob.JobState.RUNNING;
+        Assertions.assertFalse(csMgr.isTableSafeToDeleteTablet(tableId));
+
+        // An ABORTED reshard removed no tablets, so it must NOT pin the table even when it finished
+        // at/after the safe-deletion boundary (its partial orphan shards stay reclaimable).
+        job.jobState = TabletReshardJob.JobState.ABORTED;
+        boundary[0] = 1000L; // == job.finishedTimeMs, so only the aborted-state guard prevents pinning
+        Assertions.assertTrue(csMgr.isTableSafeToDeleteTablet(tableId));
+    }
+
+    @Test
+    public void testExpiredReshardJobRetainedUntilSnapshotSafe() {
+        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+
+        TestNormalTabletReshardJob job = new TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
+        job.setTableId(100L);
+        job.jobState = TabletReshardJob.JobState.FINISHED;
+        job.finishedTimeMs = 1000L; // deep in the past -> isExpired() is true
+        jobMgr.tabletReshardJobs.put(job.getJobId(), job);
+        Assertions.assertTrue(job.isExpired());
+
+        final long[] boundary = {0L};
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public long getSafeDeletionTimeMs() {
+                return boundary[0];
+            }
+        };
+
+        // A covering snapshot (safe-deletion boundary <= finishedTimeMs): the expired job is retained
+        // so isTableSafeToDeleteTablet() keeps the pre-reshard tablets alive.
+        boundary[0] = 500L;
+        jobMgr.runAfterCatalogReady();
+        Assertions.assertEquals(1, jobMgr.getTabletReshardJobs().size());
+
+        // No covering snapshot (boundary > finishedTimeMs): the expired job is reaped (no leak).
+        boundary[0] = 2000L;
+        jobMgr.runAfterCatalogReady();
+        Assertions.assertTrue(jobMgr.getTabletReshardJobs().isEmpty());
     }
 
     private void mockLeaderAdmissionOpen() {

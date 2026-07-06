@@ -55,9 +55,9 @@
 #include "common/system/cpu_info.h"
 #include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
+#include "exec/exec_env.h"
 #include "gutil/strings/substitute.h"
 #include "platform/store_path.h"
-#include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 
 namespace starrocks {

@@ -300,7 +300,26 @@ public class StatisticsCollectionTrigger {
                 Map<Long, TabletStatPB> tabletStats = partitionCommitInfo.getTabletStats();
 
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                Long partitionId = table.getPartition(physicalPartition.getParentId()).getId();
+                if (physicalPartition == null) {
+                    // The partition referenced by this commit info may have been replaced or dropped by a
+                    // concurrent online optimize (e.g. a double-write temp partition swapped in via
+                    // replacePartition + disableDoubleWritePartition) between the load txn becoming VISIBLE
+                    // and this post-commit, best-effort stats trigger running. Statistics collection on first
+                    // load must never fail an already-committed load, so skip the missing partition.
+                    LOG.debug("skip first-load statistics for physical partition {} of table {}: physical partition " +
+                            "no longer exists (likely replaced by a concurrent optimize)", physicalPartitionId, table.getId());
+                    continue;
+                }
+                Partition logicalPartition = table.getPartition(physicalPartition.getParentId());
+                if (logicalPartition == null) {
+                    // Parent logical partition was replaced/removed by a concurrent optimize after this physical
+                    // partition's commit; nothing to collect against. Skip rather than NPE and fail the load.
+                    LOG.debug("skip first-load statistics for physical partition {} of table {}: parent logical " +
+                            "partition {} no longer exists (likely replaced by a concurrent optimize)",
+                            physicalPartitionId, table.getId(), physicalPartition.getParentId());
+                    continue;
+                }
+                Long partitionId = logicalPartition.getId();
                 if (table.isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) table;
                     if (olapTable.isTempPartition(partitionId)) {

@@ -62,7 +62,26 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         break;
     case parquet::Type::INT32:
         if (logical_type->is_int()) {
-            *type_desc = TypeDescriptor(TYPE_INT);
+            auto int_logical_type = std::dynamic_pointer_cast<const parquet::IntLogicalType>(logical_type);
+            if (int_logical_type != nullptr && !int_logical_type->is_signed()) {
+                // StarRocks has no native unsigned types; widen an unsigned INT32-backed value to a
+                // signed type that holds its full range (mirrors variant_integer_desc_from_bitwidth in
+                // formats/parquet/utils.cpp). The load path zero-extends the same value, so the wider
+                // inferred type matches the loaded value.
+                switch (int_logical_type->bit_width()) {
+                case 8:
+                    *type_desc = TypeDescriptor(TYPE_SMALLINT);
+                    break;
+                case 16:
+                    *type_desc = TypeDescriptor(TYPE_INT);
+                    break;
+                default:
+                    *type_desc = TypeDescriptor(TYPE_BIGINT);
+                    break;
+                }
+            } else {
+                *type_desc = TypeDescriptor(TYPE_INT);
+            }
         } else if (logical_type->is_date()) {
             *type_desc = TypeDescriptor(TYPE_DATE);
         } else if (logical_type->is_time()) {

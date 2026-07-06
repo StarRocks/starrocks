@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "common/config_exec_fwd.h"
 #include "common/util/thrift_util.h"
 #include "runtime/descriptor_helper.h"
@@ -59,14 +61,14 @@ public:
     }
 
     void init_hdfs_scanner_context(HdfsScannerContext* ctx, TupleDescriptor* tuple_desc) {
-        ctx->materialized_columns.clear();
+        ctx->format_scan_context.materialized_columns.clear();
         const auto& slots = tuple_desc->slots();
         for (int i = 0; i < slots.size(); i++) {
             SlotDescriptor* slot = slots[i];
             FormatColumnInfo info;
             info.idx_in_chunk = i;
             info.slot_desc = slot;
-            ctx->materialized_columns.push_back(info);
+            ctx->format_scan_context.materialized_columns.push_back(info);
         }
     }
 

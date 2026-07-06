@@ -54,9 +54,9 @@
 #include "base/types/int128.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "platform/path_rw.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/storage_define.h"
 
 namespace starrocks {
 

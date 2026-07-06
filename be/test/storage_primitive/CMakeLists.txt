@@ -25,6 +25,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     column_value_range_test.cpp
     disjunctive_predicates_test.cpp
     key_coder_test.cpp
+    jni_env_stub.cpp
     lake_file_name_test.cpp
     predicate_tree_test.cpp
     projection_iterator_test.cpp
@@ -41,8 +42,8 @@ set(STORAGE_PRIMITIVE_TEST_FILES
 
 set(STORAGE_PRIMITIVE_TEST_LINK_LIBS
     StoragePrimitive
-    ExprCore
-    RuntimeCore
+    Expr
+    Runtime
     ChunkCore
     ColumnCore
     Types

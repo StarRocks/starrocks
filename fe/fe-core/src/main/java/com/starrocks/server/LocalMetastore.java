@@ -1888,6 +1888,25 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      */
     public void addPhysicalPartition(String dbName, String tableName, String partitionName,
                                      int bucketNum) throws DdlException {
+        addPhysicalPartition(dbName, tableName, partitionName, bucketNum, 1);
+    }
+
+    /**
+     * Add {@code count} new physical partitions to an existing logical partition, each with the
+     * given bucket number, persisted in a single batch. Calling this with {@code count == 1} is
+     * equivalent to the 4-argument overload. Designed to be called via admin execute script for
+     * cross-cluster data replication scenarios that need to backfill many physical partitions on a
+     * random-distribution table in one call instead of one per scheduling cycle.
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     * @param count         the number of physical partitions to add (must be {@code >= 1} and
+     *                      {@code <= Config.max_partitions_in_one_batch})
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum, int count) throws DdlException {
         Database db = getDb(dbName);
         if (db == null) {
             throw new DdlException("Database '" + dbName + "' does not exist");
@@ -1940,6 +1959,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
         }
 
+        if (count < 1) {
+            throw new DdlException("Count must be at least 1");
+        }
+
+        if (count > Config.max_partitions_in_one_batch) {
+            throw new DdlException(String.format(
+                    "Count %d exceeds the maximum number of physical partitions allowed in one batch: %d. " +
+                            "You can modify this restriction by setting max_partitions_in_one_batch larger.",
+                    count, Config.max_partitions_in_one_batch));
+        }
+
         // Get compute resource
         long warehouseId = ConnectContext.get() != null
                 ? ConnectContext.get().getCurrentWarehouseId()
@@ -1948,13 +1978,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        // Add one physical partition with the specified bucket number.
+        // Add `count` physical partitions with the specified bucket number, persisted in one batch.
         // The bucketNum is set on the shadow-copied table inside addSubPartitions,
         // so there is no concurrent safety issue with the original table object.
-        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+        addSubPartitions(db, olapTable, partition, count, bucketNum, computeResource);
 
-        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
-                partition.getName(), olapTable.getName());
+        LOG.info("Successfully added {} physical partition(s) to partition '{}' in table '{}'",
+                count, partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {

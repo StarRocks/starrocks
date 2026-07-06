@@ -23,12 +23,12 @@
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/plain_page.h"
 #include "storage/types.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

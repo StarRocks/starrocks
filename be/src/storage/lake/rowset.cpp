@@ -26,9 +26,10 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
@@ -37,9 +38,6 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -47,6 +45,9 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -378,6 +379,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         if (meta_pos < _metadata->segment_metas_size() && _metadata->segment_metas(meta_pos).shared() &&
             shared_segment_range.has_value()) {
             seg_options.tablet_range = *shared_segment_range;
+        }
+        // Owner tablet id for .vi naming: a segment shared across tablets after a split must
+        // resolve the same .vi from every reader (see resolve_segment_vector_index_uid). Set only for
+        // vector-indexed segments; read() is the sole entry point that sets belonged_to_cloud_native,
+        // so only its iterators reach the ANN-reader path that consumes this.
+        if (meta_pos < _metadata->segment_metas_size() &&
+            _metadata->segment_metas(meta_pos).vector_index_ids_size() > 0) {
+            seg_options.segment_vector_index_uid = resolve_segment_vector_index_uid(_metadata->segment_metas(meta_pos));
         }
 
         if (options.rowid_range_option != nullptr) { // physical split.
@@ -729,7 +738,7 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_segment_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load segment serially
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

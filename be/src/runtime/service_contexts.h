@@ -25,22 +25,16 @@ class BrokerMgr;
 class BrpcStubCache;
 class DataStreamMgr;
 class DiagnoseDaemon;
-class ExternalScanContextMgr;
-class FragmentMgr;
 class BaseLoadPathMgr;
-class HeartbeatFlags;
-class LoadChannelMgr;
 class LoadStreamMgr;
 class LookUpDispatcherMgr;
 class PriorityThreadPool;
 class ProfileReportWorker;
 class ResultBufferMgr;
 class ResultQueueMgr;
-class RoutineLoadTaskExecutor;
 class RuntimeFilterCache;
 class RuntimeFilterQueryLifecycle;
-class RuntimeFilterWorker;
-class SmallFileMgr;
+class RuntimeFilterSender;
 class StorePathRegistry;
 class StreamContextMgr;
 class StreamLoadExecutor;
@@ -55,12 +49,6 @@ class ClientCache;
 namespace connector {
 class ConnectorSinkSpillExecutor;
 }
-
-namespace lake {
-class ReplicationTxnManager;
-class TabletManager;
-class UpdateManager;
-} // namespace lake
 
 namespace pipeline {
 class DriverLimiter;
@@ -91,7 +79,6 @@ struct ExecutionEnv {
     ThreadPool* load_rowset_thread_pool = nullptr;
     ThreadPool* load_segment_thread_pool = nullptr;
     ThreadPool* put_combined_txn_log_thread_pool = nullptr;
-    PriorityThreadPool* udf_call_pool = nullptr;
     PriorityThreadPool* pipeline_prepare_pool = nullptr;
     PriorityThreadPool* pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* query_rpc_pool = nullptr;
@@ -114,9 +101,6 @@ struct RpcServices {
 };
 
 struct LakeServices {
-    lake::TabletManager* lake_tablet_manager = nullptr;
-    lake::UpdateManager* lake_update_manager = nullptr;
-    lake::ReplicationTxnManager* lake_replication_txn_manager = nullptr;
     ThreadPool* put_aggregate_metadata_thread_pool = nullptr;
     ThreadPool* lake_metadata_fetch_thread_pool = nullptr;
     ThreadPool* lake_vector_index_build_thread_pool = nullptr;
@@ -126,22 +110,17 @@ struct LakeServices {
 };
 
 struct RuntimeServices {
-    ExternalScanContextMgr* external_scan_context_mgr = nullptr;
     DataStreamMgr* stream_mgr = nullptr;
     LookUpDispatcherMgr* lookup_dispatcher_mgr = nullptr;
     ResultBufferMgr* result_mgr = nullptr;
     ResultQueueMgr* result_queue_mgr = nullptr;
-    FragmentMgr* fragment_mgr = nullptr;
     BaseLoadPathMgr* load_path_mgr = nullptr;
-    LoadChannelMgr* load_channel_mgr = nullptr;
     LoadStreamMgr* load_stream_mgr = nullptr;
     StreamContextMgr* stream_context_mgr = nullptr;
     TransactionMgr* transaction_mgr = nullptr;
     BatchWriteMgr* batch_write_mgr = nullptr;
     StreamLoadExecutor* stream_load_executor = nullptr;
-    RoutineLoadTaskExecutor* routine_load_task_executor = nullptr;
-    SmallFileMgr* small_file_mgr = nullptr;
-    RuntimeFilterWorker* runtime_filter_worker = nullptr;
+    RuntimeFilterSender* runtime_filter_sender = nullptr;
     RuntimeFilterQueryLifecycle* runtime_filter_query_lifecycle = nullptr;
     RuntimeFilterCache* runtime_filter_cache = nullptr;
     ProfileReportWorker* profile_report_worker = nullptr;
@@ -155,13 +134,11 @@ struct RuntimeServices {
 
 struct AgentServices {
     AgentServer* agent_server = nullptr;
-    HeartbeatFlags* heartbeat_flags = nullptr;
 };
 
 struct QueryExecutionServices {
     const ExecutionEnv* execution = nullptr;
     const RpcServices* rpc = nullptr;
-    const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
     MetricRegistry* process_metrics = nullptr;
 };
@@ -169,7 +146,6 @@ struct QueryExecutionServices {
 struct AdminServices {
     const ExecutionEnv* execution = nullptr;
     const RpcServices* rpc = nullptr;
-    const LakeServices* lake = nullptr;
     const RuntimeServices* runtime = nullptr;
     const AgentServices* agent = nullptr;
 };

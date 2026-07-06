@@ -29,8 +29,8 @@ Status HdfsPartitionScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* 
         column->append_default(1);
         (*chunk)->append_column(std::move(column), slot->id());
     }
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, 1);
-    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
+    _scanner_ctx->format_scan_context.append_or_update_partition_column_to_chunk(chunk, 1);
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     return Status::OK();
 }
 

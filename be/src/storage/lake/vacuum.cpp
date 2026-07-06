@@ -156,13 +156,31 @@ int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retr
 
 namespace {
 
+static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
+    if (index >= rowset.segment_metas_size()) {
+        return false;
+    }
+    const auto& segment_meta = rowset.segment_metas(index);
+    return segment_meta.has_bundle_file_offset() || segment_meta.shared();
+}
+
 // Delete .vi files for segments in a rowset using segment_metas metadata.
-static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, const std::string& base_dir,
-                                     const RowsetMetadataPB& rowset) {
-    for (const auto& segment_meta : rowset.segment_metas()) {
+// A .vi is a per-segment sidecar whose lifetime follows its owning segment. When the
+// segment is shared across split siblings, its .vi must be routed through the
+// refcounting shared-file deleter so it is not deleted while a sibling still references
+// the segment (mirrors the segment routing in collect_garbage_files).
+static Status delete_rowset_vi_files(AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
+                                     const std::string& base_dir, int64_t tablet_id, const RowsetMetadataPB& rowset) {
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const auto& segment_meta = rowset.segment_metas(i);
+        const bool shared_file = is_shared_segment(rowset, i);
         for (int64_t vi_id : segment_meta.vector_index_ids()) {
-            auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
-            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, vi_name)));
+            auto vi_path = join_path(base_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id));
+            if (shared_file && shared_file_deleter != nullptr) {
+                RETURN_IF_ERROR(shared_file_deleter->delete_file(vi_path));
+            } else {
+                RETURN_IF_ERROR(deleter->delete_file(vi_path));
+            }
         }
     }
     return Status::OK();
@@ -300,14 +318,6 @@ void run_clear_task_async(std::function<void()> task) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
-static bool is_shared_segment(const RowsetMetadataPB& rowset, int index) {
-    if (index >= rowset.segment_metas_size()) {
-        return false;
-    }
-    const auto& segment_meta = rowset.segment_metas(index);
-    return segment_meta.has_bundle_file_offset() || segment_meta.shared();
-}
-
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
                                     int64_t* garbage_data_size, const TabletRetainInfo& retain_info) {
@@ -325,8 +335,9 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segment_metas(i).filename())));
             }
         }
-        // Delete associated .vi files using per-segment vector index metadata
-        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, base_dir, rowset));
+        // Delete associated .vi files using per-segment vector index metadata. A shared
+        // segment's .vi follows the segment, so route it through the shared-file deleter.
+        RETURN_IF_ERROR(delete_rowset_vi_files(deleter, shared_file_deleter, base_dir, metadata.id(), rowset));
 
         for (const auto& del_file : rowset.del_files()) {
             if (del_file.shared() && shared_file_deleter != nullptr) {
@@ -370,7 +381,15 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
             for (const auto& rowset : metadata->rowsets()) {
                 for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                     if (is_shared_segment(rowset, i)) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, rowset.segment_metas(i).filename())));
+                        const auto& segment_meta = rowset.segment_metas(i);
+                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, segment_meta.filename())));
+                        // The segment's per-segment .vi sidecars follow the segment; they are named by
+                        // its recorded owner, so delay-delete them under that owner-based name (covers
+                        // both split-shared and bundled segments, matching is_shared_segment above).
+                        for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                            RETURN_IF_ERROR(deleter->delay_delete(
+                                    join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                        }
                     }
                 }
                 for (const auto& del_file : rowset.del_files()) {
@@ -1177,8 +1196,15 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 for (const auto& rowset : latest_metadata->rowsets()) {
                     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
-                            RETURN_IF_ERROR(
-                                    deleter.delete_file(join_path(data_dir, rowset.segment_metas(i).filename())));
+                            const auto& segment_meta = rowset.segment_metas(i);
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment_meta.filename())));
+                            // Delete the segment's per-segment .vi sidecars under the same shared guard
+                            // (skipped while a sibling may still reference a shared segment), named by
+                            // the segment's recorded owner so the right file is removed after a split.
+                            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(
+                                        data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                            }
                         }
                     }
                     for (const auto& del_file : rowset.del_files()) {
@@ -1186,8 +1212,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
                         }
                     }
-                    // Delete associated .vi files using per-segment vector index metadata
-                    RETURN_IF_ERROR(delete_rowset_vi_files(&deleter, data_dir, rowset));
                 }
                 if (latest_metadata->has_delvec_meta()) {
                     for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
@@ -1452,10 +1476,11 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                 data_files.erase(segment);
                 data_files_in_metadatas.emplace(segment);
             }
-            // Protect associated .vi files using per-segment vector index metadata
+            // Protect associated .vi files, named by the segment's recorded owner (not
+            // check_meta->id(): split-shared segments must be protected under the writer's name).
             for (const auto& segment_meta : rowset.segment_metas()) {
                 for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename(segment_meta.filename(), vi_id);
+                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                     data_files.erase(vi_name);
                     data_files_in_metadatas.emplace(vi_name);
                 }

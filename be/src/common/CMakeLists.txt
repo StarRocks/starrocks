@@ -42,6 +42,7 @@ set(COMMON_FILES
   thread/thread.cpp
   thread/threadpool.cpp
   s3_uri.cpp
+  storage_define.cpp
   process_exit.cpp
   util/bthreads/executor.cpp
   util/debug_util.cpp

@@ -3448,6 +3448,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect %s is not found in plan:\n %s" % (expect, plan_string),
             )
 
+    def get_col_stats_from_explain_costs(self, query, col_name):
+        """
+        Run EXPLAIN COSTS and return the column statistics line for the given column.
+        The returned string (e.g. 'col_name-->[min, max, nullFrac, size, ndv] TYPE') is
+        captured by --record so it can be validated on future runs without hardcoding values.
+        """
+        sql = "explain costs %s" % query
+        res = self.execute_sql(sql, True)
+        plan_string = "\n".join(item[0] for item in res["result"])
+        for line in plan_string.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("* %s-->" % col_name):
+                return stripped.lstrip("* ")
+        return None
+
     def assert_show_stats_meta_contains(self, predicate, *expects):
         """
         assert show stats meta with predicate contains expect string

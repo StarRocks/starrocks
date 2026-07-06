@@ -27,10 +27,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 

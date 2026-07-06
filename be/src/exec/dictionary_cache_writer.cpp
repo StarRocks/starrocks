@@ -21,7 +21,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "runtime/service_contexts.h"
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

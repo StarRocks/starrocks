@@ -25,15 +25,14 @@
 #include "base/utility/defer_op.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using ::testing::Return;
 using ::testing::ByMove;
@@ -78,13 +77,16 @@ TEST_F(HiveChunkSinkTest, test_callback) {
                                                     std::move(partition_chunk_writer_factory), _runtime_state);
         sink->init_profile();
         sink->callback_on_commit(CommitResult{
-                .io_status = Status::OK(),
-                .format = formats::PARQUET,
-                .file_statistics =
+                .file_result =
                         {
-                                .record_count = 100,
+                                .io_status = Status::OK(),
+                                .format = formats::PARQUET,
+                                .file_statistics =
+                                        {
+                                                .record_count = 100,
+                                        },
+                                .location = "path/to/directory/data.parquet",
                         },
-                .location = "path/to/directory/data.parquet",
         });
 
         EXPECT_EQ(_runtime_state->num_rows_load_sink(), 100);

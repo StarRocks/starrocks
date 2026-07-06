@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/primitive/key_coder.h"
+#include "storage_primitive/key_coder.h"
 
 #include <gtest/gtest.h>
 

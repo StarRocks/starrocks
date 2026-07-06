@@ -85,6 +85,24 @@ select c_struct.c1 from TABLE(unnest(array<struct<c1 int>>[named_struct('c1', 10
 10
 20
 -- !result
+-- name: test_array_of_struct_prune_first_subfield
+select c_struct.c1 from TABLE(unnest(array<struct<c1 int, c2 int>>[named_struct('c1', 10, 'c2', 1), named_struct('c1', 20, 'c2', 2)])) t(c_struct);
+-- result:
+10
+20
+-- !result
+-- name: test_array_of_struct_prune_second_subfield
+select c_struct.c2 from TABLE(unnest(array<struct<c1 int, c2 int>>[named_struct('c1', 10, 'c2', 1), named_struct('c1', 20, 'c2', 2)])) t(c_struct);
+-- result:
+1
+2
+-- !result
+-- name: test_array_of_struct_no_prune_all_subfields
+select c_struct.c1, c_struct.c2 from TABLE(unnest(array<struct<c1 int, c2 int>>[named_struct('c1', 10, 'c2', 1), named_struct('c1', 20, 'c2', 2)])) t(c_struct);
+-- result:
+10	1
+20	2
+-- !result
 -- name: test_array_of_map
 select c_map['a'], c_map['b'] from TABLE(unnest(array<map<string, int>>[map{'a':1,'b':2}, map{'a':2, 'b':3}])) t(c_map);
 -- result:

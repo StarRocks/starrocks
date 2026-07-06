@@ -22,17 +22,17 @@
 namespace starrocks {
 
 std::pair<std::string_view, std::string_view> JsonFlatPath::split_path(const std::string_view& path) {
-    size_t pos = 0;
-    pos = path.find('.', pos);
-    std::string_view key;
-    std::string_view next;
-    if (pos == std::string::npos) {
-        key = path;
-    } else {
-        key = path.substr(0, pos);
-        next = path.substr(pos + 1);
+    // A quoted level like "a.b" is a single key whose interior '.' is part of the name (the FE wraps a
+    // key containing the '.' separator in quotes, see SubfieldAccessPathNormalizer.formatJsonPath);
+    // resume the separator search after the closing quote, then strip the wrapping quotes so the level
+    // key equals the raw vpack object key, which carries none.
+    size_t scan = (!path.empty() && path.front() == '"') ? path.find('"', 1) : 0;
+    size_t dot = path.find('.', scan);
+    std::string_view key = path.substr(0, dot);
+    std::string_view next = (dot == std::string_view::npos) ? std::string_view{} : path.substr(dot + 1);
+    if (key.size() >= 2 && key.front() == '"' && key.back() == '"') {
+        key = key.substr(1, key.size() - 2); // strip the wrapping quotes
     }
-
     return {key, next};
 }
 

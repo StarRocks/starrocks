@@ -1104,12 +1104,18 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     visit(rollupItemContext.dupKeys().identifierList().identifier(), Identifier.class);
             dupKeys = identifierList.stream().map(Identifier::getValue).collect(toList());
         }
+        List<String> sortKeys = null;
+        if (rollupItemContext.rollupOrderByDesc() != null) {
+            final List<Identifier> sortIdentifiers =
+                    visit(rollupItemContext.rollupOrderByDesc().identifierList().identifier(), Identifier.class);
+            sortKeys = sortIdentifiers.stream().map(Identifier::getValue).collect(toList());
+        }
         String baseRollupName = rollupItemContext.fromRollup() != null ?
                 ((Identifier) visit(rollupItemContext.fromRollup().identifier())).getValue() : null;
         Map<String, String> properties = rollupItemContext.properties() == null ?
                 null : getCaseSensitiveProperties(rollupItemContext.properties());
         return new AddRollupClause(rollupName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                dupKeys, baseRollupName,
+                dupKeys, sortKeys, baseRollupName,
                 properties, createPos(rollupItemContext));
     }
 
@@ -1297,7 +1303,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     tempTableRef,
                     null,
                     context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                    "",
+                    context.engineDesc() == null ? "" :
+                            ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                     null,
                     context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                     partitionDesc,
@@ -1327,7 +1334,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 tableRef,
                 null,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                "",
+                context.engineDesc() == null ? "" :
+                        ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 null,
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 partitionDesc,
@@ -1901,7 +1909,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         boolean isSecurity = false;
-        if (context.SECURITY() != null) {
+        boolean securityExplicit = context.SECURITY() != null;
+        if (securityExplicit) {
             if (context.NONE() != null) {
                 isSecurity = false;
             } else if (context.INVOKER() != null) {
@@ -1916,6 +1925,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 isSecurity,
+                securityExplicit,
                 (QueryStatement) visit(context.queryStatement()),
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())

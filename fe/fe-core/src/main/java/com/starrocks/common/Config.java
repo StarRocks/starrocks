@@ -2496,6 +2496,10 @@ public class Config extends ConfigBase {
             "generation and dump them to logs when plan generation fails (e.g. CBO timeout) for diagnosis.")
     public static boolean enable_dump_optimizer_trace_on_error = false;
 
+    @ConfField(mutable = true, comment = "Whether to push down non-grouped aggregations below Union " +
+            "in the physical plan")
+    public static boolean push_down_non_grouped_aggregate_below_union = false;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2682,6 +2686,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Synchronously load statistics (may cause query delay)")
     public static boolean enable_sync_statistics_load = false;
+
+    @ConfField(mutable = true, comment = "Timeout to synchronously wait for stats " +
+            "(when `enable_sync_statistics_load` is enabled)")
+    public static int sync_statistics_load_timeout_ms = 5000;
 
     /**
      * default bucket size of histogram statistics
@@ -4576,6 +4584,34 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
     public static int tablet_reshard_max_split_count = 1024;
+
+    @ConfField(mutable = true, comment = "Max number of tablets the range-colocate checker sends to StarOS in a "
+            + "single getShardInfo membership-read batch RPC on shared-data clusters; values < 1 are treated as 1.")
+    public static int tablet_reshard_colocate_checker_membership_batch_size = 1000;
+
+    @ConfField(mutable = true, comment = "Max number of PACK shard groups the range-colocate checker sends to StarOS "
+            + "in a single queryShardGroupStable placement-convergence batch RPC. Each group's stability check is "
+            + "computed server-side, so a smaller batch bounds per-RPC latency (the full result is assembled across "
+            + "repeated calls); values < 1 are treated as 1.")
+    public static int tablet_reshard_colocate_checker_convergence_batch_size = 64;
+
+    /**
+     * The minimum size of a tablet produced by pre-split. Bounds the compute-node alignment
+     * during pre-split so that splitting a small load across many compute nodes does not
+     * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
+     */
+    @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
+            + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
+            + "Should be no larger than tablet_reshard_target_size.")
+    public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
+
+    @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
+            + "placement-convergence negative cache. Within this window a PACK shard group last "
+            + "reported not-yet-converged by StarOS is not re-queried, throttling the per-tick "
+            + "queryShardGroupStable load while a group is still migrating. Only not-converged "
+            + "results are cached, so a stale entry only delays the group's stable flip by up to "
+            + "this window (never a premature flip); values <= 0 disable the cache.")
+    public static long tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 1000;
 
     @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
             "Only takes effect for tables in clusters with run_mode=shared_data.")

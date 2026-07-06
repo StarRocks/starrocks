@@ -40,14 +40,14 @@
 #include "base/time/time.h"
 #include "column/column.h"
 #include "common/runtime_profile.h"
+#include "exec/exec_env.h"
 #include "exec/plain_text_builder.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "fs/fs_broker.h"
 #include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
+#include "platform/fs_broker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

@@ -537,7 +537,11 @@ rollupDesc
     ;
 
 rollupItem
-    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    : rollupName=identifier identifierList (dupKeys)? (rollupOrderByDesc)? (fromRollup)? properties?
+    ;
+
+rollupOrderByDesc
+    : ORDER BY identifierList
     ;
 
 dupKeys
@@ -558,6 +562,7 @@ ifNotExists:
 createTableAsSelectStatement
     : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? qualifiedName
         ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
+        engineDesc?
         keyDesc?
         comment?
         partitionDesc?

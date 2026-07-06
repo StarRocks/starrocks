@@ -17,13 +17,18 @@ set(COMMON_TEST_FILES
     process_metrics_registry_test.cpp
     backend_options_test.cpp
     bloom_filter_test.cpp
+    brpc/brpc_stub_cache_test.cpp
+    brpc/internal_service_recoverable_stub_parallel_test.cpp
+    brpc/internal_service_recoverable_stub_test.cpp
     config_test.cpp
     cow_test.cpp
     greplog_test.cpp
     process_exit_test.cpp
     runtime_profile_test.cpp
+    simdjson_util_test.cpp
     stack_util_test.cpp
     stack_trace_mutex_test.cpp
+    system/cpu_info_test.cpp
     system/master_info_test.cpp
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp

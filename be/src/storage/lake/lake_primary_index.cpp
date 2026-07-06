@@ -28,8 +28,8 @@
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
 #include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

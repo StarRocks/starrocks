@@ -16,16 +16,16 @@
 
 #include <mutex>
 
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "storage/primitive/range.h"
 #include "storage/query/olap_morsel_queue.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::pipeline {
 

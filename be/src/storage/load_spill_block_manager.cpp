@@ -24,8 +24,8 @@
 #include "compute_env/spill/log_block_manager.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 
@@ -37,7 +37,7 @@ static int calc_max_merge_blocks_thread() {
     // 1. Meet the memory limit requirements (by config::load_spill_merge_memory_limit_percent) for load spill.
     // 2. Each thread can use 1GB(by config::load_spill_memory_usage_per_merge) of memory.
     // 3. The maximum number of threads is limited by config::load_spill_merge_max_thread.
-    int64_t load_spill_merge_memory_limit_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->limit() *
+    int64_t load_spill_merge_memory_limit_bytes = RuntimeEnv::GetInstance()->process_mem_tracker()->limit() *
                                                   config::load_spill_merge_memory_limit_percent / (int64_t)100;
     int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_memory_usage_per_merge;
 #else

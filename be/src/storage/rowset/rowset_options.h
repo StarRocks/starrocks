@@ -23,10 +23,10 @@
 #include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 class Conditions;

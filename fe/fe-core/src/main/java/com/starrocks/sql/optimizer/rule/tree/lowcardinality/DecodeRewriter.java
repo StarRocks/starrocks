@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -65,13 +66,13 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.rule.tree.lowcardinality.DecodeCollector.supportLowCardinality;
 
 /*
  * Rewrite the whole plan using the dict column by from bottom-up
@@ -94,7 +95,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (scalarOperator.isColumnRef()) {
             return new ColumnRefSet(((ColumnRefOperator) scalarOperator).getId());
         }
-        Map<String, ColumnRefOperator> structFieldsData = context.getFieldUseStringRefMap(scalarOperator);
+        Map<String, ColumnRefOperator> structFieldsData = context.structManager.getFieldStringRefMap(scalarOperator);
         if (structFieldsData != null) {
             return new ColumnRefSet(structFieldsData.values());
         }
@@ -134,6 +135,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
         fragmentUsedDictExprs.union(decodeInfo.outputStringColumns);
         fragmentUsedDictExprs.union(decodeInfo.usedStringColumns);
+        fragmentUsedDictExprs.union(decodeInfo.inProgressStringAggregations);
         ColumnRefSet childFragmentUsedDictExpr = optExpression.getOp() instanceof PhysicalDistributionOperator ?
                 new ColumnRefSet() : fragmentUsedDictExprs;
 
@@ -154,8 +156,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         // some string column need rewrite
         boolean hasDictInput = !decodeInfo.inputStringColumns.isEmpty();
         boolean hasDictOutput = !decodeInfo.outputStringColumns.isEmpty();
+        boolean hasDictAggregate = !decodeInfo.inProgressStringAggregations.isEmpty() ||
+                !decodeInfo.finalizingStringAggregations.isEmpty();
 
-        if (hasDictInput || hasDictOutput) {
+        if (hasDictInput || hasDictOutput || hasDictAggregate) {
             return optExpression.getOp().accept(this, optExpression, fragmentUsedDictExprs);
         }
         return optExpression;
@@ -288,10 +292,13 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         if (info == null) {
             info = DecodeInfo.empty();
         }
+        ColumnRefSet encodedUnionColumns = new ColumnRefSet();
         final DecodeInfo finalInfo = info;
+        encodedUnionColumns.union(unionOp.getOutputColumnRefOp().stream().filter(
+                c -> finalInfo.outputStringColumns.contains(c) || finalInfo.usedStringColumns.contains(c)).toList());
         List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
                 context.unionDictionaryManager.generateConstantEncodingMap(
-                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
+                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), encodedUnionColumns);
         List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
         for (int i = 0; i < optExpression.arity(); ++i) {
             Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
@@ -319,15 +326,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             optExpression.setChild(i, newChild);
         }
         List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
-                c -> context.allStringColumns.contains(c.getId())
-                        ? context.stringRefToDictRefMap.get(c) : c).toList();
+                c -> encodedUnionColumns.contains(c) ? context.stringRefToDictRefMap.get(c) : c).toList();
 
-        ColumnRefSet inputColumns = new ColumnRefSet();
-        inputColumns.union(finalInfo.inputStringColumns);
-        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
-                .forEach(inputColumns::union);
-        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
-        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), encodedUnionColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), encodedUnionColumns);
 
         PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
                 unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
@@ -363,8 +365,8 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             }
 
             // merge stage is different from update stage
-            if (supportLowCardinality(aggFn.getType())) {
-                ColumnRefOperator newAggRef = context.stringRefToDictRefMap.getOrDefault(aggRef, aggRef);
+            if (context.stringRefToDictRefMap.containsKey(aggRef)) {
+                ColumnRefOperator newAggRef = context.stringRefToDictRefMap.get(aggRef);
                 aggregations.put(newAggRef, context.stringExprToDictExprMap.get(aggFn).cast());
                 inputStringRefs.union(aggRef.getId());
             } else {
@@ -488,13 +490,14 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Map<Integer, ColumnDict> dictMap = Maps.newHashMap();
         ColumnRefSet inputColumns = new ColumnRefSet();
         inputColumns.union(info.inputStringColumns);
-        info.inputStringColumns.getStream()
+        inputColumns.union(info.inProgressStringAggregations);
+        inputColumns.union(inputColumns.getStream()
                 .map(factory::getColumnRef)
                 .filter(c -> c.getType().isStructType())
-                .map(context::getFieldUseStringRefMap)
+                .map(context.structManager::getFieldStringRefMap)
                 .filter(Objects::nonNull)
-                .map(Map::values)
-                .forEach(inputColumns::union);
+                .flatMap(k -> k.values().stream())
+                .toList());
         for (int sid : inputColumns.getColumnIds()) {
             ColumnRefOperator stringRef = factory.getColumnRef(sid);
             if (!context.stringRefToDictRefMap.containsKey(stringRef)) {
@@ -504,14 +507,9 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(stringRef);
             if (context.stringRefToDicts.containsKey(sid)) {
                 dictMap.put(dictRef.getId(), context.stringRefToDicts.get(sid));
-            } else if (context.globalDictsExpr.containsKey(dictRef.getId())) {
-                // compute expressions depend-on dict
-                for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
-                    if (context.stringRefToDicts.containsKey(useRefs.getId())) {
-                        dictMap.put(context.stringRefToDictRefMap.get(useRefs).getId(),
-                                context.stringRefToDicts.get(useRefs.getId()));
-                    }
-                }
+            } else {
+                // follow the dict-expr chain down to the base dictionaries it ultimately needs
+                collectBaseDictChain(dictRef.getId(), dictMap, new HashSet<>());
             }
         }
         List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
@@ -729,13 +727,47 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         return rewriteOptExpression(optExpression, newOp, info.outputStringColumns);
     }
 
+    // Recursively collect a dict expr and every intermediate dict expr it references.
+    private void collectDictExprChain(int dictId, Map<Integer, ScalarOperator> out) {
+        if (out.containsKey(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        if (expr instanceof DictMappingOperator) {
+            collectDictExprChain(((DictMappingOperator) expr).getDictColumn().getId(), out);
+        }
+        out.put(dictId, expr);
+    }
+
+    // Recursively collect the base dictionaries a (possibly chained) dict expr ultimately needs.
+    private void collectBaseDictChain(int dictId, Map<Integer, ColumnDict> dictMap, Set<Integer> visited) {
+        if (!visited.add(dictId)) {
+            return;
+        }
+        ScalarOperator expr = context.globalDictsExpr.get(dictId);
+        if (expr == null) {
+            return;
+        }
+        for (ColumnRefOperator ref : expr.getColumnRefs()) {
+            if (context.stringRefToDicts.containsKey(ref.getId())) {
+                dictMap.put(context.stringRefToDictRefMap.get(ref).getId(),
+                        context.stringRefToDicts.get(ref.getId()));
+            } else if (context.stringRefToDictRefMap.containsKey(ref)) {
+                collectBaseDictChain(context.stringRefToDictRefMap.get(ref).getId(), dictMap, visited);
+            }
+        }
+    }
+
     @NotNull
     private Map<Integer, ScalarOperator> computeDictExpr(ColumnRefSet fragmentUseDictExprs) {
         ColumnRefSet useDictExprs = fragmentUseDictExprs.clone();
         for (int sid : fragmentUseDictExprs.getColumnIds()) {
             ColumnRefOperator strRef = factory.getColumnRef(sid);
             if (strRef.getType().isStructType()) {
-                Map<String, ColumnRefOperator> subFields = context.getFieldUseStringRefMap(strRef);
+                Map<String, ColumnRefOperator> subFields = context.structManager.getFieldStringRefMap(strRef);
                 if (subFields != null) {
                     useDictExprs.union(subFields.values());
                 }
@@ -749,9 +781,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 continue;
             }
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(strRef);
-            if (context.globalDictsExpr.containsKey(dictRef.getId())) {
-                dictExprs.put(dictRef.getId(), context.globalDictsExpr.get(dictRef.getId()));
-            }
+            // A kept (non-flattened) dict expr can reference an intermediate dict, which can
+            // reference another, etc. Collect the whole chain so the fragment that decodes the
+            // top dict also has every intermediate dict expr it depends on.
+            collectDictExprChain(dictRef.getId(), dictExprs);
         }
         return dictExprs;
     }

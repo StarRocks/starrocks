@@ -14,6 +14,7 @@ ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 -- index_build_threshold=1 forces the (default sync) inline .vi build for these small row counts;
 -- the default threshold is 10000, which a SQL-tester-sized table never reaches, so without this
 -- the queries would silently run the missing-.vi fallback instead of the index path.
+-- The IVFPQ table uses threshold 16 instead (DDL now requires threshold >= nlist); HNSW tables keep 1.
 -- =====================================================================
 
 CREATE TABLE __refine_rows (
@@ -31,7 +32,7 @@ CREATE TABLE t_ivfpq (
   INDEX idx (v) USING VECTOR (
     "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
     "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2",
-    "index_build_threshold" = "1")
+    "index_build_threshold" = "16")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
