@@ -522,6 +522,34 @@ public class RangeDistributionPrunerTest {
         });
     }
 
+    @Test
+    public void testSingleColumnNonAsciiEqualityPrune() {
+        Column k = new Column("k", VarcharType.VARCHAR, false);
+
+        List<Tablet> tablets = Lists.newArrayList();
+        // Unsigned byte order: a < b < c < d < m < é (é's first UTF-8 byte 0xC3 > ASCII 'm' 0x6D).
+        // Tablet 3 spans an ASCII lower bound to a non-ASCII upper bound; [m, é] is a valid
+        // ascending range ONLY under unsigned bytes. The old signed compare ranks é below every
+        // ASCII byte, inverting that range so RangeDistributionPruner's TreeMap lookup drops it.
+        tablets.add(createTablet(1L, "a", "b", k));
+        tablets.add(createTablet(2L, "c", "d", k));
+        tablets.add(createTablet(3L, "m", "é", k));
+
+        PartitionColumnFilter filter = new PartitionColumnFilter();
+        filter.setLowerBound(new StringLiteral("é"), true);
+        filter.setUpperBound(new StringLiteral("é"), true);
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("k", filter);
+
+        RangeDistributionPruner pruner =
+                new RangeDistributionPruner(tablets, Lists.newArrayList(k), filters);
+
+        // "é" lies in tablet 3's [m, é] under unsigned bytes, so only tablet 3 matches. The old
+        // signed-byte compare inverts that range and orders every tablet above the query, so the
+        // pruner returns empty (misses tablet 3) -- this assertion is the RED/GREEN guard.
+        Assertions.assertEquals(Collections.singleton(3L), new HashSet<>(pruner.prune()));
+    }
+
     private Tablet createTablet(long id, String lower, String upper, Column column) {
         LocalTablet tablet = new LocalTablet(id);
         List<Variant> lowerValues = Lists.newArrayList(Variant.of(column.getType(), lower));

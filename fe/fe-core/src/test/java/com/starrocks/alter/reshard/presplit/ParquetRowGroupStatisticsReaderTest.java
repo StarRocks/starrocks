@@ -94,9 +94,9 @@ class ParquetRowGroupStatisticsReaderTest {
         String globalMin = null;
         String globalMax = null;
         for (RowGroupStatistics rowGroup : rowGroupStatistics) {
-            // Binary stats are conservatively marked truncated so string sort keys
-            // route through data tier — see the class javadoc for rationale.
-            Assertions.assertTrue(rowGroup.isTruncated());
+            // String chunk stats are exact in practice (parquet-cpp/parquet-mr do not
+            // truncate chunk-level Statistics); trust them for a meta-tier split.
+            Assertions.assertFalse(rowGroup.isTruncated());
             String minValue = rowGroup.getMinTuple().getValues().get(0).getStringValue();
             String maxValue = rowGroup.getMaxTuple().getValues().get(0).getStringValue();
             Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
@@ -105,6 +105,21 @@ class ParquetRowGroupStatisticsReaderTest {
         }
         Assertions.assertEquals("tenant-00", globalMin);
         Assertions.assertEquals("tenant-15", globalMax);
+    }
+
+    @Test
+    void charSortKeyFallsBackToDataTier() throws Exception {
+        // A CHAR(N) sort key is padded/truncated to its fixed width by the BE before routing,
+        // so the raw UTF8 footer min/max cannot be trusted for a meta-tier split -- reject eagerly.
+        Path parquetPath = writeParquet(
+                "message schema { required binary tenant (UTF8); }",
+                /*rowCount=*/ 4,
+                (group, rowIndex) -> group.append("tenant", String.format("tenant-%02d", rowIndex)));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("tenant", TypeFactory.createCharType(16))));
     }
 
     @Test

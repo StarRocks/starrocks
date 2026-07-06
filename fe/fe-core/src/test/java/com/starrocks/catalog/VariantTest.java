@@ -275,8 +275,25 @@ public class VariantTest {
         StringVariant v1 = new StringVariant(VarcharType.VARCHAR, "abc\0");
         StringVariant v2 = new StringVariant(VarcharType.VARCHAR, "abc");
 
-        // When one string has null byte at the end, they should be equal
-        Assertions.assertEquals(0, v1.compareTo(v2));
+        // A trailing NUL is a real extra byte: BE memcompare (be/src/base/string/memcmp.h)
+        // has no NUL special case, so the longer string sorts after the shorter one.
+        Assertions.assertTrue(v1.compareTo(v2) > 0);
+        Assertions.assertTrue(v2.compareTo(v1) < 0);
+    }
+
+    @Test
+    public void testStringVariantNonAsciiUnsignedOrder() {
+        // FE StringVariant ordering must equal BE unsigned-byte order.
+        StringVariant z = new StringVariant(VarcharType.VARCHAR, "z");
+        StringVariant e = new StringVariant(VarcharType.VARCHAR, "é"); // é, 0xC3 0xA9
+        Assertions.assertTrue(z.compareTo(e) < 0);
+        Assertions.assertTrue(e.compareTo(z) > 0);
+        StringVariant a = new StringVariant(VarcharType.VARCHAR, "a");
+        StringVariant cjk = new StringVariant(VarcharType.VARCHAR, "中"); // 中, 0xE4 0xB8 0xAD
+        Assertions.assertTrue(a.compareTo(cjk) < 0);
+        StringVariant abc = new StringVariant(VarcharType.VARCHAR, "abc");
+        StringVariant abcd = new StringVariant(VarcharType.VARCHAR, "abcd");
+        Assertions.assertTrue(abc.compareTo(abcd) < 0);
     }
 
     @Test
