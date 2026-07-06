@@ -79,6 +79,12 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
 
+// Transform a shadow rewrite txn log in-place: move the op_write rowset into
+// op_schema_change.rowsets (with id=1) and set alter_version. If there is no
+// op_write rowset (empty partition at W), leaves an empty op_schema_change with
+// alter_version set.
+void convert_op_write_to_op_schema_change(TxnLogPB* log, int64_t alter_version);
+
 // Convert |txn_log| so it can be applied to the new tablet identified by
 // |publish_tablet_info|.
 //

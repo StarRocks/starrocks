@@ -18,8 +18,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class TabletReshardUtils {
+    private static final Logger LOG = LogManager.getLogger(TabletReshardUtils.class);
 
     // Reshard size invariants — DO NOT change individually.
     //
@@ -156,5 +159,17 @@ public class TabletReshardUtils {
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
         return parallelismFloor(computeNodeCount(computeResource), Config.tablet_reshard_max_split_count);
+    }
+
+    // Parallelism floor for merge eligibility; returns 0 (ungated) when warehouse state is unavailable.
+    // computeParallelismFloor resolves warehouse compute-node count via StarMgr, so call it off hot,
+    // lock-held paths (e.g. the periodic scan), not per-publish.
+    public static int safeComputeParallelismFloor(long tableId) {
+        try {
+            return computeParallelismFloor(tableId);
+        } catch (RuntimeException e) {
+            LOG.warn("Parallelism floor unavailable for table {}; auto-merge will not be floor-gated.", tableId, e);
+            return 0;
+        }
     }
 }

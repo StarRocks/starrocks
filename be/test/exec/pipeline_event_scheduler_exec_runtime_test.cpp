@@ -20,15 +20,15 @@
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/primitives/driver_state.h"
-#include "exec/pipeline/primitives/event.h"
 #include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "exec/runtime/schedule/event_scheduler.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
+#include "exec_primitive/pipeline/primitives/event.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
 
@@ -187,12 +187,38 @@ TEST(EventSchedulerExecRuntimeTest, ObserverUsesInjectedSchedulerWithoutFragment
 
 TEST(EventSchedulerExecRuntimeTest, AddBlockedDriverUsesLifetimeTokenWithoutQueryContext) {
     SchedulerHarness harness;
+
     ASSERT_OK(harness.prepare());
     ASSERT_EQ(nullptr, harness.runtime_state.query_ctx());
     ASSERT_EQ(nullptr, harness.runtime_state.fragment_ctx());
 
     harness.make_driver_input_ready();
     harness.mark_driver_input_empty();
+
+    // No observer is concurrently in the critical zone, so add_blocked_driver wins the
+    // schedule token. With need_check_reschedule() == false it trusts the observer to wake
+    // the parked driver, so it does NOT re-trigger: the driver stays blocked and is not
+    // pushed to the ready queue.
+    harness.event_scheduler.add_blocked_driver(harness.driver.get());
+
+    EXPECT_TRUE(harness.driver_queue.queued_drivers.empty());
+    EXPECT_TRUE(harness.driver->is_in_blocked());
+    EXPECT_EQ(DriverState::INPUT_EMPTY, harness.driver->driver_state());
+}
+
+TEST(EventSchedulerExecRuntimeTest, AddBlockedDriverReschedulesWhenCheckRequested) {
+    SchedulerHarness harness;
+
+    ASSERT_OK(harness.prepare());
+    ASSERT_EQ(nullptr, harness.runtime_state.query_ctx());
+    ASSERT_EQ(nullptr, harness.runtime_state.fragment_ctx());
+
+    harness.make_driver_input_ready();
+    harness.mark_driver_input_empty();
+
+    // need_check_reschedule() forces add_blocked_driver to re-trigger the observer even
+    // though it acquired the schedule token, so the ready driver is rescheduled.
+    harness.driver->set_need_check_reschedule(true);
 
     harness.event_scheduler.add_blocked_driver(harness.driver.get());
 

@@ -121,4 +121,18 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
+
+    @VisibleForTesting
+    public static long getNextTransactionId() {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+    }
+
+    @VisibleForTesting
+    public static long peekNextTransactionId() {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
+    }
+
+    public static long getNextGtid() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
 }

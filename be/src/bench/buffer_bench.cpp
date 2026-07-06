@@ -24,21 +24,21 @@
 
 #include "column/buffer.h"
 #include "common/memory/column_allocator.h"
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/memory_allocator.h"
 
 namespace starrocks {
 
 MemTracker* process_mem_tracker_provider() {
-    return GlobalEnv::GetInstance()->process_mem_tracker();
+    return RuntimeEnv::GetInstance()->process_mem_tracker();
 }
 
-void ensure_global_env() {
-    CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
-    if (!GlobalEnv::is_init()) {
-        auto env = GlobalEnv::GetInstance();
+void ensure_runtime_env() {
+    CurrentThread::set_mem_tracker_source(&RuntimeEnv::is_init, process_mem_tracker_provider);
+    if (!RuntimeEnv::is_init()) {
+        auto env = RuntimeEnv::GetInstance();
         env->_process_mem_tracker = std::make_shared<MemTracker>(-1, "buffer_bench_root");
         env->_is_init = true;
     }
@@ -50,7 +50,7 @@ memory::Allocator* kCachedBufferBenchAllocator = memory::get_default_allocator()
 
 struct ScopedBenchMemTrackerContext {
     explicit ScopedBenchMemTrackerContext(benchmark::State& state)
-            : tracker(GlobalEnv::GetInstance()->process_mem_tracker()), mem_tracker_setter(tracker) {
+            : tracker(RuntimeEnv::GetInstance()->process_mem_tracker()), mem_tracker_setter(tracker) {
         if (state.thread_index == 0) {
             tracker->set(0);
         }
@@ -392,7 +392,7 @@ REGISTER_INIT_LIST_BENCH(run_append_init_list_bench, int64_t);
 } // namespace starrocks
 
 int main(int argc, char** argv) {
-    starrocks::ensure_global_env();
+    starrocks::ensure_runtime_env();
     benchmark::Initialize(&argc, argv);
     if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
         return 1;

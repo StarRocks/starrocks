@@ -14,6 +14,7 @@
 
 #include "table_function_operator.h"
 
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -187,7 +188,18 @@ Status TableFunctionOperator::_process_table_function(RuntimeState* state) {
     _next_output_row = 0;
     _next_output_row_offset = 0;
 
-    _table_function_result = _table_function->process(state, _table_function_state);
+    // A table function (e.g. unnest) materializes the whole expansion of the input chunk in
+    // this single call, with no intermediate memory-limit check. For wide arrays this one step
+    // can allocate tens of GB and get the BE OOM-killed before the next pipeline-driver limit
+    // check fires. For implementations whose process() is exception-safe, wrap it in
+    // TRY_CATCH_BAD_ALLOC so allocations are checked against the query/query_pool/process mem
+    // tracker per batch and a runaway query fails with MemoryLimitExceeded instead of crashing
+    // the whole BE; implementations that are not exception-safe keep the original behavior.
+    if (_table_function->is_exception_safe()) {
+        TRY_CATCH_BAD_ALLOC(_table_function_result = _table_function->process(state, _table_function_state));
+    } else {
+        _table_function_result = _table_function->process(state, _table_function_state);
+    }
     return _table_function_state->status();
 }
 

@@ -443,6 +443,9 @@ public class InsertPlanner {
                 if (session.getTxnId() != 0) {
                     ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
                 }
+                if (insertStmt.getTargetWriteIndexId() != null) {
+                    ((OlapTableSink) dataSink).setTargetWriteIndexId(insertStmt.getTargetWriteIndexId());
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
@@ -579,6 +582,11 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            if (session.getSessionVariable().isEnableIVMRefresh()) {
+                // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
+                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
+            }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     preOptimizePlanContext.root,

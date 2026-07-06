@@ -23,9 +23,9 @@
 #include "fs/fs.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "roaring/roaring.hh"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 class Segment;

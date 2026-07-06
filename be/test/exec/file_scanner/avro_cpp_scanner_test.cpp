@@ -20,11 +20,11 @@
 #include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "exec/exec_env.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "fs/fs.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

@@ -429,6 +429,15 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **类型**: String
 * **引入版本**: v3.4.2, v3.5.0
 
+### default_view_sql_security
+
+* **描述**: 创建视图时，如果 `CREATE VIEW` 语句未显式指定 `SECURITY` 子句，则使用该变量作为默认的 SQL SECURITY 特性。`NONE`（等价于显式的 `SECURITY NONE` 子句）表示查询视图时只需要执行者拥有该视图本身的 `SELECT` 权限，不会针对执行者校验视图所引用的表的权限；`INVOKER`（等价于 `SECURITY INVOKER`）表示执行者还必须拥有视图所引用的表的 `SELECT` 权限。语句中显式指定的 `SECURITY NONE` 或 `SECURITY INVOKER` 子句始终优先于该变量。该变量仅影响 `CREATE VIEW`，不影响 `ALTER VIEW`。
+* **范围**: Session
+* **默认值**: `NONE`
+* **类型**: String
+* **取值范围**: `NONE`, `INVOKER`
+* **引入版本**: v4.1.1
+
 ### disable_colocate_join
 
 * 描述：控制是否启用 Colocate Join 功能。默认值为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
@@ -916,6 +925,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）的会话级开关。默认 `true`，因此主开关由 FE 配置 `enable_tablet_pre_split_for_*` 控制。对于不希望被预分裂干扰的会话，可将其设为 `false`。预分裂需同时满足对应 FE 配置和该会话变量都为 `true`。
 * 默认值：true
 * 引入版本：v4.1.0
+
+### enable_topn_filter_back_pressure
+
+* 描述: Scan 是否自动启用 TopN Runtime Filter（RF）背压。当一个 TopN/流式构建的 RF（来自 `ORDER BY ... LIMIT` 查询，或聚合 in-filter）作用于某个 Scan 时,背压会在该 RF 真正到达之前,将 Scan 的预读 IO 任务数钳制到较小的值,避免大量并发读取超出(非并发感知的)行预算、在 RF 生效前就淹没下游聚合。该机制对 shared-nothing（OLAP）和 shared-data（湖仓/connector）Scan 均生效。设为 `false` 时,Scan 仅在 FE 的 `topn_filter_back_pressure_mode` 开启时才启用背压。
+* 默认值: true
+* 引入版本: v4.1
+
+以下变量用于调节背压行为,仅在 `enable_topn_filter_back_pressure` 为 `true` 时生效:
+
+| 变量 | 默认值 | 描述 |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | TopN RF 尚未到达期间,Scan 预读的 IO 任务数上限。设为 `<= 0` 可关闭钳制（Scan 使用完整的 `io_tasks_per_scan_operator`）。 |
+| `topn_back_pressure_num_rows` | 1024 | 第一个节流轮次中,背压开始节流前 Scan 可读取的行数。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_ms` | 8 | 第一个节流窗口的时长（毫秒）。每个后续轮次翻倍。 |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | 背压节流某个 Scan 的总时长上限（毫秒）；达到上限后即使 RF 仍未到达,也会放行 Scan 以完整预读运行。 |
+| `topn_back_pressure_max_rounds` | 8 | 背压放弃前的最大节流轮次数。 |
 
 ### enable_topn_runtime_filter
 
@@ -1426,6 +1451,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：在SQL执行计划中, 单表允许的最大扫描分区数.
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
+
+### allow_lake_without_partition_filter
+
+* 描述：是否允许对湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）进行无分区过滤条件的查询。当设置为 `false` 时，未包含有效分区过滤条件的查询将被拒绝，以防止意外的全表扫描。
+* 作用域：Session
+* 默认值：`true`
+* 数据类型：Boolean
+* 别名：`allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* 描述：单张湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）允许扫描的最大分区数。设置为 `0` 表示无限制。超出限制时查询将报错。注意：对于增量式枚举分片的 catalog 类型（Iceberg、Delta Lake），分区数限制在 scan-range 分发阶段检查，查询可能在执行中途失败而非被立即拒绝。
+* 作用域：Session
+* 默认值：`0`（无限制）
+* 数据类型：Int
+* 别名：`scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 

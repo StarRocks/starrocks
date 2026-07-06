@@ -15,15 +15,15 @@
 #include "exec/runtime/schedule/event_scheduler.h"
 
 #include "base/time/time.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/primitives/driver_state.h"
 #include "exec/runtime/fragment_runtime_state.h"
 #include "exec/runtime/pipeline_driver.h"
 #include "exec/runtime/query_runtime_state.h"
 #include "exec/runtime/schedule/common.h"
 #include "exec/runtime/schedule/pipeline_driver_observer.h"
 #include "exec/runtime/schedule/utils.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -81,20 +81,23 @@ void EventScheduler::try_schedule(const DriverRawPtr driver) {
     auto* query_runtime_state = driver->query_runtime_state();
     if (runtime_state->is_cancelled() && !driver->is_operator_cancelled()) {
         add_to_ready_queue = true;
-    } else if (!driver->is_finished() && need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
-        add_to_ready_queue = true;
     } else if (driver->pending_finish()) {
         if (!driver->is_still_pending_finish()) {
             driver->set_driver_state(runtime_state->is_cancelled() ? DriverState::CANCELED : DriverState::FINISH);
             add_to_ready_queue = true;
+        } else if (need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
+            // Still waiting on pending I/O: don't change the driver state (it stays PENDING_FINISH), but keep
+            // enqueuing it periodically so the executor's !is_ready() path fires report_exec_state_if_necessary().
+            // Otherwise a long pending-finish driver stops sending runtime profiles until the final finish event.
+            add_to_ready_queue = true;
         }
     } else if (driver->is_finished()) {
         add_to_ready_queue = true;
-    } else {
-        if (driver->check_is_ready()) {
-            driver->set_driver_state(DriverState::READY);
-            add_to_ready_queue = true;
-        }
+    } else if (driver->check_is_ready()) {
+        driver->set_driver_state(DriverState::READY);
+        add_to_ready_queue = true;
+    } else if (need_report_exec_state(fragment_runtime_state, query_runtime_state)) {
+        add_to_ready_queue = true;
     }
 
     if (add_to_ready_queue) {

@@ -20,9 +20,9 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
+#include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {

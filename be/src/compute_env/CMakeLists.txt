@@ -64,6 +64,7 @@ set(COMPUTE_ENV_SPILL_FILES
 set(COMPUTE_ENV_QUERY_CACHE_FILES
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
+    query_cache/query_cache_metrics.cpp
 )
 
 set(COMPUTE_ENV_QUERY_FILES
@@ -89,6 +90,32 @@ set(COMPUTE_ENV_LOAD_PATH_FILES
     load_path/rejected_record_writer.cpp
 )
 
+set(COMPUTE_ENV_LOAD_FILES
+    load/stream_context_mgr.cpp
+    load/stream_load_context_handle.cpp
+    load/stream_load_context.cpp
+    load/stream_load_metrics.cpp
+    load/stream_load_pipe.cpp
+    load/time_bounded_stream_load_pipe.cpp
+)
+
+set(COMPUTE_ENV_LOAD_SPILL_FILES
+    load_spill/load_spill_block_manager.cpp
+    load_spill/load_spill_block_merge_executor.cpp
+)
+
+set(COMPUTE_ENV_STAROS_FILES
+    staros/staros_status.cpp
+    staros/staros_starcache.cpp
+    staros/staros_worker.cpp
+    staros/staros_worker_metrics.cpp
+    staros/staros_worker_runtime.cpp
+)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND COMPUTE_ENV_STAROS_FILES staros/starlet_filesystem.cpp)
+endif()
+
 ADD_BE_LIB(ComputeEnv
     compute_env.cpp
     data_stream/data_stream_mgr.cpp
@@ -110,17 +137,19 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_GLOBAL_DICT_FILES}
     ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
+    ${COMPUTE_ENV_LOAD_FILES}
+    ${COMPUTE_ENV_LOAD_SPILL_FILES}
+    ${COMPUTE_ENV_STAROS_FILES}
 )
 
 target_link_libraries(ComputeEnv PUBLIC
+    Cache
     StoragePrimitive
     ExecPrimitive
-    ExprCore
-    Serde
-    RuntimeEnv
-    RuntimeCore
+    Expr
+    Runtime
     Platform
-    FSCore
+    FileSystem
     IO
     ColumnSortCore
     ChunkCore

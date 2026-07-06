@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "agent/agent_server.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
@@ -31,16 +33,19 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
+#include "platform/platform_env.h"
 #include "platform/store_path.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/update_manager.h"
 
 namespace starrocks {
@@ -52,14 +57,23 @@ public:
 
     void SetUp() override {
         ConfigUpdateRegistry::instance()->TEST_reset();
-        _global_env = GlobalEnv::GetInstance();
-        register_config_update_hooks(ExecEnv::GetInstance(), *_global_env);
+        _runtime_env = RuntimeEnv::GetInstance();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr, RuntimeEnv::GetInstance()->diagnose_daemon(),
+                                                             PlatformEnv::GetInstance()->brpc_stub_cache());
+        ASSERT_OK(_load_channel_mgr->init(_runtime_env->load_mem_tracker()));
+        register_config_update_hooks(ExecEnv::GetInstance(), *_runtime_env, _load_channel_mgr.get());
         ConfigUpdateRegistry::instance()->set_ready();
     }
-    void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
+    void TearDown() override {
+        ConfigUpdateRegistry::instance()->TEST_reset();
+        if (_load_channel_mgr != nullptr) {
+            _load_channel_mgr->close();
+        }
+    }
 
 protected:
-    GlobalEnv* _global_env = nullptr;
+    RuntimeEnv* _runtime_env = nullptr;
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
 };
 
 TEST_F(ConfigUpdateHooksTest, update_datacache_config) {
@@ -115,7 +129,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
-    ASSERT_EQ(8, _global_env->put_aggregate_metadata_thread_pool()->max_threads());
+    ASSERT_EQ(8, _runtime_env->put_aggregate_metadata_thread_pool()->max_threads());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {
@@ -210,7 +224,7 @@ TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
-    auto* thread_pool = _global_env->lake_metadata_fetch_thread_pool();
+    auto* thread_pool = _runtime_env->lake_metadata_fetch_thread_pool();
     ASSERT_NE(nullptr, thread_pool);
     ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
 
@@ -224,24 +238,21 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
-#ifndef __APPLE__
-// Re-registers the hooks with a null exec_env to verify the
-// `vector_query_cache_capacity` callback short-circuits to InternalError instead
-// of dereferencing exec_env. The override of SetUp's registration is OK because
-// TearDown's TEST_reset() restores a clean registry for the next test.
-TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_null_exec_env_returns_internal_error) {
-    ConfigUpdateRegistry::instance()->TEST_reset();
-    register_config_update_hooks(/*exec_env=*/nullptr, *GlobalEnv::GetInstance());
-    ConfigUpdateRegistry::instance()->set_ready();
-
+#ifdef WITH_TENANN
+TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_uninitialized_cache_returns_internal_error) {
+    auto* storage_env = StorageEnv::GetInstance();
+    storage_env->destroy_vector_index_cache();
     auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
     EXPECT_FALSE(st.ok()) << st.to_string();
     EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+
+    ASSERT_OK(storage_env->init_vector_index_cache(RuntimeEnv::GetInstance()->process_mem_limit(),
+                                                   RuntimeEnv::GetInstance()->vector_index_mem_tracker()));
 }
 
 TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
-    auto* cache = ExecEnv::GetInstance()->vector_index_cache();
-    ASSERT_NE(cache, nullptr) << "test_main must initialize ExecEnv with vector_index_cache";
+    auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+    ASSERT_NE(cache, nullptr) << "test_main must initialize StorageEnv with vector_index_cache";
     const std::string saved = config::vector_query_cache_capacity;
 
     // Absolute bytes.

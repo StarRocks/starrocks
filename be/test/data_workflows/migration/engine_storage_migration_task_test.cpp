@@ -18,6 +18,7 @@
 #include <butil/files/file_path.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/path/file_util.h"
@@ -26,7 +27,9 @@
 #include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -35,9 +38,15 @@
 #include "common/system/cpu_info.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "compute_env/compute_env.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/driver_executor_factory.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
 #include "platform/user_function_cache.h"
@@ -45,7 +54,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -786,20 +794,20 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    auto* global_env = starrocks::GlobalEnv::GetInstance();
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
     static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
-    CHECK_OK(global_env->init(process_metrics_registry->root_registry()));
     auto* platform_env = starrocks::PlatformEnv::GetInstance();
     starrocks::PlatformEnvOptions platform_env_options;
     platform_env_options.metrics = process_metrics_registry->root_registry();
     platform_env_options.store_paths = paths;
     CHECK_OK(platform_env->init(std::move(platform_env_options)));
+    auto* runtime_env = starrocks::RuntimeEnv::GetInstance();
+    CHECK_OK(runtime_env->init(process_metrics_registry->root_registry()));
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.compaction_mem_tracker = global_env->process_mem_tracker();
-    options.update_mem_tracker = global_env->update_mem_tracker();
+    options.compaction_mem_tracker = runtime_env->process_mem_tracker();
+    options.update_mem_tracker = runtime_env->update_mem_tracker();
     options.table_metrics_mgr = process_metrics_registry->table_metrics_mgr();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
@@ -810,7 +818,47 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    CHECK_OK(exec_env->init(paths, process_metrics_registry, global_env));
+    auto* process_metrics = process_metrics_registry->root_registry();
+    CHECK_OK(runtime_env->init_execution_thread_pools(process_metrics));
+    starrocks::pipeline::PipelineExecutorMetrics::instance()->register_pipe_prepare_pool_queue_len_hook([runtime_env] {
+        auto pool = runtime_env->pipeline_prepare_pool();
+        return pool == nullptr ? 0L : static_cast<int64_t>(pool->get_queue_size());
+    });
+
+    std::vector<std::string> compute_store_paths;
+    compute_store_paths.reserve(paths.size());
+    for (const auto& path : paths) {
+        compute_store_paths.emplace_back(path.path);
+    }
+    starrocks::ComputeEnvOptions compute_env_options;
+    compute_env_options.runtime_env = runtime_env;
+    compute_env_options.metrics = process_metrics;
+    compute_env_options.store_paths = std::move(compute_store_paths);
+    compute_env_options.query_cache_capacity =
+            std::max<size_t>(starrocks::config::query_cache_capacity, 4L * 1024 * 1024);
+    compute_env_options.driver_queue_factory = starrocks::pipeline::create_query_shared_driver_queue;
+    compute_env_options.driver_executor_factory = starrocks::pipeline::create_workgroup_driver_executor;
+    auto compute_env = std::make_unique<starrocks::ComputeEnv>();
+    CHECK_OK(compute_env->init(compute_env_options));
+
+    exec_env->set_compute_env(compute_env.get());
+    CHECK_OK(runtime_env->init_lake_thread_pools(process_metrics));
+    CHECK_OK(exec_env->init(process_metrics_registry, runtime_env));
+    starrocks::StorageEnvOptions storage_env_options;
+    storage_env_options.store_path_registry = platform_env->store_path_registry();
+    storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
+    storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
+    storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
+    storage_env_options.lake_metadata_cache_limit = starrocks::config::lake_metadata_cache_limit;
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kStarlet;
+#elif defined(BE_TEST)
+    storage_env_options.lake_location_provider_mode = starrocks::LakeLocationProviderMode::kFixed;
+#endif
+    CHECK_OK(starrocks::StorageEnv::GetInstance()->init(storage_env_options));
+    starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    starrocks::StorageEnv::GetInstance()->set_load_spill_block_merge_executor(
+            compute_env->load_spill_block_merge_executor());
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -823,13 +871,22 @@ int main(int argc, char** argv) {
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
+    starrocks::StorageEnv::GetInstance()->stop();
     exec_env->stop();
+    compute_env->stop();
+    exec_env->clear_query_contexts();
+    runtime_env->shutdown_thread_pools();
 #ifdef USE_STAROS
     starrocks::StorageEnv::GetInstance()->stop_lake_tablet_manager();
 #endif
+    starrocks::StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    starrocks::StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
+    starrocks::StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
+    compute_env->destroy();
+    compute_env.reset();
+    runtime_env->stop();
     platform_env->destroy();
-    global_env->stop();
 
     return r;
 }

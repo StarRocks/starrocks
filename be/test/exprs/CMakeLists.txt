@@ -17,41 +17,102 @@ if (APPLE)
     list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
 endif()
 
-set(EXPR_CORE_TEST_FILES
+set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
+    ai_functions_test.cpp
     arithmetic_expr_test.cpp
+    arithmetic_operation_test.cpp
+    array_functions_test.cpp
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_expr_test.cpp
     function_context_core_test.cpp
-    expr_core_test.cpp
+    expr_test.cpp
     expr_factory_core_test.cpp
     expr_context_core_test.cpp
+    binary_function_test.cpp
+    binary_functions_test.cpp
+    binary_predicate_test.cpp
+    bitmap_functions_test.cpp
+    geography_functions_test.cpp
     hash_functions_test.cpp
+    http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
+    agg/aggregate_factory_extension_test.cpp
+    agg/aggregate_traits_test.cpp
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
+    lambda_array_expr_test.cpp
+    lambda_map_expr_test.cpp
     binary_predicate_core_test.cpp
     array_element_expr_test.cpp
     es_functions_test.cpp
     function_helper_test.cpp
     gin_functions_test.cpp
+    json_functions_test.cpp
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
+    ngram_search_test.cpp
+    percentile_functions_test.cpp
     condition_expr_core_test.cpp
+    condition_expr_test.cpp
     compound_predicate_core_test.cpp
+    compound_predicate_test.cpp
+    coalesce_expr_test.cpp
+    decimal_binary_function_test.cpp
+    decimal_cast_expr_decimal_test.cpp
+    decimal_cast_expr_decimalv2_test.cpp
+    decimal_cast_expr_integer_test.cpp
+    decimal_cast_expr_time_test.cpp
+    encryption_functions_test.cpp
+    function_call_expr_test.cpp
+    if_expr_test.cpp
     json_each_core_test.cpp
+    like_test.cpp
+    math_functions_test.cpp
+    min_max_predicate_test.cpp
+    null_if_expr_test.cpp
+    string_fn_blake3_test.cpp
+    string_fn_concat_test.cpp
+    string_fn_field.cpp
+    string_fn_format_bytes_test.cpp
+    string_fn_locate_test.cpp
+    string_fn_money_format_decimal_test.cpp
+    string_fn_ngram_test.cpp
+    string_fn_pad_test.cpp
+    string_fn_regexp_replace_test.cpp
+    string_fn_repeat_test.cpp
+    string_fn_reverse_test.cpp
+    string_fn_sm3_test.cpp
+    string_fn_space_test.cpp
+    string_fn_substr_test.cpp
+    string_fn_test.cpp
+    string_fn_trim_test.cpp
+    string_fn_url_extract_parameter_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
+    udf/python/env_test.cpp
+    unary_function_test.cpp
     vectorized_literal_test.cpp
 )
 
-set(EXPR_CORE_TEST_LINK_LIBS
-    ExprCore
-    RuntimeCore
+set(EXPR_JAVA_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    # These tests require java-extensions/udf-extensions artifacts on the runtime classpath.
+    # Keep them out of expr_test so --without-java-ext remains a valid fast loop.
+    udf/java/java_data_converter_test.cpp
+    udf/java/java_udf_test.cpp
+)
+
+set(EXPR_TEST_LINK_LIBS
+    Expr
+    Platform
+    Geo
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore
@@ -60,6 +121,8 @@ set(EXPR_CORE_TEST_LINK_LIBS
     Base
     Gutil
     StarRocksGen
+    hdfs
+    jvm
     ${STARROCKS_DEPENDENCIES}
     ${STARROCKS_STATIC_LINK_LIBS}
     ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
@@ -69,9 +132,26 @@ set(EXPR_CORE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_library(starrocks_expr_core_test_objs OBJECT ${EXPR_CORE_TEST_FILES})
-target_link_libraries(starrocks_expr_core_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_core_test_objs PROPERTIES
-    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
-add_executable(expr_core_test $<TARGET_OBJECTS:starrocks_expr_core_test_objs>)
-target_link_libraries(expr_core_test ${EXPR_CORE_TEST_LINK_LIBS} gtest_main)
+add_library(starrocks_expr_test_objs OBJECT ${EXPR_TEST_FILES})
+target_link_libraries(starrocks_expr_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
+
+set(EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_test_objs>)
+if (STARROCKS_JIT_ENABLE)
+    add_library(starrocks_expr_jit_test_objs OBJECT jit_cache_test.cpp)
+    target_link_libraries(starrocks_expr_jit_test_objs PRIVATE StarRocksPCH)
+    set_target_properties(starrocks_expr_jit_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+    list(APPEND EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_jit_test_objs>)
+endif()
+
+add_executable(expr_test expr_test_main.cpp ${EXPR_TEST_OBJECTS})
+target_link_libraries(expr_test ${EXPR_TEST_LINK_LIBS})
+
+add_library(starrocks_expr_java_test_objs OBJECT ${EXPR_JAVA_TEST_FILES})
+target_link_libraries(starrocks_expr_java_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_expr_java_test_objs PROPERTIES
+    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
+
+add_executable(expr_java_test expr_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_java_test_objs>)
+target_link_libraries(expr_java_test ${EXPR_TEST_LINK_LIBS})

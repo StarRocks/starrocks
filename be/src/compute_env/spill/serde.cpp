@@ -18,6 +18,7 @@
 
 #include "base/container/raw_container.h"
 #include "base/utility/alignment.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/statusor.h"
 #include "compute_env/spill/options.h"
@@ -25,8 +26,7 @@
 #include "gen_cpp/types.pb.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
-#include "serde/column_array_serde.h"
-#include "serde/encode_context.h"
+#include "runtime/serde/chunk_encode_context.h"
 
 namespace starrocks::spill {
 

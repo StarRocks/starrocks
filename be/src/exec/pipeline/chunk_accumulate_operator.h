@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {

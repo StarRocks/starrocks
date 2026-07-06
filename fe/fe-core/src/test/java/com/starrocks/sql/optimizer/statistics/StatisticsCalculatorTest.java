@@ -1248,4 +1248,136 @@ public class StatisticsCalculatorTest {
         calculator.estimatorStats();
         Assertions.assertEquals(888_000D, expressionContext.getStatistics().getOutputRowCount(), 0.01);
     }
+
+    @Test
+    public void testExternalScanPreservesConnectorForegroundSource(@Mocked KuduTable kuduTable) {
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        LogicalKuduScanOperator scanOperator =
+                new LogicalKuduScanOperator(kuduTable, refToColumn, columnToRef, -1, null);
+        GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                                                 ScalarOperator predicate) {
+                return Statistics.builder().setOutputRowCount(100)
+                        .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+            }
+        };
+        new MockUp<StatisticsCalcUtils>() {
+            @Mock
+            public Statistics.Builder estimateScanColumns(Table table,
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          OptimizerContext ctx) {
+                return Statistics.builder();
+            }
+        };
+
+        StatisticsCalculator calculator = new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext);
+        calculator.estimatorStats();
+        Assertions.assertEquals(Statistics.StatsSource.TABLE_METADATA,
+                expressionContext.getStatistics().getStatsSource());
+    }
+
+    @Test
+    public void testExternalScanDefaultUnknown(@Mocked KuduTable kuduTable) {
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        LogicalKuduScanOperator scanOperator =
+                new LogicalKuduScanOperator(kuduTable, refToColumn, columnToRef, -1, null);
+        GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        // getTableStatistics returns null, triggering catch -> computeNormalExternalTableScanNode with UNKNOWN
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                                                 ScalarOperator predicate) {
+                return null;
+            }
+        };
+        new MockUp<StatisticsCalcUtils>() {
+            @Mock
+            public Statistics.Builder estimateScanColumns(Table table,
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          OptimizerContext ctx) {
+                return Statistics.builder();
+            }
+        };
+
+        StatisticsCalculator calculator = new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext);
+        calculator.estimatorStats();
+        Assertions.assertEquals(Statistics.StatsSource.NONE,
+                expressionContext.getStatistics().getStatsSource());
+    }
+
+    @Test
+    public void testStatsSourceDefaults() {
+        // Default Builder produces UNKNOWN
+        Statistics stats = Statistics.builder().setOutputRowCount(100).build();
+        Assertions.assertEquals(Statistics.StatsSource.NONE, stats.getStatsSource());
+
+        // Explicit set works
+        Statistics foreground = Statistics.builder().setOutputRowCount(100)
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+        Assertions.assertEquals(Statistics.StatsSource.TABLE_METADATA, foreground.getStatsSource());
+
+        Statistics background = Statistics.builder().setOutputRowCount(100)
+                .setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(Statistics.StatsSource.ANALYZE, background.getStatsSource());
+    }
+
+    @Test
+    public void testStatsSourceBuildFromPreservesSource() {
+        Statistics original = Statistics.builder().setOutputRowCount(100)
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+        Statistics rebuilt = Statistics.buildFrom(original).setOutputRowCount(200).build();
+        Assertions.assertEquals(Statistics.StatsSource.TABLE_METADATA, rebuilt.getStatsSource());
+        Assertions.assertEquals(200, rebuilt.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testStatsSourceWithOutputRowCountPreservesSource() {
+        Statistics original = Statistics.builder().setOutputRowCount(100)
+                .setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Statistics adjusted = original.withOutputRowCount(200);
+        Assertions.assertEquals(Statistics.StatsSource.ANALYZE, adjusted.getStatsSource());
+        Assertions.assertEquals(200, adjusted.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testOlapScanGetsBackground() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        for (Column col : table.getBaseSchema()) {
+            ColumnRefOperator ref = columnRefFactory.create(col.getName(), col.getType(), col.isAllowNull());
+            colRefToColumnMetaMap.put(ref, col);
+            columnToRef.put(col, ref);
+        }
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table, colRefToColumnMetaMap,
+                columnToRef, null, -1, null, table.getBaseIndexMetaId(),
+                partitionIds, null, false, Lists.newArrayList(),
+                Lists.newArrayList(), Lists.newArrayList(), false);
+
+        GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        StatisticsCalculator calculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        calculator.estimatorStats();
+        Assertions.assertEquals(Statistics.StatsSource.ANALYZE, expressionContext.getStatistics().getStatsSource());
+    }
 }

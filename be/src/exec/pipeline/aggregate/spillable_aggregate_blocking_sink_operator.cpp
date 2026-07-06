@@ -28,9 +28,9 @@
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/fragment_runtime_state.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_state_helper.h"
 #include "storage/chunk_helper.h"
 
 DEFINE_FAIL_POINT(spill_always_streaming);

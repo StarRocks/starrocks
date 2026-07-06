@@ -23,7 +23,7 @@
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::parquet {
 

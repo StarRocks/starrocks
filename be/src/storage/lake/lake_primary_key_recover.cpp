@@ -17,14 +17,14 @@
 #include "column/column.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

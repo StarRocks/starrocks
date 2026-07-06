@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/exec_env.h"
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
@@ -45,10 +46,11 @@
 #include "http/action/transaction_stream_load.h"
 #include "http/action/update_config_action.h"
 #include "http/download_action.h"
-#include "http/ev_http_server.h"
-#include "http/http_handler.h"
 #include "http/web_page_handler.h"
-#include "runtime/env/global_env.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_handler.h"
+#include "runtime/runtime_env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "http/action/jit_cache_action.h"
@@ -57,10 +59,10 @@
 namespace starrocks {
 
 // Tests only call required_privilege() / need_auth() — const lookups that don't
-// touch the stored GlobalEnv&. The process-wide singleton is the cheapest valid
+// touch the stored RuntimeEnv&. The process-wide singleton is the cheapest valid
 // reference that won't crash if a future override accidentally dereferences it.
-static const GlobalEnv& fake_global_env() {
-    return *GlobalEnv::GetInstance();
+static const RuntimeEnv& fake_runtime_env() {
+    return *RuntimeEnv::GetInstance();
 }
 
 using Priv = HttpHandler::RequiredPrivilege;
@@ -89,7 +91,7 @@ TEST(BeHandlerPrivilegeTest, compaction_requires_OPERATE_all_subtypes) {
 }
 
 TEST(BeHandlerPrivilegeTest, checksum_requires_OPERATE) {
-    ChecksumAction h(fake_global_env());
+    ChecksumAction h(fake_runtime_env());
     EXPECT_EQ(Priv::OPERATE, h.required_privilege());
 }
 
@@ -185,23 +187,31 @@ TEST(BeHandlerPrivilegeTest, greplog_requires_OPERATE) {
 // framework Basic is skipped (`need_auth() == false`).
 // ERROR_LOG (user-facing load-failure log): framework Basic required.
 TEST(BeHandlerNeedAuthTest, download_action_normal_skips_framework_auth) {
-    DownloadAction normal(nullptr, std::vector<std::string>{});
+    DownloadAction normal(std::vector<std::string>{});
     EXPECT_FALSE(normal.need_auth());
 }
 
 TEST(BeHandlerNeedAuthTest, download_action_error_log_requires_framework_auth) {
-    DownloadAction error_log(nullptr, std::string{});
+    DownloadAction error_log(std::string{});
     EXPECT_TRUE(error_log.need_auth());
 }
 
-TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_skip_framework_auth) {
-    EXPECT_FALSE(HealthAction(nullptr).need_auth());
-    EXPECT_FALSE(MetricsAction(nullptr).need_auth());
-    EXPECT_FALSE(MemoryMetricsAction(fake_global_env()).need_auth());
+// Probe / Prometheus endpoints (/api/health, /metrics, /metrics/memory) are AuthN-only:
+// historically anonymous, now gated by `config::enable_http_auth` -- need_auth() == true
+// (the injected verifier short-circuits when the flag is off) with no extra privilege.
+TEST(BeHandlerNeedAuthTest, probe_and_prometheus_endpoints_are_authn_only) {
+    EXPECT_TRUE(HealthAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, HealthAction(nullptr).required_privilege());
+    EXPECT_TRUE(MetricsAction(nullptr).need_auth());
+    EXPECT_EQ(Priv::NONE, MetricsAction(nullptr).required_privilege());
+    EXPECT_TRUE(MemoryMetricsAction(fake_runtime_env()).need_auth());
+    EXPECT_EQ(Priv::NONE, MemoryMetricsAction(fake_runtime_env()).required_privilege());
 }
 
 TEST(BeHandlerNeedAuthTest, stream_load_uses_builtin_fe_auth_flow) {
-    StreamLoadAction action(nullptr, nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
+    StreamLoadAction action(&env, &stream_load_orchestrator, nullptr);
     EXPECT_FALSE(action.need_auth());
 }
 
@@ -211,7 +221,9 @@ TEST(BeHandlerNeedAuthTest, transaction_endpoints_skip_framework_auth) {
     // look up the StreamLoadContext by label).
     TransactionManagerAction txn_mgr(nullptr);
     EXPECT_FALSE(txn_mgr.need_auth());
-    TransactionStreamLoadAction txn_load(nullptr);
+    ExecEnv env;
+    orchestration::StreamLoadOrchestrator stream_load_orchestrator(&env, nullptr);
+    TransactionStreamLoadAction txn_load(&env, &stream_load_orchestrator);
     EXPECT_FALSE(txn_load.need_auth());
 }
 

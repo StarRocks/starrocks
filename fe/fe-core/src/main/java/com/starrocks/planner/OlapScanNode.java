@@ -130,7 +130,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import javax.annotation.Nullable;
 
@@ -142,7 +141,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -215,6 +213,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     int backPressureMaxRounds = -1;
     long backPressureThrottleTime = -1;
     long backPressureNumRows = -1;
+    // Set when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline breaker
+    // (blocking sort, analytic/window). Sent to BE to suppress TopN back-pressure on this scan for BOTH
+    // the FE-driven and the lake/connector self-enable paths (the RF cannot arrive while the scan reads).
+    boolean topnFilterBackPressureDisabled = false;
 
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, long selectedIndexId) {
         super(id, desc, planNodeName, (OlapTable) desc.getTable(), selectedIndexId);
@@ -292,14 +294,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
         this.selectedPartitionIds = selectedPartitionIds;
+        this.selectedPartitionNum = selectedPartitionIds.size();
     }
 
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
-    }
-
-    public List<Long> getSelectedPartitionVersions() {
-        return selectedPartitionVersions;
     }
 
     public List<Expr> getPrunedPartitionPredicates() {
@@ -487,7 +486,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             return distributionPruner.prune();
         } else if (DistributionInfo.DistributionInfoType.RANGE == distributionInfo.getType()) {
             RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
-                    MetaUtils.getRangeDistributionColumns(olapTable), columnFilters);
+                    MetaUtils.getRangeDistributionColumns(olapTable, index.getMetaId()), columnFilters);
             return pruner.prune();
         } else {
             return null;
@@ -611,6 +610,23 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         alreadyFoundSomeLivingCn = true;
     }
 
+    /**
+     * Returns the version to use when scanning {@code physicalPartitionId}.
+     * If {@code override} contains an entry for this partition, that version is returned;
+     * otherwise {@code visibleVersion} is returned unchanged.
+     * Passing {@code null} for {@code override} is equivalent to an empty map.
+     */
+    public static long chooseScanVersion(long visibleVersion, long physicalPartitionId,
+                                         @Nullable Map<Long, Long> override) {
+        if (override != null) {
+            Long overriddenVersion = override.get(physicalPartitionId);
+            if (overriddenVersion != null) {
+                return overriddenVersion;
+            }
+        }
+        return visibleVersion;
+    }
+
     public void addScanRangeLocations(Partition partition,
                                       PhysicalPartition physicalPartition,
                                       MaterializedIndex index,
@@ -624,12 +640,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         String schemaHashStr = String.valueOf(schemaHash);
-        long visibleVersion = physicalPartition.getVisibleVersion();
+        ConnectContext ctx = ConnectContext.get();
+        long visibleVersion = chooseScanVersion(physicalPartition.getVisibleVersion(), physicalPartition.getId(),
+                ctx == null ? null : ctx.getScanVersionOverride());
         scanPartitionVersions.put(physicalPartition.getId(), visibleVersion);
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
-        selectedPartitionVersions.add(visibleVersion);
 
         checkSomeAliveComputeNode();
         boolean checkScanRangeSize = false;
@@ -1179,6 +1196,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.lake_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.lake_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
             }
+            if (topnFilterBackPressureDisabled) {
+                msg.lake_scan_node.setTopn_filter_back_pressure_disabled(true);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1239,6 +1259,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 msg.olap_scan_node.setBack_pressure_num_rows(backPressureNumRows);
                 msg.olap_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
                 msg.olap_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
+            if (topnFilterBackPressureDisabled) {
+                msg.olap_scan_node.setTopn_filter_back_pressure_disabled(true);
             }
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -1638,19 +1661,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                             .collect(Collectors.toSet());
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
-            List<Long> partitionIds = getSelectedPartitionIds();
+            // scanPartitionVersions is keyed by physical partition id and is populated in
+            // addScanRangeLocations() with exactly the physical partitions that were actually
+            // scanned, so it is the authoritative physicalPartitionId -> version source -- no need
+            // to re-derive physical ids by re-expanding getSelectedPartitionIds() (logical ids).
+            Map<Long, Long> partitionVersions = getScanPartitionVersions();
 
-            List<Long> physicalPartitionIds = new ArrayList<>();
-            for (Long partitionId : partitionIds) {
-                Partition partition = olapTable.getPartition(partitionId);
-                physicalPartitionIds.addAll(partition.getSubPartitions().stream()
-                        .map(PhysicalPartition::getId).collect(Collectors.toList()));
+            // Sanity check: every physical partition actually scanned must belong to a selected
+            // logical partition. Cheap and harmless; guards against the two structures drifting
+            // apart in the future.
+            Set<Long> selectedLogicalPartitionIds = Sets.newHashSet(getSelectedPartitionIds());
+            for (Long physicalPartitionId : partitionVersions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null &&
+                        selectedLogicalPartitionIds.contains(physicalPartition.getParentId()));
             }
 
-            List<Long> partitionVersions = getSelectedPartitionVersions();
-            Preconditions.checkState(physicalPartitionIds.size() == partitionVersions.size());
-            List<Pair<Long, Long>> partitionVersionAndIds = IntStream.range(0, physicalPartitionIds.size())
-                    .mapToObj(i -> Pair.create(partitionVersions.get(i), physicalPartitionIds.get(i)))
+            List<Pair<Long, Long>> partitionVersionAndIds = partitionVersions.entrySet().stream()
+                    .map(e -> Pair.create(e.getValue(), e.getKey()))
                     .sorted(Pair.comparingBySecond()).collect(Collectors.toList());
             scanNode.setSelected_partition_ids(
                     partitionVersionAndIds.stream().map(p -> p.second).collect(Collectors.toList()));
@@ -1774,7 +1802,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
         selectedPartitionNames.clear();
-        selectedPartitionVersions.clear();
         result.clear();
         scanBackendIds.clear();
         appliedDictStringColumns.clear();
@@ -1800,18 +1827,26 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         boolean accept = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
         if (accept && context.getDescription().runtimeFilterType()
                 .equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
-            boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
-            int backPressureMode = Optional.ofNullable(ConnectContext.get())
-                    .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
-                    .orElse(0);
-            if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
-                this.enableTopnFilterBackPressure = true;
-                this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
-                this.backPressureThrottleTimeUpperBound =
-                        ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
-                this.backPressureNumRows = 10 * context.getDescription().getTopN();
-                this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
-                        Math.max(this.backPressureMaxRounds, 1);
+            if (context.crossedNonAggPipelineBreaker()) {
+                // The TopN RF reaches this scan only across a deterministic non-aggregation pipeline
+                // breaker (blocking sort, analytic/window), so it cannot arrive while the scan is still
+                // reading. Suppress back-pressure for this scan (the flag is sent to BE so the
+                // lake/connector self-enable path honors it too); throttling would only stall the scan.
+                this.topnFilterBackPressureDisabled = true;
+            } else {
+                boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
+                int backPressureMode = Optional.ofNullable(ConnectContext.get())
+                        .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
+                        .orElse(0);
+                if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
+                    this.enableTopnFilterBackPressure = true;
+                    this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
+                    this.backPressureThrottleTimeUpperBound =
+                            ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
+                    this.backPressureNumRows = 10 * context.getDescription().getTopN();
+                    this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
+                            Math.max(this.backPressureMaxRounds, 1);
+                }
             }
         }
         return accept;

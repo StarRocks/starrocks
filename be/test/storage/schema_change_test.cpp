@@ -33,11 +33,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/delta_writer.h"
-#include "storage/primitive/schema_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
+#include "storage_primitive/schema_helper.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
@@ -723,7 +723,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     TExpr t_expr;
     t_expr.nodes = nodes;
 
-    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals());
+    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals(), nullptr);
 
     ExprContext* ctx = nullptr;
 

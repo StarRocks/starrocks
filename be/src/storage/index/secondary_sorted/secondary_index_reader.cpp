@@ -36,12 +36,12 @@
 #include "storage/index/secondary_sorted/types.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/column_predicate.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_predicate.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks::secondary_sorted {
 

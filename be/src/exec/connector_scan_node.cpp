@@ -24,6 +24,7 @@
 #include "common/thread/threadpool.h"
 #include "compute_env/global_dict/parser.h"
 #include "connector/connector_registry.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
@@ -31,7 +32,6 @@
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -80,7 +80,7 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
 
         // we don't want scan mem limit to exceed global memory limit.
-        int64_t global_lowest = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
+        int64_t global_lowest = RuntimeEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
         if (global_lowest > 0) {
             _scan_mem_limit = std::min(_scan_mem_limit, global_lowest);
         }
@@ -101,6 +101,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
             _back_pressure_throttle_time = tnode.lake_scan_node.back_pressure_throttle_time;
             _back_pressure_throttle_time_upper_bound = tnode.lake_scan_node.back_pressure_throttle_time_upper_bound;
         }
+        _topn_filter_back_pressure_disabled = tnode.lake_scan_node.__isset.topn_filter_back_pressure_disabled &&
+                                              tnode.lake_scan_node.topn_filter_back_pressure_disabled;
     }
 
     return Status::OK();

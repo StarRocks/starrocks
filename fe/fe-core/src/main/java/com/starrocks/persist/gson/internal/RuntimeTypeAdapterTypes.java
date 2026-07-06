@@ -19,6 +19,8 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRangeRewriteSchemaChangeJob;
+import com.starrocks.alter.LakeRangeRollupJob;
 import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.LakeTableAddIndexJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
@@ -243,6 +245,8 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                         .registerSubtype(MergePartitionJob.class, "MergePartitionJob")
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
+                        .registerSubtype(LakeRangeRewriteSchemaChangeJob.class, "LakeRangeRewriteSchemaChangeJob")
+                        .registerSubtype(LakeRangeRollupJob.class, "LakeRangeRollupJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                         .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")

@@ -439,6 +439,42 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testEmptyShadowRewriteTxnCommitsWithoutNoRowsError() throws StarRocksException {
+        // Regression: an empty-partition range rewrite produces zero rows, but its SHADOW_REWRITE txn must
+        // still commit so the flip can anchor an empty op_schema_change@W on that partition. With
+        // empty_load_as_error on (the default), the empty-load guard must exempt SHADOW_REWRITE just as it
+        // exempts INSERT_STREAMING; otherwise the commit aborts with ERR_NO_ROWS_IMPORTED and cancels the
+        // whole schema change.
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr =
+                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+            // Control: a non-exempt (FRONTEND) txn committing with no tablets DOES hit the guard, proving
+            // empty_load_as_error is in effect for this fixture.
+            long frontendTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                    "empty_frontend_label", transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            assertThrows(TransactionCommitFailedException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, frontendTxnId,
+                            Lists.newArrayList(), Lists.newArrayList(), null));
+
+            // A SHADOW_REWRITE txn committing with no tablets must NOT throw and must reach COMMITTED.
+            long shadowTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                    "empty_shadow_rewrite_label", transactionSource,
+                    TransactionState.LoadJobSourceType.SHADOW_REWRITE, Config.stream_load_default_timeout_second);
+            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, shadowTxnId,
+                    Lists.newArrayList(), Lists.newArrayList(), null);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(shadowTxnId).getStatus());
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @Test
     public void testAbortTransactionWithAttachment() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
@@ -508,6 +544,31 @@ public class DatabaseTransactionMgrTest {
         masterDbTransMgr.finishTransaction(txnId, null, 0);
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
     }
+
+    @Test
+    public void getMaxCommittedTxnPendingPublishMsTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // setUp() seeds several committed transactions; the metric reports the pending-publish time of the oldest one.
+        // getCommittedTxnList() is sorted ascending by commit time, so the first entry is the oldest.
+        List<TransactionState> committedTxns = masterDbTransMgr.getCommittedTxnList();
+        Assertions.assertFalse(committedTxns.isEmpty());
+        long oldestCommitTime = committedTxns.get(0).getCommitTime();
+
+        // pending-publish time is measured from the oldest commit time; use a fixed "now" for a deterministic assertion
+        assertEquals(5000L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(oldestCommitTime + 5000L));
+        // a "now" earlier than the commit time must be clamped to 0, never negative
+        assertEquals(0L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(oldestCommitTime - 1000L));
+
+        // once every committed transaction becomes visible, nothing is sitting in committed status
+        for (TransactionState txn : committedTxns) {
+            masterDbTransMgr.finishTransaction(txn.getTransactionId(), null, 0);
+        }
+        Assertions.assertTrue(masterDbTransMgr.getCommittedTxnList().isEmpty());
+        assertEquals(0L, masterDbTransMgr.getMaxCommittedTxnPendingPublishMs(System.currentTimeMillis()));
+    }
+
     @Test
     public void testAbortTransactionWithNotFoundException() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =

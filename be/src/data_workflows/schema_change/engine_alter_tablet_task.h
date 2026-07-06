@@ -34,11 +34,13 @@
 
 #pragma once
 
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/task/engine_task.h"
 
 namespace starrocks {
+
+class ExecEnv;
 
 // base class for storage engine
 // add "Engine" as task prefix to prevent duplicate name with agent task
@@ -47,13 +49,14 @@ public:
     Status execute() override;
 
 public:
-    EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request);
+    EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& alter_tablet_request, ExecEnv* exec_env);
     ~EngineAlterTabletTask() override = default;
 
 private:
     std::unique_ptr<MemTracker> _mem_tracker;
 
     const TAlterTabletReqV2& _alter_tablet_req;
+    ExecEnv* _exec_env = nullptr;
 
 }; // EngineTask
 

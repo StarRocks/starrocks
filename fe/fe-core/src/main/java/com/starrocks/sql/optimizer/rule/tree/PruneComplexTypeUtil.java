@@ -130,8 +130,21 @@ public class PruneComplexTypeUtil {
                 ColumnRefOperator output = operator.getFnResultColRefs().get(i);
                 ColumnRefOperator input = operator.getFnParamColumnRefs().get(i);
                 unnestColRefMap.put(output, input);
-                if (getVisitedAccessGroup(output) != null) {
-                    accessGroups.put(input, getVisitedAccessGroup(output));
+                ComplexTypeAccessGroup outputGroup = getVisitedAccessGroup(output);
+                if (outputGroup != null) {
+                    // Merge access paths into the input column's access group instead of overwriting.
+                    // Multiple UNNEST operators may share the same input array column (e.g. UNNEST(a), UNNEST(a)),
+                    // and each one's downstream consumers may need different subfields of the array element.
+                    // A hard put would drop access paths recorded by earlier UNNESTs and cause the scan to
+                    // prune subfields that are still needed, leading to BE crashes when reading missing fields.
+                    ComplexTypeAccessGroup existing = accessGroups.get(input);
+                    if (existing == null) {
+                        accessGroups.put(input, outputGroup);
+                    } else if (existing != outputGroup) {
+                        for (ComplexTypeAccessPaths paths : outputGroup.getAccessGroup()) {
+                            existing.addAccessPaths(paths);
+                        }
+                    }
                     if (operator.getProjection() == null && operator.getOutputColRefs().contains(output)) {
                         add(input, input);
                     }

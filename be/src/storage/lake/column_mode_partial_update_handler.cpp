@@ -20,24 +20,23 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
-#include "serde/column_array_serde.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
@@ -45,6 +44,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -243,6 +243,16 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
+        // A nullptr iterator is a lost update-file segment ignored via
+        // experimental_lake_ignore_lost_segment. A lost upt segment produces no rowid pairs, so this
+        // upt_id should not appear here; guard anyway so read_chunk_from_update_file never dereferences
+        // a null iterator (mirrors the close() guard below).
+        if (segment_iters[upt_id] == nullptr) {
+            LOG(WARNING) << "column-mode partial update skips a null update-file segment iterator, tablet: "
+                         << _rowset_ptr->tablet_id() << ", upt_id: " << upt_id
+                         << " (a lost segment via experimental_lake_ignore_lost_segment, or an unexpected empty slot)";
+            continue;
+        }
         // 1. get chunk from upt file
         ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
         DeferOp iter_defer([&]() {
@@ -446,7 +456,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         // Create thread pool token for segment-level parallelism
         std::unique_ptr<ThreadPoolToken> token;
         if (config::enable_pk_index_parallel_execution) {
-            token = GlobalEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
+            token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 

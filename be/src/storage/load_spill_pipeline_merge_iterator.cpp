@@ -22,8 +22,7 @@
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_chunk_spiller.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/primitive/union_iterator.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

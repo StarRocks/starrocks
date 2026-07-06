@@ -17,9 +17,12 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
-set(EXPR_CORE_FILES
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set(EXPR_FILES
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
+  agg/combinator/agg_state_utils.cpp
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
@@ -40,7 +43,11 @@ set(EXPR_CORE_FILES
   sort_exec_exprs.cpp
   array_element_expr.cpp
   array_expr.cpp
-  base64.cpp
+  ai_functions.cpp
+  array_functions.cpp
+  array_map_expr.cpp
+  array_sort_lambda_expr.cpp
+  binary_functions.cpp
   bit_functions.cpp
   binary_predicate.cpp
   bitmap_functions.cpp
@@ -60,89 +67,72 @@ set(EXPR_CORE_FILES
   es_functions.cpp
   expr_factory.cpp
   expr_executor.cpp
+  function_call_expr.cpp
   function_helper.cpp
+  find_in_set.cpp
+  geo_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp
+  http_request_functions.cpp
   hyperloglog_functions.cpp
   info_func.cpp
+  inet_aton.cpp
   in_const_predicate.cpp
   in_predicate.cpp
   is_null_predicate.cpp
+  hyper_json_transformer.cpp
+  json_functions.cpp
   jsonpath.cpp
   lambda_function.cpp
   like_predicate.cpp
   literal.cpp
+  locate.cpp
   math_functions.cpp
   map_expr.cpp
+  map_apply_expr.cpp
   map_element_expr.cpp
   map_functions.cpp
   match_expr.cpp
+  ngram.cpp
   placeholder_ref.cpp
-  regexp_split.cpp
-  struct_functions.cpp
-  subfield_expr.cpp
-  table_function/json_each.cpp
-  time_functions.cpp
-  variant_path_reader.cpp
-  variant_functions.cpp
-)
-
-if(STARROCKS_JIT_ENABLE)
-  set(EXPR_CORE_FILES ${EXPR_CORE_FILES}
-      jit/ir_helper.cpp
-      jit/expr_jit_codegen.cpp)
-endif()
-
-ADD_BE_LIB(ExprCore ${EXPR_CORE_FILES})
-target_link_libraries(ExprCore PUBLIC RuntimeCore ColumnSortCore)
-
-set(EXPR_FILES
-  agg/combinator/agg_state_utils.cpp
-  agg/aggregate_factory_exprs_extension.cpp
-  binary_functions.cpp
-  expr_factory_exprs_extension.cpp
-  table_function/table_function_factory.cpp
-  table_function/list_rowsets.cpp
-  array_functions.cpp
-  arrow_function_call.cpp
-  dictmapping_expr.cpp
-  find_in_set.cpp
-  function_call_expr.cpp
-  geo_functions.cpp
-  inet_aton.cpp
-  json_functions.cpp
-  locate.cpp
   percentile_functions.cpp
+  regexp_split.cpp
   split.cpp
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
-  utility_functions.cpp
+  struct_functions.cpp
+  subfield_expr.cpp
+  substring_index.cpp
+  table_function/json_each.cpp
+  table_function/table_function_factory.cpp
+  time_functions.cpp
+  udf/java/java_udf.cpp
+  udf/java/java_udf_context.cpp
+  udf/java/java_udf_reflection.cpp
+  udf/java/java_data_converter.cpp
+  udf/python/env.cpp
+  udf/python/callstub.cpp
+  udf/udf_call_stub.cpp
+  variant_path_reader.cpp
+  variant_functions.cpp
+  arrow_function_call.cpp
   agg/java_udaf_function.cpp
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   java_function_call_expr.cpp
-  array_map_expr.cpp
-  array_sort_lambda_expr.cpp
-  map_apply_expr.cpp
-  substring_index.cpp
-  dict_query_expr.cpp
-  dictionary_get_expr.cpp
-  ngram.cpp
-  ai_functions.cpp
-  http_request_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
   set(EXPR_FILES ${EXPR_FILES}
+      jit/ir_helper.cpp
+      jit/expr_jit_codegen.cpp
       jit/expr_jit_rewriter.cpp
       jit/expr_jit_pass.cpp
       jit/jit_engine.cpp
       jit/jit_expr.cpp)
-
 endif()
 
-ADD_BE_LIB(Exprs ${EXPR_FILES})
-target_link_libraries(Exprs PUBLIC ExprCore ComputeEnv RuntimeEnv)
-target_link_libraries(Exprs PRIVATE Platform StoragePrimitive)
+ADD_BE_LIB(Expr ${EXPR_FILES})
+target_link_libraries(Expr PUBLIC Runtime ColumnSortCore Platform Geo)

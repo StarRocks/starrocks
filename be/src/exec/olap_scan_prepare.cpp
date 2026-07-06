@@ -30,7 +30,7 @@
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/binary_predicate.h"
 #include "exprs/compound_predicate.h"
-#include "exprs/dictmapping_expr.h"
+#include "exprs/dictmapping_expr_interface.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -42,9 +42,9 @@
 #include "runtime/runtime_filter.h"
 #include "runtime/runtime_state.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/runtime_filter_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -208,7 +208,7 @@ static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
 }
 
 static Expr* get_root_expr(Expr* root) {
-    if (dynamic_cast<DictMappingExpr*>(root)) {
+    if (dynamic_cast<DictMappingExprInterface*>(root)) {
         return root->get_child(1);
     }
     return root;

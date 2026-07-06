@@ -31,15 +31,15 @@
 #include "common/runtime_profile.h"
 #include "compute_env/query/file_scan_split_context.h"
 #include "exec/olap_scan_prepare.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_parser.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 
@@ -108,7 +108,6 @@ struct HdfsScannerProfile {
 struct TableSpecificData {
     std::vector<const TIcebergDeleteFile*> iceberg_delete_files;
     std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor;
-    const TIcebergSchema* iceberg_schema = nullptr;
     std::shared_ptr<TPaimonDeletionFile> paimon_deletion_file;
 };
 
@@ -124,13 +123,13 @@ struct TableSpecificData {
 // (_scanner_ctx) and _init_scanner() assigns its pointer; per-range fields are
 // overwritten in-place without copying.
 struct HdfsScannerContext {
+    HdfsScannerContext() { format_scan_context.predicate_tree = &predicates.predicate_tree; }
+
     // ===== per-range fields =====
     const THdfsScanRange* scan_range = nullptr;
-    int32_t scan_range_id = -1;
     FileSystem* fs = nullptr;
     std::string file_path;
     int64_t file_size = -1;
-    bool is_first_split = false;
     std::string table_location;
     DataCacheOptions datacache_options{};
     TableSpecificData table_specific;
@@ -139,14 +138,12 @@ struct HdfsScannerContext {
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
     const TupleDescriptor* tuple_desc = nullptr;
     FormatScanContext format_scan_context;
-    FormatScannerConjuncts conjuncts;
     HdfsScannerProfile profile;
 
     // ===== column descriptors =====
     // ---- materialized columns ----
     std::vector<SlotDescriptor*> materialize_slots;
     std::vector<int> materialize_index_in_chunk;
-    std::unordered_map<SlotId, std::string> materialize_slot_default_values;
 
     // ---- partition columns ----
     std::vector<SlotDescriptor*> partition_slots;
@@ -163,59 +160,23 @@ struct HdfsScannerContext {
     const HiveTableDescriptor* hive_table = nullptr;
     std::vector<std::string> hive_column_names;
     std::string avro_schema_json;
-    std::vector<ColumnAccessPathPtr> column_access_paths;
 
     // ===== working state =====
     std::vector<SlotDescriptor*> slot_descs;
-    std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
-
-    // materialized column read from parquet file
-    std::vector<FormatColumnInfo> materialized_columns;
-
-    // partition column
-    std::vector<FormatColumnInfo> partition_columns;
 
     // ExprContexts for partition column values (evaluated from hdfs file path).
     // Filled by HiveDataSource before init(); evaluated once in _build_scanner_context()
-    // to produce partition_values below.  Lifetime is managed by HiveDataSource's ObjectPool.
+    // to produce format_scan_context.partition_values.  Lifetime is managed by
+    // HiveDataSource's ObjectPool.
     std::vector<ExprContext*> partition_expr_ctxs;
-
-    // Evaluated partition column values (constant columns, one per partition slot).
-    Columns partition_values;
-
-    // Extended column metadata (iceberg data_seq_num, etc.).
-    std::vector<FormatColumnInfo> extended_columns;
 
     // ExprContexts for extended column values.  Same lifetime model as partition_expr_ctxs.
     std::vector<ExprContext*> extended_col_expr_ctxs;
-
-    // Evaluated extended column values.
-    Columns extended_values;
-
-    bool can_use_file_record_count = false;
 
     // used by short circuit cases:
     // get_next just returns chunk for once.
     // and it returns EOF the next time.
     bool no_more_chunks = false;
-
-    std::string timezone;
-
-    std::vector<SlotDescriptor*> not_existed_slots;
-
-    // ___count___ column for COUNT(*) optimization.
-    // Separated from not_existed_slots because it is an execution marker,
-    // not a schema-evolution missing column.
-    std::optional<SlotDescriptor*> _count_slot;
-
-    // for iceberg reserved fields
-    std::vector<SlotDescriptor*> reserved_field_slots;
-
-    std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
-
-    // TODO: probably should be removed in later version.
-    std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 
     // ===== infrastructure =====
     // ObjectPool for allocations built by _build_scanner_context().
@@ -225,12 +186,6 @@ struct HdfsScannerContext {
 
     // Embedded value structs: no pointers, no pool allocation.
     // Since ctx is pointer-passed (never copied), unique_ptr members work naturally.
-
-    struct SplitState {
-        std::vector<FileScanSplitContextPtr> split_tasks;
-        bool has_split_tasks = false;
-        size_t estimated_mem_usage_per_split_task = 0;
-    } split;
 
     // Destruction order within predicates matters (C++ reverse declaration):
     //   runtime_filter_scan_range_pruner (refs into conjuncts_manager) is destroyed first
@@ -246,64 +201,9 @@ struct HdfsScannerContext {
     } predicates;
 
     // ===== methods =====
-    bool is_lazy_materialization_slot(SlotId slot_id) const;
-
     std::string formatted_name(const std::string& name) const {
         return format_scan_context.options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
-
-    bool can_use_count_optimization() const;
-    bool has_count_column() const { return _count_slot.has_value(); }
-
-    bool can_use_min_max_optimization() const;
-
-    void update_with_none_existed_slot(SlotDescriptor* slot);
-    void update_return_count_columns();
-    void update_min_max_columns();
-
-    // update materialized column against data file.
-    // and to update not_existed slots and conjuncts.
-    // and to update `conjunct_ctxs_by_slot` field.
-    Status update_materialized_columns(const std::unordered_set<std::string>& names);
-    // "not existed columns" are materialized columns not found in file
-    // this usually happens when use changes schema. for example
-    // user create table with 3 fields A, B, C, and there is one file F1
-    // but user change schema and add one field like D.
-    // when user select(A, B, C, D), then D is the non-existed column in file F1.
-    Status append_or_update_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    // If there is no partition column in the chunk, append partition column to chunk,
-    // otherwise update partition column in chunk
-    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-    // Emit `output_rows` rows of `value` for the ___count___ column.
-    // Idempotent: if the chunk already has a ___count___ column, this is a no-op.
-    // Used by both the count-opt aggregated path (output_rows=1, value=row_count)
-    // and the per-row fallback (output_rows=row_count, value=1).
-    void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value);
-    MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot, const TExprMinMaxValue& value, size_t row_count);
-
-    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    // Append all side columns (not-existed, partition, extended, count) at once.
-    // Safe when any category is empty — each sub-function is a no-op in that case.
-    Status append_side_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-
-    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
-                                          const std::vector<FormatColumnInfo>& columns, const Columns& values);
-
-    // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
-    StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
-
-    // other helper functions.
-    bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
-    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
-
-    // Evaluate both single-slot conjuncts (conjunct_ctxs_by_slot) and multi-slot
-    // conjuncts (conjuncts.scanner_ctxs) on the chunk in place.  Safe to call
-    // when either category is empty — each sub-step is a no-op.
-    Status evaluate_all_predicates(ChunkPtr* chunk);
-
-    void merge_split_tasks();
 };
 
 } // namespace starrocks

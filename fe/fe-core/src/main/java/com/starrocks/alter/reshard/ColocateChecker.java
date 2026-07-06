@@ -30,6 +30,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
@@ -58,8 +59,10 @@ import java.util.stream.Collectors;
  * peer GroupId stable once aligned.
  *
  * <h3>Architecture</h3>
- * Stateless component owned by {@link TabletReshardJobMgr} and invoked from that manager's
- * existing scheduler tick. Every {@link #runOneCycle} call walks
+ * Owned by {@link TabletReshardJobMgr} and invoked from that manager's existing scheduler tick.
+ * Holds one piece of state — a {@link ColocateConvergenceCache} that throttles repeated StarOS
+ * placement-convergence queries; every other decision is recomputed each tick. Every
+ * {@link #runOneCycle} call walks
  * {@link ColocateTableIndex#getUnstableGroupIds} and either does work or fast-returns when the
  * unstable set is empty (the steady-state). Shares the manager's
  * {@code tablet_reshard_job_scheduler_interval_ms} cadence; no separate thread, timer, or
@@ -87,10 +90,8 @@ import java.util.stream.Collectors;
 public class ColocateChecker {
     private static final Logger LOG = LogManager.getLogger(ColocateChecker.class);
 
-    // Cap on tablets per getShardInfo RPC during PACK reconcile. A local safety bound on this
-    // (potentially large) sweep — getShardInfo is not globally chunked, and other callers pass
-    // smaller, bounded lists.
-    private static final int GET_SHARD_INFO_BATCH_SIZE = 1000;
+    // Throttles per-tick queryShardGroupStable load; all its semantics live in the cache class.
+    private final ColocateConvergenceCache convergenceCache = new ColocateConvergenceCache();
 
     /**
      * Invoked from {@link TabletReshardJobMgr#runAfterCatalogReady} on every scheduler tick.
@@ -104,6 +105,9 @@ public class ColocateChecker {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         // Steady-state fast-path: no unstable groups → cheap read-lock empty-check, no allocation.
         if (!colocateTableIndex.hasUnstableGroups()) {
+            // Nothing left to converge: drop any lingering negative-cache entries so the cache is
+            // bounded to the duration of active migrations (and reclaimed after a leader gap).
+            convergenceCache.clear();
             return;
         }
         Set<Long> processedColocateGroupIds = new HashSet<>();
@@ -161,18 +165,115 @@ public class ColocateChecker {
 
         if (allAligned) {
             // Ranges are settled, so each tablet's expected PACK shard group is now well-defined.
-            // Migrate any tablet still in the wrong PACK shard group (e.g. a split child left in the
-            // old group) into place, and flip the group stable ONLY once placement is repaired. The
-            // checker never revisits a stable group, so marking stable while a reassignment is still
-            // pending (or a StarOS query/RPC failed) would leak a permanently mis-placed tablet. This
-            // gate is on membership repair being issued and confirmed; gating on actual StarOS
-            // worker-placement convergence can be layered on top later.
-            if (reconcilePackPlacement(colocateTableIndex, peers, expectedRanges, colocateColumnCount)) {
+            // Migrate any tablet still in the wrong PACK shard group (reconcilePackPlacement), then
+            // confirm StarOS has actually placed every PACK group's shards onto co-resident workers
+            // (isPlacementConverged). Flip the group stable ONLY when both hold: the checker never
+            // revisits a stable group, so marking it stable while a reassignment is pending, a query
+            // failed, or placement is still migrating would leak a permanently mis-placed or
+            // non-host-local tablet. Both gates fail closed — any failure or pending work keeps the
+            // group unstable for the next tick.
+            if (reconcilePackPlacement(colocateTableIndex, peers, expectedRanges, colocateColumnCount)
+                    && isPlacementConverged(colocateTableIndex, peers, expectedRanges, colocateGroupId)) {
                 colocateTableIndex.markAllGroupsWithSameColocateGroupIdStable(colocateGroupId, true);
                 LOG.info("marked colocate group id {} stable across {} peer GroupIds",
                         colocateGroupId, peers.size());
             }
         }
+    }
+
+    /**
+     * Final stability gate: after range alignment and PACK membership repair, asks StarOS whether
+     * every PACK shard group of this colocate group has actually converged onto co-resident workers —
+     * placement is done, not merely that membership was assigned. Range alignment + membership are
+     * sufficient for query correctness, but the colocate-join optimization only pays off when execution
+     * is host-local, so the stable flip waits for StarOS placement to converge.
+     *
+     * <p>Queried in bounded batches (PACK groups accumulate as colocate ranges split). Best-effort /
+     * eventually-consistent: a {@code false} for any group (still migrating), a short response, or a
+     * query failure returns {@code false}, leaving the group unstable for the next tick. A group that
+     * never converges simply stays unstable and the colocate join falls back to a correct shuffle plan
+     * — no livelock, no correctness risk.
+     *
+     * @return {@code true} iff every PACK shard group reports placement-converged.
+     */
+    boolean isPlacementConverged(ColocateTableIndex colocateTableIndex,
+                                 List<ColocateTableIndex.GroupId> peers,
+                                 List<ColocateRange> expectedRanges, long colocateGroupId) {
+        List<Long> packGroupIds = expectedRanges.stream()
+                .map(ColocateRange::getShardGroupId)
+                .collect(Collectors.toList());
+        // Negative-cache fast path, before worker-group resolution / any RPC: if any PACK group was
+        // recently reported not-converged, the whole colocate group cannot be converged yet (it needs
+        // every PACK group converged), so skip the StarOS round-trip this tick. The cache is
+        // negative-only, so a flip still rides a fresh all-true read — see ColocateConvergenceCache.
+        if (convergenceCache.shouldSkipQuery(packGroupIds)) {
+            LOG.debug("colocate group {} skipped placement-convergence query; a PACK group was reported "
+                    + "not-converged within the cache TTL", colocateGroupId);
+            return false;
+        }
+        // Both expected failures on this path fail closed (group stays unstable, retried next tick):
+        // resolving the worker group can throw ErrorReportException (warehouse has no available compute
+        // nodes) and the StarOS query can throw StarClientException. Anything unexpected propagates to
+        // runOneCycle, which logs it with a stack trace rather than masking it as "not converged".
+        try {
+            long workerGroupId = resolveWorkerGroupId(colocateTableIndex, peers);
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            // queryShardGroupStable computes each group's stability server-side, so keep this batch small
+            // to bound per-RPC latency; the full result is assembled across repeated calls.
+            int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_convergence_batch_size);
+            for (int batchStart = 0; batchStart < packGroupIds.size(); batchStart += batchSize) {
+                List<Long> batch = packGroupIds.subList(batchStart,
+                        Math.min(batchStart + batchSize, packGroupIds.size()));
+                List<Boolean> stable = starOSAgent.queryShardGroupStable(batch, workerGroupId);
+                // A size mismatch would let allMatch pass on a subset and flip the group stable while a
+                // group is still migrating — fail closed so placement convergence is never faked. An
+                // incomplete response is an error, not cached: retried promptly next tick.
+                if (stable.size() != batch.size()) {
+                    LOG.warn("placement-convergence query returned {} results for {} PACK groups in colocate "
+                            + "group {}; staying unstable", stable.size(), batch.size(), colocateGroupId);
+                    return false;
+                }
+                // Feed each fresh per-group result to the negative cache (caches not-converged, drops
+                // converged) so a still-migrating group is not re-queried every tick.
+                for (int i = 0; i < batch.size(); i++) {
+                    convergenceCache.record(batch.get(i), Boolean.TRUE.equals(stable.get(i)));
+                }
+                if (!stable.stream().allMatch(Boolean.TRUE::equals)) {
+                    LOG.debug("colocate group {} not yet placement-converged on StarOS; staying unstable",
+                            colocateGroupId);
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            LOG.warn("placement-convergence check failed for colocate group {}; staying unstable",
+                    colocateGroupId, e);
+            return false;
+        }
+    }
+
+    /**
+     * Worker group to query for placement convergence, via the reshard-module daemon idiom
+     * ({@link com.starrocks.server.WarehouseManager#getBackgroundComputeResource(long)}, as used by
+     * {@link SplitTabletJob}). Resolves to the default worker group in the open-source build and to a
+     * table's import-warehouse worker group in the enterprise build. The convergence query is
+     * group-level while a worker group is per-table, so a representative member table is used; a
+     * colocate group is expected to live in one warehouse, and any mismatch only fails safe (the group
+     * stays unstable → shuffle), never a false stable. {@code isPlacementConverged} only runs after
+     * {@code reconcilePackPlacement} settled, which already proved every member table is a live NORMAL
+     * OlapTable this pass, and {@code getBackgroundComputeResource} resolves the table's warehouse
+     * worker group (table-independent in OSS) — so the first member table is a fine representative.
+     */
+    private long resolveWorkerGroupId(ColocateTableIndex colocateTableIndex,
+                                      List<ColocateTableIndex.GroupId> peers) {
+        for (ColocateTableIndex.GroupId peerGroupId : peers) {
+            List<Long> tableIds = colocateTableIndex.getAllTableIds(peerGroupId);
+            if (!tableIds.isEmpty()) {
+                return GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getBackgroundComputeResource(tableIds.get(0)).getWorkerGroupId();
+            }
+        }
+        return StarOSAgent.DEFAULT_WORKER_GROUP_ID;
     }
 
     /**
@@ -252,9 +353,10 @@ public class ColocateChecker {
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
         // Query membership in bounded batches so one very large table cannot produce an oversized RPC.
-        for (int batchStart = 0; batchStart < tabletIds.size(); batchStart += GET_SHARD_INFO_BATCH_SIZE) {
+        int batchSize = Math.max(1, Config.tablet_reshard_colocate_checker_membership_batch_size);
+        for (int batchStart = 0; batchStart < tabletIds.size(); batchStart += batchSize) {
             List<Long> batch = tabletIds.subList(batchStart,
-                    Math.min(batchStart + GET_SHARD_INFO_BATCH_SIZE, tabletIds.size()));
+                    Math.min(batchStart + batchSize, tabletIds.size()));
             try {
                 for (ShardInfo shardInfo : starOSAgent.getShardInfo(batch, StarOSAgent.DEFAULT_WORKER_GROUP_ID)) {
                     tabletIdToGroupIds.put(shardInfo.getShardId(), shardInfo.getGroupIdsList());

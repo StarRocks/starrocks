@@ -17,9 +17,9 @@
 #include "column/chunk.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/table_function_operator.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

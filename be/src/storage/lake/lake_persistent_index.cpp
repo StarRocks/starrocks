@@ -19,13 +19,13 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/walltime.h"
-#include "runtime/env/global_env.h"
-#include "serde/column_array_serde.h"
+#include "platform/key_cache.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
@@ -40,11 +40,11 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -87,7 +87,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
     std::unique_ptr<ThreadPoolToken> token;
     if (config::enable_pk_index_parallel_execution) {
-        token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
     for (int i = 0; i < num_sstables; i++) {
@@ -346,7 +346,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         // 3. flush current memtable
         bool flush_async = false;
         if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
-            if (GlobalEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
+            if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
         }
@@ -914,7 +914,7 @@ static bool should_parallel_rebuild_prefetch(int num_files) {
     if (!config::enable_pk_index_parallel_execution || num_files <= 1) {
         return false;
     }
-    auto* update_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+    auto* update_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();
     return update_tracker != nullptr &&
            !update_tracker->limit_exceeded_by_ratio(config::pk_index_parallel_rebuild_mem_ratio);
 }
@@ -1054,7 +1054,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         }
     };
 
-    auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
@@ -1294,7 +1294,10 @@ StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& ro
     }
     RETURN_IF_ERROR(res.status());
     out.iters = std::move(res).value();
-    CHECK(out.iters.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    // Surface a wrong-sized iterator vector as a graceful error rather than aborting the BE: this is
+    // a recovery path (experimental_lake_ignore_lost_segment), and the sibling checks in
+    // LakePrimaryIndex / the local persistent-index loader already use RETURN_ERROR_IF_FALSE.
+    RETURN_ERROR_IF_FALSE(out.iters.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     // One flat scan unit per non-null, non-skipped segment; the unit borrows the iterator owned by
     // out.iters.
@@ -1525,7 +1528,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // Phase B (PARALLEL): one task per (rowset, segment) unit on pk_index_execution_thread_pool via
         // ONE CONCURRENT token; each worker buffers its decoded batches into its own result slot. This
         // is the only parallel layer; Phase A's get_each_segment_iterator stays serial (own pool).
-        auto token = GlobalEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+        auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
         for (const auto& unit : scan_units) {
             const auto* unit_ptr = &unit;

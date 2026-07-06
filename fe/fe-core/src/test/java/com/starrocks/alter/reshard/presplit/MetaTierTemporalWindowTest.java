@@ -14,9 +14,11 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.common.util.DateUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
@@ -62,5 +64,38 @@ public class MetaTierTemporalWindowTest {
         } finally {
             Locale.setDefault(previous);
         }
+    }
+
+    @Test
+    public void windowAcceptsYearOneThroughNineThousand() throws Exception {
+        // DATE and DATETIME share the window down to the start of the AD range: pre-1970 and pre-1582
+        // are FE/BE-identical because both the load and the boundary parse are proleptic Gregorian.
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1, 1, 1));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1500, 6, 15));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1969, 12, 31));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(9999, 12, 31));
+    }
+
+    @Test
+    public void windowRejectsYearZeroAndBeyondNineThousand() {
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(0, 12, 31)));
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(10000, 1, 1)));
+    }
+
+    @Test
+    public void renderDateTimeRoundTripsThroughParseStrictForPre1582AndYearOne() {
+        // The render domain now reaches year 1, so the canonical text must round-trip through the
+        // parser the pre-split flow uses, with microseconds, below 1582 and at year 1.
+        LocalDateTime pre1582 = LocalDateTime.of(1500, 6, 15, 12, 0, 0, 500_000_000);
+        String pre1582Text = MetaTierTemporalWindow.renderDateTime(pre1582);
+        Assertions.assertEquals("1500-06-15 12:00:00.500000", pre1582Text);
+        Assertions.assertEquals(pre1582, DateUtils.parseStrictDateTime(pre1582Text));
+
+        LocalDateTime yearOne = LocalDateTime.of(1, 1, 1, 0, 0, 0, 1_000);
+        String yearOneText = MetaTierTemporalWindow.renderDateTime(yearOne);
+        Assertions.assertEquals("0001-01-01 00:00:00.000001", yearOneText);
+        Assertions.assertEquals(yearOne, DateUtils.parseStrictDateTime(yearOneText));
     }
 }

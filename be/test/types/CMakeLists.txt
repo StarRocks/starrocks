@@ -22,6 +22,7 @@ set(TYPES_TEST_FILES
     decimalv3_test.cpp
     datetime_value_test.cpp
     hll_test.cpp
+    int128_arithmetic_ops_test.cpp
     json_value_test.cpp
     logical_type_test.cpp
     type_descriptor_test.cpp

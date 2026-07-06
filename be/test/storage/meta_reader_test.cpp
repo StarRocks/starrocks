@@ -27,7 +27,7 @@
 #include "column/nullable_column.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment_writer.h"
 

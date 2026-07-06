@@ -16,7 +16,7 @@
 
 #include "common/logging.h"
 #include "common/object_pool.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 // new_column_*_predicate_from_datum factories now live in
 // storage/primitive/column_predicate_factory.h (split out of column_predicate.h
 // upstream); PredicateType comes via column_predicate.h (pulled in by

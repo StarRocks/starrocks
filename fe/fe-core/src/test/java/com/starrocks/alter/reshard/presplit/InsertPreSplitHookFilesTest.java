@@ -257,7 +257,8 @@ public class InsertPreSplitHookFilesTest {
             targets.when(() -> PreSplitTargets.findEligibleTarget(database, mv))
                     .thenReturn(new PreSplitTargets.EligibleTarget(database, mv, /*partitionId*/ 11L,
                             /*oldTabletId*/ 22L));
-            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(any(), any(), anyLong(), anyLong(), any()))
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                    any(), any(), anyLong(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
 
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);
@@ -265,7 +266,7 @@ public class InsertPreSplitHookFilesTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
                     any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
-                    any(), any(), anyList(), anyInt(), any()), never());
+                    any(), any(), anyList(), anyInt(), any(), any()), never());
         }
     }
 
@@ -351,19 +352,6 @@ public class InsertPreSplitHookFilesTest {
         // INSERT INTO t SELECT * FROM other_olap_table — FROM is a plain TableRelation,
         // not FileTableFunctionRelation. Out of scope for pre-split.
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(mock(TableRelation.class)));
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
-    }
-
-    @Test
-    public void testTargetColumnListShortCircuits() throws Exception {
-        // INSERT INTO t (a, b) SELECT * FROM FILES(...) — the explicit column
-        // list reorders/subsets the target's columns; the sampler reads source
-        // columns matching the target's sort-key names, so the sampled column
-        // would mismatch what the load writes.
-        InsertStmt stmt = simpleFilesInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("a", "b"));
-
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
@@ -570,6 +558,33 @@ public class InsertPreSplitHookFilesTest {
         TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
 
         assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasAlignWithPartialColumnListMatchingFiles() {
+        // INSERT INTO t (k) SELECT * FROM FILES(...): target is (k, v) but the parquet
+        // has only column k. The effective target columns are the list (k), which
+        // aligns by position-name with the FILES schema (k).
+        InsertStmt stmt = byPositionInsertStmt();
+        when(stmt.getTargetColumnNames()).thenReturn(List.of("k"));
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k");
+
+        assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
+    }
+
+    @Test
+    public void testSchemasMisalignedWhenColumnListOrderDiffersFromFiles() {
+        // INSERT INTO t (v, k) SELECT * FROM FILES(k, v): by position the load writes
+        // FILES column k into target v and FILES column v into target k, so the
+        // effective target names (v, k) disagree with the FILES names (k, v) at every
+        // ordinal — the by-name sampler would read the wrong column.
+        InsertStmt stmt = byPositionInsertStmt();
+        when(stmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
+        OlapTable target = olapTableWithColumns("k", "v");
+        TableFunctionTable source = tableFunctionTableWithColumns("k", "v");
+
+        assertFalse(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
     }
 
     private static InsertStmt byPositionInsertStmt() {

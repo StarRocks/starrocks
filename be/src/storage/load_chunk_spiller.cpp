@@ -17,24 +17,21 @@
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/serde.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
-#include "compute_env/workgroup/work_group_manager.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/storage_metrics.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -159,12 +156,12 @@ Status LoadChunkSpiller::_prepare(const ChunkPtr& chunk_ptr) {
         // 1. alloc & prepare spiller
         spill::SpilledOptions options;
         options.encode_level = 7;
-        options.wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
+        // Leave options.wg unset (nullptr): the spill framework resolves it to the reserved
+        // default workgroup in Spiller::prepare(), so this load path no longer needs ExecEnv.
         _spiller = _spiller_factory->create(options);
         RETURN_IF_ERROR(_spiller->prepare(_runtime_state.get()));
         DCHECK(_profile != nullptr) << "LoadChunkSpiller profile is null";
-        spill::SpillProcessMetrics metrics(_profile,
-                                           RuntimeStateHelper::mutable_total_spill_bytes(_runtime_state.get()));
+        spill::SpillProcessMetrics metrics(_profile, &_total_spill_bytes);
         _spiller->set_metrics(metrics);
         // 2. prepare serde
         if (const_cast<spill::ChunkBuilder*>(&_spiller->chunk_builder())->chunk_schema()->empty()) {

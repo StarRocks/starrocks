@@ -19,12 +19,12 @@
 #include <string>
 #include <unordered_set>
 
+#include "base/json/json_util.h"
 #include "common/config_rowset_fwd.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
-#include "util/json_util.h"
 #include "utils.h"
 
 namespace starrocks {

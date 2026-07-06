@@ -106,6 +106,24 @@ public class DeltaLakeFileStats {
         return recordCount;
     }
 
+    /** Returns the aggregated min value for {@code colName} as a double, or NaN if absent. */
+    public double getMinDouble(String colName) {
+        if (minValues == null) {
+            return Double.NaN;
+        }
+        Object v = minValues.get(colName);
+        return (v instanceof Double) ? (Double) v : Double.NaN;
+    }
+
+    /** Returns the aggregated max value for {@code colName} as a double, or NaN if absent. */
+    public double getMaxDouble(String colName) {
+        if (maxValues == null) {
+            return Double.NaN;
+        }
+        Object v = maxValues.get(colName);
+        return (v instanceof Double) ? (Double) v : Double.NaN;
+    }
+
     public ColumnStatistic fillColumnStats(Column col) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
         String colName = col.getName();

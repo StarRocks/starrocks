@@ -303,9 +303,24 @@ public class SplitTabletJobTest {
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
                                        long baseVersion, long newVersion, Map<Long, Double> compactionScores,
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
-                                       Map<Long, Long> tabletRowNums, boolean useAggregatePublish,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                       boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
+            }
+        };
+
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
             }
         };
 
@@ -317,6 +332,20 @@ public class SplitTabletJobTest {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
+    }
+
+    // The job's warehouse defaults to "unset" (null -> background) and is settable by the pre-split
+    // caller (base-class TabletReshardJob#setWarehouseId, also used by the merge job). The
+    // empty-source -> spread / non-empty -> PACK behavior is covered by the end-to-end
+    // external-boundaries flow and StarOSAgentTest#testCreateShardsForSplitSpreadDropsWithShardPin.
+    @Test
+    public void testWarehouseIdDefaultsUnsetAndIsSettable() throws Exception {
+        SplitTabletJob job = (SplitTabletJob) createTabletReshardJob();
+        Assertions.assertNull(job.getWarehouseId(),
+                "warehouse defaults to unset (null -> background warehouse)");
+        job.setWarehouseId(12345L);
+        Assertions.assertEquals(Long.valueOf(12345L), job.getWarehouseId(),
+                "caller applies the load's warehouse id");
     }
 
     // -------------------------------------------------------------------------
@@ -692,7 +721,8 @@ public class SplitTabletJobTest {
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
                                              Map<String, String> properties,
-                                             ComputeResource computeResource) throws DdlException {
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) throws DdlException {
                 throw new DdlException("simulated StarOS failure");
             }
         };

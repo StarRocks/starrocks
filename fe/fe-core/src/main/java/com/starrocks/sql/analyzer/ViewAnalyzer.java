@@ -22,6 +22,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
@@ -59,6 +60,13 @@ public class ViewAnalyzer {
             final String db = tableRef.getDbName();
             final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
+
+            // When the statement omits the SECURITY clause, fall back to the session-level default characteristic.
+            // An explicit SECURITY NONE / SECURITY INVOKER clause is preserved as parsed.
+            if (!stmt.isSecurityExplicit()) {
+                DefaultViewSqlSecurity defaultSecurity = context.getSessionVariable().getDefaultViewSqlSecurity();
+                stmt.setSecurity(defaultSecurity == DefaultViewSqlSecurity.INVOKER);
+            }
 
             // Only allow setting properties for Iceberg views
             if (!MapUtils.isEmpty(stmt.getProperties())) {

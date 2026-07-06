@@ -563,6 +563,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- 默认值: 2147483648 (2 GB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 引入版本: v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - 默认值: 259200000 (72 hours)

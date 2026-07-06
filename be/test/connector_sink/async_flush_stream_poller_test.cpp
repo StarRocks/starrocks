@@ -23,10 +23,10 @@
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/io/async_flush_output_stream.h"
 #include "fs/fs_memory.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {

@@ -16,11 +16,11 @@
 
 #include <utility>
 
+#include "column/serde/column_array_serde.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "serde/column_array_serde.h"
-#include "storage/primitive/storage_path_constants.h"
+#include "common/storage_path_constants.h"
 
 namespace starrocks {
 

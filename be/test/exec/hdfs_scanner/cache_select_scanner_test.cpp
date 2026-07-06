@@ -112,7 +112,7 @@ HdfsScannerContext* CacheSelectScannerTest::_create_ctx(const std::string& file,
     ctx->materialize_index_in_chunk = materialize_index_in_chunk;
     ctx->materialize_slots = mat_slots;
     ctx->partition_slots = part_slots;
-    ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    ctx->format_scan_context.lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     return ctx;
 }
 

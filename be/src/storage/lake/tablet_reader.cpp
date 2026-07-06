@@ -26,6 +26,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
+#include "column/flat_json/json_flat_path.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/config_lake_fwd.h"
@@ -33,11 +34,9 @@
 #include "common/config_secondary_index_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_morsel.h"
-#include "exec/pipeline/scan/split_scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/stl_util.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/aggregate_iterator.h"
@@ -46,23 +45,25 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/index/secondary_sorted/secondary_index_reader.h"
+#include "storage/json_path_deriver.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/column_predicate.h"
-#include "storage/primitive/conjunctive_predicates.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
+#include "storage/query/split_morsel_queue.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
-#include "util/json_flattener.h"
+#include "storage_primitive/column_predicate.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks::lake {
 
@@ -269,9 +270,10 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
 
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
+    // get_non_null_segments() drops lost-segment placeholders (experimental_lake_ignore_lost_segment).
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
-        auto segments = rowset->get_segments();
+        auto segments = rowset->get_non_null_segments();
         std::for_each(segments.begin(), segments.end(),
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
@@ -285,7 +287,7 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         }
         readers.clear();
         for (const auto& rowset : _rowsets) {
-            for (const auto& segment : rowset->get_segments()) {
+            for (const auto& segment : rowset->get_non_null_segments()) {
                 if (segment->num_rows() == 0) {
                     continue;
                 }
@@ -399,8 +401,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
-        rs_opts.version = _tablet_metadata->version();
     }
+    // Read version is required by the Index Delta Group (ADD INDEX fast-path)
+    // visibility filter for ALL key types, not only PRIMARY_KEYS. Leaving it 0
+    // for DUPLICATE / UNIQUE / AGGREGATE reads hides every .idx entry
+    // (entry.version > 0 == query_version), so the index is silently skipped.
+    rs_opts.version = _tablet_metadata->version();
     rs_opts.reader_type = params.reader_type;
 
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
@@ -932,7 +938,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

@@ -161,25 +161,32 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
 }
 
 TEST_F(FilenamesTest, gen_vector_index_filename) {
-    // Standard segment filename with .dat extension: strip the extension and append _{index_id}.vi
+    // Standard segment filename with .dat extension: strip the extension and append _{tablet_id}_{index_id}.vi
     {
         std::string segment_filename = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
-        std::string vi_filename = gen_vector_index_filename(segment_filename, 123);
-        ASSERT_EQ("0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_123.vi", vi_filename);
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 7, 123);
+        ASSERT_EQ("0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_7_123.vi", vi_filename);
     }
 
-    // Different index_id
+    // Different tablet_id / index_id
     {
         std::string segment_filename = "0123_abcd.dat";
-        std::string vi_filename = gen_vector_index_filename(segment_filename, 456);
-        ASSERT_EQ("0123_abcd_456.vi", vi_filename);
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 8, 456);
+        ASSERT_EQ("0123_abcd_8_456.vi", vi_filename);
     }
 
-    // Segment filename without .dat: append _{index_id}.vi to the raw name (fallback branch).
+    // Segment filename without .dat: append _{tablet_id}_{index_id}.vi to the raw name (fallback branch).
     {
         std::string segment_filename = "0123_abcd";
-        std::string vi_filename = gen_vector_index_filename(segment_filename, 789);
-        ASSERT_EQ("0123_abcd_789.vi", vi_filename);
+        std::string vi_filename = gen_vector_index_filename(segment_filename, 9, 789);
+        ASSERT_EQ("0123_abcd_9_789.vi", vi_filename);
+    }
+
+    // Two tablets sharing the same (bundle) segment filename get distinct .vi names.
+    {
+        std::string segment_filename = "bundle_shared.dat";
+        ASSERT_NE(gen_vector_index_filename(segment_filename, 100, 1),
+                  gen_vector_index_filename(segment_filename, 200, 1));
     }
 }
 
@@ -188,37 +195,37 @@ TEST_F(FilenamesTest, gen_vector_index_path_from_segment_path) {
     // the .dat suffix on the basename with _{index_id}.vi.
     {
         std::string seg_path = "/foo/bar/0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.dat";
-        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 0);
-        ASSERT_EQ("/foo/bar/0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_0.vi", vi_path);
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 5, 0);
+        ASSERT_EQ("/foo/bar/0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_5_0.vi", vi_path);
     }
 
     // Single-level directory.
     {
         std::string seg_path = "data/0123_abcd.dat";
-        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 42);
-        ASSERT_EQ("data/0123_abcd_42.vi", vi_path);
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 5, 42);
+        ASSERT_EQ("data/0123_abcd_5_42.vi", vi_path);
     }
 
     // No directory part: return just the .vi filename.
     {
         std::string seg_path = "0123_abcd.dat";
-        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 7);
-        ASSERT_EQ("0123_abcd_7.vi", vi_path);
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 5, 7);
+        ASSERT_EQ("0123_abcd_5_7.vi", vi_path);
     }
 
     // Root-only directory (leading slash, nothing before it): treat as no parent dir.
     {
         std::string seg_path = "/seg.dat";
-        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 1);
-        ASSERT_EQ("seg_1.vi", vi_path);
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 5, 1);
+        ASSERT_EQ("seg_5_1.vi", vi_path);
     }
 
     // Segment basename without .dat suffix falls through gen_vector_index_filename's
-    // fallback branch: append _{index_id}.vi to the raw name.
+    // fallback branch: append _{tablet_id}_{index_id}.vi to the raw name.
     {
         std::string seg_path = "/foo/bar/0123_abcd";
-        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 9);
-        ASSERT_EQ("/foo/bar/0123_abcd_9.vi", vi_path);
+        std::string vi_path = gen_vector_index_path_from_segment_path(seg_path, 5, 9);
+        ASSERT_EQ("/foo/bar/0123_abcd_5_9.vi", vi_path);
     }
 }
 

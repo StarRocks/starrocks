@@ -39,6 +39,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.proto.TabletStatPB;
 
 import java.util.HashMap;
 import java.util.List;
@@ -83,7 +84,11 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
-    private final Map<Long, Long> tabletIdToRowCountForPartitionFirstLoad = new HashMap<>();
+    // Per-tablet stats collected during publish: for lake tables from the publish RPC response
+    // (range-distribution tablets, and any tablet on first import), for shared-nothing tables
+    // from TTabletInfo on first import. Transient (not serialized), leader-only. Consumed for
+    // first-load statistics collection and (lake only) real-time reshard triggering.
+    private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
     private boolean isDoubleWrite = false;
 
@@ -129,7 +134,7 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = partitionCommitInfo.compactionScore == null
                 ? null
                 : new Quantiles(partitionCommitInfo.compactionScore);
-        this.tabletIdToRowCountForPartitionFirstLoad.putAll(partitionCommitInfo.tabletIdToRowCountForPartitionFirstLoad);
+        this.tabletStats.putAll(partitionCommitInfo.tabletStats);
         this.isDoubleWrite = partitionCommitInfo.isDoubleWrite;
     }
 
@@ -193,8 +198,8 @@ public class PartitionCommitInfo implements Writable {
         this.compactionScore = compactionScore;
     }
 
-    public Map<Long, Long> getTabletIdToRowCountForPartitionFirstLoad() {
-        return tabletIdToRowCountForPartitionFirstLoad;
+    public Map<Long, TabletStatPB> getTabletStats() {
+        return tabletStats;
     }
 
     @Nullable

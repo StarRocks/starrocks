@@ -15,10 +15,10 @@
 #include "storage/load_spill_pipeline_merge_context.h"
 
 #include "common/thread/threadpool.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -34,9 +34,9 @@ LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
 void LoadSpillPipelineMergeContext::create_thread_pool_token() {
     std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
     if (_token == nullptr) {
-        _token = StorageEngine::instance()
-                         ->load_spill_block_merge_executor()
-                         ->create_tablet_internal_parallel_merge_token();
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        DCHECK(executor != nullptr);
+        _token = executor->create_tablet_internal_parallel_merge_token();
     }
 }
 
@@ -45,9 +45,9 @@ void LoadSpillPipelineMergeContext::init_parallel_merge() {
     if (_token == nullptr) {
         _writer->set_auto_flush(false);
         _writer->try_enable_pk_index_eager_build();
-        _token = StorageEngine::instance()
-                         ->load_spill_block_merge_executor()
-                         ->create_tablet_internal_parallel_merge_token();
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        DCHECK(executor != nullptr);
+        _token = executor->create_tablet_internal_parallel_merge_token();
     }
 }
 

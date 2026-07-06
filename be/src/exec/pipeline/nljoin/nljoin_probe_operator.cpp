@@ -274,11 +274,15 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(size_t chunk_size) const {
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
     }
+    // A null _curr_build_chunk means the previous round just consumed all build chunks, so use the
+    // first build chunk to decide column nullability.
+    // NOTE: this can still be wrong if column info differs between build chunks.
+    Chunk* ref_build_chunk = _num_build_chunks() > 0 ? _cross_join_context->get_build_chunk(0) : _curr_build_chunk;
     for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         bool nullable = right_to_nullable | _col_types[i]->is_nullable();
-        if (_curr_build_chunk) {
-            nullable |= _curr_build_chunk->is_column_nullable(slot->id());
+        if (ref_build_chunk) {
+            nullable |= ref_build_chunk->is_column_nullable(slot->id());
         }
         MutableColumnPtr new_col = ColumnHelper::create_column(slot->type(), nullable);
         chunk->append_column(std::move(new_col), slot->id());
@@ -591,7 +595,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
     DCHECK(_curr_build_chunk);
     size_t cur_build_chunk_rows = _curr_build_chunk->num_rows();
     COUNTER_UPDATE(_permute_rows_counter, cur_build_chunk_rows);
-    TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _col_types.size(); i++) {
         bool is_probe = i < _probe_column_count;
         SlotDescriptor* slot = _col_types[i];
@@ -604,7 +607,6 @@ Status NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
             dst_col->append(*src_col);
         }
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 
@@ -679,14 +681,18 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
 // 2. Apply the conjuncts, and append it to output buffer
 // 3. Maintain match index and implement left join and right join
 StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    StatusOr<ChunkPtr> res;
+    TRY_CATCH_ALLOC_SCOPE_START()
     _check_post_probe();
     size_t chunk_size = state->chunk_size();
 
     if (_join_op == TJoinOp::INNER_JOIN) {
-        return _pull_chunk_for_inner_join(chunk_size);
+        res = _pull_chunk_for_inner_join(chunk_size);
     } else {
-        return _pull_chunk_for_other_join(chunk_size);
+        res = _pull_chunk_for_other_join(chunk_size);
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
+    return res;
 }
 
 // eval conjuncts for nest loop join, apply common exprs and conjuncts first

@@ -45,6 +45,7 @@ import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -729,7 +730,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 return StatisticsUtils.buildDefaultStatistics(columns.keySet());
             }
 
-            Statistics.Builder builder = Statistics.builder();
+            Statistics.Builder builder = Statistics.builder()
+                    .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
             if (!session.getSessionVariable().enablePaimonColumnStatistics()) {
                 return defaultStatistics(columns, table, predicate, limit, versionRange);
             }
@@ -751,7 +753,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private Statistics defaultStatistics(Map<ColumnRefOperator, Column> columns, Table table, ScalarOperator predicate,
                                          long limit, TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
@@ -814,16 +817,22 @@ public class PaimonMetadata implements ConnectorMetadata {
 
             if (colStats.distinctCount().isPresent()) {
                 builder.setDistinctValuesCount(colStats.distinctCount().getAsLong());
-                builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
             } else {
-                builder.setDistinctValuesCount(1);
-                builder.setType(ColumnStatistic.StatisticType.UNKNOWN);
+                builder.setDistinctValuesCount(ConnectorNdvEstimator.typeNdv(
+                        ConnectorNdvEstimator.fromStarRocksType(column.getType()), Math.max(1L, rowCount)));
             }
+            builder.setType(ColumnStatistic.StatisticType.ESTIMATE);
             columnStatistic = builder.build();
         }
 
         if (columnStatistic == null) {
-            columnStatistic = ColumnStatistic.unknown();
+            ConnectorNdvEstimator.TypeCategory cat = ConnectorNdvEstimator.fromStarRocksType(column.getType());
+            columnStatistic = ColumnStatistic.builder()
+                    .setDistinctValuesCount(ConnectorNdvEstimator.typeNdv(cat, Math.max(1L, rowCount)))
+                    .setAverageRowSize(column.getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build();
         }
         return columnStatistic;
     }

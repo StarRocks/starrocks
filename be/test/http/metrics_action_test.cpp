@@ -39,9 +39,9 @@
 #include "base/metrics.h"
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_response.h"
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
 #endif

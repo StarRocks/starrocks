@@ -33,8 +33,9 @@
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/bundle_file.h"
+#include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
@@ -2169,6 +2170,86 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
+}
+
+// experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
+// compaction txn is published must not crash and must not fail the publish. This covers all three
+// publish shapes with an error-injected (physically deleted) lost output segment:
+//   1. light publish, NO loss    -> normal SST ingest + conflict resolver
+//   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
+//   3. non-light publish, lost   -> CompactionState empty PK column
+// and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
+// + SST ingest) persistent index via the param list.
+TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+    int shift = 0;
+
+    auto write_rowsets = [&](int n) {
+        for (int i = 0; i < n; i++) {
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize, shift++, false, true);
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+            CHECK_OK(dw->open());
+            CHECK_OK(dw->write(*chunk, indexes.data(), indexes.size()));
+            CHECK_OK(dw->finish_with_txnlog());
+            dw->close();
+            CHECK_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+            version++;
+        }
+    };
+
+    // Compact, optionally delete an output segment (error injection), then publish.
+    auto compact_and_publish = [&](bool lose_output_segment) -> Status {
+        int64_t txn_id = next_id();
+        auto old_min = config::lake_pk_compaction_min_input_segments;
+        config::lake_pk_compaction_min_input_segments = 1;
+        DeferOp reset_min([&] { config::lake_pk_compaction_min_input_segments = old_min; });
+        auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
+        RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
+        if (lose_output_segment) {
+            ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+            const auto& out = txnlog->op_compaction().output_rowset();
+            if (out.segment_metas_size() > 0) {
+                _tablet_mgr->metacache()->prune();
+                RETURN_IF_ERROR(FileSystem::Default()->delete_file(
+                        _tablet_mgr->segment_location(tablet_id, out.segment_metas(0).filename())));
+            }
+        }
+        auto st = publish_single_version(tablet_id, version + 1, txn_id).status();
+        version++;
+        return st;
+    };
+
+    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
+
+    // 2. Light publish, lost output segment: resolver lost branch + SST-ingest skip.
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp reset_flag([] { config::experimental_lake_ignore_lost_segment = false; });
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
+
+    // 3. Non-light publish, lost output segment: CompactionState empty PK column path.
+    config::enable_light_pk_compaction_publish = false;
+    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
+
+    // The tablet stays readable afterwards (a lost segment's rows are simply gone).
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+    (void)chunk;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
