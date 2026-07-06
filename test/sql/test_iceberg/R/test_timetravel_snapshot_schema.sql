@@ -121,6 +121,31 @@ select p from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_evo_tbl_${uuid0}
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Column 'p' cannot be resolved.")
 -- !result
+function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} (id int, c int)", False, 5, 1000)
+-- result:
+{'status': True, 'result': '', 'msg': b''}
+-- !result
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} values (1, 100), (2, 200);
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} add column extra int;
+-- result:
+-- !result
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0};
+-- result:
+-- !result
+select id, extra from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} order by id;
+-- result:
+1	None
+2	None
+-- !result
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} where extra is null;
+-- result:
+2
+-- !result
+select id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} where extra = 1 order by id;
+-- result:
+-- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 -- result:
 -- !result
@@ -128,6 +153,9 @@ drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_part_tbl_${uuid0} f
 -- result:
 -- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_evo_tbl_${uuid0} force;
+-- result:
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} force;
 -- result:
 -- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};

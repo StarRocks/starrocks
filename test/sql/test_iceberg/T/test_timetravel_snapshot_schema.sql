@@ -4,6 +4,8 @@
 --      snapshot schema: the old column name resolves, the renamed name does not exist yet.
 --   2. Predicates on the snapshot-schema column name are planned and evaluated correctly.
 --   3. The same holds for a partitioned table whose partition source column was renamed.
+--   4. An ordinary current read after a metadata-only ADD COLUMN (no new snapshot) resolves the
+--      new column against the current schema, including predicates on it.
 -- Method: rename a column between two snapshots anchored by a tag and a branch; assert
 --         column resolution (positive and negative) and row results for time-travel reads
 --         vs latest-schema reads, with and without predicates.
@@ -75,9 +77,25 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_evo_tbl_${uuid0}
 -- the column added after the snapshot does not exist in the snapshot schema
 select p from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_evo_tbl_${uuid0} version as of "tag_evo_before" order by id;
 
+-- 4) ordinary current read after a metadata-only ADD COLUMN (no new snapshot yet): the current
+-- snapshot still references the pre-evolution schema, but a normal read must resolve the new column
+-- against the current table schema (backfilled NULL), including predicates on it.
+function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} (id int, c int)", False, 5, 1000)
+
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} values (1, 100), (2, 200);
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} add column extra int;
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0};
+
+-- projection of the newly added column: old rows backfill NULL
+select id, extra from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} order by id;
+-- predicate on the newly added column must bind against the current schema (was "Cannot find field")
+select count(*) from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} where extra is null;
+select id from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} where extra = 1 order by id;
+
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_part_tbl_${uuid0} force;
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_evo_tbl_${uuid0} force;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_add_tbl_${uuid0} force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
 
