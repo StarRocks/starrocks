@@ -6699,7 +6699,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                     continue;
                 }
 
-                if (!root.has(attr.name())) {
+                String key = attr.name();
+                if (!root.has(key) && !attr.alias().isEmpty() && root.has(attr.alias())) {
+                    key = attr.alias();
+                }
+                if (!root.has(key)) {
                     continue;
                 }
                 // Do not restore the session_only variable
@@ -6709,22 +6713,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
                 switch (field.getType().getSimpleName()) {
                     case "boolean":
-                        field.set(this, root.getBoolean(attr.name()));
+                        field.set(this, root.getBoolean(key));
                         break;
                     case "int":
-                        field.set(this, root.getInt(attr.name()));
+                        field.set(this, root.getInt(key));
                         break;
                     case "long":
-                        field.set(this, root.getLong(attr.name()));
+                        field.set(this, root.getLong(key));
                         break;
                     case "float":
-                        field.set(this, root.getFloat(attr.name()));
+                        field.set(this, root.getFloat(key));
                         break;
                     case "double":
-                        field.set(this, root.getDouble(attr.name()));
+                        field.set(this, root.getDouble(key));
                         break;
                     case "String":
-                        field.set(this, root.getString(attr.name()));
+                        field.set(this, root.getString(key));
                         break;
                     default:
                         // Unsupported type variable.
