@@ -80,13 +80,13 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
     auto* nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
     if (options.escape != 0) {
-        if (is_raw_null_literal(s)) {
+        if (options.hive_null_literal && is_raw_null_literal(s)) {
             return nullable_column->append_nulls(1);
         }
         if (!_base_converter->consumes_raw_bytes()) {
             s = unescape_into(s, options.escape, &_unescape_buf);
         }
-    } else if (s == "\\N") {
+    } else if (options.hive_null_literal && s == "\\N") {
         return nullable_column->append_nulls(1);
     }
     auto* data = nullable_column->begin_append_not_default_value();
@@ -112,13 +112,13 @@ bool NullableConverter::read_string(Column* column, const Slice& s_in, const Opt
         // escape-aware separator scanning on `s` unescaped -- e.g. an escaped array
         // element separator like "a\|b|c" must stay intact for it to find the real
         // boundary.
-        if (is_raw_null_literal(s)) {
+        if (options.hive_null_literal && is_raw_null_literal(s)) {
             return nullable->append_nulls(1);
         }
         if (!_base_converter->consumes_raw_bytes()) {
             s = unescape_into(s, options.escape, &_unescape_buf);
         }
-    } else if (s == "\\N") {
+    } else if (options.hive_null_literal && s == "\\N") {
         return nullable->append_nulls(1);
     }
 

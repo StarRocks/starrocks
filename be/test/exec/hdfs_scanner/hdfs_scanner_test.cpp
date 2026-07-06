@@ -2138,11 +2138,18 @@ TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
         ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
         status = scanner->get_next(_runtime_state, &chunk);
         ASSERT_TRUE(status.ok()) << status.message();
-        EXPECT_EQ(4, chunk->num_rows());
+        EXPECT_EQ(5, chunk->num_rows());
         EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
         EXPECT_EQ("['2', 'a,b,c', 'done']", chunk->debug_row(1));
         EXPECT_EQ("['3', 'plain', 'end']", chunk->debug_row(2));
         EXPECT_EQ("['4', 'she said \"hi\"', 'quoted']", chunk->debug_row(3));
+        // OpenCSVSerde has NO null literal: quoted "\\N" (escaped backslash + N -- the
+        // quotes matter: only inside quotes/a token is the escape effective, so this is
+        // the one spelling whose field bytes come out as exactly \N) must be the 2-char
+        // STRING "\N", never SQL NULL (Options::hive_null_literal=false). And in "\N"
+        // the escape doesn't protect 'N' (not quote/escape), so opencsv silently drops
+        // the backslash -> "N".
+        EXPECT_EQ("['5', '\\N', 'N']", chunk->debug_row(4));
         scanner->close();
     }
 
@@ -2164,12 +2171,12 @@ TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
         ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
         status = scanner->get_next(_runtime_state, &chunk);
         ASSERT_TRUE(status.ok()) << status.message();
-        EXPECT_EQ(4, chunk->num_rows());
+        EXPECT_EQ(5, chunk->num_rows());
         EXPECT_EQ("['1', 'INFANTS, PETS', 'ok']", chunk->debug_row(0));
         scanner->close();
     }
 
-    // 3) splittable: read in two ranges; total rows must stay 4 regardless of
+    // 3) splittable: read in two ranges; total rows must stay 5 regardless of
     //    the split point (validates the set_limit/_parsed_bytes boundary in v2).
     for (int offset = 8; offset < 30; offset++) {
         int records = 0;
@@ -2190,7 +2197,7 @@ TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
         };
         read_range(0, offset);
         read_range(offset, 0);
-        ASSERT_EQ(records, 4) << "offset=" << offset;
+        ASSERT_EQ(records, 5) << "offset=" << offset;
     }
 
     // 4) One combined fixture (BOM + CRLF + a blank line + backslash escape + the

@@ -562,12 +562,16 @@ Status HdfsTextScanner::_parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
     options.invalid_field_as_null = _invalid_field_as_null;
 
-    // Only LazySimpleSerDe (ESCAPED BY) has a null literal and needs NullableConverter's
-    // raw-bytes "\N" check (see Options::escape); leave it unset (0) for OpenCSVSerde,
-    // which has no null literal at all even though it has its own escape character --
-    // split_hive_open_csv_line already fully resolves quotes/escapes before any
-    // converter sees the bytes, so the converter layer has no escape work left to do.
+    // The two serdes differ on both knobs (see Options for the full semantics):
+    // - LazySimpleSerDe (_enclose == 0): fields still carry raw escape bytes, so pass
+    //   ESCAPED BY's escape char down for NullableConverter's raw-bytes "\N" check and
+    //   unescape; "\N" is its null literal (serialization.null.format default).
+    // - OpenCSVSerde (_enclose != 0): split_hive_open_csv_line already fully resolves
+    //   quotes/escapes, so no escape work remains -- and the serde has NO null-literal
+    //   concept at all (fields are always strings; input "\\N" must come out as the
+    //   2-char string "\N", not NULL), so disable the "\N" check entirely.
     options.escape = (_enclose == 0) ? _escape : 0;
+    options.hive_null_literal = (_enclose == 0);
 
     const size_t num_materialize_columns = _scanner_ctx->format_scan_context.materialized_columns.size();
     const char field_delim = _field_delimiter.front();

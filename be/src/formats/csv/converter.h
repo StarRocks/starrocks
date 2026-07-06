@@ -87,10 +87,20 @@ public:
         // uses it to decide null on the RAW (pre-unescape) bytes before deciding whether
         // to unescape: "\N" is null even though it unescapes to "N", while "\\N"
         // unescapes to a literal "\N" string that would otherwise be mistaken for null.
-        // Left 0 for OpenCSVSerde (which has no null literal at all) even though that
-        // format has its own escape character -- the scanner never sets this field for
-        // OpenCSVSerde -- and for every non-Hive caller (unaffected, existing behavior).
+        // Left 0 for OpenCSVSerde even though that format has its own escape character
+        // (its splitter fully resolves quotes/escapes before any converter runs, so no
+        // unescape work remains) -- and for every non-Hive caller (existing behavior).
         char escape = 0;
+
+        // Whether a field spelled exactly "\N" is SQL NULL. True for LazySimpleSerDe
+        // (serialization.null.format's default) and for every legacy CSV caller
+        // (broker/stream load), where "\N" has always meant NULL. The Hive scanner sets
+        // it to false for OpenCSVSerde, which has NO null-literal concept at all: its
+        // fields are always strings, so input "\\N" (escaped backslash + N) must come
+        // out as the two-character string "\N", not NULL. This is a static property of
+        // the serde -- distinct from `escape`, which only says whether unescape work is
+        // still pending in the converter.
+        bool hive_null_literal = true;
 
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;

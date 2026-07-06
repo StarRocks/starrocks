@@ -2,3 +2,4 @@
 2,"a,b,c",done
 3,plain,end
 4,"she said ""hi""",quoted
+5,"\\N","\N"

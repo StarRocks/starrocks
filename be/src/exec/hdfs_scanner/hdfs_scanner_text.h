@@ -53,6 +53,17 @@ void split_hive_lazy_simple_line(const Slice& line, char field_delim, char escap
 // silently dropped otherwise (an escaped separator still splits!); a line ending
 // inside quotes keeps only the completed fields, or becomes an all-null row when
 // none completed; there is NO null literal ("\N" is data).
+//
+// Unlike split_hive_lazy_simple_line, this fully resolves quotes/escapes here and
+// emits FINAL field values -- there is no "pass raw bytes down for a complex type
+// to re-split" path. That is safe only because OpenCSVSerde has no complex-type
+// concept: Hive itself types every OpenCSVSerde column as string, so a field can
+// never be handed to ArrayConverter/MapConverter. If a StarRocks external table
+// were hand-declared with a MAP/ARRAY column against an OpenCSVSerde-backed table
+// (a schema real Hive metadata cannot produce), an escaped element/kv separator
+// inside that field would already be resolved away by this function and would be
+// mis-split one level down -- the same class of bug fixed for LazySimpleSerDe by
+// keeping escape bytes raw for nested elements, just not applicable here.
 void split_hive_open_csv_line(const Slice& line, char field_delim, char quote, char escape, HiveTextFields* out);
 
 // This class used by data lake(Hive, Iceberg,... etc), not for broker load.
