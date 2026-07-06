@@ -74,9 +74,15 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public class SetStmtAnalyzer {
+    private static final String LANCE_QUERY_PARALLELISM_ANN_PARAM = "lance.query_parallelism";
+    private static final Set<String> LANCE_POSITIVE_INTEGER_ANN_PARAMS =
+            Set.of("lance.nprobes", "lance.refine_factor", "lance.ef");
+
     public static void analyze(SetStmt setStmt, ConnectContext session) {
         List<SetListItem> setVars = setStmt.getSetListItems();
         for (SetListItem var : setVars) {
@@ -424,12 +430,61 @@ public class SetStmtAnalyzer {
                 }
 
                 for (Map.Entry<String, String> entry : annParamMap.entrySet()) {
+                    String rawKey = entry.getKey();
+                    String key = rawKey.toLowerCase(Locale.ROOT);
+                    if (isSupportedLanceAnnParam(rawKey, key, entry.getValue())) {
+                        continue;
+                    }
                     IndexParams.getInstance().checkParams(entry.getKey().toUpperCase(), entry.getValue());
                 }
             }
         }
 
         var.setResolvedExpression(resolvedExpression);
+    }
+
+    private static boolean isSupportedLanceAnnParam(String rawKey, String key, String value) {
+        if (key.startsWith("lance.") && !rawKey.equals(key)) {
+            throw new SemanticException("Lance ann_params key must be lowercase: " + rawKey);
+        }
+        if (LANCE_POSITIVE_INTEGER_ANN_PARAMS.contains(key)) {
+            validatePositiveIntegerAnnParam(key, value);
+            return true;
+        }
+        if (LANCE_QUERY_PARALLELISM_ANN_PARAM.equals(key)) {
+            validateQueryParallelismAnnParam(key, value);
+            return true;
+        }
+        if (key.startsWith("lance.")) {
+            throw new SemanticException("Unsupported lance ann_params: " + key);
+        }
+        return false;
+    }
+
+    private static void validatePositiveIntegerAnnParam(String key, String value) {
+        if (value == null) {
+            throw new SemanticException("Value of `" + key + "` must be a positive integer");
+        }
+        try {
+            if (Integer.parseInt(value) <= 0) {
+                throw new SemanticException("Value of `" + key + "` must be >= 1");
+            }
+        } catch (NumberFormatException e) {
+            throw new SemanticException("Value of `" + key + "` must be a positive integer");
+        }
+    }
+
+    private static void validateQueryParallelismAnnParam(String key, String value) {
+        if (value == null) {
+            throw new SemanticException("Value of `" + key + "` must be -1 or a non-negative integer");
+        }
+        try {
+            if (Integer.parseInt(value) < -1) {
+                throw new SemanticException("Value of `" + key + "` must be -1 or >= 0");
+            }
+        } catch (NumberFormatException e) {
+            throw new SemanticException("Value of `" + key + "` must be -1 or a non-negative integer");
+        }
     }
 
     /**
