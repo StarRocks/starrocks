@@ -117,18 +117,67 @@ class OrcStripeStatisticsReaderTest {
     }
 
     @Test
-    void stringColumnFallsBackToDataTier() throws Exception {
-        // ORC string stats would always need data-tier fallback; v1 rejects the
-        // type eagerly rather than wiring a string-stats path.
+    void readsStringStatistics() throws Exception {
+        Path orcPath = writeOrc(
+                "struct<tenant:string>",
+                /*rowCount=*/ 8,
+                (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
+                        .setVal(batchRow, String.format("tenant-%02d", rowIndex).getBytes(StandardCharsets.UTF_8)));
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("tenant-00", globalMin);
+        Assertions.assertEquals("tenant-07", globalMax);
+    }
+
+    @Test
+    void truncatedStringStatsFallBackToDataTier() throws Exception {
+        // ORC keeps exact string min/max only up to 1024 bytes; beyond that it records
+        // a truncated bound and getMinimum()/getMaximum() return null -> mark truncated.
+        String longPrefix = "z".repeat(2000);
         Path orcPath = writeOrc(
                 "struct<tenant:string>",
                 /*rowCount=*/ 4,
                 (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
-                        .setVal(batchRow, ("tenant-" + rowIndex).getBytes(StandardCharsets.UTF_8)));
+                        .setVal(batchRow, (longPrefix + rowIndex).getBytes(StandardCharsets.UTF_8)));
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertTrue(stripe.isTruncated());
+            Assertions.assertNull(stripe.getMinTuple());
+            Assertions.assertNull(stripe.getMaxTuple());
+        }
+    }
+
+    @Test
+    void charSortKeyFallsBackToDataTier() throws Exception {
+        // A CHAR(N) sort key is padded/truncated to its fixed width by the BE before routing,
+        // so the raw stripe min/max cannot be trusted for a meta-tier split -- reject eagerly.
+        Path orcPath = writeOrc(
+                "struct<tenant:string>",
+                /*rowCount=*/ 4,
+                (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
+                        .setVal(batchRow, String.format("tenant-%02d", rowIndex).getBytes(StandardCharsets.UTF_8)));
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR)));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("tenant", TypeFactory.createCharType(16))));
     }
 
     @Test
