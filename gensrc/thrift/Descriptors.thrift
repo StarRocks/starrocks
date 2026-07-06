@@ -208,12 +208,10 @@ enum TSchemaTableType {
 
     SCH_BE_TABLET_WRITE_LOG,
 
-<<<<<<< HEAD
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS,
+
     // Used by epack
     STARROCKS_POLICY_REFERENCES = 20000
-=======
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
->>>>>>> 5ae759a5a3f... [Enhancement] Backport MV observability columns, refresh_jobs table & metrics (backport #74342) (#75795)
 }
 
 enum THdfsCompression {

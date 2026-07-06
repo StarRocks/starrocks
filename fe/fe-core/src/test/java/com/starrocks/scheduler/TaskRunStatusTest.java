@@ -98,8 +98,6 @@ public class TaskRunStatusTest {
         taskRunStatus.getMvTaskRunExtraMessage().setNextPartitionStart("2023-01-01");
         Assertions.assertEquals(Constants.TaskRunState.PENDING, taskRunStatus.getLastRefreshState());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testSourceIsUnknownWhenAbsentFromPersistedJson() {
@@ -117,5 +115,4 @@ public class TaskRunStatusTest {
         status.setState(Constants.TaskRunState.SUCCESS);
         Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getLastRefreshState());
     }
->>>>>>> 5ae759a5a3f... [Enhancement] Backport MV observability columns, refresh_jobs table & metrics (backport #74342) (#75795)
 }
