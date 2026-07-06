@@ -525,6 +525,15 @@ CONF_mInt64(secondary_index_reader_cache_capacity, "256");
 // Enable the covering-index fast path: predicate AND output columns all in
 // the index -> answer from .idx (DelVec-filtered), no base-table readback.
 CONF_mBool(enable_secondary_index_covering, "true");
+// Multi-index AND selectivity cost gate (mirrors config_secondary_index_fwd.h).
+// An AND index whose estimated match ratio exceeds this percent is left as a
+// residual predicate instead of materialized.
+CONF_mInt64(secondary_index_and_skip_broad_pct, "10");
+// If even the most selective applicable index matches more than this percent of
+// the rowset, skip the index path entirely and full-scan.
+CONF_mInt64(secondary_index_skip_fullscan_pct, "20");
+// Stop intersecting further indexes once the candidate set is at/below this many rows.
+CONF_mInt64(secondary_index_and_stop_rows, "262144");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.
