@@ -31,6 +31,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/string/utf8.h"
 #include "base/time/date_func.h"
 #include "base/types/int128.h"
 #include "base/types/numeric_types.h"
@@ -1519,6 +1520,16 @@ class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr result, _evaluate_to_string(context, ptr));
+        // MySQL semantics: CAST(x AS CHAR(N)) truncates to N characters. Only bounded CHAR(N)
+        // (len >= 0) is affected; VARCHAR(N) and wildcard CHAR keep the full value.
+        if (type().type == TYPE_CHAR && type().len >= 0) {
+            return _truncate_to_char_len(std::move(result), type().len);
+        }
+        return result;
+    }
+
+    StatusOr<ColumnPtr> _evaluate_to_string(ExprContext* context, Chunk* ptr) {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1622,6 +1633,33 @@ private:
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
     ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr&& column) { return Column::mutate(std::move(column)); }
+
+    // Truncate each non-null value to its first `len` UTF-8 characters (MySQL CHAR(N) semantics).
+    // Nulls stay null; const-ness is preserved.
+    static ColumnPtr _truncate_to_char_len(ColumnPtr column, int len) {
+        if (column->only_null()) {
+            return column;
+        }
+        ColumnViewer<TYPE_VARCHAR> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
+        for (int row = 0; row < viewer.size(); ++row) {
+            if (viewer.is_null(row)) {
+                builder.append_null();
+                continue;
+            }
+            Slice s = viewer.value(row);
+            // Byte length is an upper bound on the character count: <= len bytes already fits.
+            if (s.size <= static_cast<size_t>(len)) {
+                builder.append(s);
+                continue;
+            }
+            const char* begin = s.data;
+            const char* end = s.data + s.size;
+            const char* truncated_end = skip_leading_utf8(begin, end, static_cast<size_t>(len));
+            builder.append(Slice(begin, truncated_end - begin));
+        }
+        return builder.build(column->is_constant());
+    }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
