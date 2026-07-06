@@ -1237,27 +1237,47 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
         if (tableFullMORParams.isEmpty()) {
             return baseSource;
-        } else {
-            // build remote file info source for table with equality delete files.
-            IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
-                    dbName, tableName, params, tableFullMORParams.getMORId(), param.getMORParams());
+        }
 
-            if (!remoteFileInfoSources.containsKey(remoteFileInfoSourceKey)) {
-                IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
-                // The tableFullMORParams we recorded are mainly used here. Scheduling of multiple
-                // split scan nodes from one table scan node is one by one. And in the IcebergRemoteSourceTrigger,
-                // multiple queues need to be filled according to different iceberg mor params when executing iceberg planing.
-                // Therefore, here we initialize the remoteFileInfoSource of all iceberg mor params for the first time.
-                for (IcebergMORParams morParams : tableFullMORParams.getMorParamsList()) {
-                    IcebergRemoteFileInfoSourceKey key = IcebergRemoteFileInfoSourceKey.of(
-                            dbName, tableName, params, tableFullMORParams.getMORId(), morParams);
-                    Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
-                    remoteFileInfoSources.put(key, new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque));
+        // build remote file info source for table with equality delete files.
+        if (sampled) {
+            // Same rationale as the splitTasks bypass above: IcebergRemoteFileInfoSourceKey also
+            // derives from PredicateSearchKey (via morId/icebergMORParams on top of it) and ignores
+            // fileSampleRatio/sampleSeed, so caching here could let a sampled ANALYZE reuse a
+            // previously cached full MOR source (silently skipping sampling), or let a later normal
+            // MOR query reuse a sampled source (silently under-scanning). Build a fresh, uncached
+            // trigger and all sibling MOR params' queues -- mirroring the cached branch below -- and
+            // return only the one this call actually asked for.
+            IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
+            RemoteFileInfoSource requestedSource = null;
+            for (IcebergMORParams morParams : tableFullMORParams.getMorParamsList()) {
+                Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
+                RemoteFileInfoSource source = new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque);
+                if (morParams.equals(param.getMORParams())) {
+                    requestedSource = source;
                 }
             }
-
-            return remoteFileInfoSources.get(remoteFileInfoSourceKey);
+            return requestedSource;
         }
+
+        IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
+                dbName, tableName, params, tableFullMORParams.getMORId(), param.getMORParams());
+
+        if (!remoteFileInfoSources.containsKey(remoteFileInfoSourceKey)) {
+            IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
+            // The tableFullMORParams we recorded are mainly used here. Scheduling of multiple
+            // split scan nodes from one table scan node is one by one. And in the IcebergRemoteSourceTrigger,
+            // multiple queues need to be filled according to different iceberg mor params when executing iceberg planing.
+            // Therefore, here we initialize the remoteFileInfoSource of all iceberg mor params for the first time.
+            for (IcebergMORParams morParams : tableFullMORParams.getMorParamsList()) {
+                IcebergRemoteFileInfoSourceKey key = IcebergRemoteFileInfoSourceKey.of(
+                        dbName, tableName, params, tableFullMORParams.getMORId(), morParams);
+                Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
+                remoteFileInfoSources.put(key, new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque));
+            }
+        }
+
+        return remoteFileInfoSources.get(remoteFileInfoSourceKey);
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(IcebergTable table,

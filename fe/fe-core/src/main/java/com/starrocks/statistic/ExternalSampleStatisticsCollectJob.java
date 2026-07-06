@@ -67,7 +67,23 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     // max, min, ndv cardinality.
     private static final int AGGREGATES_PER_COLUMN = 6;
 
+    // StatisticsUtils#estimateColumnStatistics rescales a SAMPLE job's stored row_count by
+    // allPartitionSize / sampledPartitionsHashValue().size() -- a correction for the legacy
+    // Hive-style "latest N partitions, full scan" sampling, where the stored row_count only covers
+    // the sampled partition subset. Iceberg's whole-table file sampling already rescales row_count
+    // (and now data_size/null_count) to a full-table estimate during collection (see
+    // collectSinglePassStatisticSync), so that downstream rescale must be a no-op here. Reporting a
+    // fixed 1-sampled-out-of-1-total split (rather than the factory's real, and irrelevant,
+    // "latest N partitions" pre-selection) keeps the ratio at exactly 1.0x. A single constant
+    // element (not a fresh Set per call) keeps StatisticExecutor's cross-run union at size 1 too.
+    private static final Set<Long> FILE_SAMPLE_NEUTRAL_PARTITION_HASH = Set.of(0L);
+    private static final int FILE_SAMPLE_NEUTRAL_PARTITION_SIZE = 1;
+
     private final int allPartitionSize;
+
+    // Set once collectIcebergWithFileSampling actually runs (i.e. this job is against an Iceberg
+    // table). See FILE_SAMPLE_NEUTRAL_PARTITION_HASH for why this matters downstream.
+    private volatile boolean usedFileSampling = false;
 
     public ExternalSampleStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                               List<String> columnNames, List<Type> columnTypes,
@@ -78,12 +94,15 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     }
 
     public Set<Long> getSampledPartitionsHashValue() {
+        if (usedFileSampling) {
+            return FILE_SAMPLE_NEUTRAL_PARTITION_HASH;
+        }
         HashFunction hashFunction = Hashing.murmur3_128();
         return partitionNames.stream().map(s -> hashFunction.hashUnencodedChars(s).asLong()).collect(Collectors.toSet());
     }
 
     public int getAllPartitionSize() {
-        return allPartitionSize;
+        return usedFileSampling ? FILE_SAMPLE_NEUTRAL_PARTITION_SIZE : allPartitionSize;
     }
 
     @Override
@@ -104,6 +123,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     }
 
     private void collectIcebergWithFileSampling(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        usedFileSampling = true;
         long startMs = System.currentTimeMillis();
         long jobId = analyzeStatus.getId();
 
@@ -392,13 +412,20 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         for (int i = 0; i < columnBatch.size(); i++) {
             String columnName = columnNames.get(columnBatch.get(i));
             int base = 1 + i * AGGREGATES_PER_COLUMN;
-            long dataSize = data.get(base).getAsLong();
+            long sampledDataSize = data.get(base).getAsLong();
             String hllHex = data.get(base + 1).getAsString();
-            long nullCount = data.get(base + 2).getAsLong();
+            long sampledNullCount = data.get(base + 2).getAsLong();
             String max = data.get(base + 3).getAsString();
             String min = data.get(base + 4).getAsString();
             long cardinality = data.get(base + 5).getAsLong();
             cardinalityByColumn.put(columnName, cardinality);
+
+            // data_size and null_count are sample-local totals just like row_count was before
+            // scaling -- readers compute averageRowSize = data_size / row_count and nullsFraction =
+            // null_count / row_count, so leaving these two unscaled while row_count is a full-table
+            // estimate would make both figures come out ~ratio times too small.
+            long scaledDataSize = (ratio > 0 && ratio < 1.0) ? (long) Math.ceil(sampledDataSize / ratio) : sampledDataSize;
+            long scaledNullCount = (ratio > 0 && ratio < 1.0) ? (long) Math.ceil(sampledNullCount / ratio) : sampledNullCount;
 
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
@@ -410,9 +437,9 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
             params.add("'" + db.getOriginName() + "'");
             params.add("'" + table.getName() + "'");
             params.add(String.valueOf(scaledRowCount));
-            params.add(String.valueOf(dataSize));
+            params.add(String.valueOf(scaledDataSize));
             params.add("hll_deserialize(unhex('mockData'))");
-            params.add(String.valueOf(nullCount));
+            params.add(String.valueOf(scaledNullCount));
             params.add("'" + max + "'");
             params.add("'" + min + "'");
             params.add("now()");
@@ -424,9 +451,9 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
             row.add(new StringLiteral(db.getOriginName()));
             row.add(new StringLiteral(table.getName()));
             row.add(new IntLiteral(scaledRowCount, IntegerType.BIGINT));
-            row.add(new IntLiteral(dataSize, IntegerType.BIGINT));
+            row.add(new IntLiteral(scaledDataSize, IntegerType.BIGINT));
             row.add(hllDeserialize(hllHex.getBytes(StandardCharsets.UTF_8)));
-            row.add(new IntLiteral(nullCount, IntegerType.BIGINT));
+            row.add(new IntLiteral(scaledNullCount, IntegerType.BIGINT));
             row.add(new StringLiteral(max));
             row.add(new StringLiteral(min));
             row.add(nowFn());
