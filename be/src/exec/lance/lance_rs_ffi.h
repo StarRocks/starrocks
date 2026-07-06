@@ -51,7 +51,8 @@ typedef struct SrLanceVectorOptions {
 int sr_lance_reader_open(SrLanceString dataset_uri, int32_t fragment_id, const SrLanceString* columns,
                          size_t column_count, int32_t batch_size, const SrLanceStringPair* storage_options,
                          size_t storage_option_count, const SrLanceVectorOptions* vector_options,
-                         SrLanceReader** out_reader, char** error);
+                         int64_t index_cache_size_bytes, int64_t metadata_cache_size_bytes, SrLanceReader** out_reader,
+                         char** error);
 
 int sr_lance_reader_next(SrLanceReader* reader, struct ArrowArray* out_array, struct ArrowSchema* out_schema,
                          int64_t* out_rows, char** error);

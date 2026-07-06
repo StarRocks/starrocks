@@ -77,6 +77,17 @@ struct VectorOptions {
     query_parallelism: Option<i32>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct CacheConfig {
+    index_cache_size_bytes: usize,
+    metadata_cache_size_bytes: usize,
+}
+
+struct SharedSession {
+    config: CacheConfig,
+    session: Arc<Session>,
+}
+
 fn runtime() -> &'static Runtime {
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
@@ -88,9 +99,46 @@ fn runtime() -> &'static Runtime {
     })
 }
 
-fn session() -> Arc<Session> {
-    static SESSION: OnceLock<Arc<Session>> = OnceLock::new();
-    SESSION.get_or_init(|| Arc::new(Session::default())).clone()
+fn cache_size_from_i64(name: &str, value: i64) -> Result<usize, String> {
+    if value < 0 {
+        return Err(format!("{name} must be non-negative, got {value}"));
+    }
+    usize::try_from(value).map_err(|_| format!("{name} is too large: {value}"))
+}
+
+fn session(
+    index_cache_size_bytes: i64,
+    metadata_cache_size_bytes: i64,
+) -> Result<Arc<Session>, String> {
+    static SESSION: OnceLock<SharedSession> = OnceLock::new();
+    let config = CacheConfig {
+        index_cache_size_bytes: cache_size_from_i64(
+            "lance_index_cache_size_bytes",
+            index_cache_size_bytes,
+        )?,
+        metadata_cache_size_bytes: cache_size_from_i64(
+            "lance_metadata_cache_size_bytes",
+            metadata_cache_size_bytes,
+        )?,
+    };
+    let shared = SESSION.get_or_init(|| SharedSession {
+        config,
+        session: Arc::new(Session::new(
+            config.index_cache_size_bytes,
+            config.metadata_cache_size_bytes,
+            Default::default(),
+        )),
+    });
+    if shared.config != config {
+        return Err(format!(
+            "Lance cache config changed after session initialization: initial index={} metadata={}, current index={} metadata={}",
+            shared.config.index_cache_size_bytes,
+            shared.config.metadata_cache_size_bytes,
+            config.index_cache_size_bytes,
+            config.metadata_cache_size_bytes
+        ));
+    }
+    Ok(shared.session.clone())
 }
 
 unsafe fn string_from_raw(value: SrLanceString) -> Result<String, String> {
@@ -234,10 +282,12 @@ async fn open_reader(
     batch_size: i32,
     storage_options: HashMap<String, String>,
     vector_options: Option<VectorOptions>,
+    index_cache_size_bytes: i64,
+    metadata_cache_size_bytes: i64,
 ) -> Result<SrLanceReader, String> {
     let dataset = DatasetBuilder::from_uri(&dataset_uri)
         .with_storage_options(storage_options)
-        .with_session(session())
+        .with_session(session(index_cache_size_bytes, metadata_cache_size_bytes)?)
         .load()
         .await
         .map_err(|e| format!("failed to open Lance dataset {dataset_uri}: {e}"))?;
@@ -324,6 +374,8 @@ pub unsafe extern "C" fn sr_lance_reader_open(
     storage_options: *const SrLanceStringPair,
     storage_option_count: usize,
     vector_options: *const SrLanceVectorOptions,
+    index_cache_size_bytes: i64,
+    metadata_cache_size_bytes: i64,
     out_reader: *mut *mut SrLanceReader,
     error: *mut *mut c_char,
 ) -> c_int {
@@ -345,6 +397,8 @@ pub unsafe extern "C" fn sr_lance_reader_open(
             batch_size,
             storage_options,
             vector_options,
+            index_cache_size_bytes,
+            metadata_cache_size_bytes,
         ))?;
         Ok(Box::into_raw(Box::new(reader)))
     })();
