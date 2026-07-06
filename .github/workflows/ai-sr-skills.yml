@@ -230,15 +230,29 @@ jobs:
   # the GitHub REST API (GITHUB_TOKEN injected). --comment applies a strict confidence gate and emits
   # either a sticky-marked briefing or the sentinel "MODULE-RISK: none" (then we post nothing).
   #
+  # TRIGGER: every human-authored PR event (opened/reopened/synchronize/ready_for_review), minus
+  # mergify/ and *-sync-pr-* automation branches and Bot-typed authors. It intentionally does NOT
+  # restrict to org members / collaborators — external contributors are briefed too (deliberate; see
+  # the SECURITY note below for the accepted risk).
+  #
+  # Why no trusted-author gate: the prior `author_association in [OWNER,MEMBER,COLLABORATOR]` check
+  # silently skipped EVERY PR. In the pull_request_target payload `author_association` reflects only
+  # PUBLICLY-visible org membership, and StarRocks committers keep membership private, so they arrive
+  # as CONTRIBUTOR and the gate matched nobody (module-risk never ran once since it was added). The
+  # replacement `github.event.pull_request.user.type != 'Bot'` keeps automation (mergify[bot],
+  # dependabot, ...) out while briefing all human PRs.
+  #
   # SECURITY (pull_request_target): this job injects secrets (GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN)
   # into `claude --dangerously-skip-permissions`, which reads attacker-influenceable PR body/diff and
-  # whose output is posted back to the PR. An untrusted author could prompt-inject the model to run
-  # bash / emit secrets (e.g. after the marker) and have them published. So it is GATED to TRUSTED
-  # authors only (author_association OWNER/MEMBER/COLLABORATOR = write access); external / first-time
-  # contributors never reach the model. (assign-reviewer tolerates all authors because its host step
-  # extracts only login-shaped tokens — a strict whitelist; module-risk's output is free-form, so it
-  # needs the author gate. The marker-bounded extraction below is defense-in-depth, not the control.)
-  # For an external PR a maintainer can still run /github-pr-module-risk:review manually.
+  # posts output back to the PR. Untrusted authors now reach the model, so a malicious PR can attempt
+  # prompt-injection to run bash / emit secrets. This risk is ACCEPTED in exchange for briefing every
+  # human PR; residual mitigations (defense-in-depth, NOT a hard gate): the model runs inside the
+  # claude-cli container, the upsert step extracts only from the `<!-- module-risk-briefing -->` marker
+  # onward, and continue-on-error stops a hijacked run from failing checks. To re-restrict to write
+  # access, a preflight job can query repos/<repo>/collaborators/<author>/permission at runtime (the
+  # webhook author_association field cannot, per above). (assign-reviewer stays safe for any author
+  # because its host step extracts only login-shaped tokens — a strict whitelist; module-risk's output
+  # is free-form.)
   module-risk:
     runs-on: [self-hosted, normal]
     # Dedup rapid pushes for THIS job only (a new event cancels the in-flight briefing run).
@@ -253,7 +267,7 @@ jobs:
        github.event.action == 'synchronize' || github.event.action == 'ready_for_review') &&
       !startsWith(github.head_ref, 'mergify/') &&
       !contains(github.head_ref, '-sync-pr-') &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+      github.event.pull_request.user.type != 'Bot'
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
