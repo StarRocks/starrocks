@@ -181,6 +181,13 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
     private volatile long lastMinActiveTxnId = 0;
 
+    // Incremental (bounded, resumable) vacuum protocol state, grouped into one object (see
+    // VacuumState). Persisted in the image via @SerializedName, and between snapshots via the
+    // OP_MODIFY_PARTITION_VACUUM_STATE edit log the autovacuum coordinator writes each round, so an
+    // in-flight pass survives an FE restart / failover.
+    @SerializedName(value = "vacuumState")
+    private volatile VacuumState vacuumState = new VacuumState();
+
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
     
@@ -320,6 +327,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
         this.lastMinActiveTxnId = lastMinActiveTxnId;
+    }
+
+    public VacuumState getVacuumState() {
+        return vacuumState;
+    }
+
+    // Replace the whole state object. Used on edit-log / image replay; the value is null-guarded so an
+    // old image entry without the field cannot null it out.
+    public void setVacuumState(VacuumState vacuumState) {
+        if (vacuumState != null) {
+            this.vacuumState = vacuumState;
+        }
     }
 
     public long getExtraFileSize() {
@@ -947,6 +966,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        // lastSuccVacuumVersion is not serialized into the image (no @SerializedName). Once a checkpoint has
+        // absorbed the vacuum-state edit-log records, restarting from that image replays no record to restore
+        // it, so it would reset to 0 and every already-drained partition would be needlessly vacuumed again.
+        // The completed-pass floor is durable in vacuumState.minRetainedVersion (which IS serialized), so
+        // re-derive the watermark from it here -- mirroring the edit-log replay path.
+        if (vacuumState != null) {
+            long vacuumFloor = vacuumState.getMinRetainedVersion();
+            if (vacuumFloor > lastSuccVacuumVersion.get()) {
+                lastSuccVacuumVersion.set(vacuumFloor);
+            }
         }
 
         if (baseIndexMetaId == -1L) {

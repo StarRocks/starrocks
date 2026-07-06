@@ -301,6 +301,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
+                    break;
+                }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.data();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
@@ -1727,6 +1732,10 @@ public class EditLog {
 
     public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
+    }
+
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {

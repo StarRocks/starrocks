@@ -636,4 +636,22 @@ public class PhysicalPartitionTest {
         Assertions.assertFalse(partition.isUnsharing());
         Assertions.assertEquals(children, partition.getQueryableBaseIndex());
     }
+
+    @Test
+    public void testGsonRestoresVacuumWatermarkFromVacuumState() {
+        // lastSuccVacuumVersion is image-excluded (no @SerializedName). Once a checkpoint absorbs the
+        // vacuum-state edit-log records, restarting from that image replays nothing to restore it, so
+        // gsonPostProcess must re-derive it from the durable vacuumState floor -- otherwise it resets to 0
+        // and every already-drained partition is needlessly vacuumed again.
+        PhysicalPartition p = new PhysicalPartition(1L, 2L, new MaterializedIndex(2));
+        VacuumState vs = new VacuumState();
+        vs.setMinRetainedVersion(42L);
+        p.setVacuumState(vs);
+
+        PhysicalPartition restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(p), PhysicalPartition.class);
+
+        // lastSuccVacuumVersion did not survive the image directly, but is re-derived from the retain floor.
+        Assertions.assertEquals(42L, restored.getLastSuccVacuumVersion());
+        Assertions.assertEquals(42L, restored.getVacuumState().getMinRetainedVersion());
+    }
 }
