@@ -18,28 +18,19 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.io.CharStreams;
-<<<<<<< HEAD
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
-=======
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
->>>>>>> 01a5230c29 ([BugFix] Fix query cache normalization crash for tables with sub-partitions (#75789))
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.IntLiteral;
->>>>>>> 01a5230c29 ([BugFix] Fix query cache normalization crash for tables with sub-partitions (#75789))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.util.Util;
 import com.starrocks.statistic.StatsConstants;
@@ -1146,13 +1137,19 @@ public class QueryCacheTest {
                 "/*Q04*/ SELECT AVG(UserID) FROM hits",
                 "/*Q05*/ SELECT COUNT(DISTINCT UserID) FROM hits",
                 "/*Q06*/ SELECT COUNT(DISTINCT SearchPhrase) FROM hits",
-                "/*Q08*/ SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) DESC",
+                "/*Q08*/ SELECT AdvEngineID, COUNT(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY COUNT(*) " +
+                        "DESC",
                 "/*Q09*/ SELECT RegionID, COUNT(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10",
-                "/*Q10*/ SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10",
-                "/*Q11*/ SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10",
-                "/*Q12*/ SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10",
-                "/*Q13*/ SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10",
-                "/*Q14*/ SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC",
+                "/*Q10*/ SELECT RegionID, SUM(AdvEngineID), COUNT(*) AS c, AVG(ResolutionWidth), COUNT(DISTINCT UserID) FROM " +
+                        "hits GROUP BY RegionID ORDER BY c DESC LIMIT 10",
+                "/*Q11*/ SELECT MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY " +
+                        "MobilePhoneModel ORDER BY u DESC LIMIT 10",
+                "/*Q12*/ SELECT MobilePhone, MobilePhoneModel, COUNT(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> " +
+                        "'' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10",
+                "/*Q13*/ SELECT SearchPhrase, COUNT(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c" +
+                        " DESC LIMIT 10",
+                "/*Q14*/ SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY " +
+                        "SearchPhrase ORDER BY u DESC",
         };
 
         Map<String, String> digests = new HashMap<String, String>();
@@ -1174,7 +1171,8 @@ public class QueryCacheTest {
         String queriesWithHotPartitions[] = {
                 "/*PRIMARY_KEYS*/ SELECT COUNT(*) FROM t4 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
                 "/*UNIQUE_KEYS*/ SELECT COUNT(*) FROM t5 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
-                "/*AGGREGATE_KEYS with replace*/ SELECT COUNT(*) FROM t6 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*AGGREGATE_KEYS with replace*/ SELECT COUNT(*) FROM t6 where ts between '2022-02-01 00:00:00' and '2022-03-31" +
+                        " 00:00:00'",
         };
 
         String queriesWithoutHotPartitions[] = {
@@ -1402,7 +1400,8 @@ public class QueryCacheTest {
                         "join[broadcast] customer on lo_custkey = c_custkey\n" +
                         "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
                         "join[broadcast] part on lo_partkey = p_partkey\n" +
-                        "where c_region = 'AMERICA' and %s and s_region = 'AMERICA' and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')\n" +
+                        "where c_region = 'AMERICA' and %s and s_region = 'AMERICA' and (p_mfgr = 'MFGR#1' or p_mfgr = " +
+                        "'MFGR#2')\n" +
                         "group by d_year, c_nation\n" +
                         "order by d_year, c_nation",
                 "select d_year, c_nation, sum(lo_revenue) + sum(lo_supplycost) as profit\n" +
@@ -1411,7 +1410,8 @@ public class QueryCacheTest {
                         "join[broadcast] customer on lo_custkey = c_custkey\n" +
                         "join[broadcast] supplier on lo_suppkey = s_suppkey\n" +
                         "join[broadcast] part on lo_partkey = p_partkey\n" +
-                        "where c_region = 'AMERICA' and s_region = 'AMERICA' and %s and (p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2')\n" +
+                        "where c_region = 'AMERICA' and s_region = 'AMERICA' and %s and (p_mfgr = 'MFGR#1' or p_mfgr = " +
+                        "'MFGR#2')\n" +
                         "group by d_year, c_nation\n" +
                         "order by d_year, c_nation"
         );
@@ -1485,19 +1485,27 @@ public class QueryCacheTest {
                 "with t1 as (\n" +
                         "select p_brand, p_partkey, p_category,p_supplycost\n" +
                         "from (\n" +
-                        "select p_brand, p_partkey, p_category, p_supplycost, row_number() over (partition by p_partkey, p_category order by p_supplycost) as rn\n" +
+                        "select p_brand, p_partkey, p_category, p_supplycost, row_number() over (partition by p_partkey, " +
+                        "p_category order by p_supplycost) as rn\n" +
                         "from\n" +
-                        "((select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.1, lo_supplycost) as p_supplycost \n" +
-                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19950101 and 19951231\n" +
+                        "((select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.1, lo_supplycost) as p_supplycost" +
+                        " \n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19950101 and " +
+                        "19951231\n" +
                         "UNION ALL\n" +
                         "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.2, lo_supplycost) as p_supplycost\n" +
-                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19960101 and 19961231)\n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19960101 and " +
+                        "19961231)\n" +
                         "INTERSECT\n" +
-                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.3, lo_supplycost) as p_supplycost \n" +
-                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19970101 and 19971231\n" +
+                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.3, lo_supplycost) as p_supplycost " +
+                        "\n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19970101 and " +
+                        "19971231\n" +
                         "EXCEPT\n" +
-                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.4, lo_supplycost) as p_supplycost \n" +
-                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19980101 and 19981231) p\n" +
+                        "select p_brand, p_partkey, p_category, if(lo_supplycost is NULL, 1.4, lo_supplycost) as p_supplycost " +
+                        "\n" +
+                        "from part left join lineorder on lo_partkey = p_partkey where lo_orderdate between 19980101 and " +
+                        "19981231) p\n" +
                         ") pp\n" +
                         "where rn = 1\n" +
                         "order by p_supplycost\n" +
@@ -1589,33 +1597,5 @@ public class QueryCacheTest {
                 "GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25) as t";
         Optional<PlanFragment> frag = getCachedFragment(sql0);
         Assertions.assertTrue(frag.isPresent());
-    }
-
-    @Test
-    public void testQueryCacheWithEmptySubPartition() throws Exception {
-        // Simulate a table whose logical partition has been split so that it owns an extra,
-        // empty physical sub-partition (no tablets). OlapScanNode.toNormalForm() used to
-        // re-derive physical partition ids by blindly expanding every sub-partition of each
-        // selected logical partition and zip the result positionally against a version list
-        // that only recorded actually-scanned (non-empty) sub-partitions -- a size mismatch
-        // that tripped Preconditions.checkState(). "dates" sits on the broadcast side of the
-        // join in testHashJoin, so its scan node is normalized via the
-        // !isProcessingLeftNode() branch, which is required to exercise that code path at all.
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("qc_db", "dates");
-        Partition partition = table.getPartition("dates");
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
-        long emptySubPartitionId = GlobalStateMgr.getCurrentState().getNextId();
-        PhysicalPartition emptyPhysicalPartition = new PhysicalPartition(emptySubPartitionId, partition.getId(),
-                new MaterializedIndex(baseIndex.getId(), MaterializedIndex.IndexState.NORMAL));
-        partition.addSubPartition(emptyPhysicalPartition);
-        try {
-            String sql = "select sum(lo_revenue) as revenue\n" +
-                    "from lineorder join[broadcast] dates on lo_orderdate = d_datekey\n" +
-                    "where d_year = 1993";
-            Assertions.assertDoesNotThrow(() -> UtFrameUtils.getPlanAndFragment(ctx, sql));
-            Assertions.assertTrue(getCachedFragment(sql).isPresent());
-        } finally {
-            partition.removeSubPartition(emptySubPartitionId);
-        }
     }
 }

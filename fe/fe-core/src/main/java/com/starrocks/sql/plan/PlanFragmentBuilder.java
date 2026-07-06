@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
@@ -965,21 +966,8 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-<<<<<<< HEAD
                 // Filter out empty partitions from all selected partitions, original selected partition ids may be
                 // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
-=======
-                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
-                RangeColocateScanDispatch dispatch = null;
-                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
-                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
-                }
-
-                // Filter out logical partitions that have no non-empty physical sub-partition. The result
-                // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
-                // other consumer of getSelectedPartitionIds()/setSelectedPartitionIds() in this codebase --
-                // restricted to those logical partitions with at least one non-empty physical sub-partition.
->>>>>>> 01a5230c29 ([BugFix] Fix query cache normalization crash for tables with sub-partitions (#75789))
                 // eg:
                 // partition        : 10001 -> (tablet_1)
                 //  subpartition1   : 10002 -> (tablet_2)
