@@ -33,16 +33,13 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
@@ -206,60 +203,7 @@ public class IvmRewriter {
         requiredColumns.union(loadOpColumn);
         rootTaskContext.getRequiredColumns().union(loadOpColumn);
 
-        OptExpression projectExpr = OptExpression.create(new LogicalProjectOperator(projectMap), root);
-        // TopN orders DELETEs before UPSERTs for same-PK batches. Skip it when __ACTION__
-        // is provably constant (e.g. append-only Iceberg) — there are no DELETEs to order.
-        if (isActionColumnConstant(root, actionColumn)) {
-            return projectExpr;
-        }
-        List<Ordering> orderings = List.of(new Ordering(loadOpColumn, false, false));
-        LogicalTopNOperator.Builder topNBuilder = LogicalTopNOperator.builder()
-                .withOperator(
-                        new LogicalTopNOperator(orderings, Operator.DEFAULT_LIMIT, Operator.DEFAULT_OFFSET,
-                                SortPhase.PARTIAL))
-                .setOrderByElements(orderings)
-                .setPerPipeline(true);
-        LogicalTopNOperator topN = topNBuilder.build();
-        return OptExpression.create(topN, projectExpr);
-    }
-
-    /**
-     * Walks down the plan tracing {@code target} through aliasing projections (including
-     * projections attached to non-Project operators like Filter). Returns true if the trace
-     * lands on a {@link ConstantOperator}; bails at multi-input operators (join/union/set op)
-     * or any non-constant, non-alias expression.
-     */
-    private static boolean isActionColumnConstant(OptExpression root, ColumnRefOperator actionColumn) {
-        OptExpression current = root;
-        ColumnRefOperator target = actionColumn;
-        for (int i = 0; current != null && i < 64; i++) {
-            Map<ColumnRefOperator, ScalarOperator> colMap = extractColumnRefMap(current.getOp());
-            if (colMap != null && colMap.containsKey(target)) {
-                ScalarOperator expr = colMap.get(target);
-                if (expr instanceof ConstantOperator) {
-                    return true;
-                }
-                if (!(expr instanceof ColumnRefOperator)) {
-                    return false;
-                }
-                target = (ColumnRefOperator) expr;
-            }
-            if (current.getInputs().size() != 1) {
-                return false;
-            }
-            current = current.inputAt(0);
-        }
-        return false;
-    }
-
-    private static Map<ColumnRefOperator, ScalarOperator> extractColumnRefMap(Operator op) {
-        if (op instanceof LogicalProjectOperator) {
-            return ((LogicalProjectOperator) op).getColumnRefMap();
-        }
-        if (op.getProjection() != null) {
-            return op.getProjection().getColumnRefMap();
-        }
-        return null;
+        return OptExpression.create(new LogicalProjectOperator(projectMap), root);
     }
 
     /**
