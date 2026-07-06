@@ -15,9 +15,14 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
+#include <memory>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
+#include "compute_env/spill/block_group.h"
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/data_stream.h"
 #include "compute_env/spill/spiller_factory.h"
@@ -29,16 +34,8 @@ class LoadSpillBlockManager;
 class Chunk;
 class ChunkIterator;
 class LoadChunkSpiller;
-class LoadSpillPipelineMergeTask;
-class LoadSpillPipelineMergeContext;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
-using LoadSpillPipelineMergeTaskPtr = std::unique_ptr<LoadSpillPipelineMergeTask>;
-
-namespace lake {
-class TabletWriter;
-class TabletInternalParallelMergeTask;
-} // namespace lake
 
 namespace spill {
 class BlockGroup;
@@ -87,11 +84,46 @@ struct SpillBlockInputTasks {
     size_t group_count = 0;
 };
 
+class LoadSpillSlotTracker {
+public:
+    virtual ~LoadSpillSlotTracker() = default;
+
+    virtual void mark_slot_ready(int64_t slot_idx) = 0;
+    virtual bool is_slot_ready(int64_t from_slot_idx, int64_t to_slot_idx) = 0;
+};
+
+/**
+ * Encapsulates a single merge input unit for pipeline execution.
+ *
+ * WHY THIS STRUCT: Groups all resources needed for one merge task to be executed
+ * independently in a pipeline operator. The block_groups ownership is critical.
+ *
+ * This is the compute_env-owned form of the former LoadSpillPipelineMergeTask.
+ */
+struct LoadSpillMergeInputBatch {
+    // LIFETIME MANAGEMENT: Holds shared ownership of block groups to prevent premature
+    // destruction. The merge_itr reads from these block groups asynchronously during
+    // pipeline execution, so block groups must outlive the iterator. Without this,
+    // we'd have use-after-free bugs when blocks are reclaimed before iterator finishes.
+    std::vector<spill::BlockGroupPtr> block_groups;
+
+    // Iterator that performs the actual merge of spilled data chunks. Supports both
+    // sorted merge (for aggregation/ordering) and union (for DUP_KEYS tables).
+    ChunkIteratorPtr merge_itr;
+
+    // Metrics for monitoring merge workload distribution across pipeline tasks.
+    // Used to ensure roughly equal work distribution and for performance analysis.
+    size_t total_block_groups = 0;
+    size_t total_block_bytes = 0;
+
+    // Release block group in advance to free load spill disk space
+    void release_block_groups() { block_groups.clear(); }
+};
+
 class LoadChunkSpiller {
 public:
-    friend class LoadSpillPipelineMergeIterator;
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
-                     LoadSpillPipelineMergeContext* pipeline_merge_context = nullptr);
+                     LoadSpillSlotTracker* slot_tracker = nullptr);
     ~LoadChunkSpiller() = default;
 
     StatusOr<size_t> spill(const Chunk& chunk, int64_t slot_idx = -1);
@@ -104,9 +136,8 @@ public:
     StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
                                                                     bool do_sort, bool do_agg);
 
-    StatusOr<LoadSpillPipelineMergeTaskPtr> generate_pipeline_merge_task(size_t target_size,
-                                                                         size_t memory_usage_per_merge, bool do_sort,
-                                                                         bool do_agg, bool final_round);
+    StatusOr<LoadSpillMergeInputBatch> generate_merge_input_batch(size_t target_size, size_t memory_usage_per_merge,
+                                                                  bool do_sort, bool do_agg, bool final_round);
 
     bool empty();
 
@@ -130,8 +161,8 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state;
     // Load spilling uses a dummy RuntimeState without QueryContext.
     std::atomic_int64_t _total_spill_bytes = 0;
-    // pipeline merge context for managing merge tasks
-    LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
+    // Slot readiness tracker for parallel flush ordering. Not owned.
+    LoadSpillSlotTracker* _slot_tracker = nullptr;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     spill::SpillerFactoryPtr _spiller_factory;

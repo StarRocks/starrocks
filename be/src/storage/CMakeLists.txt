@@ -238,7 +238,6 @@ set(STORAGE_FILES
     lake/persistent_index_sstable_fileset.cpp
     lake/lake_persistent_index_key_value_merger.cpp
     lake/tablet_internal_parallel_merge_task.cpp
-    load_chunk_spiller.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp

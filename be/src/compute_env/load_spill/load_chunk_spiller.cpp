@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/load_chunk_spiller.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
@@ -24,11 +24,6 @@
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
-#include "storage/lake/tablet_internal_parallel_merge_task.h"
-#include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_pipeline_merge_context.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage_primitive/aggregate_iterator.h"
 #include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/union_iterator.h"
@@ -114,8 +109,8 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
 }
 
 LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
-                                   LoadSpillPipelineMergeContext* pipeline_merge_context)
-        : _block_manager(block_manager), _profile(profile), _pipeline_merge_context(pipeline_merge_context) {
+                                   LoadSpillSlotTracker* slot_tracker)
+        : _block_manager(block_manager), _profile(profile), _slot_tracker(slot_tracker) {
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -133,8 +128,8 @@ LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, Runtime
 //                  original submission order for correct merge sequence.
 StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
     if (chunk.num_rows() == 0) {
-        if (_pipeline_merge_context) {
-            _pipeline_merge_context->mark_slot_ready(slot_idx);
+        if (_slot_tracker) {
+            _slot_tracker->mark_slot_ready(slot_idx);
         }
         return 0;
     }
@@ -145,8 +140,8 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
-    if (_pipeline_merge_context) {
-        _pipeline_merge_context->mark_slot_ready(slot_idx);
+    if (_slot_tracker) {
+        _slot_tracker->mark_slot_ready(slot_idx);
     }
     return output->append_bytes();
 }
@@ -381,11 +376,11 @@ bool LoadChunkSpiller::empty() {
  * @param final_round - If true, must consume ALL remaining blocks; if false, can stop at gaps
  * @return Task with merge iterator, or task with nullptr iterator if no blocks available
  */
-StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merge_task(size_t target_size,
-                                                                                       size_t memory_usage_per_merge,
-                                                                                       bool do_sort, bool do_agg,
-                                                                                       bool final_round) {
-    LoadSpillPipelineMergeTaskPtr result_task = std::make_unique<LoadSpillPipelineMergeTask>();
+StatusOr<LoadSpillMergeInputBatch> LoadChunkSpiller::generate_merge_input_batch(size_t target_size,
+                                                                                size_t memory_usage_per_merge,
+                                                                                bool do_sort, bool do_agg,
+                                                                                bool final_round) {
+    LoadSpillMergeInputBatch result_batch;
 
     // THREAD SAFETY: Lock held for entire operation because we're both reading and modifying
     // the block groups vector (sorting + erasing). Must be atomic to prevent race conditions
@@ -394,10 +389,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     auto& groups = _block_manager->block_container()->block_groups();
 
     // Empty result signals iteration complete (iterator checks merge_itr == nullptr)
-    RETURN_IF(groups.empty(), result_task);
-    // Return error if _pipeline_merge_context is null
-    RETURN_IF(_pipeline_merge_context == nullptr,
-              Status::InternalError("LoadChunkSpiller pipeline merge context is null"));
+    RETURN_IF(groups.empty(), result_batch);
+    RETURN_IF(!final_round && _slot_tracker == nullptr, Status::InternalError("LoadChunkSpiller slot tracker is null"));
 
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
@@ -421,7 +414,7 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
         auto& group = groups[i];
 
         // CONTINUITY CHECK: Ensure we only merge consecutive slot_idx ranges
-        if (!final_round && !_pipeline_merge_context->is_slot_ready(last_slot_idx, group.slot_idx)) {
+        if (!final_round && !_slot_tracker->is_slot_ready(last_slot_idx, group.slot_idx)) {
             break;
         }
         last_slot_idx = group.slot_idx;
@@ -430,8 +423,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
         merge_inputs.push_back(
                 std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.block_group->blocks()));
         current_input_bytes += group.block_group->data_size();
-        result_task->total_block_bytes += group.block_group->data_size();
-        result_task->total_block_groups++;
+        result_batch.total_block_bytes += group.block_group->data_size();
+        result_batch.total_block_groups++;
 
         // STOPPING CRITERIA: Balance between task size and parallelism.
         // Stop accumulating blocks when either:
@@ -447,8 +440,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
              merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
             // Build the merge iterator chain based on table type requirements
             auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
-            result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
-            RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            result_batch.merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+            RETURN_IF_ERROR(result_batch.merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
             merge_inputs.clear();
             stop_idx = i;
             break;
@@ -460,8 +453,8 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     // Non-final rounds can leave partial batches for next iteration.
     if (final_round && merge_inputs.size() > 0) {
         auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
-        result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
-        RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        result_batch.merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+        RETURN_IF_ERROR(result_batch.merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
         merge_inputs.clear();
         stop_idx = groups.size() - 1;
     }
@@ -470,14 +463,14 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     // The merge iterator (created above) needs these blocks to remain valid during async
     // task execution. By holding shared_ptr in result_task, we ensure blocks outlive iterator.
     for (int64_t i = 0; i <= stop_idx; i++) {
-        result_task->block_groups.push_back(groups[i].block_group);
+        result_batch.block_groups.push_back(groups[i].block_group);
     }
 
     // CLEANUP: Remove processed groups from container so they won't be included in future
     // tasks. This is why we need the lock - concurrent access during erase would corrupt vector.
     groups.erase(groups.begin(), groups.begin() + stop_idx + 1);
 
-    return result_task;
+    return result_batch;
 }
 
 } // namespace starrocks

@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 
 namespace starrocks {
 
@@ -49,10 +50,10 @@ class TabletWriter;
  * THREAD SAFETY: add_merge_task() is thread-safe and can be called from multiple pipeline
  * operators concurrently. The mutex only protects vector modification, not task execution.
  */
-class LoadSpillPipelineMergeContext {
+class LoadSpillPipelineMergeContext : public LoadSpillSlotTracker {
 public:
     explicit LoadSpillPipelineMergeContext(lake::TabletWriter* writer);
-    ~LoadSpillPipelineMergeContext();
+    ~LoadSpillPipelineMergeContext() override;
 
     /**
      * Lazily create thread pool token for submitting parallel merge tasks.
@@ -99,12 +100,12 @@ public:
 
     ThreadPoolToken* token() { return _token.get(); }
 
-    void mark_slot_ready(int64_t slot_idx) {
+    void mark_slot_ready(int64_t slot_idx) override {
         std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
         _ready_slots.insert(slot_idx);
     }
 
-    bool is_slot_ready(int64_t from_slot_idx, int64_t to_slot_idx) {
+    bool is_slot_ready(int64_t from_slot_idx, int64_t to_slot_idx) override {
         std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
         for (int64_t i = from_slot_idx; i <= to_slot_idx; ++i) {
             if (i >= 0 && _ready_slots.find(i) == _ready_slots.end()) {
@@ -141,4 +142,4 @@ private:
     std::unordered_set<int64_t> _ready_slots;
 };
 
-}; // namespace starrocks
+} // namespace starrocks

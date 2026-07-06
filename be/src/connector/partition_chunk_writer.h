@@ -20,12 +20,12 @@
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 #include "connector/utils.h"
 #include "connector_primitive/connector_sink_commit.h"
 #include "connector_primitive/connector_sink_profile.h"
 #include "formats/file_writer.h"
 #include "fs/fs_fwd.h"
-#include "storage/load_chunk_spiller.h"
 
 namespace starrocks {
 

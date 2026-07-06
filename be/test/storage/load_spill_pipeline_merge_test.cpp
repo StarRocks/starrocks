@@ -24,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 #include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/spill/spiller.h"
 #include "fs/fs.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
-#include "storage/load_chunk_spiller.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/storage_env.h"
@@ -125,23 +125,22 @@ TEST_F(LoadSpillPipelineMergeTest, test_spill_without_query_context_uses_local_s
 }
 
 // Test basic pipeline merge task generation
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_basic) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_basic) {
     // Spill chunks with continuous slot indices
     auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {200, 2}});
 
     // Generate a pipeline merge task
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(
                                        bytes - 1,                               // target_size
                                        config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
                                        true,                                    // do_sort
                                        false,                                   // do_agg
                                        true));                                  // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
-    ASSERT_GT(task->total_block_groups, 0);
-    ASSERT_GT(task->total_block_bytes, 0);
-    ASSERT_EQ(task->block_groups.size(), task->total_block_groups);
+    ASSERT_NE(task.merge_itr, nullptr);
+    ASSERT_GT(task.total_block_groups, 0);
+    ASSERT_GT(task.total_block_bytes, 0);
+    ASSERT_EQ(task.block_groups.size(), task.total_block_groups);
 
     // Verify block groups were removed from spiller
     auto& remaining_groups = _block_manager->block_container()->block_groups();
@@ -149,54 +148,53 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_basic) {
 }
 
 // Test pipeline merge task generation with non-continuous slot indices
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_non_continuous) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_non_continuous) {
     // Spill chunks with non-continuous slot indices (0, 1, 3)
     auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {200, 3}});
 
     // Try to generate another task - should get empty task since slot_idx 2 is missing
     auto task_or =
-            _spiller->generate_pipeline_merge_task(bytes,                                   // target_size
-                                                   config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
-                                                   true,                                    // do_sort
-                                                   false,                                   // do_agg
-                                                   false);                                  // final_round
+            _spiller->generate_merge_input_batch(bytes,                                   // target_size
+                                                 config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
+                                                 true,                                    // do_sort
+                                                 false,                                   // do_agg
+                                                 false);                                  // final_round
 
     ASSERT_TRUE(task_or.ok());
-    ASSERT_EQ(task_or.value()->total_block_groups, 2);
+    ASSERT_EQ(task_or.value().total_block_groups, 2);
 }
 
 // Test final round merge with non-continuous slot indices should fail
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_final_round_non_continuous) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_final_round_non_continuous) {
     // Spill chunks with non-continuous slot indices (0, 2, 3)
     auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 2}, {200, 3}});
 
     // Final round merge should fail with non-continuous slot indices
     auto result =
-            _spiller->generate_pipeline_merge_task(bytes,                                   // target_size
-                                                   config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
-                                                   true,                                    // do_sort
-                                                   false,                                   // do_agg
-                                                   true);                                   // final_round
+            _spiller->generate_merge_input_batch(bytes,                                   // target_size
+                                                 config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
+                                                 true,                                    // do_sort
+                                                 false,                                   // do_agg
+                                                 true);                                   // final_round
 
     ASSERT_TRUE(result.ok());
 }
 
 // Test final round merge with continuous slot indices
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_final_round_continuous) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_final_round_continuous) {
     // Spill chunks with continuous slot indices
     auto bytes = spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {200, 2}});
 
     // Final round merge should succeed and merge all groups
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(
                                        bytes,                                   // target_size
                                        config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
                                        true,                                    // do_sort
                                        false,                                   // do_agg
                                        true));                                  // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
-    ASSERT_EQ(task->total_block_groups, 3);
+    ASSERT_NE(task.merge_itr, nullptr);
+    ASSERT_EQ(task.total_block_groups, 3);
 
     // All groups should be consumed
     auto& remaining_groups = _block_manager->block_container()->block_groups();
@@ -204,7 +202,7 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_final_round
 }
 
 // Test target size limitation
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_target_size_limit) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_target_size_limit) {
     // Spill multiple chunks with continuous slot indices
     for (int i = 0; i < 10; i++) {
         spill_chunks_with_slot_idx({{i * 100, i}});
@@ -212,17 +210,16 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_target_size
 
     // Set a small target_size to limit how many groups are merged
     size_t small_target_size = 100; // Very small, should only merge 1-2 groups
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(small_target_size, // target_size
-                                                                      1024 * 1024,       // memory_usage_per_merge
-                                                                      true,              // do_sort
-                                                                      false,             // do_agg
-                                                                      false));           // final_round
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(small_target_size, // target_size
+                                                                    1024 * 1024,       // memory_usage_per_merge
+                                                                    true,              // do_sort
+                                                                    false,             // do_agg
+                                                                    false));           // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
+    ASSERT_NE(task.merge_itr, nullptr);
     // Should only merge a subset of groups
-    ASSERT_LT(task->total_block_groups, 10);
-    ASSERT_GT(task->total_block_groups, 0);
+    ASSERT_LT(task.total_block_groups, 10);
+    ASSERT_GT(task.total_block_groups, 0);
 
     // Remaining groups should exist
     auto& remaining_groups = _block_manager->block_container()->block_groups();
@@ -230,42 +227,40 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_target_size
 }
 
 // Test slot_idx ordering is preserved
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_ordering) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_ordering) {
     // Spill chunks in random order but with sequential slot indices
     auto bytes = spill_chunks_with_slot_idx({{200, 2}, {0, 0}, {300, 3}, {100, 1}});
 
     // Generate pipeline merge task
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(
                                        bytes,                                   // target_size
                                        config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
                                        true,                                    // do_sort
                                        false,                                   // do_agg
                                        true));                                  // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
-    ASSERT_EQ(task->total_block_groups, 4);
+    ASSERT_NE(task.merge_itr, nullptr);
+    ASSERT_EQ(task.total_block_groups, 4);
 
     // Verify all block groups are included
-    ASSERT_EQ(task->block_groups.size(), 4);
+    ASSERT_EQ(task.block_groups.size(), 4);
 }
 
 // Test empty spiller
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_empty) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_empty) {
     // Don't spill anything
     ASSERT_TRUE(_spiller->empty());
 
     // Generate pipeline merge task on empty spiller
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(1024 * 1024, // target_size
-                                                                      1024 * 1024, // memory_usage_per_merge
-                                                                      true,        // do_sort
-                                                                      false,       // do_agg
-                                                                      false));     // final_round
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(1024 * 1024, // target_size
+                                                                    1024 * 1024, // memory_usage_per_merge
+                                                                    true,        // do_sort
+                                                                    false,       // do_agg
+                                                                    false));     // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_EQ(task->merge_itr, nullptr); // Empty task
-    ASSERT_EQ(task->total_block_groups, 0);
-    ASSERT_EQ(task->total_block_bytes, 0);
+    ASSERT_EQ(task.merge_itr, nullptr); // Empty task
+    ASSERT_EQ(task.total_block_groups, 0);
+    ASSERT_EQ(task.total_block_bytes, 0);
 }
 
 // Test LoadSpillPipelineMergeContext basic functionality
@@ -297,7 +292,7 @@ TEST_F(LoadSpillPipelineMergeTest, test_pipeline_merge_context_add_tasks) {
 }
 
 // Test memory usage per merge limitation
-TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_memory_limit) {
+TEST_F(LoadSpillPipelineMergeTest, test_generate_merge_input_batch_memory_limit) {
     // Spill multiple chunks
     for (int i = 0; i < 10; i++) {
         spill_chunks_with_slot_idx({{i * 100, i}});
@@ -306,16 +301,15 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_memory_limi
     // Set memory usage per merge to a value that limits number of groups
     // Assuming config::load_spill_max_chunk_bytes is around 64KB
     size_t memory_limit = 200 * 1024; // 200KB - should limit to ~3 groups
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(10 * 1024 * 1024, // large target_size
-                                                                      memory_limit,     // memory_usage_per_merge
-                                                                      true,             // do_sort
-                                                                      false,            // do_agg
-                                                                      false));          // final_round
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(10 * 1024 * 1024, // large target_size
+                                                                    memory_limit,     // memory_usage_per_merge
+                                                                    true,             // do_sort
+                                                                    false,            // do_agg
+                                                                    false));          // final_round
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
+    ASSERT_NE(task.merge_itr, nullptr);
     // Should be limited by memory, not target size
-    ASSERT_LT(task->total_block_groups, 10);
+    ASSERT_LT(task.total_block_groups, 10);
 
     auto& remaining_groups = _block_manager->block_container()->block_groups();
     ASSERT_GT(remaining_groups.size(), 0);
@@ -331,19 +325,17 @@ TEST_F(LoadSpillPipelineMergeTest, test_incremental_pipeline_merge) {
     size_t small_target = 100; // Force small merges
 
     // Generate first task
-    ASSIGN_OR_ABORT(auto task1, _spiller->generate_pipeline_merge_task(small_target, 1024 * 1024, true, false, false));
-    ASSERT_NE(task1, nullptr);
-    ASSERT_NE(task1->merge_itr, nullptr);
-    size_t first_batch_size = task1->total_block_groups;
+    ASSIGN_OR_ABORT(auto task1, _spiller->generate_merge_input_batch(small_target, 1024 * 1024, true, false, false));
+    ASSERT_NE(task1.merge_itr, nullptr);
+    size_t first_batch_size = task1.total_block_groups;
     ASSERT_GT(first_batch_size, 0);
     ASSERT_LT(first_batch_size, 6);
 
     // Generate second task
-    ASSIGN_OR_ABORT(auto task2, _spiller->generate_pipeline_merge_task(small_target, 1024 * 1024, true, false, false));
-    ASSERT_NE(task2, nullptr);
+    ASSIGN_OR_ABORT(auto task2, _spiller->generate_merge_input_batch(small_target, 1024 * 1024, true, false, false));
 
-    if (task2->merge_itr != nullptr) {
-        size_t second_batch_size = task2->total_block_groups;
+    if (task2.merge_itr != nullptr) {
+        size_t second_batch_size = task2.total_block_groups;
         ASSERT_GT(second_batch_size, 0);
 
         // Total consumed should not exceed original
@@ -358,13 +350,12 @@ TEST_F(LoadSpillPipelineMergeTest, test_thread_safe_pipeline_merge_generation) {
         spill_chunks_with_slot_idx({{i * 100, i}});
     }
 
-    // The generate_pipeline_merge_task method should be thread-safe
+    // The generate_merge_input_batch method should be thread-safe
     // due to the mutex lock in the implementation
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(1024 * 1024, 1024 * 1024, true, false, false));
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(1024 * 1024, 1024 * 1024, true, false, false));
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
-    ASSERT_GT(task->total_block_groups, 0);
+    ASSERT_NE(task.merge_itr, nullptr);
+    ASSERT_GT(task.total_block_groups, 0);
 }
 
 // Test slot_idx sorting correctness
@@ -375,13 +366,12 @@ TEST_F(LoadSpillPipelineMergeTest, test_slot_idx_sorting) {
     auto bytes = spill_chunks_with_slot_idx(out_of_order);
 
     // Generate task - should automatically sort by slot_idx
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(bytes, config::load_spill_max_chunk_bytes * 10,
-                                                                      true, false, true));
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(bytes, config::load_spill_max_chunk_bytes * 10,
+                                                                    true, false, true));
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
+    ASSERT_NE(task.merge_itr, nullptr);
     // All 6 groups should be merged in order
-    ASSERT_EQ(task->total_block_groups, 6);
+    ASSERT_EQ(task.total_block_groups, 6);
 }
 
 // Test duplicate slot_idx handling (should still work, just not continuous)
@@ -390,12 +380,11 @@ TEST_F(LoadSpillPipelineMergeTest, test_duplicate_slot_idx) {
     spill_chunks_with_slot_idx({{0, 0}, {100, 1}, {150, 1}, {200, 2}});
 
     // Should merge first chunk (slot 0), then stop at duplicate
-    ASSIGN_OR_ABORT(auto task, _spiller->generate_pipeline_merge_task(1024 * 1024, 1024 * 1024, true, false, false));
+    ASSIGN_OR_ABORT(auto task, _spiller->generate_merge_input_batch(1024 * 1024, 1024 * 1024, true, false, false));
 
-    ASSERT_NE(task, nullptr);
-    ASSERT_NE(task->merge_itr, nullptr);
+    ASSERT_NE(task.merge_itr, nullptr);
     // Should only merge first continuous sequence
-    ASSERT_GE(task->total_block_groups, 1);
+    ASSERT_GE(task.total_block_groups, 1);
 }
 
 } // namespace starrocks

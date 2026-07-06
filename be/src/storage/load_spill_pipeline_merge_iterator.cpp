@@ -15,12 +15,12 @@
 #include "storage/load_spill_pipeline_merge_iterator.h"
 
 #include "common/config_ingest_fwd.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_chunk_spiller.h"
 #include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/union_iterator.h"
 
@@ -58,18 +58,18 @@ Status LoadSpillPipelineMergeIterator::_generate_next_task() {
     // - true (sort): Whether to sort during merge (always true for correctness)
     // - _do_agg: Whether to perform aggregation (depends on table keys type)
     // - _final_round: Whether this merges to final tablet vs intermediate blocks
-    ASSIGN_OR_RETURN(auto task, _spiller->generate_pipeline_merge_task(config::load_spill_max_merge_bytes,
-                                                                       config::load_spill_memory_usage_per_merge,
-                                                                       true /*sort*/, _do_agg, _final_round));
+    ASSIGN_OR_RETURN(auto batch, _spiller->generate_merge_input_batch(config::load_spill_max_merge_bytes,
+                                                                      config::load_spill_memory_usage_per_merge,
+                                                                      true /*sort*/, _do_agg, _final_round));
 
     // nullptr merge_itr indicates no more block groups available - iteration complete
-    if (task->merge_itr != nullptr) {
+    if (batch.merge_itr != nullptr) {
         // Update metrics for monitoring merge workload and performance analysis.
         // These counters help identify bottlenecks (too many small merges vs few large ones)
         // and validate that workload is being distributed evenly across pipeline tasks.
         COUNTER_UPDATE(ADD_COUNTER(_spiller->profile(), "SpillMergeInputGroups", TUnit::UNIT),
-                       task->total_block_groups);
-        COUNTER_UPDATE(ADD_COUNTER(_spiller->profile(), "SpillMergeInputBytes", TUnit::BYTES), task->total_block_bytes);
+                       batch.total_block_groups);
+        COUNTER_UPDATE(ADD_COUNTER(_spiller->profile(), "SpillMergeInputBytes", TUnit::BYTES), batch.total_block_bytes);
         COUNTER_UPDATE(ADD_COUNTER(_spiller->profile(), "SpillMergeCount", TUnit::UNIT), 1);
 
         // WHY CLONE WRITER: Each parallel merge task needs its own writer instance to
@@ -80,8 +80,9 @@ Status LoadSpillPipelineMergeIterator::_generate_next_task() {
 
         // Create the parallel merge task with all necessary context: writer clone,
         // merge iterator, schema, quit flag for cancellation, and I/O metrics timer.
+        auto task = std::make_unique<LoadSpillMergeInputBatch>(std::move(batch));
         _current_task = std::make_shared<lake::TabletInternalParallelMergeTask>(
-                std::move(writer), std::move(task), _spiller->_schema.get(), _quit_flag,
+                std::move(writer), std::move(task), _spiller->schema().get(), _quit_flag,
                 _spiller->spiller()->metrics().write_io_timer);
     } else {
         // No more data to merge - signal iteration completion by returning nullptr.
