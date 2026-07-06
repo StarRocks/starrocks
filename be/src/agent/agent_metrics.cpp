@@ -126,46 +126,7 @@ void AgentMetrics::_register_thread_pool_metrics(const std::string& name, Thread
     DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
 
-<<<<<<< HEAD
-#define REGISTER_AGENT_THREAD_POOL_METRICS(threadpool_name)                                                         \
-    if (name == #threadpool_name) {                                                                                 \
-        register_thread_pool_metric_group(_registry, name, threadpool, &threadpool_name##_threadpool_size,          \
-                                          &threadpool_name##_executed_tasks_total,                                  \
-                                          &threadpool_name##_pending_time_ns_total,                                 \
-                                          &threadpool_name##_execute_time_ns_total, &threadpool_name##_queue_count, \
-                                          &threadpool_name##_running_threads, &threadpool_name##_active_threads);   \
-        return;                                                                                                     \
-    }
-
-    REGISTER_AGENT_THREAD_POOL_METRICS(publish_version);
-    REGISTER_AGENT_THREAD_POOL_METRICS(drop);
-    REGISTER_AGENT_THREAD_POOL_METRICS(create_tablet);
-    REGISTER_AGENT_THREAD_POOL_METRICS(alter_tablet);
-    REGISTER_AGENT_THREAD_POOL_METRICS(clear_transaction);
-    REGISTER_AGENT_THREAD_POOL_METRICS(storage_medium_migrate);
-    REGISTER_AGENT_THREAD_POOL_METRICS(check_consistency);
-    REGISTER_AGENT_THREAD_POOL_METRICS(manual_compaction);
-    REGISTER_AGENT_THREAD_POOL_METRICS(compaction_control);
-    REGISTER_AGENT_THREAD_POOL_METRICS(update_schema);
-    REGISTER_AGENT_THREAD_POOL_METRICS(upload);
-    REGISTER_AGENT_THREAD_POOL_METRICS(download);
-    REGISTER_AGENT_THREAD_POOL_METRICS(make_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(release_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(move_dir);
-    REGISTER_AGENT_THREAD_POOL_METRICS(update_tablet_meta_info);
-    REGISTER_AGENT_THREAD_POOL_METRICS(drop_auto_increment_map_dir);
-    REGISTER_AGENT_THREAD_POOL_METRICS(clone);
-    REGISTER_AGENT_THREAD_POOL_METRICS(remote_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(replicate_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(cluster_snapshot);
-    REGISTER_AGENT_THREAD_POOL_METRICS(replicate_file);
-
-#undef REGISTER_AGENT_THREAD_POOL_METRICS
-
-    DCHECK(false) << "unknown agent thread pool metric group: " << name;
-=======
     metric_group->register_metrics(_registry, name, threadpool);
->>>>>>> f7a57837907... [Refactor] Introduce ThreadPoolMetricGroup for thread-pool metrics (#75853)
 }
 
 } // namespace starrocks

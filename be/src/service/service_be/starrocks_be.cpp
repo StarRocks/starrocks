@@ -166,7 +166,7 @@ Status init_snapshot_file_syncer_thread_pool(std::unique_ptr<ThreadPool>* thread
                             .set_max_threads(std::max(1, snapshot_file_syncer_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(thread_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("snapshot_file_syncer", thread_pool->get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), snapshot_file_syncer, thread_pool->get());
 #endif
     return Status::OK();
 }

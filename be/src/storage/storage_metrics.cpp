@@ -251,39 +251,7 @@ void StorageMetrics::_register_thread_pool_metrics(const std::string& name, Thre
     DCHECK(metric_group != nullptr);
     DCHECK(threadpool != nullptr);
 
-<<<<<<< HEAD
-#define REGISTER_STORAGE_THREAD_POOL_METRICS(threadpool_name)                                                       \
-    if (name == #threadpool_name) {                                                                                 \
-        register_thread_pool_metric_group(_registry, name, threadpool, &threadpool_name##_threadpool_size,          \
-                                          &threadpool_name##_executed_tasks_total,                                  \
-                                          &threadpool_name##_pending_time_ns_total,                                 \
-                                          &threadpool_name##_execute_time_ns_total, &threadpool_name##_queue_count, \
-                                          &threadpool_name##_running_threads, &threadpool_name##_active_threads);   \
-        return;                                                                                                     \
-    }
-
-    REGISTER_STORAGE_THREAD_POOL_METRICS(async_delta_writer);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(load_spill_block_merge);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(memtable_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_memtable_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(storage_cleanup);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(lake_schema_change);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(segment_replicate);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(segment_flush);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(update_apply);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(pk_index_compaction);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(compact_pool);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(pindex_load);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(cloud_native_pk_index_compact);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(snapshot_file_syncer);
-    REGISTER_STORAGE_THREAD_POOL_METRICS(tablet_internal_parallel_merge);
-
-#undef REGISTER_STORAGE_THREAD_POOL_METRICS
-
-    DCHECK(false) << "unknown storage thread pool metric group: " << name;
-=======
     metric_group->register_metrics(_registry, name, threadpool);
->>>>>>> f7a57837907... [Refactor] Introduce ThreadPoolMetricGroup for thread-pool metrics (#75853)
 }
 
 void StorageMetrics::_register_int_gauge_hook(const std::string& name, IntGauge* metric,
