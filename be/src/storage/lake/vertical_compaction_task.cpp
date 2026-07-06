@@ -161,6 +161,14 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
                                    .fill_metadata_cache = true};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
+            // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
+            // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
+            // just skip it whatever the cause.
+            if (segment == nullptr) {
+                LOG(WARNING) << "vertical compaction chunk-size estimation skips a null (lost) segment, tablet: "
+                             << _tablet.id() << ", rowset: " << rowset->id();
+                continue;
+            }
             for (auto column_index : column_group) {
                 auto uid = _tablet_schema->column(column_index).unique_id();
                 const auto* column_reader = segment->column_with_uid(uid);

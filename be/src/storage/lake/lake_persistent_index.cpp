@@ -1294,7 +1294,10 @@ StatusOr<std::optional<OneRowsetScan>> build_one_rowset_scan(const RowsetPtr& ro
     }
     RETURN_IF_ERROR(res.status());
     out.iters = std::move(res).value();
-    CHECK(out.iters.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    // Surface a wrong-sized iterator vector as a graceful error rather than aborting the BE: this is
+    // a recovery path (experimental_lake_ignore_lost_segment), and the sibling checks in
+    // LakePrimaryIndex / the local persistent-index loader already use RETURN_ERROR_IF_FALSE.
+    RETURN_ERROR_IF_FALSE(out.iters.size() == rowset->num_segments(), "itrs.size != num_segments");
 
     // One flat scan unit per non-null, non-skipped segment; the unit borrows the iterator owned by
     // out.iters.

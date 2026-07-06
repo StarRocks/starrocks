@@ -65,6 +65,11 @@ public:
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
 
+protected:
+    // Per-output-segment row counts from the output rowset metadata, so the base resolver can advance
+    // the rows-mapper past a lost segment (experimental_lake_ignore_lost_segment) without the segment.
+    std::vector<uint32_t> output_segment_num_rows() const override;
+
 private:
     // input
     const TabletMetadata* _metadata = nullptr;

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <set>
 #include <string>
 
 #include "common/status.h"
@@ -28,6 +30,12 @@ class DelvecLoader;
 class Schema;
 class PrimaryIndex;
 class Segment;
+
+// Sentinel returned by output_segment_num_rows() for a segment whose row count is unavailable (e.g. an
+// old cross-version rowset whose metadata has no num_rows). Lets the resolver fail with a clear error
+// if it ever needs that count to advance the rows-mapper past a lost segment, instead of silently
+// under-advancing and failing later with a confusing row-count mismatch.
+inline constexpr uint32_t kUnknownSegmentNumRows = UINT32_MAX;
 
 struct CompactConflictResolveParams {
     int64_t tablet_id = 0;
@@ -63,6 +71,23 @@ public:
     Status execute();
 
     Status execute_without_update_index();
+
+    // Output segment positions that were skipped because their segment file was lost
+    // (experimental_lake_ignore_lost_segment). Populated by execute_without_update_index(); the caller
+    // must skip the SST ingest and delvec for these positions so the PK index does not reference a
+    // lost rssid. Positions index the output rowset's segments/ssts (which are 1:1).
+    const std::set<uint32_t>& lost_segment_positions() const { return _lost_segment_positions; }
+
+protected:
+    // Per-output-segment row counts, in segment_metas order. Used to advance the rows-mapper past a
+    // lost segment (a nullptr placeholder produced when experimental_lake_ignore_lost_segment drops a
+    // missing segment) so the mapper stays aligned for the remaining segments -- the segment object
+    // itself is only needed for its row count here. The default empty vector means "no lost segment is
+    // possible" (local engine, whose segments are never null); only the lake resolver overrides it.
+    virtual std::vector<uint32_t> output_segment_num_rows() const { return {}; }
+
+    // Output segment positions skipped due to a lost segment; see lost_segment_positions().
+    std::set<uint32_t> _lost_segment_positions;
 };
 
 } // namespace starrocks

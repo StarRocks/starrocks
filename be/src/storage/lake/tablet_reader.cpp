@@ -239,9 +239,10 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
 
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
+    // get_non_null_segments() drops lost-segment placeholders (experimental_lake_ignore_lost_segment).
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
-        auto segments = rowset->get_segments();
+        auto segments = rowset->get_non_null_segments();
         std::for_each(segments.begin(), segments.end(),
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
@@ -255,7 +256,7 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         }
         readers.clear();
         for (const auto& rowset : _rowsets) {
-            for (const auto& segment : rowset->get_segments()) {
+            for (const auto& segment : rowset->get_non_null_segments()) {
                 if (segment->num_rows() == 0) {
                     continue;
                 }

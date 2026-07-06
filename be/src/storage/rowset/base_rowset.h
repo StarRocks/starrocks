@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -35,6 +36,19 @@ public:
     virtual bool is_overlapped() const = 0;
     //virtual StatusOr<std::vector<SegmentSharedPtr>> get_segments() = 0;
     virtual std::vector<SegmentSharedPtr> get_segments() = 0;
+
+    // get_segments() with the nullptr placeholders removed. A null entry appears only for a lake rowset
+    // when experimental_lake_ignore_lost_segment dropped a physically-missing segment (local rowsets
+    // never produce nulls). Use this from consumers that just iterate the segments and do NOT need
+    // positional alignment with the segment metadata (e.g. scan-split planning, compaction sizing);
+    // consumers that derive an rssid from a segment's position must use get_segments() instead and
+    // handle the null slots themselves.
+    std::vector<SegmentSharedPtr> get_non_null_segments() {
+        std::vector<SegmentSharedPtr> segments = get_segments();
+        segments.erase(std::remove(segments.begin(), segments.end(), nullptr), segments.end());
+        return segments;
+    }
+
     virtual Status load() { return Status::OK(); };
 
     virtual bool has_data_files() const = 0;

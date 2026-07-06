@@ -208,6 +208,14 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
                                    .fill_metadata_cache = false};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
+            // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
+            // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
+            // just skip it whatever the cause.
+            if (segment == nullptr) {
+                LOG(WARNING) << "horizontal compaction chunk-size estimation skips a null (lost) segment, tablet: "
+                             << _tablet.id() << ", rowset: " << rowset->id();
+                continue;
+            }
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 auto uid = _tablet_schema->column(i).unique_id();
                 const auto* column_reader = segment->column_with_uid(uid);
