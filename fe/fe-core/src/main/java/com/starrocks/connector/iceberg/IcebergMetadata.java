@@ -72,6 +72,7 @@ import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.metric.IcebergMaintenanceMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -151,6 +152,7 @@ import org.apache.iceberg.expressions.StrictMetricsEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.metrics.TimerResult;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
@@ -1545,6 +1547,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         String name = "ICEBERG.ScanMetrics." + ((StarRocksIcebergTableScan) tableScan).getIcebergTableName();
         String value = metricsReporter.getScanReport().toString();
         Tracers.record(EXTERNAL, name, value);
+
+        // Feed Iceberg's own split-planning duration (manifest planning only; excludes the
+        // StarRocks-side per-file stats loop) into the per-catalog planning-latency histogram,
+        // isolating the part that rewrite_manifests actually speeds up.
+        TimerResult planningDuration = metricsReporter.getScanReport().scanMetrics().totalPlanningDuration();
+        if (planningDuration != null && planningDuration.totalDuration() != null) {
+            IcebergMaintenanceMetricsMgr.recordPlanningLatencyMs(catalogName,
+                    planningDuration.totalDuration().toMillis());
+        }
     }
 
     private void closeUnchecked(AutoCloseable closeable, String closeableName, String dbName, String tableName,

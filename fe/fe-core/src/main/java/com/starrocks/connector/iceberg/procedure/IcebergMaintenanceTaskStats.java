@@ -43,8 +43,8 @@ public class IcebergMaintenanceTaskStats {
     private static final Logger LOG = LoggerFactory.getLogger(IcebergMaintenanceTaskStats.class);
 
     // an output manifest is considered a residual small file when it is smaller
-    // than half of the manifest target size
-    private static final long SMALL_MANIFEST_TARGET_SIZE_DIVISOR = 2;
+    // than a quarter of the manifest target size
+    private static final long SMALL_MANIFEST_TARGET_SIZE_DIVISOR = 4;
 
     private IcebergTableOperation operation;
     // true only when the procedure actually committed work into the transaction

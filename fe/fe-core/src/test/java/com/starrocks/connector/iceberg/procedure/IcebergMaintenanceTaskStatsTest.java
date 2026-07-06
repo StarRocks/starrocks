@@ -117,7 +117,7 @@ public class IcebergMaintenanceTaskStatsTest extends TableTestBase {
 
         Assertions.assertEquals(2, stats.getManifestCountOutput());
         Assertions.assertTrue(stats.getManifestBytesOutput() > 0);
-        // both manifests are far below half the target size, so both count as residual small files
+        // both manifests are far below a quarter of the target size, so both count as residual small files
         Assertions.assertEquals(2, stats.getManifestSmallFilesOutput());
 
         JsonObject json = JsonParser.parseString(stats.toJson()).getAsJsonObject();

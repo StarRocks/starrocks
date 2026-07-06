@@ -1,0 +1,90 @@
+## `iceberg_amm_check_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total time spent on Iceberg auto metadata maintenance check passes (listing candidate tables and deciding whether maintenance is due).
+
+## `iceberg_amm_check_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of Iceberg auto metadata maintenance check passes.
+
+## `iceberg_amm_execute_duration_ms_total`
+
+- Unit: Millisecond
+- Type: Cumulative
+- Labels: `catalog`, `action` (`expire_snapshots`, `remove_orphan_files`, or `rewrite_manifests`)
+- Description: Total time spent executing Iceberg auto metadata maintenance actions.
+
+## `iceberg_amm_execute_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`, `action` (`expire_snapshots`, `remove_orphan_files`, or `rewrite_manifests`), `status` (`success`, `skipped`, `failed`, or `partial`)
+- Description: Total number of Iceberg auto metadata maintenance executions. `skipped` means the action ran but had nothing to do (no snapshots to expire, manifests to compact, or orphan files to remove); `partial` means some work was applied before a failure (part of the orphan files were already deleted). The ratio against `iceberg_amm_check_total` indicates how many maintenance tasks each check pass actually triggers.
+
+## `iceberg_amm_manifest_bytes_total_output`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total bytes of manifest files after Iceberg auto metadata maintenance `rewrite_manifests` executions.
+
+## `iceberg_amm_manifest_file_count_input`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of manifest files before Iceberg auto metadata maintenance `rewrite_manifests` executions.
+
+## `iceberg_amm_manifest_file_count_output`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of manifest files after Iceberg auto metadata maintenance `rewrite_manifests` executions.
+
+## `iceberg_amm_orphan_bytes_removed_total`
+
+- Unit: Bytes
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total bytes reclaimed by Iceberg auto metadata maintenance `remove_orphan_files` executions.
+
+## `iceberg_amm_orphan_file_removed_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of orphan files removed by Iceberg auto metadata maintenance `remove_orphan_files` executions.
+
+## `iceberg_amm_planning_latency_ms`
+
+- Unit: Millisecond
+- Type: Histogram
+- Labels: `catalog`
+- Description: Histogram of Iceberg query split-planning latency per catalog (sourced from Iceberg's own `totalPlanningDuration`, i.e. manifest planning only). Use it to observe the planning performance trend as metadata maintenance takes effect, e.g. `rate(iceberg_amm_planning_latency_ms_sum[5m]) / rate(iceberg_amm_planning_latency_ms_count[5m])` for the time-windowed average. Reflects mainly `rewrite_manifests` effectiveness; incremental-scan planning is not included.
+
+## `iceberg_amm_rewrite_manifest_small_files_total_output`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of output manifest files smaller than a quarter of the manifest target size after Iceberg auto metadata maintenance `rewrite_manifests` executions.
+
+## `iceberg_amm_snapshot_count_input`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of snapshots before Iceberg auto metadata maintenance `expire_snapshots` executions.
+
+## `iceberg_amm_snapshot_count_output`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `catalog`
+- Description: Total number of snapshots after Iceberg auto metadata maintenance `expire_snapshots` executions.

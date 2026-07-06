@@ -391,6 +391,18 @@ public final class MetricRepo {
         });
     }
 
+    private static final Map<String, HistogramMetric> HISTO_ICEBERG_PLANNING_LATENCY_MAP = new ConcurrentHashMap<>();
+
+    public static HistogramMetric getOrCreateIcebergPlanningLatencyHistogram(String catalog) {
+        return HISTO_ICEBERG_PLANNING_LATENCY_MAP.computeIfAbsent(catalog, k -> {
+            HistogramMetric histogram = new HistogramMetric("iceberg_amm_planning_latency_ms");
+            histogram.addLabel(new MetricLabel("catalog", catalog));
+            METRIC_REGISTER.register(
+                    MetricRegistry.name("iceberg_amm_planning", "latency", "ms", catalog), histogram);
+            return histogram;
+        });
+    }
+
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;

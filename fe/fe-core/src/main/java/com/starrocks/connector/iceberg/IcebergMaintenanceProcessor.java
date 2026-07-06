@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.procedure.IcebergMaintenanceTaskStats;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedureContext;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
+import com.starrocks.metric.IcebergMaintenanceMetricsMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.Snapshot;
@@ -159,11 +160,13 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
         long now = System.currentTimeMillis();
         ConnectContext ctx = new ConnectContext();
         for (IcebergMaintenanceInfo info : maintenanceInfoMap.values()) {
+            long checkStartMillis = System.currentTimeMillis();
             List<Pair<String, String>> tableNames = listTablesForMaintenance(info.catalog, ctx);
             boolean cleanupDue = info.cleanupIntervalHours > 0
                     && (now - info.lastCleanupTimeMillis) >= info.cleanupIntervalHours * 3600L * 1000L;
             boolean rewriteDue = info.rewriteIntervalHours > 0
                     && (now - info.lastRewriteTimeMillis) >= info.rewriteIntervalHours * 3600L * 1000L;
+            IcebergMaintenanceMetricsMgr.recordCheck(info.catalogName, System.currentTimeMillis() - checkStartMillis);
             if (tableNames.isEmpty()) {
                 continue;
             }
@@ -288,7 +291,7 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
                         return;
                     }
                     runMaintenanceTask(info.catalogName, name.first, name.second,
-                            "rewrite_manifests",
+                            IcebergMaintenanceMetricsMgr.ACTION_REWRITE_MANIFESTS,
                             stats -> runRewriteManifests(info.catalog, table, info.hdfsEnvironment, stats));
                 }));
                 submittedTables.add(name);
@@ -324,14 +327,14 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
      */
     private void runTableCleanup(IcebergMaintenanceInfo info, org.apache.iceberg.Table table,
                                  String db, String tbl) {
-        runMaintenanceTask(info.catalogName, db, tbl, "expire_snapshots",
+        runMaintenanceTask(info.catalogName, db, tbl, IcebergMaintenanceMetricsMgr.ACTION_EXPIRE_SNAPSHOTS,
                 stats -> runExpireSnapshots(info.catalog, table, info.hdfsEnvironment, stats));
         if (Thread.currentThread().isInterrupted()) {
             LOG.warn("Cleanup on {}.{}.{} was cancelled after expire_snapshots, skipping remove_orphan_files",
                     info.catalogName, db, tbl);
             return;
         }
-        runMaintenanceTask(info.catalogName, db, tbl, "remove_orphan_files",
+        runMaintenanceTask(info.catalogName, db, tbl, IcebergMaintenanceMetricsMgr.ACTION_REMOVE_ORPHAN_FILES,
                 stats -> runRemoveOrphanFiles(info.catalog, table, info.hdfsEnvironment, stats));
     }
 
@@ -366,6 +369,9 @@ public class IcebergMaintenanceProcessor extends FrontendDaemon {
         }
         record.setStatus(status);
         try {
+            IcebergMaintenanceMetricsMgr.recordExecute(catalog, action, status,
+                    System.currentTimeMillis() - record.getStartTimeMs());
+            IcebergMaintenanceMetricsMgr.reportEffectMetrics(catalog, stats);
             record.finish(stats);
             GlobalStateMgr.getCurrentState().getIcebergMaintenanceTaskHistory().addRecord(record);
         } catch (Exception e) {
