@@ -176,6 +176,10 @@ private:
     std::string _merge_condition;
     std::string _encryption_meta;
     TPartialUpdateMode::type _partial_update_mode;
+    // Table-level Flat JSON policy carried with the load plan (shared-data). Copied into
+    // each PTabletWriterOpenRequest so the target CN's segment writer uses the FE value.
+    bool _has_flat_json_config = false;
+    TFlatJsonConfig _flat_json_config;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;

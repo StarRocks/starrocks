@@ -33,6 +33,7 @@ class Column;
 class TabletSchema;
 class ThreadPool;
 class SegmentWriter;
+class FlatJsonConfig;
 
 struct OlapWriterStatistics;
 
@@ -194,6 +195,13 @@ public:
     bool force_build_vector_index_inline() const { return _force_build_vector_index_inline; }
     void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
 
+    // Flat JSON policy delivered with the load plan (shared-data). When set, the segment writer
+    // uses it to decide JSON flattening instead of reading the best-effort tablet-metadata cache.
+    const std::shared_ptr<FlatJsonConfig>& flat_json_config() const { return _flat_json_config; }
+    void set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+    }
+
     void check_global_dict(SegmentWriter* segment_writer);
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
@@ -226,6 +234,7 @@ protected:
     DictColumnsValidMap _global_dict_columns_valid_info;
     bool _enable_pk_index_eager_build = false;
     bool _force_build_vector_index_inline = false;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 };
 
 } // namespace lake

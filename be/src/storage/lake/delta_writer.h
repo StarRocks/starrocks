@@ -32,6 +32,7 @@ class MemTracker;
 class SlotDescriptor;
 class Chunk;
 class TabletSchema;
+class FlatJsonConfig;
 class ThreadPool;
 struct FileInfo;
 class TxnLogPB;
@@ -235,6 +236,13 @@ public:
         return *this;
     }
 
+    // Table-level Flat JSON policy carried from the load plan. When set, the internal
+    // TabletWriter uses it to decide JSON flattening instead of the tablet-metadata cache.
+    DeltaWriterBuilder& set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+        return *this;
+    }
+
     DeltaWriterBuilder& set_immutable_tablet_size(int64_t immutable_tablet_size) {
         _immutable_tablet_size = immutable_tablet_size;
         return *this;
@@ -324,6 +332,7 @@ private:
     int64_t _tablet_id{0};
     const std::vector<SlotDescriptor*>* _slots{nullptr};
     std::string _merge_condition{};
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
     int64_t _immutable_tablet_size{0};
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};

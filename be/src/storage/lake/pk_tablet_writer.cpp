@@ -173,6 +173,12 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
         writer->force_set_enable_pk_index_eager_build();
     }
     writer->set_auto_flush(auto_flush());
+    // Propagate the plan-carried Flat JSON policy so spill-merged segments (built through cloned
+    // writers, see LoadSpillPipelineMergeIterator) keep using the FE-authoritative value instead of
+    // falling back to the best-effort tablet-metadata cache.
+    if (flat_json_config() != nullptr) {
+        writer->set_flat_json_config(flat_json_config());
+    }
     return writer;
 }
 

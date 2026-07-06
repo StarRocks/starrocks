@@ -2418,7 +2418,7 @@ struct TCloudTabletMeta {
     3: optional bool enable_persistent_index;
     4: optional AgentService.TPersistentIndexType persistent_index_type;
     5: optional AgentService.TCompactionStrategy compaction_strategy;
-    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    6: optional Types.TFlatJsonConfig flat_json_config;
     7: optional map<i64, Types.TTabletRange> tablet_ranges;
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;

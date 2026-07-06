@@ -271,10 +271,15 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             // must all be flat json type
             JsonPathDeriver deriver;
 
-            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
-                metadata && metadata->has_flat_json_config()) {
+            // Take flat_json from the exact version being compacted (_tablet_metadata, already in
+            // scope), not the best-effort latest-metadata cache. This keeps the compaction reader's
+            // path derivation consistent with the writer (VersionedTablet::new_writer_with_schema):
+            // on a cold-cache miss the cache returns null, so reading it here would fall back to
+            // default flatten factors while the writer uses the version's factors, and the two
+            // halves of the same compaction would disagree.
+            if (_tablet_metadata != nullptr && _tablet_metadata->has_flat_json_config()) {
                 auto flat_json_config = std::make_shared<FlatJsonConfig>();
-                flat_json_config->update(metadata->flat_json_config());
+                flat_json_config->update(_tablet_metadata->flat_json_config());
                 deriver.init_flat_json_config(flat_json_config.get());
             }
 

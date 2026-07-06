@@ -140,10 +140,13 @@ StatusOr<std::unique_ptr<SegmentWriter>> ColumnModePartialUpdateHandler::_prepar
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     SegmentWriterOptions writer_options;
 
-    if (auto metadata = params.tablet->tablet_mgr()->get_latest_cached_tablet_metadata(params.tablet->id());
-        metadata && metadata->has_flat_json_config()) {
+    // Take flat_json from the exact version being written (params.metadata, already in scope and
+    // used just below for the DCG loader), not the best-effort latest-metadata cache. A cold-cache
+    // miss would otherwise silently drop the table's flat_json policy for delta-column writes,
+    // which is the same cache-reliability defect this change removes on the normal write path.
+    if (params.metadata != nullptr && params.metadata->has_flat_json_config()) {
         writer_options.flat_json_config = std::make_shared<FlatJsonConfig>();
-        writer_options.flat_json_config->update(metadata->flat_json_config());
+        writer_options.flat_json_config->update(params.metadata->flat_json_config());
     }
 
     if (config::enable_transparent_data_encryption) {

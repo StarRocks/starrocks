@@ -583,6 +583,18 @@ enum TPartialUpdateMode {
     COLUMN_UPDATE_MODE = 4;
 }
 
+// Table-level Flat JSON storage policy. Kept in the low-level Types thrift (like
+// TPartialUpdateMode) so it can be shared by the load sink (DataSinks.TOlapTableSink),
+// the tablet-create/meta-update agent path (AgentService), and FrontendService without
+// creating an include cycle.
+struct TFlatJsonConfig {
+    1: optional bool flat_json_enable;
+    2: optional double flat_json_null_factor;
+    3: optional double flat_json_sparsity_factor;
+    4: optional i64 flat_json_column_max;
+    5: optional i64 version;
+}
+
 enum TRunMode {
     SHARED_NOTHING = 0;
     SHARED_DATA = 1;
