@@ -4,6 +4,8 @@ hide_table_of_contents: true
 description: "Alphabetical i - p"
 ---
 
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
 # 指标 i 到 p
 
 :::note
@@ -16,6 +18,8 @@ description: "Alphabetical i - p"
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
 
 :::
+
+<MetricsIP />
 
 ## `iceberg_compaction_duration_ms_total`
 
