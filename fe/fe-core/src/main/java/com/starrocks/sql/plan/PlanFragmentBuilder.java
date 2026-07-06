@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BrokerDesc;
@@ -970,13 +971,13 @@ public class PlanFragmentBuilder {
                 // eg:
                 // partition        : 10001 -> (tablet_1)
                 //  subpartition1   : 10002 -> (tablet_2)
-                //  subpartition2   : 10004 -> (tablet_3)
-                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                //  subpartition2   : 10004 -> (empty)
+                // original selected partition id: 10001
                 // after:
-                // selected partition ids   : 10002
+                // selected partition ids   : 10001 (unchanged -- still the logical id, deduplicated)
                 // selected tablet ids      : tablet_2
                 // total tablets num        : 1
-                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
+                Set<Long> selectedNonEmptyPartitionIds = Sets.newLinkedHashSet();
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -1000,7 +1001,7 @@ public class PlanFragmentBuilder {
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
                     }
                 }
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
