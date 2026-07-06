@@ -160,6 +160,13 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     // Persistence: in-memory only, NOT persisted (no @SerializedName); resets to 0 on restart/failover.
     private volatile long lastMinActiveTxnId = 0;
 
+    // Incremental (bounded, resumable) vacuum protocol state, grouped into one object (see
+    // VacuumState). Persisted in the image via @SerializedName, and between snapshots via the
+    // OP_MODIFY_PARTITION_VACUUM_STATE edit log the autovacuum coordinator writes each round, so an
+    // in-flight pass survives an FE restart / failover.
+    @SerializedName(value = "vacuumState")
+    private volatile VacuumState vacuumState = new VacuumState();
+
     @SerializedName(value = "bucketNum")
     private int bucketNum = 0;
     
@@ -299,6 +306,18 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastMinActiveTxnId(long lastMinActiveTxnId) {
         this.lastMinActiveTxnId = lastMinActiveTxnId;
+    }
+
+    public VacuumState getVacuumState() {
+        return vacuumState;
+    }
+
+    // Replace the whole state object. Used on edit-log / image replay; the value is null-guarded so an
+    // old image entry without the field cannot null it out.
+    public void setVacuumState(VacuumState vacuumState) {
+        if (vacuumState != null) {
+            this.vacuumState = vacuumState;
+        }
     }
 
     public long getExtraFileSize() {
