@@ -122,6 +122,25 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         super(type);
     }
 
+    @Override
+    protected void resetTransientStateForHandoff() {
+        // BOTH WAITING_TXN and RUNNING are in-memory only for this job family; PENDING is the
+        // only durable predecessor (its same-state re-log carries the watershed and the
+        // tablet snapshot, and the watershedTxnId != -1 guard makes the re-run idempotent).
+        if (jobState == JobState.WAITING_TXN || jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // runRunningJob dispatches ONLY behind a null guard - a stale batch would silently
+        // suppress the re-send and wedge the job until timeout. Drop queue entries (mirror
+        // cancelImpl) and null the field so the re-run re-dispatches.
+        if (batchTask != null) {
+            for (AgentTask task : batchTask.getAllTasks()) {
+                AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+            }
+            batchTask = null;
+        }
+    }
+
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
                                             long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);

@@ -186,7 +186,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private OlapTableHistorySchema historySchema;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -200,6 +201,29 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientStateForHandoff() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled (runWaitingTxnJob: "DO NOT
+        // write edit log here"); map it back so the re-elected leader re-enters
+        // runWaitingTxnJob and re-sends every AlterReplicaTask, as a restarted FE would.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Always start from a fresh batch: runWaitingTxnJob APPENDS to it, so a stale (even
+        // partially filled) batch would double-add tasks whose duplicates never receive
+        // finish callbacks (AgentTaskQueue de-dups by signature) and wedge the job until its
+        // timeout-cancel.
+        schemaChangeBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
+        if (jobState == JobState.PENDING) {
+            // Discard a watershed allocated by a fenced PENDING -> WAITING_TXN attempt; it
+            // was never journaled and runPendingJob re-generates it.
+            watershedTxnId = -1;
+        }
     }
 
     protected SchemaChangeJobV2(SchemaChangeJobV2 job) {

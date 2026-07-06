@@ -126,6 +126,22 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     // save all create rollup tasks
     protected AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
+    @Override
+    protected void resetTransientStateForHandoff() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-enters runWaitingTxnJob and re-sends the tasks.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Same normalization replay() performs: drop queue entries and start from an empty
+        // batch - runWaitingTxnJob appends directly to the field (double-add hazard).
+        AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
+        rollupBatchTask = new AgentBatchTask();
+        // whereClause deliberately KEPT: this class has no gsonPostProcess restore, so a real
+        // reload silently loses the sync-MV filter (pre-existing reload bug); keep the
+        // strictly-better in-memory value.
+    }
+
     public LakeRollupJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                          long baseIndexMetaId, long rollupIndexMetaId, String baseIndexName, String rollupIndexName,
                          int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash,

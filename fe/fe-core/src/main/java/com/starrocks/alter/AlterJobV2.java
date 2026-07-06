@@ -233,6 +233,39 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
+    /**
+     * Reset this job's in-memory state to its last durable (journaled) equivalent when the
+     * leader demotes in place. Historically "FE restart or master changed" reloaded jobs from
+     * the image/journal, which implicitly discarded in-memory-only progress (the deliberately
+     * unlogged WAITING_TXN -&gt; RUNNING transitions) and leader-session transients (batch
+     * tasks, latches, futures). In-place demotion keeps the very same objects alive, so this
+     * hook performs that normalization explicitly: on re-election the job re-enters its last
+     * durable state and re-sends its work from scratch, exactly like a restarted FE.
+     *
+     * Synchronized on the job: run() and cancel() use the same monitor, so a straggling user
+     * cancel or a finish-callback thread surviving the executor's shutdownNow() cannot
+     * interleave with the reset. Final states are left untouched. Must NOT write to the
+     * journal - it is already sealed when the demotion drain invokes this.
+     */
+    public synchronized void resetOnLeaderHandoff() {
+        if (jobState.isFinalState()) {
+            return;
+        }
+        if (publishVersionFuture != null) {
+            publishVersionFuture.cancel(false);
+            publishVersionFuture = null;
+        }
+        resetTransientStateForHandoff();
+    }
+
+    /**
+     * Subclass hook for {@link #resetOnLeaderHandoff()}: map in-memory-only job states back
+     * to their last durable predecessor and recreate/clear leader-session transients (batch
+     * tasks, latches, flags, futures). Runs under the job monitor with the journal sealed.
+     */
+    protected void resetTransientStateForHandoff() {
+    }
+
     public void setComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
         this.warehouseId = computeResource.getWarehouseId();

@@ -158,7 +158,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -171,6 +172,24 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientStateForHandoff() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-verifies the watershed and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Mirror cancelImpl's queue cleanup, then start from an empty batch: the WAITING_TXN
+        // handler APPENDS to it (double-add hazard), and getInfo dereferences the field, so
+        // fresh-empty rather than null. watershedTxnId/Gtid stay - they are durable with the
+        // WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
+        AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
+        schemaChangeBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
     }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
