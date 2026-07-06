@@ -182,6 +182,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     @Override
+    protected boolean flipNotYetApplied(@NotNull OlapTable table) {
+        // Replace flip drops the origin index meta; if it is gone, the flip has already run.
+        return table.getIndexMetaByMetaId(originIndexMetaId) != null;
+    }
+
+    @Override
     protected void validateRewriteConfig() throws AlterCancelException {
         Preconditions.checkNotNull(newSchema, "new schema is not set");
         Preconditions.checkNotNull(newKeysType, "new keys type is not set");

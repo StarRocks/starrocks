@@ -491,7 +491,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             return distributionPruner.prune();
         } else if (DistributionInfo.DistributionInfoType.RANGE == distributionInfo.getType()) {
             RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
-                    MetaUtils.getRangeDistributionColumns(olapTable), columnFilters);
+                    MetaUtils.getRangeDistributionColumns(olapTable, index.getMetaId()), columnFilters);
             return pruner.prune();
         } else {
             return null;
