@@ -18,4 +18,12 @@ namespace starrocks {
 
 inline constexpr const char* kStorageTmpPrefix = "/tmp";
 
+// Legacy load spill layout: <root>/load_spill/<load_id_uuid>/.
+// Written by BE versions before the txn-id-scoped layout was introduced.
+inline constexpr const char* kLoadSpillDirectoryName = "load_spill";
+
+// Active Lake load spill flat layout. Spill files live directly under
+// <root>/load_spill_txns/ with txn-id-scoped file names.
+inline constexpr const char* kLoadSpillTxnsDirectoryName = "load_spill_txns";
+
 } // namespace starrocks

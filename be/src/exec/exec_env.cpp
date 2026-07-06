@@ -145,6 +145,8 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.cache_mgr = cache_mgr();
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
     _runtime_services.global_spill_manager = _compute_env == nullptr ? nullptr : _compute_env->global_spill_manager();
+    _runtime_services.load_spill_block_merge_executor =
+            _compute_env == nullptr ? nullptr : _compute_env->load_spill_block_merge_executor();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
     _runtime_services.diagnose_daemon = runtime_env->diagnose_daemon();
 

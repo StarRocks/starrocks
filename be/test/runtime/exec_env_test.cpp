@@ -62,6 +62,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().cache_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
     EXPECT_EQ(env.compute_env(), nullptr);
@@ -128,6 +129,8 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, env.compute_env()->profile_report_worker());
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, env.compute_env()->spill_dir_mgr());
     EXPECT_EQ(env.runtime_services().global_spill_manager, env.compute_env()->global_spill_manager());
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor,
+              env.compute_env()->load_spill_block_merge_executor());
     EXPECT_EQ(env.runtime_services().runtime_filter_sender,
               static_cast<RuntimeFilterSender*>(&runtime_filter_services));
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle,
@@ -157,6 +160,7 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().profile_report_worker, nullptr);
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
+    EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
 
     env._query_context_mgr = nullptr;
     compute_env.destroy();

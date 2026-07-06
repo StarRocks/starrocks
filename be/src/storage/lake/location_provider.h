@@ -28,6 +28,7 @@ namespace starrocks::lake {
 static const char* const kMetadataDirectoryName = "meta";
 static const char* const kTxnLogDirectoryName = "log";
 static const char* const kSegmentDirectoryName = "data";
+<<<<<<< HEAD
 static const char* const kSnapshotLogDirectoryName = "snapshot_log";
 // Legacy load_spill layout: <root>/load_spill/<load_id_uuid>/. Written by BE versions
 // before the txn_id-scoped layout was introduced; new code only reclaims it via
@@ -39,6 +40,8 @@ static const char* const kLoadSpillDirectoryName = "load_spill";
 // single paginated list over this dir is sufficient. Non-Lake callers (connector /
 // SpillPartitionChunkWriter) keep using kLoadSpillDirectoryName above.
 static const char* const kLoadSpillTxnsDirectoryName = "load_spill_txns";
+=======
+>>>>>>> f888049b808... [Refactor] Move load spill block manager to compute env (#75869)
 
 class LocationProvider {
 public:

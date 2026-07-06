@@ -76,7 +76,6 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/lake/local_pk_index_manager.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
@@ -251,11 +250,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
     REGISTER_STORAGE_THREAD_POOL_METRICS(
             StorageMetrics::instance(), async_delta_writer,
             static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())->get_thread_pool());
-
-    _load_spill_block_merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
-    RETURN_IF_ERROR(_load_spill_block_merge_executor->init());
-    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), load_spill_block_merge,
-                                         _load_spill_block_merge_executor->get_thread_pool());
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
