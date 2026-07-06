@@ -116,7 +116,7 @@ public class IvmDeltaOlapScanRule extends TransformationRule {
 
         // Throws SemanticException on any non-trackable change.
         LogicalChangesScanOperator changesScan = ChangesScanBuilder.buildScanOperator(
-                table, range, colRefToCol, colToColRef, descriptors);
+                table, range, colRefToCol, colToColRef, descriptors, null, null);
 
         OptExpression scanTree = ChangesScanBuilder.applyNetChange(
                     changesScan, context.getColumnRefFactory(),

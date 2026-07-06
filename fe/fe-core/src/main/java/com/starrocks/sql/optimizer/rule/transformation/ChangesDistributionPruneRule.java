@@ -42,9 +42,18 @@ public class ChangesDistributionPruneRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalChangesScanOperator scan = (LogicalChangesScanOperator) input.getOp();
-        LogicalChangesScanOperator newScan = OptDistributionPruner.pruneChangesScanTablets(scan);
+        LogicalChangesScanOperator newScan;
+        if (scan.getTabletIdHints().isPresent()) {
+            // TABLET hint wins: the selected set is the hint itself, not the distribution-pruned set.
+            newScan = new LogicalChangesScanOperator.Builder()
+                    .withOperator(scan)
+                    .setSelectedTabletId(scan.getTabletIdHints().get())
+                    .build();
+        } else {
+            newScan = OptDistributionPruner.pruneChangesScanTablets(scan);
+        }
+        // No change: obey the optimizer rule contract and avoid an endless rewrite loop.
         if (newScan.getSelectedTabletId().equals(scan.getSelectedTabletId())) {
-            // No change: obey the optimizer rule contract and avoid an endless rewrite loop.
             return Collections.emptyList();
         }
         return Lists.newArrayList(OptExpression.create(newScan, input.getInputs()));

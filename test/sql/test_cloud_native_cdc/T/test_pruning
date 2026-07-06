@@ -122,3 +122,82 @@ SELECT k, v FROM rnd [_CHANGES_${bk0}_${bk1}_] WHERE k = 7 ORDER BY k;
 -- for a planner-focused SQL test. RANGE distribution routes through the same shared
 -- RangeDistributionPruner as the OLAP scan; that path is covered by the plan-level parity test
 -- CloudNativeChangesPlanTest.testChangesPruningParityWithOlapScan.
+
+
+-- name: test_cdc_hint_partition @cloud
+
+CREATE TABLE rp (k bigint NOT NULL, dt date NOT NULL, v bigint)
+DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01'),
+    PARTITION p3 VALUES LESS THAN ('2026-04-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "rp", "hp")
+INSERT INTO rp VALUES (1, '2026-01-15', 10), (2, '2026-02-15', 20), (3, '2026-03-15', 30);
+[UC]function: bk1=create_bookmark("${db[0]}", "rp", "hp")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "rp", ${bk0}, "hp")
+    function: release_bookmark("${db[0]}", "rp", ${bk1}, "hp")
+} END CLEANUP
+
+-- PARTITION hint keeps 1 of the 3 changed partitions.
+function: assert_explain_contains("SELECT k, dt, v FROM rp PARTITION(p2) [_CHANGES_${bk0}_${bk1}_]", "ChangesScanNode", "partitions=1/3")
+-- Result equals the full CHANGES result filtered to p2 (only the 2026-02-15 row).
+SELECT k, dt, v FROM rp PARTITION(p2) [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+
+-- name: test_cdc_hint_tablet @cloud
+
+CREATE TABLE ht (k int, v int)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 8
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "ht", "hp")
+INSERT INTO ht VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60), (7, 70), (8, 80), (9, 90), (10, 100), (11, 110), (12, 120), (13, 130), (14, 140), (15, 150), (16, 160);
+[UC]function: bk1=create_bookmark("${db[0]}", "ht", "hp")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "ht", ${bk0}, "hp")
+    function: release_bookmark("${db[0]}", "ht", ${bk1}, "hp")
+} END CLEANUP
+
+-- Capture a real tablet id; tablet ids are assigned dynamically.
+function: set_first_tablet_id("ht")
+-- TABLET hint keeps exactly the hinted tablet: tabletRatio=1/8.
+function: assert_explain_contains("SELECT k, v FROM ht TABLET(${tablet_id}) [_CHANGES_${bk0}_${bk1}_]", "ChangesScanNode", "tabletRatio=1/8")
+-- Result equals the full CHANGES result filtered to that tablet's rows.
+SELECT k, v FROM ht TABLET(${tablet_id}) [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
+
+
+-- name: test_cdc_hint_partition_and_tablet @cloud
+
+CREATE TABLE rpt (k int NOT NULL, city varchar(16) NOT NULL, v int)
+DUPLICATE KEY(k, city)
+PARTITION BY LIST(city) (
+    PARTITION p_bj VALUES IN ('bj'),
+    PARTITION p_sh VALUES IN ('sh')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 4
+PROPERTIES ('replication_num' = '1');
+
+[UC]function: bk0=create_bookmark("${db[0]}", "rpt", "hp")
+INSERT INTO rpt VALUES (1, 'bj', 10), (2, 'bj', 20), (3, 'bj', 30), (4, 'bj', 40), (5, 'bj', 50), (6, 'bj', 60), (7, 'bj', 70), (8, 'bj', 80), (9, 'sh', 90), (10, 'sh', 100);
+[UC]function: bk1=create_bookmark("${db[0]}", "rpt", "hp")
+
+CLEANUP {
+    function: release_bookmark("${db[0]}", "rpt", ${bk0}, "hp")
+    function: release_bookmark("${db[0]}", "rpt", ${bk1}, "hp")
+} END CLEANUP
+
+-- Capture a tablet id from the named partition p_bj.
+function: set_first_tablet_id("rpt", "p_bj")
+-- PARTITION keeps p_bj (1/2); TABLET narrows to one of p_bj's 4 tablets: partitions=1/2, tabletRatio=1/4.
+function: assert_explain_contains("SELECT k, city, v FROM rpt PARTITION(p_bj) TABLET(${tablet_id}) [_CHANGES_${bk0}_${bk1}_]", "ChangesScanNode", "partitions=1/2", "tabletRatio=1/4")
+-- Result equals the full CHANGES result filtered to p_bj rows on that one tablet.
+SELECT k, city, v FROM rpt PARTITION(p_bj) TABLET(${tablet_id}) [_CHANGES_${bk0}_${bk1}_] ORDER BY k;

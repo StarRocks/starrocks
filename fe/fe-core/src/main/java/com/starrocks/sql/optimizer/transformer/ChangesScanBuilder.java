@@ -19,6 +19,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkManager;
@@ -28,6 +32,7 @@ import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -48,6 +53,7 @@ import com.starrocks.thrift.TOpType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +61,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Builds the logical operators for a {@code [_CHANGES_]} table reference over a bookmark range —
@@ -75,7 +82,9 @@ public final class ChangesScanBuilder {
             OlapTable table, BookmarkRange range,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            List<ChangesMetaDescriptor> metaDescriptors) {
+            List<ChangesMetaDescriptor> metaDescriptors,
+            PartitionRef partitionNameHint,
+            List<Long> tabletIdHint) {
         long dbId = table.mayGetDatabaseId().orElseThrow(() ->
                 new IllegalStateException(
                         String.format("dbId missing on %s", table.getName())));
@@ -88,10 +97,79 @@ public final class ChangesScanBuilder {
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
         BookmarkChange delta = BookmarkChange.computeChanges(Optional.of(base), head);
         OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
-        return new LogicalChangesScanOperator(
+
+        validatePartitionHint(scopedTable, partitionNameHint,
+                base.getBookmarkId(), head.getBookmarkId(), table.getName());
+        validateTabletHint(scopedTable, partitionNameHint, tabletIdHint,
+                base.getBookmarkId(), head.getBookmarkId(), table.getName());
+
+        LogicalChangesScanOperator op = new LogicalChangesScanOperator(
                 scopedTable, colRefToColumnMetaMap, columnMetaToColRefMap,
-                base, head, delta, Operator.DEFAULT_LIMIT,
-                metaDescriptors);
+                base, head, delta, Operator.DEFAULT_LIMIT, metaDescriptors);
+        PartitionNames partitionNames = partitionNameHint == null ? null
+                : new PartitionNames(partitionNameHint.isTemp(),
+                        partitionNameHint.getPartitionNames(), partitionNameHint.getPos());
+        return new LogicalChangesScanOperator.Builder()
+                .withOperator(op)
+                .setPartitionNameHints(partitionNames)
+                .setTabletIdHints(tabletIdHint)
+                .build();
+    }
+
+    private static void validatePartitionHint(OlapTable scopedTable, PartitionRef partitionNameHint,
+                                              long baseId, long headId, String tableName) {
+        if (partitionNameHint == null) {
+            return;
+        }
+        // PARTITION(col='value') resolves to no partition name (the value lives in
+        // partitionColValues) and no SELECT path resolves it, so it would silently
+        // prune to an empty scan. Reject it; only the partition-name form is honored.
+        if (partitionNameHint.isKeyPartitionNames()) {
+            throw new SemanticException(String.format(
+                    "CHANGES on table '%s' does not support a PARTITION hint by column value; "
+                            + "specify partition names", tableName));
+        }
+        for (String name : partitionNameHint.getPartitionNames()) {
+            if (scopedTable.getPartition(name, partitionNameHint.isTemp()) == null) {
+                throw new SemanticException(String.format(
+                        "CHANGES from bookmark %d to %d on table '%s' not trackable: partition '%s' not present",
+                        baseId, headId, tableName, name));
+            }
+        }
+    }
+
+    private static void validateTabletHint(OlapTable scopedTable, PartitionRef partitionNameHint,
+                                           List<Long> tabletIdHint, long baseId, long headId, String tableName) {
+        if (tabletIdHint == null || tabletIdHint.isEmpty()) {
+            return;
+        }
+        Collection<Partition> scope;
+        if (partitionNameHint == null) {
+            scope = scopedTable.getPartitions();
+        } else {
+            // Names already validated present by validatePartitionHint.
+            scope = partitionNameHint.getPartitionNames().stream()
+                    .map(name -> scopedTable.getPartition(name, partitionNameHint.isTemp()))
+                    .collect(Collectors.toList());
+        }
+        Set<Long> unfound = new HashSet<>(tabletIdHint);
+        for (Partition partition : scope) {
+            for (PhysicalPartition physical : partition.getSubPartitions()) {
+                for (Tablet tablet : physical.getLatestBaseIndex().getTablets()) {
+                    unfound.remove(tablet.getId());
+                    if (unfound.isEmpty()) {
+                        return;
+                    }
+                }
+            }
+        }
+        for (Long tabletId : tabletIdHint) {
+            if (unfound.contains(tabletId)) {
+                throw new SemanticException(String.format(
+                        "CHANGES from bookmark %d to %d on table '%s' not trackable: tablet %d not present",
+                        baseId, headId, tableName, tabletId));
+            }
+        }
     }
 
     /**

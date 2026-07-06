@@ -223,3 +223,28 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 -- result:
 [REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ resharded.*
 -- !result
+-- name: test_cdc_hint_partition_not_present @cloud
+CREATE TABLE rp2 (k bigint NOT NULL, dt date NOT NULL, v bigint)
+DUPLICATE KEY(k, dt)
+PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2026-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2026-03-01')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]function: bk0=create_bookmark("${db[0]}", "rp2", "nt")
+INSERT INTO rp2 VALUES (2, '2026-02-15', 20);
+-- result:
+-- !result
+[UC]function: bk1=create_bookmark("${db[0]}", "rp2", "nt")
+CLEANUP {
+    function: release_bookmark("${db[0]}", "rp2", ${bk0}, "nt")
+    function: release_bookmark("${db[0]}", "rp2", ${bk1}, "nt")
+} END CLEANUP
+
+SELECT k, dt, v FROM rp2 PARTITION(p1) [_CHANGES_${bk0}_${bk1}_];
+-- result:
+[REGEX]E:.*on table 'rp2' not trackable: partition 'p1' not present.*
+-- !result

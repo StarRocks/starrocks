@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public class LogicalChangesScanOperator extends LogicalScanOperator {
 
@@ -37,7 +39,13 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     private BookmarkChange delta;
     // CHANGES metadata descriptors for this relation.
     private List<ChangesMetaDescriptor> changesMetaDescriptors = List.of();
-    // Selected logical partition ids after partition pruning; null means all delta partitions.
+    // User-written PARTITION(...) / TABLET(...) hints on the table reference that narrow the scan,
+    // kept verbatim until partition/tablet pruning consumes them; Optional.empty() means the hint was not given.
+    private Optional<PartitionNames> partitionNameHints = Optional.empty();
+    private Optional<List<Long>> tabletIdHints = Optional.empty();
+
+    // Selected logical-partition ids after partition pruning on the delta;
+    // null means no pruning was applied, so all delta partitions are scanned.
     private List<Long> selectedLogicalPartitionId;
     // Selected tablet ids after tablet pruning; null means all tablets in the selected partitions.
     private List<Long> selectedTabletId;
@@ -86,6 +94,14 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+    public Optional<PartitionNames> getPartitionNameHints() {
+        return partitionNameHints;
+    }
+
+    public Optional<List<Long>> getTabletIdHints() {
+        return tabletIdHints;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -98,6 +114,8 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
         return base.getBookmarkId() == that.base.getBookmarkId()
                 && head.getBookmarkId() == that.head.getBookmarkId()
                 && Objects.equals(changesMetaDescriptors, that.changesMetaDescriptors)
+                && Objects.equals(partitionNameHints, that.partitionNameHints)
+                && Objects.equals(tabletIdHints, that.tabletIdHints)
                 && Objects.equals(selectedLogicalPartitionId, that.selectedLogicalPartitionId)
                 && Objects.equals(selectedTabletId, that.selectedTabletId);
     }
@@ -105,7 +123,8 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), base.getBookmarkId(), head.getBookmarkId(),
-                changesMetaDescriptors, selectedLogicalPartitionId, selectedTabletId);
+                changesMetaDescriptors, partitionNameHints, tabletIdHints,
+                selectedLogicalPartitionId, selectedTabletId);
     }
 
     @Override
@@ -133,8 +152,21 @@ public class LogicalChangesScanOperator extends LogicalScanOperator {
             builder.head = operator.head;
             builder.delta = operator.delta;
             builder.changesMetaDescriptors = operator.changesMetaDescriptors;
+            builder.partitionNameHints = operator.partitionNameHints;
+            builder.tabletIdHints = operator.tabletIdHints;
             builder.selectedLogicalPartitionId = operator.selectedLogicalPartitionId;
             builder.selectedTabletId = operator.selectedTabletId;
+            return this;
+        }
+
+        public Builder setPartitionNameHints(PartitionNames partitionNameHints) {
+            builder.partitionNameHints = Optional.ofNullable(partitionNameHints);
+            return this;
+        }
+
+        public Builder setTabletIdHints(List<Long> tabletIdHints) {
+            builder.tabletIdHints = (tabletIdHints == null || tabletIdHints.isEmpty())
+                    ? Optional.empty() : Optional.of(ImmutableList.copyOf(tabletIdHints));
             return this;
         }
 

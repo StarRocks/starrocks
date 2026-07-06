@@ -27,6 +27,7 @@ import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.planner.ChangesScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -534,6 +536,145 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
             for (PhysicalPartition pp : p.getSubPartitions()) {
                 pp.setVisibleVersion(newVersion, System.currentTimeMillis());
             }
+        }
+    }
+
+    @Test
+    public void testChangesTabletHintNarrows() throws Exception {
+        String name = "ch_th_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 8 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("th_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("th_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        long aTablet = table.getPartition(name).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0).getId();
+        try {
+            String sql = String.format(
+                    "SELECT k, v FROM %s TABLET(%d) [_CHANGES_%d_%d_]",
+                    name, aTablet, base.getBookmarkId(), head.getBookmarkId());
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(plan.contains("tabletRatio=1/8"),
+                    "TABLET hint should keep 1 of 8 tablets:\n" + plan);
+
+            String bogus = String.format(
+                    "SELECT k, v FROM %s TABLET(%d) [_CHANGES_%d_%d_]",
+                    name, 1L, base.getBookmarkId(), head.getBookmarkId());
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> UtFrameUtils.getFragmentPlan(connectContext, bogus));
+            assertTrue(e.getMessage().contains("not trackable") && e.getMessage().contains("not present"),
+                    "tablet id not in changeset should be rejected as not-trackable: " + e.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesPartitionAndTabletHintCombined() throws Exception {
+        String name = "ch_pt_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name
+                + " (k int NOT NULL, city varchar(16) NOT NULL, v int) DUPLICATE KEY(k, city) "
+                + "PARTITION BY LIST(city) ("
+                + "PARTITION p_bj VALUES IN ('bj'), PARTITION p_sh VALUES IN ('sh')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("pt_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("pt_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        long bjTablet = table.getPartition("p_bj").getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0).getId();
+        try {
+            // PARTITION keeps p_bj (1/2); TABLET keeps one of p_bj's 4 tablets.
+            String sql = String.format(
+                    "SELECT k, city, v FROM %s PARTITION(p_bj) TABLET(%d) [_CHANGES_%d_%d_]",
+                    name, bjTablet, base.getBookmarkId(), head.getBookmarkId());
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(plan.contains("partitions=1/2"),
+                    "PARTITION hint should keep 1 of 2 partitions:\n" + plan);
+            assertTrue(plan.contains("tabletRatio=1/4"),
+                    "TABLET hint should keep 1 of p_bj's 4 tablets:\n" + plan);
+
+            // A tablet from the non-named partition p_sh is outside the scan scope.
+            long shTablet = table.getPartition("p_sh").getDefaultPhysicalPartition()
+                    .getLatestBaseIndex().getTablets().get(0).getId();
+            String crossPart = String.format(
+                    "SELECT k, city, v FROM %s PARTITION(p_bj) TABLET(%d) [_CHANGES_%d_%d_]",
+                    name, shTablet, base.getBookmarkId(), head.getBookmarkId());
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> UtFrameUtils.getFragmentPlan(connectContext, crossPart));
+            assertTrue(e.getMessage().contains("not trackable") && e.getMessage().contains("not present"),
+                    "tablet outside named partitions should be not-trackable: " + e.getMessage());
+
+            // REPLICA hint stays rejected on CHANGES.
+            String withReplica = String.format(
+                    "SELECT k, city, v FROM %s REPLICA(1) [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            SemanticException re = assertThrows(SemanticException.class,
+                    () -> UtFrameUtils.getFragmentPlan(connectContext, withReplica));
+            assertTrue(re.getMessage().contains("REPLICA"),
+                    "REPLICA hint should still be rejected: " + re.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testChangesPartitionHintNarrows() throws Exception {
+        String name = "ch_ph_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name
+                + " (k bigint NOT NULL, dt date NOT NULL, v bigint) DUPLICATE KEY(k, dt) "
+                + "PARTITION BY RANGE(dt) ("
+                + "PARTITION p1 VALUES LESS THAN ('2026-02-01'), "
+                + "PARTITION p2 VALUES LESS THAN ('2026-03-01'), "
+                + "PARTITION p3 VALUES LESS THAN ('2026-04-01')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("ph_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("ph_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+        try {
+            // PARTITION hint keeps 1 of the 3 changed partitions.
+            String sql = String.format(
+                    "SELECT k, dt, v FROM %s PARTITION(p2) [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(plan.contains("partitions=1/3"),
+                    "PARTITION hint should keep 1 of 3 delta partitions:\n" + plan);
+
+            // Naming a partition that has no changes in the window is not trackable.
+            String absent = String.format(
+                    "SELECT k, dt, v FROM %s PARTITION(p1) [_CHANGES_%d_%d_]",
+                    name, head.getBookmarkId(), head.getBookmarkId());
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> UtFrameUtils.getFragmentPlan(connectContext, absent));
+            assertTrue(e.getMessage().contains("not trackable") && e.getMessage().contains("not present"),
+                    "absent partition hint should be rejected as not-trackable: " + e.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
         }
     }
 }

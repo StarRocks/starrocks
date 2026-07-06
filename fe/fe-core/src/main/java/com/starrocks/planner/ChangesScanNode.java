@@ -210,8 +210,12 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitions, totalPartitions));
 
         int totalTablets = 0;
-        for (List<BookmarkChange.PhysicalPartitionChange> changes : delta.getChanges().values()) {
-            for (BookmarkChange.PhysicalPartitionChange change : changes) {
+        for (Map.Entry<Long, List<BookmarkChange.PhysicalPartitionChange>> entry :
+                delta.getChanges().entrySet()) {
+            if (selectedLogicalPartitionIds != null && !selectedLogicalPartitionIds.contains(entry.getKey())) {
+                continue;
+            }
+            for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
                 long ppId = change.getPhysicalPartitionId();
                 PhysicalPartition pp = olapTable.getPhysicalPartition(ppId);
                 if (pp == null) {

@@ -31,7 +31,10 @@ import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -39,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -172,7 +176,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of()));
+                        List.of(), null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d dropped",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, phantomPhysicalId);
@@ -199,7 +203,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of()));
+                        List.of(), null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d rewritten",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
@@ -226,12 +230,50 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of()));
+                        List.of(), null, null));
         String expected = String.format(
                 "CHANGES from bookmark %d to %d on table '%s' not trackable: physical partition %d resharded",
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
         assertTrue(ex.getMessage().contains(expected),
                 "expected message to contain '" + expected + "', got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testBuildRejectsKeyPartitionHint() throws Exception {
+        String tableName = "dup_keypart_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("keypart_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("keypart_head");
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 4L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        // PARTITION(dt='2026-02-15') — the key-partition value form. The delta is
+        // trackable, so the only rejection must come from the unsupported hint form.
+        List<Expr> colValues = new ArrayList<>();
+        colValues.add(new StringLiteral("2026-02-15"));
+        PartitionRef keyPartitionHint = new PartitionRef(
+                new ArrayList<>(), false, List.of("dt"), colValues, NodePosition.ZERO);
+
+        try {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> ChangesScanBuilder.buildScanOperator(
+                            table,
+                            new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                            new HashMap<>(),
+                            new HashMap<>(),
+                            List.of(), keyPartitionHint, null));
+            assertTrue(ex.getMessage().contains("does not support a PARTITION hint by column value"),
+                    "got: " + ex.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
     }
 
     @Test
@@ -255,7 +297,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                     new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
                     new HashMap<>(),
                     new HashMap<>(),
-                    List.of());
+                    List.of(), null, null);
             assertNotNull(op);
             assertEquals(base.getBookmarkId(), op.getBase().getBookmarkId());
             assertEquals(head.getBookmarkId(), op.getHead().getBookmarkId());
@@ -291,9 +333,9 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         try {
             BookmarkRange range = new BookmarkRange(b1.getBookmarkId(), b2.getBookmarkId());
             LogicalChangesScanOperator op = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of());
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null);
             LogicalChangesScanOperator same = ChangesScanBuilder.buildScanOperator(
-                    table, range, new HashMap<>(), new HashMap<>(), List.of());
+                    table, range, new HashMap<>(), new HashMap<>(), List.of(), null, null);
 
             // Reflexive, and two unpruned scans over the same (table, base, head)
             // are equal with matching hashCode — the equality the Cascades memo
@@ -310,10 +352,10 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // only thing distinguishing these from op at the operator level.
             LogicalChangesScanOperator baseDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b0.getBookmarkId(), b2.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of());
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null);
             LogicalChangesScanOperator headDiff = ChangesScanBuilder.buildScanOperator(
                     table, new BookmarkRange(b1.getBookmarkId(), b3.getBookmarkId()),
-                    new HashMap<>(), new HashMap<>(), List.of());
+                    new HashMap<>(), new HashMap<>(), List.of(), null, null);
             assertNotEquals(op, baseDiff);
             assertNotEquals(op, headDiff);
 
@@ -321,7 +363,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
             // are part of the scan's output identity.
             LogicalChangesScanOperator metaDiff = ChangesScanBuilder.buildScanOperator(
                     table, range, new HashMap<>(), new HashMap<>(),
-                    ChangesMetaDescriptor.resolve(table.getBaseSchema()));
+                    ChangesMetaDescriptor.resolve(table.getBaseSchema()), null, null);
             assertNotEquals(op, metaDiff);
 
             // The selected ids are what make a pruned scan a distinct memo
@@ -439,7 +481,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(99999L, real.getBookmarkId()),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of()));
+                            List.of(), null, null));
             assertTrue(baseEx.getMessage().contains("bookmark 99999 not found"),
                     "actual: " + baseEx.getMessage());
 
@@ -449,7 +491,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                             new BookmarkRange(real.getBookmarkId(), 99998L),
                             new HashMap<>(),
                             new HashMap<>(),
-                            List.of()));
+                            List.of(), null, null));
             assertTrue(headEx.getMessage().contains("bookmark 99998 not found"),
                     "actual: " + headEx.getMessage());
         } finally {
@@ -474,7 +516,7 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                         new BookmarkRange(1L, 2L),
                         new HashMap<>(),
                         new HashMap<>(),
-                        List.of()));
+                        List.of(), null, null));
         assertTrue(ex.getMessage().contains("dbId missing on " + tableName),
                 "actual: " + ex.getMessage());
     }

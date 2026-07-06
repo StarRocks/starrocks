@@ -180,8 +180,8 @@ public class OptOlapPartitionPruner {
      * does not strip always-true predicates — the CHANGES scan keeps its predicates and delta unchanged.
      */
     public static LogicalChangesScanOperator pruneChangesScanPartitions(LogicalChangesScanOperator scan) {
-        // CHANGES scan rejects PARTITION hints, so there is never an explicit partition-name list.
-        List<Long> selectedPartitionIds = computeSelectedPartitionIds(scan, null);
+        List<Long> selectedPartitionIds =
+                computeSelectedPartitionIds(scan, scan.getPartitionNameHints().orElse(null));
         return new LogicalChangesScanOperator.Builder()
                 .withOperator(scan)
                 .setSelectedLogicalPartitionId(selectedPartitionIds)

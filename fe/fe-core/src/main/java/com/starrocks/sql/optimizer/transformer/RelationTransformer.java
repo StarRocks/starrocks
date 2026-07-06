@@ -687,7 +687,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         columnMetaToColRefMap,
                         node.getChangesMetaDescriptors().orElseThrow(() ->
                                 new IllegalStateException("CHANGES metadata descriptors "
-                                        + "not resolved on " + node.getName())));
+                                        + "not resolved on " + node.getName())),
+                        node.getPartitionNames(),
+                        node.getTabletIds());
             } else {
                 OlapTable scanTable = (OlapTable) node.getTable();
                 if (node.getBookmarkId().isPresent()) {

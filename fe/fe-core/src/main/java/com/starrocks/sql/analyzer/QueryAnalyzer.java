@@ -251,14 +251,8 @@ public class QueryAnalyzer {
             throw new SemanticException(
                     "CHANGES hint cannot combine with _META_ / _CACHE_STATS_ / _BOOKMARK_");
         }
-        // CHANGES does not honor table-scope hints; rejecting prevents queries from
-        // silently scanning a broader range than the user asked for.
-        // TODO: honor PARTITION / TABLET / REPLICA hints on CHANGES scans.
-        if (tableRelation.getPartitionNames() != null
-                || !tableRelation.getTabletIds().isEmpty()
-                || !tableRelation.getReplicaIds().isEmpty()) {
-            throw new SemanticException(
-                    "CHANGES hint cannot combine with PARTITION / TABLET / REPLICA hints");
+        if (!tableRelation.getReplicaIds().isEmpty()) {
+            throw new SemanticException("CHANGES hint cannot combine with REPLICA hints");
         }
         // CHANGES does not honor SAMPLE; rejecting prevents queries from
         // silently scanning the full range without the requested sampling.
@@ -2538,7 +2532,10 @@ public class QueryAnalyzer {
                 throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
             }
 
-            if (partitionNamesObject != null && table.isNativeTable()) {
+            // CHANGES validates partition names against its scoped (delta) table in
+            // ChangesScanBuilder, not against the live table here.
+            if (partitionNamesObject != null && table.isNativeTable()
+                    && tableRelation.getBookmarkRange().isEmpty()) {
                 List<String> partitionNames = partitionNamesObject.getPartitionNames();
                 if (partitionNames != null) {
                     boolean isTemp = partitionNamesObject.isTemp();
