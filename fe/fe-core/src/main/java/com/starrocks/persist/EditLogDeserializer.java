@@ -101,6 +101,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_PARTITION, DropPartitionInfo.class)
             .put(OperationType.OP_DROP_PARTITIONS, DropPartitionsInfo.class)
             .put(OperationType.OP_MODIFY_PARTITION_V2, ModifyPartitionInfo.class)
+            .put(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, PartitionVacuumStateInfo.class)
             .put(OperationType.OP_BATCH_MODIFY_PARTITION, BatchModifyPartitionsInfo.class)
             .put(OperationType.OP_RECOVER_DB_V2, RecoverInfo.class)
             .put(OperationType.OP_RECOVER_TABLE_V2, RecoverInfo.class)
