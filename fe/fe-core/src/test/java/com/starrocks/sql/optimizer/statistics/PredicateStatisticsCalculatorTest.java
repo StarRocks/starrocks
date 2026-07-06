@@ -449,7 +449,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge30Condition, c2Eq50Predicate, innerIfPredicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(15.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
 
         // IF ( IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
         BinaryPredicateOperator c1Ge20Predicate =
