@@ -265,16 +265,13 @@ STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 SET(DW_TEST_FILES
-    ./storage/aggregate_iterator_test.cpp
     ./storage/base_compaction_test.cpp
     ./storage/binlog_builder_test.cpp
     ./storage/binlog_file_test.cpp
     ./storage/binlog_manager_test.cpp
     ./storage/binlog_reader_test.cpp
     ./storage/binlog_test_base.cpp
-    ./storage/chunk_aggregator_test.cpp
     ./storage/chunk_helper_test.cpp
-    ./storage/column_aggregator_test.cpp
     ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp

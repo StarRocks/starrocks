@@ -77,6 +77,12 @@ TEST(SpillMetricsTest, InstallRegistersLocalAndRemoteMetrics) {
     ASSERT_NE(nullptr, remote);
     remote->trigger_total->increment(8);
     assert_metric_value(&registry, "query_spill_trigger_total", remote_labels, "8");
+
+    metrics.load_spill_remote_bytes_read_total.increment(9);
+    assert_metric_value(&registry, "load_spill_remote_bytes_read_total", "9");
+
+    metrics.load_spill_local_blocks_write_total.increment(10);
+    assert_metric_value(&registry, "load_spill_local_blocks_write_total", "10");
 }
 
 TEST(SpillMetricsTest, InstallRegistersUncoveredReasonCounter) {

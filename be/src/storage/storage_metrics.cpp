@@ -138,15 +138,6 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(async_delta_writer_task_execute_duration_us);
     REGISTER_STORAGE_METRIC(async_delta_writer_task_pending_duration_us);
 
-    REGISTER_STORAGE_METRIC(load_spill_local_blocks_read_total);
-    REGISTER_STORAGE_METRIC(load_spill_local_blocks_write_total);
-    REGISTER_STORAGE_METRIC(load_spill_remote_blocks_read_total);
-    REGISTER_STORAGE_METRIC(load_spill_remote_blocks_write_total);
-    REGISTER_STORAGE_METRIC(load_spill_local_bytes_read_total);
-    REGISTER_STORAGE_METRIC(load_spill_local_bytes_write_total);
-    REGISTER_STORAGE_METRIC(load_spill_remote_bytes_read_total);
-    REGISTER_STORAGE_METRIC(load_spill_remote_bytes_write_total);
-
     REGISTER_STORAGE_METRIC(delta_writer_commit_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STORAGE_METRIC(delta_writer_wait_flush_duration_us);
