@@ -93,6 +93,11 @@ void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_d
 // ownership propagation (private for an exclusive segment).
 void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 
+// Peer of set_dcg_shared for Index Delta Groups: mark every .idx entry in an IDG version
+// list shared / private. Used by set_non_segment_files_shared (shared) and tablet split's
+// per-segment ownership propagation (private for an exclusive segment).
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
+
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
