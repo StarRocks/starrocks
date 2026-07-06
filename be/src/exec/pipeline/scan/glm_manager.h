@@ -99,6 +99,10 @@ public:
     const TLakeScanNode& scan_node() const { return *_thrift_lake_scan_node; }
     void set_scan_node(const TLakeScanNode& node);
 
+    // [GLM-DIAG] dump captured version + rowset id-ranges for a tablet (diagnostic only).
+    std::string debug_dump_ranges(int32_t tablet_id) const;
+    std::string debug_dump_ranges(const std::vector<lake::RowsetPtr>& rowsets) const;
+
 private:
     mutable std::shared_mutex _mutex;
     std::unordered_map<int32_t, std::vector<lake::RowsetPtr>> _rowsets;

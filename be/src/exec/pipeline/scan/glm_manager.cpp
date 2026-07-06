@@ -125,6 +125,33 @@ void LakeScanLazyMaterializationContext::capture_rowsets(int32_t tablet_id, int6
     _versions[tablet_id] = version;
 }
 
+// [GLM-DIAG] diagnostic only. rssid range of a rowset is [id, id + segment_metas_size).
+std::string LakeScanLazyMaterializationContext::debug_dump_ranges(const std::vector<lake::RowsetPtr>& rowsets) const {
+    std::string s = "n=" + std::to_string(rowsets.size()) + " ranges=[";
+    for (const auto& rs : rowsets) {
+        const auto& m = rs->metadata();
+        uint32_t base = m.id();
+        s += std::to_string(base) + ":" + std::to_string(base + m.segment_metas_size()) + " ";
+    }
+    s += "]";
+    return s;
+}
+
+// [GLM-DIAG] diagnostic only.
+std::string LakeScanLazyMaterializationContext::debug_dump_ranges(int32_t tablet_id) const {
+    std::shared_lock lock(_mutex);
+    std::string s = "captured_version=";
+    auto vit = _versions.find(tablet_id);
+    s += (vit == _versions.end() ? std::string("MISSING") : std::to_string(vit->second));
+    auto it = _rowsets.find(tablet_id);
+    if (it == _rowsets.end()) {
+        s += " captured=ABSENT";
+        return s;
+    }
+    s += " captured_" + debug_dump_ranges(it->second);
+    return s;
+}
+
 void LakeScanLazyMaterializationContext::set_scan_node(const TLakeScanNode& node) {
     std::unique_lock lock(_mutex);
     if (!_thrift_lake_scan_node.has_value()) {

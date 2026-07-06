@@ -339,6 +339,11 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     }
 
     if (target == nullptr) {
+        // [GLM-DIAG] dump captured vs live rowset ranges to expose the scan-vs-fetch snapshot
+        // mismatch behind "not found lake rssid". All PB access lives in debug_dump_ranges.
+        LOG(WARNING) << "[GLM-DIAG notfound] tablet=" << _tablet_id << " rssid=" << rssid << " "
+                     << _glm_ctx->debug_dump_ranges(static_cast<int32_t>(_tablet_id))
+                     << " live_" << _glm_ctx->debug_dump_ranges(_rowsets);
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
     }
 
