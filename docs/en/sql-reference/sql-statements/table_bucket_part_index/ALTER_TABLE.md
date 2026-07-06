@@ -737,17 +737,31 @@ Syntax:
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: Support setting timeout time and the default timeout time is one day.
 
+`ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
+
+- The table must be a Duplicate Key or Aggregate table. Primary Key tables are not supported.
+- The table must not be a colocate table and must not contain an AUTO_INCREMENT column.
+- The rollup can be added only when the table has no other rollup or synchronous materialized view.
+
 Example:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+Example: create a rollup with an independent sort key on a range-distribution table in a shared-data cluster.
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### Create rollups in batches
