@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::ffi::{c_char, c_int, CString};
 use std::ptr;
 use std::slice;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use arrow_array::ffi::FFI_ArrowArray;
 use arrow_array::{Array, Float32Array, RecordBatch, StructArray};
@@ -24,6 +24,7 @@ use arrow_schema::ffi::FFI_ArrowSchema;
 use futures::stream::StreamExt;
 use lance::dataset::builder::DatasetBuilder;
 use lance::dataset::scanner::DatasetRecordBatchStream;
+use lance::session::Session;
 use lance_linalg::distance::MetricType;
 use tokio::runtime::{Builder, Runtime};
 use uuid::Uuid;
@@ -85,6 +86,11 @@ fn runtime() -> &'static Runtime {
             .build()
             .expect("failed to initialize Lance Rust runtime")
     })
+}
+
+fn session() -> Arc<Session> {
+    static SESSION: OnceLock<Arc<Session>> = OnceLock::new();
+    SESSION.get_or_init(|| Arc::new(Session::default())).clone()
 }
 
 unsafe fn string_from_raw(value: SrLanceString) -> Result<String, String> {
@@ -231,6 +237,7 @@ async fn open_reader(
 ) -> Result<SrLanceReader, String> {
     let dataset = DatasetBuilder::from_uri(&dataset_uri)
         .with_storage_options(storage_options)
+        .with_session(session())
         .load()
         .await
         .map_err(|e| format!("failed to open Lance dataset {dataset_uri}: {e}"))?;
