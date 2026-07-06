@@ -196,11 +196,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
-<<<<<<< HEAD
     METRICS_DEFINE_THREAD_POOL(snapshot_file_syncer);
-    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
-=======
->>>>>>> f888049b808... [Refactor] Move load spill block manager to compute env (#75869)
 
 private:
     struct PendingThreadPoolMetrics {
