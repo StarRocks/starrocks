@@ -537,4 +537,33 @@ public class CTASAnalyzerTest {
             ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }
     }
+
+    @Test
+    public void testCTASParsesEngineClause() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_with_engine engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithoutEngineClauseParsesEmptyEngine() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_without_engine as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt)
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+        Assertions.assertEquals("", stmt.getCreateTableStmt().getEngineName());
+    }
+
+    @Test
+    public void testCTASWithExplicitOlapEngineAnalyzesSuccessfully() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_explicit_olap engine=olap as select * from test;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
+    }
 }
