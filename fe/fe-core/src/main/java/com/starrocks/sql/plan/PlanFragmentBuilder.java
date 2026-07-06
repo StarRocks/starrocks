@@ -965,18 +965,31 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
+<<<<<<< HEAD
                 // Filter out empty partitions from all selected partitions, original selected partition ids may be
                 // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+=======
+                DistributionInfo distInfo = referenceTable.getDefaultDistributionInfo();
+                RangeColocateScanDispatch dispatch = null;
+                if (distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE) {
+                    dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+                }
+
+                // Filter out logical partitions that have no non-empty physical sub-partition. The result
+                // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
+                // other consumer of getSelectedPartitionIds()/setSelectedPartitionIds() in this codebase --
+                // restricted to those logical partitions with at least one non-empty physical sub-partition.
+>>>>>>> 01a5230c29 ([BugFix] Fix query cache normalization crash for tables with sub-partitions (#75789))
                 // eg:
                 // partition        : 10001 -> (tablet_1)
                 //  subpartition1   : 10002 -> (tablet_2)
-                //  subpartition2   : 10004 -> (tablet_3)
-                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                //  subpartition2   : 10004 -> (empty)
+                // original selected partition id: 10001
                 // after:
-                // selected partition ids   : 10002
+                // selected partition ids   : 10001 (unchanged -- still the logical id, deduplicated)
                 // selected tablet ids      : tablet_2
                 // total tablets num        : 1
-                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
+                Set<Long> selectedNonEmptyPartitionIds = Sets.newLinkedHashSet();
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -1000,7 +1013,7 @@ public class PlanFragmentBuilder {
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, localBeId);
                     }
                 }
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                scanNode.setSelectedPartitionIds(Lists.newArrayList(selectedNonEmptyPartitionIds));
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (StarRocksException e) {
                 throw new StarRocksPlannerException(
