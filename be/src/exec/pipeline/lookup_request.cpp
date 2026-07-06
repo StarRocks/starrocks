@@ -869,31 +869,15 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
     accumulator.finalize();
     auto accumulated = accumulator.pull();
     if (accumulated == nullptr) {
-        // [GLM-DIAG] distinguish empty-batch (a) from located-but-materialized-nothing (b).
+        // [GLM-DIAG] ISOLATION BUILD (not-for-merge): log the empty accumulator but INTENTIONALLY
+        // do NOT guard -- fall through to the original accumulated->schema() deref below. This build
+        // has the capture-rowsets fix but NOT the #75889 null-guard, so if the empty-accumulator
+        // path is still reached the CN will SIGSEGV -- telling us whether the capture fix alone
+        // prevents the crash or the guard was doing the work.
         LOG(WARNING) << "[GLM-DIAG empty-accum] scan_id=" << _ctx->scan_id << " n_locators=" << row_locators.size()
                      << (row_locators.empty() ? std::string()
                                               : fmt::format(" first=(tablet={},rssid={})", std::get<0>(row_locators[0]),
                                                             std::get<1>(row_locators[0])));
-        // pull() returns nullptr when the accumulator produced no chunk, i.e. nothing was
-        // materialized. Previously this null was dereferenced unconditionally below
-        // (accumulated->schema()), which crashes the CN with SIGSEGV.
-        //
-        // There are two ways to get here:
-        //  - There were no row locators to look up (empty lookup request). _build_row_id_range
-        //    returns an empty locator set only when its input has 0 rows, so an empty chunk with
-        //    the requested slots is the correct result.
-        //  - Row locators existed but none could be materialized. Under a version-consistent read
-        //    a located row must be readable, so this indicates the tablet changed under us between
-        //    the position scan and this fetch (concurrent ingest/updates/deletes, or
-        //    compaction/GC). Fail loudly so the query retries on a consistent snapshot rather than
-        //    silently returning fewer rows. (A missing rowset already surfaces as an error earlier
-        //    via _tablet_adaptor->get_iterator -> "not found lake rssid".)
-        if (!row_locators.empty()) {
-            return Status::InternalError(
-                    "late materialization produced no rows for a non-empty set of row locators; "
-                    "the tablet changed between the position scan and the lookup fetch");
-        }
-        return ChunkPtr(RuntimeChunkHelper::new_chunk(slots, 0));
     }
 
     for (const auto& slot : slots) {
