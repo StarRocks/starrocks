@@ -71,12 +71,31 @@ public class ScalarType extends Type implements Cloneable {
     @SerializedName(value = "scale")
     private int scale;
 
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (true) from timestamp-with-local-time-zone. Rides along as
+    // metadata and is intentionally excluded from equals()/hashCode() so it does NOT affect
+    // type identity; it only tells the BE reader to keep the naive wall clock unshifted.
+    private boolean datetimeIsNtz = false;
+
     public ScalarType(PrimitiveType type) {
         this.type = type;
     }
 
     public ScalarType() {
         this.type = PrimitiveType.INVALID_TYPE;
+    }
+
+    // A DATETIME whose source is a timezone-naive lake timestamp (e.g. Paimon TIMESTAMP). Returns a
+    // fresh instance (not a shared DATETIME singleton) carrying the datetime_is_ntz metadata flag,
+    // which rides along to the BE reader without affecting type identity.
+    public static ScalarType createDatetimeNtzType() {
+        ScalarType type = new ScalarType(PrimitiveType.DATETIME);
+        type.datetimeIsNtz = true;
+        return type;
+    }
+
+    public boolean isDatetimeNtz() {
+        return datetimeIsNtz;
     }
 
     public PrimitiveType getType() {
