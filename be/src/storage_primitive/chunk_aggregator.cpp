@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/chunk_aggregator.h"
+#include "storage_primitive/chunk_aggregator.h"
 
 #include "column/chunk_factory.h"
 #include "column/sorting/sorting.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "gutil/casts.h"
-#include "storage/column_aggregate_func.h"
+#include "storage_primitive/column_aggregate_func.h"
 
 namespace starrocks {
 

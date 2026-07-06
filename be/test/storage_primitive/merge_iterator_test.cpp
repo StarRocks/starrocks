@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/base/merge_iterator.h"
+#include "storage_primitive/merge_iterator.h"
 
 #include <gtest/gtest.h>
 
@@ -25,7 +25,7 @@
 #include "column/schema.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "storage/vector_chunk_iterator.h"
+#include "storage_primitive/vector_chunk_iterator.h"
 
 namespace starrocks {
 

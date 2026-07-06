@@ -199,15 +199,15 @@ Format module for core format primitives and concrete CSV, JSON, Avro, ORC, and 
 - Remediation: Keep format code inside the Format module; move connector orchestration and higher execution policy upward.
 
 ### StoragePrimitive (`storageprimitive`)
-Shared storage-access primitives, predicate contracts, predicate trees, iterator contracts, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+Shared storage-access primitives, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
 - Targets: `StoragePrimitive`
 - Allowed internal include prefixes: `storage_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `Expr`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `storage_primitive_test`
-- Remediation: Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator contracts, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward.
+- Remediation: Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward.
 
 ### StorageBase (`storagebase`)
-Base storage algorithms and mask-buffer helpers above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
+Base storage algorithms above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.
 - Targets: `StorageBase`
 - Allowed internal include prefixes: `storage/base/`, `storage_primitive/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
 - Allowed target deps: `ComputeEnv`, `StoragePrimitive`, `Runtime`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`

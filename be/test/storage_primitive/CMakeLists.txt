@@ -19,7 +19,10 @@ endif()
 
 set(STORAGE_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    aggregate_iterator_test.cpp
+    chunk_aggregator_test.cpp
     column_and_predicate_test.cpp
+    column_aggregator_test.cpp
     column_or_predicate_test.cpp
     column_predicate_test.cpp
     column_value_range_test.cpp
@@ -30,7 +33,9 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     predicate_tree_test.cpp
     projection_iterator_test.cpp
     range_test.cpp
+    merge_iterator_test.cpp
     roaring2range_test.cpp
+    row_source_mask_buffer_test.cpp
     row_source_mask_test.cpp
     storage_value_types_test.cpp
     tablet_column_test.cpp

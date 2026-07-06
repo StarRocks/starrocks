@@ -47,7 +47,6 @@
 #include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
@@ -78,6 +77,7 @@
 #include "storage/update_manager.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/tablet_basic_info.h"
 #include "storage_primitive/union_iterator.h"
 

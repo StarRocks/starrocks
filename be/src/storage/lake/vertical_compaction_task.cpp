@@ -24,7 +24,6 @@
 #include "common/system/master_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
@@ -37,6 +36,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/row_source_mask_buffer.h"
 
 namespace starrocks::lake {
 

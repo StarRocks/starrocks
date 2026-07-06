@@ -19,8 +19,8 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "storage/column_aggregate_func.h"
 #include "storage_primitive/aggregate_type.h"
+#include "storage_primitive/column_aggregate_func.h"
 #include "types/type_info.h"
 
 namespace starrocks {

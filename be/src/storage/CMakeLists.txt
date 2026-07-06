@@ -18,8 +18,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 ADD_BE_LIB(StorageBase
-    base/merge_iterator.cpp
-    base/row_source_mask.cpp
     base/short_key_index.cpp
 )
 
@@ -141,7 +139,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
@@ -162,8 +159,6 @@ set(STORAGE_FILES
     olap_meta_reader.cpp
     seek_tuple.cpp
     unique_iterator.cpp
-    column_aggregate_func.cpp
-    chunk_aggregator.cpp
     delta_writer.cpp
     memtable.cpp
     base_compaction.cpp

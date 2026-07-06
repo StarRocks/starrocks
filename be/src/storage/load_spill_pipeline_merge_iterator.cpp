@@ -18,10 +18,10 @@
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_chunk_spiller.h"
+#include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/union_iterator.h"
 
 namespace starrocks {

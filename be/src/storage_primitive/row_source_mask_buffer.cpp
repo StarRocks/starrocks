@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/base/row_source_mask.h"
+#include "storage_primitive/row_source_mask_buffer.h"
 
 #include <utility>
 

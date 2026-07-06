@@ -20,17 +20,17 @@
 #include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/serde.h"
+#include "compute_env/spill/spill_metrics.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_metrics.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
@@ -88,12 +88,12 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
     RETURN_IF_ERROR(_block->flush());
     if (_block->is_remote()) {
         // Update remote block write metric
-        StorageMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
-        StorageMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
+        SpillMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
+        SpillMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
     } else {
         // Update local block write metric
-        StorageMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
-        StorageMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
+        SpillMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
+        SpillMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
     }
     RETURN_IF_ERROR(_block_manager->release_block(_block));
     // Save this block into the block group, which is tagged with slot_idx for ordering
@@ -212,14 +212,12 @@ public:
                 COUNTER_UPDATE(metrics.block_count, 1);
                 if (_blocks[_block_idx]->is_remote()) {
                     COUNTER_UPDATE(metrics.remote_block_count, 1);
-                    StorageMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
-                    StorageMetrics::instance()->load_spill_remote_bytes_read_total.increment(
-                            _blocks[_block_idx]->size());
+                    SpillMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
+                    SpillMetrics::instance()->load_spill_remote_bytes_read_total.increment(_blocks[_block_idx]->size());
                 } else {
                     COUNTER_UPDATE(metrics.local_block_count, 1);
-                    StorageMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
-                    StorageMetrics::instance()->load_spill_local_bytes_read_total.increment(
-                            _blocks[_block_idx]->size());
+                    SpillMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
+                    SpillMetrics::instance()->load_spill_local_bytes_read_total.increment(_blocks[_block_idx]->size());
                 }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());

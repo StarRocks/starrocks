@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/chunk_aggregator.h"
+#include "storage_primitive/chunk_aggregator.h"
 
 #include <gtest/gtest.h>
 
@@ -21,7 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
-#include "storage/column_aggregate_func.h"
+#include "storage_primitive/column_aggregate_func.h"
 
 namespace starrocks {
 

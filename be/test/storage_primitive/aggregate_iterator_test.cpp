@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/aggregate_iterator.h"
+#include "storage_primitive/aggregate_iterator.h"
 
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "gtest/gtest.h"
-#include "storage/vector_chunk_iterator.h"
 #include "storage_primitive/aggregate_type.h"
+#include "storage_primitive/vector_chunk_iterator.h"
 
 namespace starrocks {
 
