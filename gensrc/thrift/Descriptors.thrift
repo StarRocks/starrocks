@@ -685,7 +685,8 @@ struct TLanceTable {
     // Lance dataset URI.
     1: optional string dataset_uri
 
-    // Storage options passed to the Lance SDK.
+    // DEPRECATED: Lance storage options are carried by
+    // THdfsScanRange.lance_storage_options. Retained for wire compatibility.
     2: optional map<string, string> storage_options
 }
 
