@@ -199,6 +199,7 @@ private:
     RuntimeProfile::Counter* _sidx_rows_scanned_counter = nullptr;
     RuntimeProfile::Counter* _sidx_candidate_rows_counter = nullptr;
     RuntimeProfile::Counter* _sidx_skipped_by_selectivity_counter = nullptr;
+    RuntimeProfile::Counter* _sidx_filtered_rows_counter = nullptr;
 
     // Gin filter Statistics
     RuntimeProfile::Counter* _gin_filtered_timer = nullptr;

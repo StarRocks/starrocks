@@ -315,7 +315,9 @@ private:
 
         std::shared_ptr<VectorIndexReader> ann_reader;
 
-        bool always_build_rowid() const { return use_vector_index && !refine_distance; }
+        bool always_build_rowid() const {
+            return use_vector_index && !refine_distance;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -372,8 +374,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -4004,10 +4010,13 @@ Status SegmentIterator::_apply_presupplied_rowid_filter() {
     SparseRange<> filter_range = roaring2range(*_opts.presupplied_rowid_filter);
     _scan_range = _scan_range.intersection(filter_range);
     if (_opts.stats != nullptr) {
+        // intersection() can only shrink the range, so after <= before always.
         const size_t after = _scan_range.span_size();
-        if (before >= after) {
-            _opts.stats->rows_bitmap_index_filtered += (before - after);
-        }
+        _opts.stats->secondary_index_filtered_rows += (before - after);
+        // Candidate rows that survived pruning and are read back through the
+        // index, counted here (per segment, per morsel) so the total is
+        // partitioned by scan range rather than inflated by the morsel count.
+        _opts.stats->secondary_index_candidate_rows += after;
     }
     return Status::OK();
 }

@@ -973,6 +973,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _sidx_candidate_rows_counter = ADD_CHILD_COUNTER(_runtime_profile, "CandidateRows", TUnit::UNIT, sidx_name);
     _sidx_skipped_by_selectivity_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SkippedBySelectivity", TUnit::UNIT, sidx_name);
+    _sidx_filtered_rows_counter = ADD_CHILD_COUNTER(_runtime_profile, "FilteredRows", TUnit::UNIT, sidx_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
@@ -1140,6 +1141,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_sidx_rows_scanned_counter, _reader->stats().secondary_index_rows_scanned);
     COUNTER_UPDATE(_sidx_candidate_rows_counter, _reader->stats().secondary_index_candidate_rows);
     COUNTER_UPDATE(_sidx_skipped_by_selectivity_counter, _reader->stats().secondary_index_skipped_by_selectivity);
+    COUNTER_UPDATE(_sidx_filtered_rows_counter, _reader->stats().secondary_index_filtered_rows);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);

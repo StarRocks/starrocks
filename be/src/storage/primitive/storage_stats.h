@@ -122,6 +122,11 @@ struct OlapReaderStatistics {
     int64_t secondary_index_candidate_rows = 0;
     // Set when the selectivity gate dropped the index for a rowset.
     int64_t secondary_index_skipped_by_selectivity = 0;
+    // Base-scan rows pruned by the per-segment secondary-index rowid filter
+    // (before - after of the scan-range intersection). Kept separate from
+    // rows_bitmap_index_filtered so the profile doesn't misattribute sorted
+    // secondary-index pruning to a bitmap index.
+    int64_t secondary_index_filtered_rows = 0;
 
     int64_t rows_del_vec_filtered = 0;
 

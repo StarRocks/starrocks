@@ -411,6 +411,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
 
     rs_opts.column_access_paths = params.column_access_paths;
+    // The base options never carry a presupplied secondary-index filter; per-rowset
+    // copies (eff_opts below) set it when an index supplies candidates.
+    rs_opts.presupplied_rowid_filter_per_segment = nullptr;
     rs_opts.use_vector_index = params.use_vector_index;
     rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.has_preaggregation = true;
@@ -444,7 +447,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     // Rowsets whose index fully covers the query (predicate + output cols):
     // these are served entirely from the .idx (covering fast path), bypassing
     // the base-table scan. Maps rowset id -> the covering index reader.
-    std::unordered_map<uint32_t, std::shared_ptr<secondary_sorted::SecondaryIndexReader>> covering_reader_by_rowset;
+    std::unordered_map<uint32_t, std::vector<std::shared_ptr<secondary_sorted::SecondaryIndexReader>>>
+            covering_reader_by_rowset;
     // BE-config-only gate for now: the FE-side session variable that would
     // set TabletReaderParams::use_secondary_index is not wired yet. Once a
     // SELECT references columns that any registered index covers, the lookup
@@ -521,17 +525,20 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             // output columns, serve this rowset entirely from the .idx and skip
             // the candidate-bitmap / base-scan path below.
             if (covering_allowed) {
-                int covering_idx = -1;
-                // Group runs by index_name; covering currently requires a
-                // SINGLE run per index (e.g. post-compaction-merge). Multi-run
-                // indexes fall through to the lookup path below.
+                std::vector<int>* covering_runs = nullptr;
+                // Group runs by index_name. Multi-run indexes ARE supported for
+                // covering: base rows are partitioned across an index's runs
+                // (each row's entry lives in exactly one run), so concatenating
+                // every run's covering output yields each live row once -- correct
+                // for orderless queries (COUNT / GROUP BY / aggregate).
                 std::map<std::string, std::vector<int>> cov_runs;
                 for (int i = 0; i < meta.secondary_indexes_size(); ++i) {
                     if (meta.secondary_indexes(i).file_name().empty()) continue;
                     cov_runs[meta.secondary_indexes(i).index_name()].push_back(i);
                 }
                 for (auto& [cov_name, cov_run_list] : cov_runs) {
-                    if (cov_run_list.size() != 1) continue;
+                    // All runs of one index share index_col_names, so the
+                    // covered-check only needs the first run's PB.
                     const auto& fpb = meta.secondary_indexes(cov_run_list[0]);
                     std::unordered_set<ColumnId> idx_cids;
                     bool ok = true;
@@ -560,19 +567,25 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                         }
                     }
                     if (covered) {
-                        covering_idx = cov_run_list[0];
+                        covering_runs = &cov_run_list;
                         break;
                     }
                 }
-                if (covering_idx >= 0) {
-                    secondary_sorted::SecondaryIndexReader::OpenInput open_in;
-                    open_in.fs = sidx_fs;
-                    open_in.tablet_mgr = _tablet_mgr;
-                    open_in.tablet_id = rowset->tablet_id();
-                    open_in.file_pb = meta.secondary_indexes(covering_idx);
-                    open_in.source_schema = _tablet_schema;
-                    ASSIGN_OR_RETURN(auto rdr, secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
-                    covering_reader_by_rowset[rowset->id()] = std::move(rdr);
+                if (covering_runs != nullptr) {
+                    std::vector<std::shared_ptr<secondary_sorted::SecondaryIndexReader>> rdrs;
+                    rdrs.reserve(covering_runs->size());
+                    for (int ri : *covering_runs) {
+                        secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                        open_in.fs = sidx_fs;
+                        open_in.tablet_mgr = _tablet_mgr;
+                        open_in.tablet_id = rowset->tablet_id();
+                        open_in.file_pb = meta.secondary_indexes(ri);
+                        open_in.source_schema = _tablet_schema;
+                        ASSIGN_OR_RETURN(auto rdr,
+                                         secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                        rdrs.push_back(std::move(rdr));
+                    }
+                    covering_reader_by_rowset[rowset->id()] = std::move(rdrs);
                     continue; // skip the candidate-bitmap path for this rowset
                 }
             }
@@ -727,9 +740,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 for (auto& [seg_id, bitmap] : merged) merged_card += static_cast<int64_t>(bitmap.cardinality());
                 if (merged.empty()) break; // no rows can satisfy all indexes so far
             }
-            for (auto& [seg_id, bitmap] : merged) {
-                _stats.secondary_index_candidate_rows += static_cast<int64_t>(bitmap.cardinality());
-            }
+            // NOTE: candidate rows are counted per-segment when the filter is
+            // actually applied (SegmentIterator::_apply_presupplied_rowid_filter),
+            // where the count is naturally partitioned by each morsel's scan
+            // range. Counting |merged| here would multiply by the morsel count
+            // (each morsel builds the full tablet-wide `merged`) and inflate the
+            // profile ~N x.
             // When we will strip the enforced predicates from the base scan, a
             // segment absent from `merged` (zero index matches) must be SKIPPED
             // rather than full-scanned -- otherwise, with the predicate gone,
@@ -768,26 +784,24 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         // a covering iterator (predicate + DelVec applied inside) and skip the
         // base-table scan entirely.
         if (auto cit = covering_reader_by_rowset.find(rowset->id()); cit != covering_reader_by_rowset.end()) {
-            auto delvec_loader = std::make_shared<lake::LakeDelvecLoader>(
-                    _tablet_mgr, nullptr, params.lake_io_opts.fill_data_cache, params.lake_io_opts);
-            // Parallelize the covering scan across morsels: the .idx has one
-            // entry per base row, so this morsel's base-rowid coverage maps
-            // numerically onto a disjoint slice of the .idx row space [0,N_idx).
-            // Map each owned (segment, rowid-subrange) through the segment's
-            // cumulative base-row offset; the union of all morsels' slices is
-            // the whole .idx, scanned exactly once and in parallel.
-            SparseRangePtr idx_range;
+            auto& cov_readers = cit->second;
+            const auto& rmeta = rowset->metadata();
+            int64_t n_base = 0;
+            for (int s = 0; s < rmeta.segment_metas_size(); ++s) n_base += rmeta.segment_metas(s).num_rows();
+
+            // This morsel's owned base-rowid ranges (per-segment splits mapped
+            // through each segment's cumulative base offset). Empty when there
+            // is no morsel split (single morsel owns the whole rowset).
+            std::vector<std::pair<rowid_t, rowid_t>> ivals;
             if (params.rowid_range_option != nullptr) {
                 auto& m = params.rowid_range_option->rowid_range_per_segment_per_rowset;
                 if (auto rit = m.find(rowset->rowset_id()); rit != m.end()) {
-                    const auto& rmeta = rowset->metadata();
                     std::unordered_map<uint32_t, int64_t> seg_offset;
                     int64_t off = 0;
                     for (int s = 0; s < rmeta.segment_metas_size(); ++s) {
                         seg_offset[static_cast<uint32_t>(s)] = off;
                         off += rmeta.segment_metas(s).num_rows();
                     }
-                    std::vector<std::pair<rowid_t, rowid_t>> ivals;
                     for (const auto& [seg_id, split] : rit->second) {
                         auto oit = seg_offset.find(static_cast<uint32_t>(seg_id));
                         if (oit == seg_offset.end() || split.row_id_range == nullptr) continue;
@@ -799,10 +813,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                         }
                     }
                     std::sort(ivals.begin(), ivals.end());
-                    idx_range = std::make_shared<SparseRange<>>();
-                    for (const auto& [lo, hi] : ivals) idx_range->add(Range<>(lo, hi));
                 }
             }
+            const bool no_split = (params.rowid_range_option == nullptr);
+            auto pos_in_ivals = [&ivals](int64_t pos) {
+                for (const auto& [lo, hi] : ivals) {
+                    if (pos >= lo && pos < hi) return true;
+                }
+                return false;
+            };
             // Does this rowset have any delete vector? If none of its segments
             // appear in the tablet's delvec map, the covering scan can skip the
             // position column + per-row DelVec test entirely.
@@ -811,7 +830,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 const auto& dvs = _tablet_metadata->delvec_meta().delvecs();
                 if (!dvs.empty()) {
                     const uint32_t base = rowset->id();
-                    const int nseg = rowset->metadata().segment_metas_size();
+                    const int nseg = rmeta.segment_metas_size();
                     for (int s = 0; s < nseg; ++s) {
                         if (dvs.find(base + static_cast<uint32_t>(s)) != dvs.end()) {
                             needs_delvec = true;
@@ -820,76 +839,97 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     }
                 }
             }
-            auto cov_or = cit->second->make_covering_iterator(
-                    schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
-                    _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, needs_delvec,
-                    std::move(idx_range), &_stats);
-            if (cov_or.status().is_end_of_file()) {
-                continue; // index pruned this rowset entirely
+            const int R = static_cast<int>(cov_readers.size());
+            for (int r = 0; r < R; ++r) {
+                SparseRangePtr idx_range;
+                if (R == 1) {
+                    // Single run: N_idx == N_base, so split the run's ordinal
+                    // space by this morsel's base-rowid ranges (within-run
+                    // parallelism -- one entry per base row maps 1:1).
+                    if (!ivals.empty()) {
+                        idx_range = std::make_shared<SparseRange<>>();
+                        for (const auto& [lo, hi] : ivals) idx_range->add(Range<>(lo, hi));
+                    }
+                } else if (!no_split) {
+                    // Multi run: a run holds only its flush window's rows (sorted
+                    // by key), so base-rowid <-> ordinal doesn't hold. Assign each
+                    // run to exactly one morsel by its proportional base position;
+                    // the owner scans the WHOLE run (idx_range stays null). Runs
+                    // partition the base rows, so the union across morsels covers
+                    // every run exactly once.
+                    const int64_t pos_r =
+                            (n_base > 0) ? static_cast<int64_t>((static_cast<__int128>(r) * n_base) / R) : 0;
+                    if (!pos_in_ivals(pos_r)) continue; // owned by another morsel
+                }
+                // Fresh DelvecLoader per iterator (each keeps its own delvec cache).
+                auto delvec_loader = std::make_shared<lake::LakeDelvecLoader>(
+                        _tablet_mgr, nullptr, params.lake_io_opts.fill_data_cache, params.lake_io_opts);
+                auto cov_or = cov_readers[r]->make_covering_iterator(
+                        schema(), params.pred_tree, &_obj_pool, static_cast<int64_t>(rowset->id()),
+                        _tablet_metadata->version(), std::move(delvec_loader), params.chunk_size, needs_delvec,
+                        std::move(idx_range), &_stats);
+                if (cov_or.status().is_end_of_file()) {
+                    continue; // this run pruned entirely
+                }
+                RETURN_IF_ERROR(cov_or.status());
+                iters->push_back(std::move(cov_or).value());
             }
-            RETURN_IF_ERROR(cov_or.status());
-            iters->push_back(std::move(cov_or).value());
             continue;
         }
 
-        // Thread this rowset's per-segment rowid filter into rs_opts just
-        // before invoking rowset->read(). When no entry exists for this
-        // rowset (typical case), the field stays null and Rowset::read()
-        // falls back to the normal scan.
+        // Build this rowset's effective read options. When a secondary index
+        // supplies a candidate filter and/or enforces predicates, use a
+        // per-rowset COPY (eff_opts) carrying the presupplied rowid filter and
+        // the stripped pred-tree, instead of mutating the shared rs_opts. This
+        // lets the segment-parallel read path capture per-task options without
+        // racing (previously that path was forced serial when an index was on).
+        const std::unordered_map<uint32_t, roaring::Roaring>* presupplied = nullptr;
         if (auto it = sidx_per_rowset.find(rowset->id()); it != sidx_per_rowset.end()) {
-            rs_opts.presupplied_rowid_filter_per_segment = &it->second;
-        } else {
-            rs_opts.presupplied_rowid_filter_per_segment = nullptr;
+            presupplied = &it->second;
         }
+        const std::unordered_set<ColumnId>* enforced = nullptr;
+        if (auto eit = sidx_enforced_cids.find(rowset->id()); eit != sidx_enforced_cids.end() && !eit->second.empty()) {
+            enforced = &eit->second;
+        }
+        const bool index_active = (presupplied != nullptr) || (enforced != nullptr && !rs_opts.pred_tree.empty());
 
-        // Readback speedup: the candidate bitmap already enforces the
-        // index-covered predicates exactly (and every zero-match segment now
-        // carries an explicit empty bitmap, so it is skipped). Strip those
-        // predicates from this rowset's base scan so it materializes only the
-        // residual / output columns -- e.g. for `MAX(amount) WHERE user_id=...`
-        // the base segments read `amount` alone, not `user_id`. Restored after
-        // read() so a later non-indexed rowset keeps the full predicate. Only
-        // the serial read path runs when a secondary index is active, so this
-        // per-iteration mutation of rs_opts is safe.
-        PredicateTree saved_pred_tree;
-        PredicateTree saved_zonemap_tree;
-        bool stripped = false;
-        if (auto eit = sidx_enforced_cids.find(rowset->id());
-            eit != sidx_enforced_cids.end() && !eit->second.empty() && !rs_opts.pred_tree.empty()) {
-            const auto& enforced = eit->second;
-            auto cond = [&enforced](const auto& node) { return node.visit(SidxEnforcedColumnChecker{&enforced}); };
-            PredicateAndNode keep_root, drop_root; // true=enforced(drop), false=residual(keep)
-            rs_opts.pred_tree.root().partition_copy(cond, &drop_root, &keep_root);
-            PredicateAndNode keep_zm, drop_zm;
-            rs_opts.pred_tree_for_zone_map.root().partition_copy(cond, &drop_zm, &keep_zm);
-            saved_pred_tree = std::move(rs_opts.pred_tree);
-            saved_zonemap_tree = std::move(rs_opts.pred_tree_for_zone_map);
-            rs_opts.pred_tree = PredicateTree::create(std::move(keep_root));
-            rs_opts.pred_tree_for_zone_map = PredicateTree::create(std::move(keep_zm));
-            stripped = true;
-        }
-        DeferOp restore_pred_tree([&] {
-            if (stripped) {
-                rs_opts.pred_tree = std::move(saved_pred_tree);
-                rs_opts.pred_tree_for_zone_map = std::move(saved_zonemap_tree);
+        RowsetReadOptions eff_opts; // populated (as a copy of rs_opts) only when index_active
+        if (index_active) {
+            eff_opts = rs_opts; // predicates are ObjectPool-owned raw pointers -> shallow, safe copy
+            eff_opts.presupplied_rowid_filter_per_segment = presupplied;
+            // Readback speedup: the candidate bitmap already enforces the
+            // index-covered predicates exactly, so strip them from the base scan
+            // -- e.g. for `MAX(amount) WHERE user_id=...` the base segments read
+            // `amount` alone, not `user_id`.
+            if (enforced != nullptr && !eff_opts.pred_tree.empty()) {
+                auto cond = [enforced](const auto& node) { return node.visit(SidxEnforcedColumnChecker{enforced}); };
+                PredicateAndNode keep_root, drop_root; // true=enforced(drop), false=residual(keep)
+                eff_opts.pred_tree.root().partition_copy(cond, &drop_root, &keep_root);
+                PredicateAndNode keep_zm, drop_zm;
+                eff_opts.pred_tree_for_zone_map.root().partition_copy(cond, &drop_zm, &keep_zm);
+                eff_opts.pred_tree = PredicateTree::create(std::move(keep_root));
+                eff_opts.pred_tree_for_zone_map = PredicateTree::create(std::move(keep_zm));
             }
-        });
+        }
+        // Per-rowset options: the copy when index-active, else the shared base
+        // (which never carries a presupplied filter or stripped predicate).
+        const RowsetReadOptions& read_opts = index_active ? eff_opts : rs_opts;
 
-        // Parallel load captures rs_opts by reference; mutating
-        // presupplied_rowid_filter_per_segment per iteration would race.
-        // Force the serial path whenever a secondary index lookup is in use.
-        const bool use_parallel = config::enable_load_segment_parallel && !config::enable_secondary_index_read;
+        // Segment-parallel read: each task captures its OWN options copy (opts),
+        // so it is race-free even with an active secondary index.
+        const bool use_parallel = config::enable_load_segment_parallel;
         if (use_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [this, rowset, opts = read_opts]() {
 #ifdef BE_TEST
-                Status injected_st;
-                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                if (!injected_st.ok()) {
-                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                }
+                        Status injected_st;
+                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                        if (!injected_st.ok()) {
+                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                        }
 #endif
-                return enhance_error_prompt(rowset->read(schema(), rs_opts));
-            });
+                        return enhance_error_prompt(rowset->read(schema(), opts));
+                    });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
@@ -897,13 +937,13 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
                              << ", try to load rowset serially, rowset_id: " << rowset->id();
-                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), read_opts)));
                 iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
             } else {
                 futures.push_back(task->get_future());
             }
         } else {
-            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+            ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), read_opts)));
             iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
         }
     }
