@@ -83,6 +83,7 @@ public class SqlCredentialRedactor {
             .add("pwd")
             .add("property.sasl.password")
             .add("broker.password")
+            .add("api_key")
             .build();
 
     // Lowercase set for O(1) lookup (case-insensitive matching)

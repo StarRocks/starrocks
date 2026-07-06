@@ -512,6 +512,8 @@ public class GlobalStateMgr {
 
     private final StorageVolumeMgr storageVolumeMgr;
 
+    private final AIProviderMgr aiProviderMgr;
+
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
 
@@ -908,6 +910,8 @@ public class GlobalStateMgr {
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.sqlBlackList = new SqlBlackList();
         this.sqlDigestBlackList = new SqlDigestBlackList();
+
+        this.aiProviderMgr = new AIProviderMgr();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
@@ -1143,6 +1147,10 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public AIProviderMgr getAIProviderMgr() {
+        return aiProviderMgr;
     }
 
     public PipeManager getPipeManager() {
@@ -2175,6 +2183,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
+                .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2413,6 +2422,7 @@ public class GlobalStateMgr {
                 historicalNodeMgr.save(imageWriter);
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
+                aiProviderMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
