@@ -41,4 +41,5 @@ description: "partitions_metaはテーブルのパーティションに関する
 | STORAGE_PATH                  | パーティションのストレージパス。                 |
 | STORAGE_SIZE                  | パーティションのストレージサイズ。               |
 | METADATA_SWITCH_VERSION       | パーティションのメタデータスイッチバージョン。   |
+| VACUUM_VERSION                | パーティションの最後に完了した vacuum パスのバージョンウォーターマーク（これより下は回収済み。未実施は 0）。 |
 | TABLET_BALANCED               | Tablet の配置がパーティション内で均等に分散されているかどうか。 |

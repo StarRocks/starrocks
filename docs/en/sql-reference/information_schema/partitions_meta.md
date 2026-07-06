@@ -41,4 +41,5 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_PATH                  | Storage path of the partition.                               |
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
+| VACUUM_VERSION                | Version watermark of the last completed vacuum pass for the partition (everything below it has been reclaimed; 0 if none yet). |
 | TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |

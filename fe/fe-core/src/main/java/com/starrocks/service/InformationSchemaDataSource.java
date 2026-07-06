@@ -539,6 +539,8 @@ public class InformationSchemaDataSource {
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
+            // VACUUM_VERSION: success watermark of the last completed incremental vacuum pass.
+            partitionMetaInfo.setVacuum_version(physicalPartition.getLastSuccVacuumVersion());
             // MIN_VI_BUILT_VERSION / MAX_VI_BUILT_VERSION
             // Vector-index built-version span across this partition's base-index tablets, for
             // observability (null = no vector index). Async: actual [min, max] — MIN < VISIBLE_VERSION
