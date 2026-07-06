@@ -42,9 +42,9 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 #endif
 
-#include <arrow/testing/gtest_util.h>
 #include <arrow/memory_pool.h>
 #include <arrow/pretty_print.h>
+#include <arrow/testing/gtest_util.h>
 
 #include "base/hash/unaligned_access.h"
 #include "base/types/int128.h"
@@ -554,8 +554,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::ArrayFromJSON(arrow_type,
-                                                       "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
+    auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
     ASSERT_TRUE(s.ok());
     ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
 }
