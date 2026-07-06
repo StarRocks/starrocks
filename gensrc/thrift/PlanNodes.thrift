@@ -479,8 +479,8 @@ struct THdfsScanRange {
     // whether to use JNI scanner to read Avro data (default: false = use native C++ scanner)
     38: optional bool use_avro_jni_reader
 
-    // whether this scan range belongs to a Lance table. Kept for compatibility
-    // with older FE/BE versions that used it to select the Lance JNI reader.
+    // DEPRECATED: Lance scans are selected by the Lance table descriptor.
+    // Retained for wire compatibility with older FE/BE versions.
     39: optional bool use_lance_jni_reader
 
     // Lance dataset URI and fragment id.

@@ -862,12 +862,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
-    bool use_lance_reader = false;
-    bool use_lance_native_reader = false;
-    if (scan_range.__isset.use_lance_jni_reader) {
-        use_lance_reader = scan_range.use_lance_jni_reader;
-        // Default to native for old FE plans that do not carry use_lance_native_reader.
-        use_lance_native_reader = scan_range.use_lance_jni_reader;
+    bool use_lance_reader = dynamic_cast<const LanceTableDescriptor*>(_hive_table) != nullptr;
+    bool use_lance_native_reader = true;
+    if (use_lance_reader) {
         scanner_params.table_specific.lance_dataset_uri = scan_range.dataset_uri;
         scanner_params.table_specific.lance_fragment_id = scan_range.fragment_id;
         if (scan_range.__isset.lance_storage_options) {

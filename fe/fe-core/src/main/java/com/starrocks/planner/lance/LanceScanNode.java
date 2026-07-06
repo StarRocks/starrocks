@@ -190,8 +190,6 @@ public class LanceScanNode extends ScanNode {
         int rowCount = Math.max(fragment.countRows(), 1);
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         boolean useNativeReader = useNativeReader(ConnectContext.getSessionVariableOrDefault());
-        // Keep use_lance_jni_reader as the Lance range marker for FE/BE compatibility.
-        hdfsScanRange.setUse_lance_jni_reader(true);
         hdfsScanRange.setUse_lance_native_reader(useNativeReader);
         hdfsScanRange.setDataset_uri(datasetUri);
         hdfsScanRange.setFragment_id(fragment.getId());
@@ -228,7 +226,6 @@ public class LanceScanNode extends ScanNode {
         }
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setUse_lance_jni_reader(true);
         hdfsScanRange.setUse_lance_native_reader(true);
         hdfsScanRange.setDataset_uri(datasetUri);
         hdfsScanRange.setFragment_id(-1);
