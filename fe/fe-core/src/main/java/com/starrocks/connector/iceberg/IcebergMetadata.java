@@ -852,6 +852,31 @@ public class IcebergMetadata implements ConnectorMetadata {
         return table.schemas().get(snapshot.schemaId());
     }
 
+    // Partition specs actually referenced by the snapshot's data manifests, keyed by spec id. This is
+    // the snapshot's partitioning view (Iceberg plans a snapshot from the specs attached to its
+    // manifests), which can differ from the current table spec after partition evolution. Returns null
+    // when the snapshot is unresolved. Reads only the manifest list, and only for time-travel reads.
+    public static Map<Integer, PartitionSpec> getSnapshotSpecs(org.apache.iceberg.Table table, long snapshotId) {
+        Snapshot snapshot = table.snapshot(snapshotId);
+        if (snapshot == null) {
+            return null;
+        }
+        // The spec never evolved: the only spec is the snapshot's spec; skip the manifest-list read.
+        if (table.specs().size() == 1) {
+            return table.specs();
+        }
+        Map<Integer, PartitionSpec> specsById = new HashMap<>();
+        for (ManifestFile manifest : snapshot.dataManifests(table.io())) {
+            PartitionSpec spec = table.specs().get(manifest.partitionSpecId());
+            if (spec == null) {
+                // A referenced spec is missing from the table metadata: treat the snapshot's
+                // partitioning as unknown (empty map reads as unpartitioned, the conservative view).
+                return Map.of();
+            }
+            specsById.put(manifest.partitionSpecId(), spec);
+        }
+        return specsById;
+    }
 
     private static long getSnapshotIdFromTemporalVersion(org.apache.iceberg.Table table, ConstantOperator version) {
         try {
@@ -1159,7 +1184,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Set<List<String>> scannedPartitions = new HashSet<>();
-        PartitionSpec spec = icebergTable.getNativeTable().spec();
+        // Use the read spec so the extracted values, the partition columns, and the evolution check
+        // below all derive from the same partitioning view (the snapshot's for time travel).
+        PartitionSpec spec = icebergTable.getReadSpec();
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         boolean existPartitionTransformedEvolution = ((IcebergTable) table).hasPartitionTransformedEvolution();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
@@ -1521,7 +1548,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
         // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
-        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadSchema);
+        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
         //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
         //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
         // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.

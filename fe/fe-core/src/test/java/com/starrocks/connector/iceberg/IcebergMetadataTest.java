@@ -4418,7 +4418,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         // Rebinding the table to the snapshot schema must flip both the StarRocks-side full
         // schema (column resolution / result-set metadata) and the schema fed to the BE.
-        icebergTable = icebergTable.withReadSchema(snapshotSchema);
+        icebergTable = icebergTable.withReadMetadata(snapshotSchema,
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
         Assertions.assertNotNull(icebergTable.getColumn("k2"));
         Assertions.assertNull(icebergTable.getColumn("k2_renamed"));
         Assertions.assertNotNull(icebergTable.getReadSchema().findField("k2"));
@@ -4507,8 +4508,9 @@ public class IcebergMetadataTest extends TableTestBase {
         // Latest table is partitioned by both k2 and k3.
         Assertions.assertEquals(List.of("k2", "k3"), icebergTable.getPartitionColumnNames());
 
-        // Binding the snapshot schema must not throw, and must drop the k3 partition column.
-        IcebergTable snapshotTable = icebergTable.withReadSchema(snapshotSchema);
+        // Binding the snapshot read metadata must not throw, and must drop the k3 partition column.
+        IcebergTable snapshotTable = icebergTable.withReadMetadata(snapshotSchema,
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
         Assertions.assertEquals(List.of("k2"), snapshotTable.getPartitionColumnNames());
         Assertions.assertTrue(snapshotTable.getPartitionColumns().stream().allMatch(java.util.Objects::nonNull));
 
@@ -4530,6 +4532,37 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(3, res.stream()
                 .map(f -> (IcebergRemoteFileInfo) f)
                 .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+    }
+
+    @Test
+    public void testTimeTravelDropsPartitionFieldAddedOnPreexistingColumn() {
+        // S1 committed when the table was partitioned only by k2. Later the spec evolves to also
+        // partition by k1 -- a column that ALREADY existed at S1. Filtering the current spec by
+        // schema membership would wrongly keep k1 (its source column is in the snapshot schema), so
+        // the snapshot must be read with its own spec: at S1 only k2 is a partition column.
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+
+        mockedNativeTableB.updateSpec().addField("k1").commit();
+        mockedNativeTableB.refresh();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
+                mockedNativeTableB, Maps.newHashMap());
+        // Latest table is partitioned by both k2 and the newly added k1.
+        Assertions.assertTrue(icebergTable.getPartitionColumnNames().contains("k1"));
+
+        Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1);
+        IcebergTable snapshotTable = icebergTable.withReadMetadata(snapshotSchema,
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
+        // The k1 partition field was added after S1, so S1 is partitioned only by k2.
+        Assertions.assertEquals(List.of("k2"), snapshotTable.getPartitionColumnNames());
+        Assertions.assertFalse(snapshotTable.isUnPartitioned());
+        TTableDescriptor tableDescriptor = snapshotTable.toThrift(Lists.newArrayList());
+        Assertions.assertEquals(1, tableDescriptor.getIcebergTable().getPartition_info().size());
+        Assertions.assertEquals("k2",
+                tableDescriptor.getIcebergTable().getPartition_info().get(0).getSource_column_name());
     }
 
     @Test

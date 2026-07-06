@@ -129,6 +129,7 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private transient Schema readSchema;
+    private transient Map<Integer, PartitionSpec> readSpecsById;
     private List<Column> partitionColumns;
     private Optional<Boolean> hasBucketProperties = Optional.empty();
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
@@ -212,7 +213,7 @@ public class IcebergTable extends Table {
     public boolean isAllPartitionColumnsAlwaysIdentity() {
         // now we are sure we have never applied transformation,
         // we check if all partition columns are identity.
-        for (PartitionField field : getNativeTable().spec().fields()) {
+        for (PartitionField field : getReadSpec().fields()) {
             if (!field.transform().isIdentity()) {
                 return false;
             }
@@ -221,7 +222,7 @@ public class IcebergTable extends Table {
     }
 
     public PartitionField getPartitionField(String partitionColumnName) {
-        List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
+        List<PartitionField> allPartitionFields = getReadSpec().fields();
         Schema schema = getReadSchema();
         for (PartitionField field : allPartitionFields) {
             if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
@@ -272,8 +273,8 @@ public class IcebergTable extends Table {
     //  in the same partition column.
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
-        return (!isV2Format() && getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
-                (isV2Format() && getNativeTable().spec().specId() > 0);
+        return (!isV2Format() && getReadSpec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
+                (isV2Format() && getReadSpec().specId() > 0);
     }
 
     public boolean isV2Format() {
@@ -319,7 +320,7 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
+        return getReadSpec().isUnpartitioned();
     }
 
     public boolean isPartitioned() {
@@ -332,7 +333,7 @@ public class IcebergTable extends Table {
     }
 
     public List<String> getPartitionColumnNamesWithTransform() {
-        PartitionSpec partitionSpec = getNativeTable().spec();
+        PartitionSpec partitionSpec = getReadSpec();
         return IcebergApiConverter.toPartitionFields(partitionSpec, false);
     }
 
@@ -441,35 +442,54 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
-    // Return a per-query copy bound to the given read schema (a targeted snapshot's schema for
-    // time travel), with the StarRocks full schema rebuilt from it.
-    public IcebergTable withReadSchema(Schema schema) {
+    // Return a per-query copy bound to the given read metadata (a targeted snapshot's schema and the
+    // partition specs its manifests reference, for time travel), with the StarRocks full schema
+    // rebuilt from the read schema.
+    public IcebergTable withReadMetadata(Schema readSchema, Map<Integer, PartitionSpec> readSpecsById) {
         IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
-                comment, IcebergApiConverter.toFullSchemas(schema, getNativeTable()), getNativeTable(), icebergProperties);
-        table.readSchema = schema;
+                comment, IcebergApiConverter.toFullSchemas(readSchema, getNativeTable()), getNativeTable(),
+                icebergProperties);
+        table.readSchema = readSchema;
+        table.readSpecsById = readSpecsById;
         table.setUniqueConstraints(getUniqueConstraints());
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         table.metricsReporter = metricsReporter;
         return table;
     }
 
-    // Current-spec partition fields whose source column exists in the read schema. Time travel
-    // drops fields added by later spec evolution; non-time-travel keeps the full spec.
+    // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
+    // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
+    // are not exposed; ordinary reads keep the current spec.
     private List<PartitionField> readSchemaPartitionFields() {
         Schema schema = getReadSchema();
-        return getNativeTable().spec().fields().stream()
+        return getReadSpec().fields().stream()
                 .filter(field -> schema.findColumnName(field.sourceId()) != null)
                 .collect(Collectors.toList());
     }
 
     // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
-    // time-travel read (bound via withReadSchema), otherwise the current table schema.
+    // time-travel read (bound via withReadMetadata), otherwise the current table schema.
     public Schema getReadSchema() {
         return readSchema != null ? readSchema : getNativeTable().schema();
     }
 
-    // True when a time-travel read has pinned an explicit snapshot schema via withReadSchema. Lets
-    // callers tell a time-travel read (keep the snapshot schema) from an ordinary read.
+    // The partition spec this table instance is read with. For a time-travel read this is derived
+    // from the target snapshot's manifests: a single spec is the snapshot's partitioning; multiple
+    // specs (mixed partitioning within the snapshot) are treated as unpartitioned so table-level
+    // partition-metadata optimizations are disabled and correctness is preserved (scan planning still
+    // uses each file's own spec). Ordinary reads use the current table spec.
+    public PartitionSpec getReadSpec() {
+        if (readSpecsById == null) {
+            return getNativeTable().spec();
+        }
+        if (readSpecsById.size() == 1) {
+            return readSpecsById.values().iterator().next();
+        }
+        return PartitionSpec.unpartitioned();
+    }
+
+    // True when a time-travel read has pinned explicit read metadata via withReadMetadata. Lets
+    // callers tell a time-travel read (keep the snapshot schema/spec) from an ordinary read.
     public boolean hasReadSchema() {
         return readSchema != null;
     }

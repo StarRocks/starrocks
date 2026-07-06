@@ -114,6 +114,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 
 import java.util.ArrayDeque;
@@ -2509,12 +2510,18 @@ public class QueryAnalyzer {
         }
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
         Schema snapshotSchema = IcebergMetadata.getSnapshotSchema(nativeTable, snapshotId.get());
-        if (snapshotSchema != null && snapshotSchema.schemaId() != nativeTable.schema().schemaId()) {
-            IcebergTable snapshotTable = icebergTable.withReadSchema(snapshotSchema);
-            tableRelation.setTable(snapshotTable);
-            return snapshotTable;
+        if (snapshotSchema == null) {
+            // Legacy metadata without a per-snapshot schema id: keep the current table state.
+            return icebergTable;
         }
-        return icebergTable;
+        // Pin the snapshot's read metadata (schema + partition specs). Bind it whenever time travel
+        // resolves a snapshot, not only when the schema id differs: partition evolution can change the
+        // spec while leaving the schema id unchanged, and the descriptor/partition metadata must then
+        // still reflect the snapshot rather than the current spec.
+        Map<Integer, PartitionSpec> snapshotSpecs = IcebergMetadata.getSnapshotSpecs(nativeTable, snapshotId.get());
+        IcebergTable snapshotTable = icebergTable.withReadMetadata(snapshotSchema, snapshotSpecs);
+        tableRelation.setTable(snapshotTable);
+        return snapshotTable;
     }
 
     private Table resolveTableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc) {
