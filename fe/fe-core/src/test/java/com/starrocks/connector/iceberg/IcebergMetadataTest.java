@@ -4566,6 +4566,41 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testTimeTravelForcesLocalPlanning() throws Exception {
+        // Time travel must plan locally even when the session requests distributed planning: the remote
+        // metadata scanner binds pushed-down predicates against the current specs, which fails for a
+        // column renamed after the snapshot. Local planning rebinds to the snapshot spec, so a predicate
+        // on the old column name plans the snapshot's files instead of routing to the remote scanner.
+        StarRocksAssert starRocksAssert = new StarRocksAssert();
+        starRocksAssert.getCtx().getSessionVariable().setPlanMode(PlanMode.DISTRIBUTED.modeName());
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        long s1 = mockedNativeTableB.currentSnapshot().snapshotId();
+        mockedNativeTableB.updateSchema().renameColumn("k2", "k2_renamed").commit();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", IcebergApiConverter.toFullSchemas(mockedNativeTableB.schema(), mockedNativeTableB),
+                mockedNativeTableB, Maps.newHashMap());
+        icebergTable = icebergTable.withReadMetadata(IcebergMetadata.getSnapshotSchema(mockedNativeTableB, s1),
+                IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, s1));
+
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(s1)))
+                        .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
+        Assertions.assertEquals(3, res.stream()
+                .map(f -> (IcebergRemoteFileInfo) f)
+                .map(fileInfo -> fileInfo.getFileScanTask().file().recordCount()).reduce(0L, Long::sum), 0.001);
+    }
+
+    @Test
     public void testTimeTravelSnapshotSchemaThroughAnalyzer() throws Exception {
         // End-to-end through QueryAnalyzer: SELECT * VERSION AS OF <old snapshot> must expose the
         // old column name, and the analyzer must pin the resolved version range on the relation

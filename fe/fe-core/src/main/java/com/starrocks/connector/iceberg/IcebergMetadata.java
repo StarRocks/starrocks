@@ -1540,8 +1540,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
+        // Force local planning for time-travel reads: the remote metadata-collection scanner
+        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
+        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
+        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
+        // metadata reader honors the snapshot schema/specs.
+        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode(connectContext), connectContext);
+                catalogName, dbName, tableName, planMode, connectContext);
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
