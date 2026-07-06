@@ -24,6 +24,7 @@
 #include "arrow/c/bridge.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "exec/lance/lance_rs_ffi.h"
 #include "exec/file_scanner/parquet_scanner.h"
@@ -214,11 +215,11 @@ Status LanceNativeReader::_open_reader() {
     }
 
     char* error = nullptr;
-    int result =
-            sr_lance_reader_open(to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
-                                 _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(),
-                                 _max_chunk_size, storage_options.data(), storage_options.size(), vector_options_ptr,
-                                 &_reader, &error);
+    int result = sr_lance_reader_open(
+            to_lance_string(_scanner_params.table_specific.lance_dataset_uri),
+            _scanner_params.table_specific.lance_fragment_id, fields.data(), fields.size(), _max_chunk_size,
+            storage_options.data(), storage_options.size(), vector_options_ptr, config::lance_index_cache_size_bytes,
+            config::lance_metadata_cache_size_bytes, &_reader, &error);
     if (result == SR_LANCE_ERROR || _reader == nullptr) {
         return lance_error_status(
                 fmt::format("Failed to open Lance native reader for {}",

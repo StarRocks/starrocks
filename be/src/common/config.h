@@ -930,6 +930,13 @@ CONF_Int32(routine_load_pulsar_timeout_second, "10");
 // default is 20, batch_size's defualt value is 1024 means 20 * 1024 rows will be cached
 CONF_mInt32(max_memory_sink_batch_count, "20");
 
+// Process-wide Lance Rust SDK index cache size in bytes. 0 disables the index
+// cache. Takes effect after BE/CN restart.
+CONF_Int64(lance_index_cache_size_bytes, "6442450944");
+// Process-wide Lance Rust SDK metadata cache size in bytes. 0 disables the
+// metadata cache. Takes effect after BE/CN restart.
+CONF_Int64(lance_metadata_cache_size_bytes, "1073741824");
+
 // This configuration is used for the context gc thread schedule period
 // note: unit is minute, default is 5min
 CONF_mInt32(scan_context_gc_interval_min, "5");

@@ -446,6 +446,24 @@ This topic introduces the following types of BE configurations:
 - Description: Limits the maximum number of concurrently running connector (HDFS/remote) scanners that a ConnectorScanNode can have. During scan startup the node computes an estimated concurrency (based on memory, chunk size and scanner_row_num) and then caps it with this value to determine how many scanners and chunks to reserve and how many scanner threads to start. It is also consulted when scheduling pending scanners at runtime (to avoid oversubscription) and when deciding how many pending scanners can be re-submitted considering file-handle limits. Lowering this reduces threads, memory and open-file pressure at the cost of potential throughput; increasing it raises concurrency and resource usage.
 - Introduced in: v3.2.0
 
+### lance_index_cache_size_bytes
+
+- Default: 6442450944
+- Type: Int64
+- Unit: Bytes
+- Is mutable: No
+- Description: The process-wide Lance Rust SDK index cache size for Lance native readers on each BE or CN. The default value is 6 GiB. Set it to `0` to disable the Lance SDK index cache. This cache is independent from StarRocks Data Cache. The value is used when the Lance SDK session is initialized and takes effect after BE or CN restart.
+- Introduced in: v3.5.16
+
+### lance_metadata_cache_size_bytes
+
+- Default: 1073741824
+- Type: Int64
+- Unit: Bytes
+- Is mutable: No
+- Description: The process-wide Lance Rust SDK metadata cache size for Lance native readers on each BE or CN. The default value is 1 GiB. Set it to `0` to disable the Lance SDK metadata cache. This cache is independent from StarRocks Data Cache. The value is used when the Lance SDK session is initialized and takes effect after BE or CN restart.
+- Introduced in: v3.5.16
+
 ### query_max_memory_limit_percent
 
 - Default: 90

@@ -434,6 +434,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 `0` 表示对并发不做限制。
 - 引入版本：-
 
+### lance_index_cache_size_bytes
+
+- 默认值：6442450944
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：否
+- 描述：每个 BE 或 CN 上 Lance native reader 使用的进程级 Lance Rust SDK index cache 大小。默认值为 6 GiB。设置为 `0` 表示禁用 Lance SDK index cache。该缓存独立于 StarRocks Data Cache。该参数在 Lance SDK Session 初始化时生效，修改后需要重启 BE 或 CN。
+- 引入版本：v3.5.16
+
+### lance_metadata_cache_size_bytes
+
+- 默认值：1073741824
+- 类型：Int64
+- 单位：Bytes
+- 是否动态：否
+- 描述：每个 BE 或 CN 上 Lance native reader 使用的进程级 Lance Rust SDK metadata cache 大小。默认值为 1 GiB。设置为 `0` 表示禁用 Lance SDK metadata cache。该缓存独立于 StarRocks Data Cache。该参数在 Lance SDK Session 初始化时生效，修改后需要重启 BE 或 CN。
+- 引入版本：v3.5.16
+
 ### query_max_memory_limit_percent
 
 - 默认值：90

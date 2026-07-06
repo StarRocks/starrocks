@@ -519,6 +519,8 @@
         "arrow_io_coalesce_read_max_buffer_size",
         "arrow_io_coalesce_read_max_distance_size",
         "arrow_read_batch_size",
+        "lance_index_cache_size_bytes",
+        "lance_metadata_cache_size_bytes",
         "avro_reader_buffer_size_bytes",
         "predicate_sampling_trigger_selectivity_threshold",
         "es_index_max_result_window",
