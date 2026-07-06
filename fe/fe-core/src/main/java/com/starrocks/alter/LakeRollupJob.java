@@ -133,9 +133,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         if (jobState == JobState.RUNNING) {
             jobState = JobState.WAITING_TXN;
         }
-        // Same normalization replay() performs: drop queue entries and start from an empty
-        // batch - runWaitingTxnJob appends directly to the field (double-add hazard).
-        AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
+        // Same normalization replay() performs: start from an empty batch - runWaitingTxnJob
+        // appends directly to the field (double-add hazard). No AgentTaskQueue cleanup needed:
+        // the demotion drain (abandonInFlightAgentTasks) already emptied the queue.
         rollupBatchTask = new AgentBatchTask();
         // whereClause deliberately KEPT: this class has no gsonPostProcess restore, so a real
         // reload silently loses the sync-MV filter (pre-existing reload bug); keep the

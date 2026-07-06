@@ -181,11 +181,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (jobState == JobState.RUNNING) {
             jobState = JobState.WAITING_TXN;
         }
-        // Mirror cancelImpl's queue cleanup, then start from an empty batch: the WAITING_TXN
-        // handler APPENDS to it (double-add hazard), and getInfo dereferences the field, so
-        // fresh-empty rather than null. watershedTxnId/Gtid stay - they are durable with the
+        // Start from an empty batch: the WAITING_TXN handler APPENDS to it (double-add hazard),
+        // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
+        // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
+        // queue before this hook runs. watershedTxnId/Gtid stay - they are durable with the
         // WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
-        AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         schemaChangeBatchTask = new AgentBatchTask();
         createReplicaLatch = null;
         waitingCreatingReplica.set(false);

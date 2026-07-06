@@ -131,14 +131,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             jobState = JobState.PENDING;
         }
         // runRunningJob dispatches ONLY behind a null guard - a stale batch would silently
-        // suppress the re-send and wedge the job until timeout. Drop queue entries (mirror
-        // cancelImpl) and null the field so the re-run re-dispatches.
-        if (batchTask != null) {
-            for (AgentTask task : batchTask.getAllTasks()) {
-                AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
-            }
-            batchTask = null;
-        }
+        // suppress the re-send and wedge the job until timeout. Null the field so the re-run
+        // re-dispatches. No AgentTaskQueue cleanup needed: the demotion drain
+        // (abandonInFlightAgentTasks) already emptied the queue before this hook runs.
+        batchTask = null;
     }
 
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
