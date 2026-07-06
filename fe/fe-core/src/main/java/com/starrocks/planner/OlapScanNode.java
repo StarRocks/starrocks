@@ -129,7 +129,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import javax.annotation.Nullable;
 
@@ -141,7 +140,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<String> selectedPartitionNames = Lists.newArrayList();
-    private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -281,14 +279,11 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
     public void setSelectedPartitionIds(List<Long> selectedPartitionIds) {
         this.selectedPartitionIds = selectedPartitionIds;
+        this.selectedPartitionNum = selectedPartitionIds.size();
     }
 
     public List<String> getSelectedPartitionNames() {
         return selectedPartitionNames;
-    }
-
-    public List<Long> getSelectedPartitionVersions() {
-        return selectedPartitionVersions;
     }
 
     public List<Expr> getPrunedPartitionPredicates() {
@@ -617,7 +612,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         String visibleVersionStr = String.valueOf(visibleVersion);
         boolean fillDataCache = olapTable.isEnableFillDataCache(partition);
         selectedPartitionNames.add(partition.getName());
-        selectedPartitionVersions.add(visibleVersion);
 
         checkSomeAliveComputeNode();
         boolean checkScanRangeSize = false;
@@ -1610,19 +1604,24 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                             .collect(Collectors.toSet());
             normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
         } else {
-            List<Long> partitionIds = getSelectedPartitionIds();
+            // scanPartitionVersions is keyed by physical partition id and is populated in
+            // addScanRangeLocations() with exactly the physical partitions that were actually
+            // scanned, so it is the authoritative physicalPartitionId -> version source -- no need
+            // to re-derive physical ids by re-expanding getSelectedPartitionIds() (logical ids).
+            Map<Long, Long> partitionVersions = getScanPartitionVersions();
 
-            List<Long> physicalPartitionIds = new ArrayList<>();
-            for (Long partitionId : partitionIds) {
-                Partition partition = olapTable.getPartition(partitionId);
-                physicalPartitionIds.addAll(partition.getSubPartitions().stream()
-                        .map(PhysicalPartition::getId).collect(Collectors.toList()));
+            // Sanity check: every physical partition actually scanned must belong to a selected
+            // logical partition. Cheap and harmless; guards against the two structures drifting
+            // apart in the future.
+            Set<Long> selectedLogicalPartitionIds = Sets.newHashSet(getSelectedPartitionIds());
+            for (Long physicalPartitionId : partitionVersions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null &&
+                        selectedLogicalPartitionIds.contains(physicalPartition.getParentId()));
             }
 
-            List<Long> partitionVersions = getSelectedPartitionVersions();
-            Preconditions.checkState(physicalPartitionIds.size() == partitionVersions.size());
-            List<Pair<Long, Long>> partitionVersionAndIds = IntStream.range(0, physicalPartitionIds.size())
-                    .mapToObj(i -> Pair.create(partitionVersions.get(i), physicalPartitionIds.get(i)))
+            List<Pair<Long, Long>> partitionVersionAndIds = partitionVersions.entrySet().stream()
+                    .map(e -> Pair.create(e.getValue(), e.getKey()))
                     .sorted(Pair.comparingBySecond()).collect(Collectors.toList());
             scanNode.setSelected_partition_ids(
                     partitionVersionAndIds.stream().map(p -> p.second).collect(Collectors.toList()));
@@ -1746,7 +1745,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     public void clearScanNodeForThriftBuild() {
         sortColumn = null;
         selectedPartitionNames.clear();
-        selectedPartitionVersions.clear();
         result.clear();
         scanBackendIds.clear();
         appliedDictStringColumns.clear();
