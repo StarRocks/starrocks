@@ -22,7 +22,6 @@
 #include "common/config_secondary_index_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
-#include "runtime/exec_env.h"
 #include "storage/index/secondary_sorted/index_registry.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_compaction_policy.h"
