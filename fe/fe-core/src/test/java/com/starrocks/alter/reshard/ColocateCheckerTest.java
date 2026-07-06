@@ -621,6 +621,294 @@ public class ColocateCheckerTest {
         colocateTableIndex.markGroupUnstable(groupId, /* needEditLog */ false);
     }
 
+    @Test
+    public void testConvergenceNegativeCacheSkipsQueryWithinTtl() {
+        // Build inputs from the real (stable) group; do NOT mark it unstable so the shared
+        // background daemon stays idle and the query count is deterministic.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            Assertions.assertFalse(
+                    checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId));
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // Advance the clock but stay within the TTL window: the cached not-converged entry
+            // must short-circuit the second call with no additional RPC.
+            clock[0] = 2000L;
+            Assertions.assertFalse(
+                    checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId));
+            Assertions.assertEquals(1, queryCount[0],
+                    "second call within TTL must be served from the negative cache");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergenceCacheEntryExpiresAndReQueries() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // Advance past the TTL: the stale entry must be ignored and the group re-queried.
+            clock[0] = 1000L + 5000L + 1L;
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(2, queryCount[0], "an expired cache entry must be re-queried");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergenceCacheTtlIsRuntimeMutable() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // Clock advances to within the original 5000ms TTL (would be a cache hit)...
+            clock[0] = 3000L;
+            // ...but shrinking the TTL at runtime makes the 2000ms-old entry expired -> re-query.
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 1000;
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(2, queryCount[0],
+                    "shrinking the TTL config at runtime must expire the cached entry and re-query");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergedResultIsNotCached() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.TRUE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            Assertions.assertTrue(
+                    checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId));
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // Same instant, no clock advance: a converged (true) result must NOT be cached, so the
+            // second call queries again -> the stable flip always rides a fresh read.
+            Assertions.assertTrue(
+                    checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId));
+            Assertions.assertEquals(2, queryCount[0], "a converged result must never be served from cache");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergenceCacheDisabledWhenTtlNonPositive() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            // Seed a fresh negative entry while the cache is enabled.
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // TTL 0 disables the cache: the seeded entry must not be consulted -> re-query.
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 0;
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(2, queryCount[0], "TTL 0 must disable the cache and re-query");
+
+            // A negative TTL disables it too.
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = -1;
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(3, queryCount[0], "a negative TTL must disable the cache and re-query");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergenceCacheTreatsBackwardClockAsExpired() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS");
+
+            // Wall clock jumps backward (e.g. NTP correction): negative elapsed must be treated as
+            // expired and re-queried, never as an indefinitely fresh entry.
+            clock[0] = 500L;
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(2, queryCount[0], "a backward clock must be treated as expired and re-query");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
+    @Test
+    public void testConvergenceCacheClearedWhenNoUnstableGroups() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        List<ColocateTableIndex.GroupId> peers =
+                colocateTableIndex.getAllGroupIdsWithSameColocateGroupId(groupId.grpId);
+
+        long previousTtl = Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms;
+        Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = 5000;
+        long[] clock = {1000L};
+        int[] queryCount = {0};
+        new MockUp<ColocateConvergenceCache>() {
+            @Mock
+            long currentTimeMillis() {
+                return clock[0];
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Boolean> queryShardGroupStable(List<Long> shardGroupIds, long workerGroupId) {
+                queryCount[0]++;
+                return Collections.nCopies(shardGroupIds.size(), Boolean.FALSE);
+            }
+        };
+        try {
+            ColocateChecker checker = new ColocateChecker();
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(1, queryCount[0], "first call must query StarOS and seed the cache");
+
+            // The group is stable (never marked unstable), so a cycle finds no unstable groups and
+            // must clear the negative cache. The next call within TTL then re-queries (cache miss).
+            Assertions.assertFalse(colocateTableIndex.hasUnstableGroups(),
+                    "precondition: no unstable groups so runOneCycle takes the cache-clearing fast path");
+            checker.runOneCycle();
+            checker.isPlacementConverged(colocateTableIndex, peers, expectedRanges, groupId.grpId);
+            Assertions.assertEquals(2, queryCount[0],
+                    "runOneCycle with no unstable groups must clear the cache, forcing a re-query");
+        } finally {
+            Config.tablet_reshard_colocate_checker_convergence_cache_ttl_ms = previousTtl;
+        }
+    }
+
     // ---- Misplaced-PACK-group detection (pure, no cluster) ----
     //
     // These exercise the read-only detection logic that reassignShardGroups consumes. They build
