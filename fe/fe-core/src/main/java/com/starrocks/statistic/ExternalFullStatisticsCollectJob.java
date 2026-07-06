@@ -97,6 +97,13 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // because we can not generate partition predicates for it.
     private static final Set<String> DO_NOT_COLLECT_PARTITIONS = Set.of(ICEBERG_DEFAULT_PARTITION);
 
+    // Conservative mirror of BE's primary_key_limit_size default (be/src/common/config.h) and its
+    // per-field VARCHAR encoding overhead, used only to decide whether to log a warning below -
+    // table_uuid is always hashed (StatisticUtils.hashTableUuidForPkStorage) regardless of this
+    // estimate, so an inaccurate guess here never causes a correctness problem.
+    private static final int EXTERNAL_STATS_PK_LIMIT_ESTIMATE = 128;
+    private static final int PK_FIELD_OVERHEAD_ESTIMATE = 12;
+
     public ExternalFullStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                             List<String> columnNames, List<Type> columnTypes,
                                             StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -127,6 +134,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         LOG.info("[ExternalStats] collect start | jobId={} catalog={} db={} table={} partitions={} columns={}",
                 jobId, catalogName, db.getOriginName(), table.getName(),
                 partitionNames.size(), columnNames.size());
+        logIfRawKeyWouldExceedPkLimit(jobId);
 
         Map<String, String> extendedInfo = new LinkedHashMap<>();
         extendedInfo.put("table_format", table.getType().name().toLowerCase(Locale.ROOT));
@@ -177,6 +185,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             flushInsertStatisticsData(context, true);
+            cleanupStaleRawKeyedRows(context, jobId);
         } catch (Exception e) {
             status = "FAILED";
             failureReason = e.getMessage();
@@ -187,6 +196,38 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                     jobId, catalogName, db.getOriginName(), table.getName(),
                     status, System.currentTimeMillis() - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
+        }
+    }
+
+    // table_uuid is always hashed for storage (StatisticUtils.hashTableUuidForPkStorage), so this
+    // never affects correctness. It's a diagnostic-only warning to confirm which tables actually
+    // would have hit "primary key size exceed the limit" pre-hashing (e.g. long Iceberg
+    // catalog/db/table names combined with long partition_name values, see the Demandbase case).
+    private void logIfRawKeyWouldExceedPkLimit(long jobId) {
+        String rawTableUuid = table.getUUID();
+        int maxPartitionNameLen = partitionNames.stream().mapToInt(String::length).max().orElse(0);
+        int maxColumnNameLen = columnNames.stream().mapToInt(String::length).max().orElse(0);
+        int estimatedRawPkLen = rawTableUuid.length() + maxPartitionNameLen + maxColumnNameLen + PK_FIELD_OVERHEAD_ESTIMATE;
+        if (estimatedRawPkLen > EXTERNAL_STATS_PK_LIMIT_ESTIMATE) {
+            LOG.warn("[ExternalStats] table_uuid hashed | jobId={} catalog={} db={} table={} rawTableUuidLen={} " +
+                            "maxPartitionNameLen={} maxColumnNameLen={} estimatedRawPkLen={} limitEstimate={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), rawTableUuid.length(),
+                    maxPartitionNameLen, maxColumnNameLen, estimatedRawPkLen, EXTERNAL_STATS_PK_LIMIT_ESTIMATE);
+        }
+    }
+
+    // Deletes the stale raw-keyed rows for exactly the (partition, column) pairs this job just
+    // (re-)wrote under the hashed table_uuid. Purely storage hygiene: buildQueryExternalFullStatisticsSQL
+    // dedups by (partition_name, column_name, latest update_time) internally, so a lingering stale
+    // row is never double-counted even if this cleanup fails - it just wastes a bit of space until
+    // the next collection retries it. Best-effort: must never fail a job whose actual stats write
+    // already succeeded.
+    private void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+        String rawTableUuid = table.getUUID();
+        boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
+        if (!ok) {
+            LOG.warn("[ExternalStats] failed to clean up stale raw-keyed rows | jobId={} catalog={} db={} table={}",
+                    jobId, catalogName, db.getOriginName(), table.getName());
         }
     }
 
@@ -344,11 +385,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
+        String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            params.add("'" + table.getUUID() + "'");
+            params.add("'" + hashedTableUuid + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getPartitionName()) + "'");
             params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
             params.add("'" + catalogName + "'");
@@ -362,7 +404,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("'" + data.getMin() + "'");
             params.add("now()");
             // int
-            row.add(new StringLiteral(table.getUUID())); // table id, wait to byte
+            row.add(new StringLiteral(hashedTableUuid)); // table id, wait to byte
             row.add(new StringLiteral(data.getPartitionName()));
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
             row.add(new StringLiteral(catalogName));
