@@ -49,6 +49,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/flat_json_metrics.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -490,7 +491,19 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
         int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
-        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+        // The lake TabletReader uses _morsel->rowsets() only when it is non-empty, and otherwise
+        // loads the rowsets from the tablet metadata (see lake::TabletReader). For lake scans
+        // _morsel->rowsets() is typically empty, so capturing it here records an EMPTY snapshot and
+        // forces global late materialization to fall back to live tablet metadata -- which races
+        // with concurrent ingest/compaction and makes row locators unresolvable ("not found lake
+        // rssid") or produces an empty materialization. Capture the same rowsets the reader reads.
+        if (!_morsel->rowsets().empty()) {
+            glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+        } else {
+            auto lake_rowsets = lake::Rowset::get_rowsets(_provider->tablet_manager(), _tablet.metadata());
+            std::vector<BaseRowsetSharedPtr> base_rowsets(lake_rowsets.begin(), lake_rowsets.end());
+            glm_ctx->capture_rowsets(_scan_range.tablet_id, version, base_rowsets);
+        }
     }
 
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
