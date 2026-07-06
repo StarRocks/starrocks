@@ -112,6 +112,24 @@ public:
                                                                          ObjectPool* obj_pool,
                                                                          OlapReaderStatistics* stats = nullptr);
 
+    // Cheap selectivity probe for the multi-index AND cost gate: counts how
+    // many index rows match |source_pred_tree| WITHOUT decoding __sidx_pos__
+    // or building a Roaring bitmap (reads only the index key columns, applies
+    // the same remapped predicate + zone-map pruning). |stop_at| bounds the
+    // work: the scan returns as soon as the count exceeds |stop_at| (the exact
+    // value past the cap does not matter to the gate), so a broad predicate is
+    // probed in O(stop_at) rather than O(matches). Returns min(matches,
+    // stop_at + 1). |stop_at| <= 0 means count everything.
+    StatusOr<int64_t> estimate_match_count(const PredicateTree& source_pred_tree, ObjectPool* obj_pool, int64_t stop_at,
+                                           OlapReaderStatistics* stats = nullptr);
+
+    // Like estimate_match_count(), memoized across morsels the same way
+    // lookup_cached() memoizes the bitmap. |cache_key| must uniquely identify
+    // (.idx file, predicate, stop_at).
+    StatusOr<int64_t> estimate_match_count_cached(const std::string& cache_key, const PredicateTree& source_pred_tree,
+                                                  ObjectPool* obj_pool, int64_t stop_at,
+                                                  OlapReaderStatistics* stats = nullptr);
+
     const SecondaryIndexFilePB& file_pb() const { return _file_pb; }
 
     // Covering-index fast path: when the query's predicate columns AND its

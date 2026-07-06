@@ -14,6 +14,7 @@
 
 #include "storage/index/secondary_sorted/secondary_index_reader.h"
 
+#include <limits>
 #include <list>
 #include <mutex>
 
@@ -399,6 +400,100 @@ StatusOr<std::shared_ptr<const PerSegmentRowidBitmap>> SecondaryIndexReader::loo
             entry->result = res.status();
         }
     });
+    return entry->result;
+}
+
+StatusOr<int64_t> SecondaryIndexReader::estimate_match_count(const PredicateTree& source_pred_tree,
+                                                             ObjectPool* obj_pool, int64_t stop_at,
+                                                             OlapReaderStatistics* stats) {
+    if (_segment == nullptr) return static_cast<int64_t>(0);
+
+    MonotonicStopWatch watch;
+    if (stats != nullptr) watch.start();
+    DeferOp timer([&] {
+        if (stats != nullptr) stats->secondary_index_lookup_ns += watch.elapsed_time();
+    });
+
+    // Read only the index KEY columns [0, _encoded_pos_col_idx) -- not the
+    // 8-byte __sidx_pos__ column. We only need the matched row count, so we
+    // skip the position decode and the Roaring build entirely.
+    std::vector<ColumnId> cids;
+    cids.reserve(_encoded_pos_col_idx);
+    for (uint32_t c = 0; c < _encoded_pos_col_idx; ++c) cids.push_back(static_cast<ColumnId>(c));
+    Schema read_schema = ChunkHelper::convert_schema(_index_schema, cids);
+
+    OlapReaderStatistics idx_scan_stats;
+    SegmentReadOptions read_opts;
+    read_opts.fs = _fs;
+    read_opts.stats = &idx_scan_stats;
+    if (obj_pool != nullptr && !source_pred_tree.empty()) {
+        read_opts.pred_tree = build_remapped_predicate_tree(source_pred_tree, _source_index_col_ids, obj_pool);
+        read_opts.pred_tree_for_zone_map = read_opts.pred_tree;
+    }
+
+    ASSIGN_OR_RETURN(auto iter, _segment->new_iterator(read_schema, read_opts));
+    if (iter == nullptr) return static_cast<int64_t>(0); // zone-map pruned
+
+    ASSIGN_OR_RETURN(auto chunk, RuntimeChunkHelper::new_chunk_checked(read_schema, kReadChunkSize));
+    int64_t count = 0;
+    const int64_t cap = (stop_at > 0) ? stop_at : std::numeric_limits<int64_t>::max();
+    while (true) {
+        chunk->reset();
+        Status s = iter->get_next(chunk.get());
+        if (s.is_end_of_file()) break;
+        RETURN_IF_ERROR(s);
+        count += static_cast<int64_t>(chunk->num_rows());
+        if (stats != nullptr) stats->secondary_index_rows_scanned += static_cast<int64_t>(chunk->num_rows());
+        if (count > cap) return cap + 1; // past the gate's threshold; exact value irrelevant
+    }
+    return count;
+}
+
+// Memoized match-count probe, mirroring lookup_cached()'s call_once sharing so
+// the identical .idx probe runs once per (file, predicate, stop_at) instead of
+// once per morsel.
+namespace {
+struct CountCacheEntry {
+    std::once_flag once;
+    StatusOr<int64_t> result{0};
+};
+class CountResultCache {
+public:
+    static CountResultCache& instance() {
+        static CountResultCache c;
+        return c;
+    }
+    std::shared_ptr<CountCacheEntry> get_or_create(const std::string& key) {
+        std::lock_guard<std::mutex> l(_mu);
+        if (auto it = _index.find(key); it != _index.end()) {
+            _entries.splice(_entries.begin(), _entries, it->second);
+            return it->second->second;
+        }
+        auto entry = std::make_shared<CountCacheEntry>();
+        _entries.emplace_front(key, entry);
+        _index[key] = _entries.begin();
+        const size_t cap = static_cast<size_t>(std::max<int64_t>(1, config::secondary_index_reader_cache_capacity));
+        while (_entries.size() > cap) {
+            _index.erase(_entries.back().first);
+            _entries.pop_back();
+        }
+        return entry;
+    }
+
+private:
+    std::mutex _mu;
+    std::list<std::pair<std::string, std::shared_ptr<CountCacheEntry>>> _entries;
+    std::unordered_map<std::string, decltype(_entries)::iterator> _index;
+};
+} // namespace
+
+StatusOr<int64_t> SecondaryIndexReader::estimate_match_count_cached(const std::string& cache_key,
+                                                                    const PredicateTree& source_pred_tree,
+                                                                    ObjectPool* obj_pool, int64_t stop_at,
+                                                                    OlapReaderStatistics* stats) {
+    auto entry = CountResultCache::instance().get_or_create(cache_key);
+    std::call_once(entry->once,
+                   [&] { entry->result = estimate_match_count(source_pred_tree, obj_pool, stop_at, stats); });
     return entry->result;
 }
 

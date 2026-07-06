@@ -16,9 +16,11 @@
 
 #include <algorithm>
 #include <future>
+#include <limits>
 #include <map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/sync_point.h"
@@ -585,8 +587,34 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                 if (meta.secondary_indexes(i).file_name().empty()) continue;
                 runs_by_index[meta.secondary_indexes(i).index_name()].push_back(i);
             }
-            std::unordered_map<uint32_t, roaring::Roaring> merged;
-            bool first_index = true;
+
+            // "Plan A" selectivity cost gate: instead of materializing every
+            // index's full position set and then intersecting (cost dominated by
+            // the BROADEST predicate), cheaply probe each applicable index's
+            // match count, then AND them MOST-SELECTIVE-FIRST -- materializing
+            // only selective indexes and leaving broad predicates as residuals
+            // the base scan evaluates on the already-narrowed candidate rows.
+            int64_t rowset_rows = 0;
+            for (int s = 0; s < meta.segment_metas_size(); ++s) {
+                rowset_rows += meta.segment_metas(s).num_rows();
+            }
+            const int64_t skip_broad_cap =
+                    rowset_rows > 0
+                            ? rowset_rows * std::clamp<int64_t>(config::secondary_index_and_skip_broad_pct, 0, 100) /
+                                      100
+                            : std::numeric_limits<int64_t>::max();
+            const int64_t fullscan_cap =
+                    rowset_rows > 0
+                            ? rowset_rows * std::clamp<int64_t>(config::secondary_index_skip_fullscan_pct, 0, 100) / 100
+                            : std::numeric_limits<int64_t>::max();
+            const int64_t stop_rows = std::max<int64_t>(0, config::secondary_index_and_stop_rows);
+
+            struct IdxCandidate {
+                const std::string* name;
+                const std::vector<int>* runs;
+                int64_t est;
+            };
+            std::vector<IdxCandidate> cands;
             for (auto& [idx_name, run_list] : runs_by_index) {
                 const auto& first_pb = meta.secondary_indexes(run_list[0]);
                 // Predicate-applicability gate: a sorted secondary index can
@@ -599,19 +627,56 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     !queried_col_ids.count(static_cast<ColumnId>(prefix_src_idx))) {
                     continue;
                 }
+                // Cheap count-probe (no __sidx_pos__ decode, no Roaring): sum
+                // matches across this index's runs, capping at fullscan_cap so a
+                // broad predicate is probed in bounded time.
+                int64_t est = 0;
+                for (int ri : run_list) {
+                    const auto& file_pb = meta.secondary_indexes(ri);
+                    secondary_sorted::SecondaryIndexReader::OpenInput open_in;
+                    open_in.fs = sidx_fs;
+                    open_in.tablet_mgr = _tablet_mgr;
+                    open_in.tablet_id = rowset->tablet_id();
+                    open_in.file_pb = file_pb;
+                    open_in.source_schema = _tablet_schema;
+                    ASSIGN_OR_RETURN(auto reader,
+                                     secondary_sorted::SecondaryIndexReader::open_cached(open_in, &_stats));
+                    const std::string cnt_key = file_pb.file_name() + "|" + pred_signature + "|cnt";
+                    ASSIGN_OR_RETURN(auto c, reader->estimate_match_count_cached(cnt_key, params.pred_tree, &_obj_pool,
+                                                                                 fullscan_cap, &_stats));
+                    est += c;
+                    if (est > fullscan_cap) break; // already broad; no need to probe more runs
+                }
+                cands.push_back({&idx_name, &run_list, est});
+            }
+            // Most-selective first: the narrowest predicate drives the AND.
+            std::sort(cands.begin(), cands.end(),
+                      [](const IdxCandidate& a, const IdxCandidate& b) { return a.est < b.est; });
 
-                // Record the predicated columns this index enforces exactly, so
-                // the base scan can drop them from the residual predicate.
-                for (const auto& nm : first_pb.index_col_names()) {
-                    const size_t ci = _tablet_schema->field_index(nm);
-                    if (ci != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(ci))) {
-                        enforced.insert(static_cast<ColumnId>(ci));
+            // Cost gate: if even the most selective index matches more than
+            // fullscan_cap rows, using it would scatter a huge readback for
+            // little pruning -- skip the index path and let the base scan run
+            // as a plain scan (leave sidx_per_rowset unset for this rowset).
+            if (cands.empty() || cands.front().est > fullscan_cap) {
+                continue;
+            }
+
+            std::unordered_map<uint32_t, roaring::Roaring> merged;
+            bool first_index = true;
+            int64_t merged_card = 0;
+            for (const auto& cand : cands) {
+                if (!first_index) {
+                    // Stop conditions: candidate set already tiny (residual is
+                    // cheap), or this (and every remaining) index is too broad
+                    // to be worth materializing -> leave as residual predicate.
+                    if (merged.empty() || merged_card <= stop_rows || cand.est > skip_broad_cap) {
+                        break;
                     }
                 }
 
                 // Union the per-segment candidate bitmaps across this index's runs.
                 std::unordered_map<uint32_t, roaring::Roaring> per_index;
-                for (int ri : run_list) {
+                for (int ri : *cand.runs) {
                     const auto& file_pb = meta.secondary_indexes(ri);
                     secondary_sorted::SecondaryIndexReader::OpenInput open_in;
                     open_in.fs = sidx_fs;
@@ -631,24 +696,36 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                     }
                 }
 
+                // Only a materialized index enforces its predicate columns
+                // exactly; skipped (broad) indexes leave theirs as residuals.
+                const auto& mat_pb = meta.secondary_indexes((*cand.runs)[0]);
+                for (const auto& nm : mat_pb.index_col_names()) {
+                    const size_t ci = _tablet_schema->field_index(nm);
+                    if (ci != static_cast<size_t>(-1) && queried_col_ids.count(static_cast<ColumnId>(ci))) {
+                        enforced.insert(static_cast<ColumnId>(ci));
+                    }
+                }
+
                 if (first_index) {
                     merged = std::move(per_index);
                     first_index = false;
-                    continue;
-                }
-                // Intersect across indexes: drop seg_ids missing from this index.
-                std::unordered_map<uint32_t, roaring::Roaring> next;
-                for (auto& [seg_id, bitmap] : merged) {
-                    auto it = per_index.find(seg_id);
-                    if (it == per_index.end()) continue;
-                    roaring::Roaring r = bitmap;
-                    r &= it->second;
-                    if (!r.isEmpty()) {
-                        next.emplace(seg_id, std::move(r));
+                } else {
+                    // Intersect across indexes: drop seg_ids missing from this index.
+                    std::unordered_map<uint32_t, roaring::Roaring> next;
+                    for (auto& [seg_id, bitmap] : merged) {
+                        auto it = per_index.find(seg_id);
+                        if (it == per_index.end()) continue;
+                        roaring::Roaring r = bitmap;
+                        r &= it->second;
+                        if (!r.isEmpty()) {
+                            next.emplace(seg_id, std::move(r));
+                        }
                     }
+                    merged = std::move(next);
                 }
-                merged = std::move(next);
-                if (merged.empty()) break; // no rows can satisfy all indexes
+                merged_card = 0;
+                for (auto& [seg_id, bitmap] : merged) merged_card += static_cast<int64_t>(bitmap.cardinality());
+                if (merged.empty()) break; // no rows can satisfy all indexes so far
             }
             for (auto& [seg_id, bitmap] : merged) {
                 _stats.secondary_index_candidate_rows += static_cast<int64_t>(bitmap.cardinality());

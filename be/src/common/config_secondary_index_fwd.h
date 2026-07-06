@@ -46,4 +46,25 @@ CONF_mInt64(secondary_index_reader_cache_capacity, "256");
 // the index -> answer from .idx (DelVec-filtered), no base-table readback.
 CONF_mBool(enable_secondary_index_covering, "true");
 
+// Multi-index AND selectivity cost gate ("plan A" -- bypass materializing the
+// broadest predicate's position set). Before materializing per-index position
+// sets, a cheap count-probe estimates each index's match ratio; indexes are
+// then ANDed most-selective-first.
+//   * A secondary AND index whose estimated match ratio exceeds this percent
+//     is NOT materialized -- its predicate is left as a residual the base scan
+//     evaluates on the already-narrowed candidate rows (avoids decoding a huge
+//     __sidx_pos__ set + building a huge Roaring for a predicate that barely
+//     narrows the AND).
+CONF_mInt64(secondary_index_and_skip_broad_pct, "10");
+//   * If even the MOST selective applicable index matches more than this
+//     percent of the rowset, skip the index path entirely and full-scan --
+//     a broad single predicate loses to a plain scan (scattered readback).
+//     Empirically a >~10-20% match already makes the index's scattered
+//     readback lose badly to a sequential scan, so the default is 20; tune
+//     per workload (raise it if queries are covering / COUNT-only).
+CONF_mInt64(secondary_index_skip_fullscan_pct, "20");
+//   * Stop intersecting further indexes once the running candidate set is at
+//     or below this many rows -- residual predicates on so few rows are cheap.
+CONF_mInt64(secondary_index_and_stop_rows, "262144");
+
 } // namespace starrocks::config
