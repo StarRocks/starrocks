@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/load_spill_pipeline_merge_iterator.h"
+#include "storage/lake/load_spill_pipeline_merge_iterator.h"
 
 #include "common/config_ingest_fwd.h"
 #include "compute_env/load_spill/load_chunk_spiller.h"
 #include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
-#include "runtime/runtime_state.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage_primitive/merge_iterator.h"
-#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

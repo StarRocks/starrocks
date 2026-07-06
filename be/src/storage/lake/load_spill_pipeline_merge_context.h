@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "compute_env/load_spill/load_chunk_spiller.h"
+#include "compute_env/load_spill/load_spill_slot_tracker.h"
 
 namespace starrocks {
 

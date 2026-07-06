@@ -17,7 +17,7 @@
 #include "common/runtime_profile.h"
 #include "compute_env/load_spill/load_chunk_spiller.h"
 #include "runtime/mem_tracker.h"
-#include "storage/load_spill_pipeline_merge_context.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
 #include "storage/memtable_sink.h"
 
 namespace starrocks {

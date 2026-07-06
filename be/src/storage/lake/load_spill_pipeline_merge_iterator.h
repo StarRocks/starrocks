@@ -17,10 +17,11 @@
 #include <atomic>
 #include <memory>
 
-#include "common/runtime_profile.h"
-#include "compute_env/load_spill/load_chunk_spiller.h"
+#include "common/status.h"
 
 namespace starrocks {
+
+class LoadChunkSpiller;
 
 namespace lake {
 class TabletInternalParallelMergeTask;

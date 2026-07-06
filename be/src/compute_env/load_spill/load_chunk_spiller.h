@@ -22,6 +22,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "compute_env/load_spill/load_spill_merge_input_batch.h"
+#include "compute_env/load_spill/load_spill_slot_tracker.h"
 #include "compute_env/spill/block_group.h"
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/data_stream.h"
@@ -32,10 +34,7 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class Chunk;
-class ChunkIterator;
 class LoadChunkSpiller;
-
-using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 
 namespace spill {
 class BlockGroup;
@@ -82,42 +81,6 @@ struct SpillBlockInputTasks {
     size_t total_blocks = 0;
     size_t total_block_bytes = 0;
     size_t group_count = 0;
-};
-
-class LoadSpillSlotTracker {
-public:
-    virtual ~LoadSpillSlotTracker() = default;
-
-    virtual void mark_slot_ready(int64_t slot_idx) = 0;
-    virtual bool is_slot_ready(int64_t from_slot_idx, int64_t to_slot_idx) = 0;
-};
-
-/**
- * Encapsulates a single merge input unit for pipeline execution.
- *
- * WHY THIS STRUCT: Groups all resources needed for one merge task to be executed
- * independently in a pipeline operator. The block_groups ownership is critical.
- *
- * This is the compute_env-owned form of the former LoadSpillPipelineMergeTask.
- */
-struct LoadSpillMergeInputBatch {
-    // LIFETIME MANAGEMENT: Holds shared ownership of block groups to prevent premature
-    // destruction. The merge_itr reads from these block groups asynchronously during
-    // pipeline execution, so block groups must outlive the iterator. Without this,
-    // we'd have use-after-free bugs when blocks are reclaimed before iterator finishes.
-    std::vector<spill::BlockGroupPtr> block_groups;
-
-    // Iterator that performs the actual merge of spilled data chunks. Supports both
-    // sorted merge (for aggregation/ordering) and union (for DUP_KEYS tables).
-    ChunkIteratorPtr merge_itr;
-
-    // Metrics for monitoring merge workload distribution across pipeline tasks.
-    // Used to ensure roughly equal work distribution and for performance analysis.
-    size_t total_block_groups = 0;
-    size_t total_block_bytes = 0;
-
-    // Release block group in advance to free load spill disk space
-    void release_block_groups() { block_groups.clear(); }
 };
 
 class LoadChunkSpiller {
