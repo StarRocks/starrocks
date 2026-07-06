@@ -132,7 +132,8 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
     return {};
 }
 
-Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
+Status DataStreamMgr::transmit_chunk(PTransmitChunkParams& request, butil::IOBuf* attachment,
+                                     ::google::protobuf::Closure** done) {
     const PUniqueId& finst_id = request.finst_id();
     // TODO(zc): Use PUniqueId directly
     // We can use PUniqueId directly, because old version StarRocks has already use
@@ -173,7 +174,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
         }
     });
     if (request.chunks_size() > 0 || request.use_pass_through()) {
-        RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
+        RETURN_IF_ERROR(recvr->add_chunks(request, attachment, eos ? nullptr : done));
     }
 
     return Status::OK();
