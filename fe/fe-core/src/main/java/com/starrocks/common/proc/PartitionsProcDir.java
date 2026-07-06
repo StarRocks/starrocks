@@ -132,7 +132,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("MetaSwitchVersion");
+                    .add("MetaSwitchVersion")
+                    .add("VacuumVersion");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -427,6 +428,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
         partitionInfo.add(physicalPartition.getMetadataSwitchVersion()); // MetaSwitchVersion
+        partitionInfo.add(physicalPartition.getLastSuccVacuumVersion()); // VacuumVersion
         return partitionInfo;
     }
 

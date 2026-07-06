@@ -153,7 +153,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+    // Success watermark: the retain floor of the last completed incremental vacuum pass -- everything below
+    // is reclaimed. Persisted so SHOW PARTITIONS / partitions_meta's VacuumVersion (and the vacuum scheduler)
+    // survive an FE restart / failover instead of resetting to 0.
+    @SerializedName(value = "lastSuccVacuumVersion")
+    private AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
     //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
