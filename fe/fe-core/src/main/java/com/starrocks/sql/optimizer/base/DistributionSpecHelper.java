@@ -69,6 +69,8 @@ public final class DistributionSpecHelper {
             // Metadata inconsistency (e.g. partial replay); fall back to ANY.
             return null;
         }
+        // Table-level sort key is correct here: range-colocate group membership is defined
+        // on the base table's sort key and does not vary per rollup index.
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
         int colocateCount = groupSchema.getColocateColumnCount();
         if (sortKeyColumns.size() < colocateCount) {
