@@ -142,7 +142,7 @@ public class HistogramStatisticsTest {
 
     @Test
     public void testColumnToConstantExcludesNullFraction() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
 
         List<Bucket> bucketList = new ArrayList<>();
         bucketList.add(new Bucket(1D, 10D, 100L, 20L));
@@ -468,7 +468,7 @@ public class HistogramStatisticsTest {
         Map<String, Long> mcv = Maps.newHashMap();
         mcv.put("10", 236L);
         Histogram histogram = new Histogram(new ArrayList<>(), mcv);
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, IntegerType.BIGINT, "v1", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BIGINT, "v1", true);
         ColumnStatistic columnStatistic = new ColumnStatistic(1, 1000, 0.2, 8, 62,
                 histogram, ColumnStatistic.StatisticType.ESTIMATE);
 
