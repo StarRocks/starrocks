@@ -17,10 +17,10 @@
 #include <string>
 #include <vector>
 
+#include "column/chunk.h"
 #include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
-#include "column/chunk.h"
 #include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/runtime/query_runtime_state.h"
