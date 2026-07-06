@@ -216,7 +216,7 @@ public class StarRocksIcebergTableScan
         executeInNewThread(threadNamePrefix + "-fetch_result", metadataCollectJob::asyncCollectMetadata);
 
         MetadataParser parser = new MetadataParser(
-                table(), specStringCache, residualCache, planExecutor(), scanMetrics(),
+                table(), schemaString, specStringCache, residualCache, planExecutor(), scanMetrics(),
                 deleteFileIndex, metadataCollectJob, liveFilesCount);
         executeInNewThread(threadNamePrefix + "-parallel_parser", parser::parse);
 
