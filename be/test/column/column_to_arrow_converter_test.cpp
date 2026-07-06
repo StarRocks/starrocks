@@ -529,8 +529,7 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &array);
 
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
-    ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+    ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
@@ -555,8 +554,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
 
     std::shared_ptr<arrow::Array> expect_array;
     auto s = arrow::ArrayFromJSON(arrow_type, "[[1, 2, 3], null, [4, null, 5, 6], [], [null, null]]");
-    ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+    ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
@@ -586,8 +584,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
                         {"id": 2, "name": null},
                         {"id": null, "name": null}
                     ])");
-    ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+    ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
@@ -621,8 +618,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
                         {"id": 2, "name": null},
                         {"id": null, "name": null}
                     ])");
-    ASSERT_TRUE(s.ok());
-    ASSERT_TRUE(s.ValueUnsafe()->Equals(array));
+    ASSERT_TRUE(s->Equals(array));
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
