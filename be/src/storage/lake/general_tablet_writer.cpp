@@ -31,7 +31,6 @@
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "column/serde/column_array_serde.h"
 #include "storage/index/secondary_sorted/collector.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/lake/filenames.h"
