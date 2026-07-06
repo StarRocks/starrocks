@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
@@ -379,9 +380,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                                get_expected_gtid(txns.back()));
     }
 
-    // Read base version metadata
-    auto base_metadata_or =
-            tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    // Read base version metadata. This is an object-storage/metacache read that
+    // happens before the PublishTablet apply counters start, so time it here to
+    // keep it from hiding inside the overall publish cost.
+    auto base_metadata_or = [&] {
+        TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
@@ -444,7 +449,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             }
             txn_log_st = std::vector<TxnLogVector>{{std::move(schema_change_log_or).value()}};
         } else {
-            txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            // Loading the txn log reads one or more log files from object storage
+            // and is otherwise untraced; a slow/throttled read here would hide in
+            // the total publish cost.
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("load_txn_log_latency_us");
+                txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            }
 
             if (txn_log_st.status().is_not_found()) {
                 if (i == 0) {
@@ -678,6 +689,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
+<<<<<<< HEAD
     // In the advanced case (ori_base_version < base_version), base_metadata
     // was written by a prior publish_version attempt of the same batch that
     // failed to ack to FE; FE's visibleVersion therefore stays at
@@ -693,6 +705,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
+=======
+    // Save new metadata. finish() commits the primary index and writes the new
+    // tablet metadata (and delvecs) to object storage; that metadata write is not
+    // covered by the apply counters, so time the whole step here.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
+        RETURN_IF_ERROR(log_applier->finish());
+    }
+>>>>>>> a123c063f0d... [Enhancement] Trace the uncovered lake load publish-version paths (#75901)
 
     delete_files_async(std::move(files_to_delete));
 
