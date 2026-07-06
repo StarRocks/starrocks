@@ -39,11 +39,8 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
-<<<<<<< HEAD
-=======
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
->>>>>>> e57f5849f0 ([BugFix] Remove useless per-rowid seeks in ArrayColumnIterator::fetch_values_by_rowid offsets-only path (#75861))
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
