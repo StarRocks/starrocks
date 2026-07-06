@@ -41,7 +41,8 @@ constexpr const char* LANCE_VECTOR_COLUMN_PARAM = "lance.vector_column";
 constexpr const char* LANCE_NPROBES_PARAM = "lance.nprobes";
 constexpr const char* LANCE_REFINE_FACTOR_PARAM = "lance.refine_factor";
 constexpr const char* LANCE_EF_PARAM = "lance.ef";
-constexpr const char* LANCE_USE_INDEX_PARAM = "lance.use_index";
+constexpr const char* LANCE_QUERY_PARALLELISM_PARAM = "lance.query_parallelism";
+constexpr int32_t LANCE_QUERY_PARALLELISM_UNSET = -2;
 
 SrLanceString to_lance_string(const std::string& value) {
     return SrLanceString{value.data(), value.size()};
@@ -91,19 +92,19 @@ StatusOr<int32_t> parse_optional_positive_i32_param(const TVectorSearchOptions& 
     return value;
 }
 
-StatusOr<int32_t> parse_optional_bool_param(const TVectorSearchOptions& options, const std::string& key) {
+StatusOr<int32_t> parse_optional_query_parallelism_param(const TVectorSearchOptions& options, const std::string& key) {
     auto it = options.query_params.find(key);
     if (it == options.query_params.end() || it->second.empty()) {
-        return -1;
+        return LANCE_QUERY_PARALLELISM_UNSET;
     }
     const auto& raw = it->second;
-    if (raw == "true" || raw == "1") {
-        return 1;
+    int32_t value = LANCE_QUERY_PARALLELISM_UNSET;
+    auto result = std::from_chars(raw.data(), raw.data() + raw.size(), value);
+    if (result.ec != std::errc() || result.ptr != raw.data() + raw.size() || value < -1) {
+        return Status::InternalError(
+                fmt::format("Invalid query parallelism value for Lance vector parameter {}: {}", key, raw));
     }
-    if (raw == "false" || raw == "0") {
-        return 0;
-    }
-    return Status::InternalError(fmt::format("Invalid boolean value for Lance vector parameter {}: {}", key, raw));
+    return value;
 }
 
 } // namespace
@@ -194,9 +195,10 @@ Status LanceNativeReader::_open_reader() {
         ASSIGN_OR_RETURN(int32_t ef,
                          parse_optional_positive_i32_param(
                                  _scanner_params.table_specific.lance_vector_search_options, LANCE_EF_PARAM));
-        ASSIGN_OR_RETURN(int32_t use_index,
-                         parse_optional_bool_param(_scanner_params.table_specific.lance_vector_search_options,
-                                                   LANCE_USE_INDEX_PARAM));
+        ASSIGN_OR_RETURN(int32_t query_parallelism,
+                         parse_optional_query_parallelism_param(
+                                 _scanner_params.table_specific.lance_vector_search_options,
+                                 LANCE_QUERY_PARALLELISM_PARAM));
 
         vector_options = SrLanceVectorOptions{to_lance_string(vector_column),
                                               query_vector.data(),
@@ -207,7 +209,7 @@ Status LanceNativeReader::_open_reader() {
                                               nprobes,
                                               refine_factor,
                                               ef,
-                                              use_index};
+                                              query_parallelism};
         vector_options_ptr = &vector_options;
     }
 

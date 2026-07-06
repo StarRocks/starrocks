@@ -58,7 +58,7 @@ pub struct SrLanceVectorOptions {
     nprobes: i32,
     refine_factor: i32,
     ef: i32,
-    use_index: i32,
+    query_parallelism: i32,
 }
 
 pub struct SrLanceReader {
@@ -73,6 +73,7 @@ struct VectorOptions {
     nprobes: Option<usize>,
     refine_factor: Option<u32>,
     ef: Option<usize>,
+    query_parallelism: Option<i32>,
 }
 
 fn runtime() -> &'static Runtime {
@@ -161,10 +162,6 @@ unsafe fn vector_options_from_raw(
             value.limit_k
         ));
     }
-    if value.use_index == 0 {
-        return Err("Lance segment vector search requires use_index=true".to_string());
-    }
-
     let query_vector = strings_from_raw(value.query_vector, value.query_vector_len)?;
     if query_vector.is_empty() {
         return Err("Lance query vector must not be empty".to_string());
@@ -192,11 +189,20 @@ unsafe fn vector_options_from_raw(
         nprobes: positive_option(value.nprobes).map(|v| v as usize),
         refine_factor: positive_option(value.refine_factor).map(|v| v as u32),
         ef: positive_option(value.ef).map(|v| v as usize),
+        query_parallelism: query_parallelism_option(value.query_parallelism),
     }))
 }
 
 fn positive_option(value: i32) -> Option<i32> {
     if value > 0 {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn query_parallelism_option(value: i32) -> Option<i32> {
+    if value >= -1 {
         Some(value)
     } else {
         None
@@ -248,6 +254,9 @@ async fn open_reader(
         }
         if let Some(ef) = vector_options.ef {
             scanner.ef(ef);
+        }
+        if let Some(query_parallelism) = vector_options.query_parallelism {
+            scanner.query_parallelism(query_parallelism);
         }
         scanner
             .with_index_segments(vector_options.index_segment_uuids)

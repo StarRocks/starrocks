@@ -357,5 +357,37 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sv.setAnnParams("{\"Efsearch\": 1}");
         assertThat(connectContext.getSessionVariable().getAnnParams()).containsExactlyEntriesOf(ImmutableMap.of("Efsearch", "1"));
+
+        sql = "set ann_params='{\"lance.nprobes\":\"8\",\"lance.refine_factor\":\"2\"," +
+                "\"lance.ef\":\"64\",\"lance.query_parallelism\":\"4\"}'";
+        analyzeSuccess(sql);
+        sv.setAnnParams("{\"lance.nprobes\":\"8\",\"lance.refine_factor\":\"2\"," +
+                "\"lance.ef\":\"64\",\"lance.query_parallelism\":\"4\"}");
+        assertThat(connectContext.getSessionVariable().getAnnParams())
+                .containsEntry("lance.nprobes", "8")
+                .containsEntry("lance.refine_factor", "2")
+                .containsEntry("lance.ef", "64")
+                .containsEntry("lance.query_parallelism", "4");
+
+        sql = "set ann_params='{\"lance.nprobes\":\"0\"}'";
+        analyzeFail(sql, "Value of `lance.nprobes` must be >= 1");
+
+        sql = "set ann_params='{\"lance.ef\":\"abc\"}'";
+        analyzeFail(sql, "Value of `lance.ef` must be a positive integer");
+
+        sql = "set ann_params='{\"lance.query_parallelism\":\"-2\"}'";
+        analyzeFail(sql, "Value of `lance.query_parallelism` must be -1 or >= 0");
+
+        sql = "set ann_params='{\"lance.query_parallelism\":\"abc\"}'";
+        analyzeFail(sql, "Value of `lance.query_parallelism` must be -1 or a non-negative integer");
+
+        sql = "set ann_params='{\"lance.NPROBES\":\"8\"}'";
+        analyzeFail(sql, "Lance ann_params key must be lowercase: lance.NPROBES");
+
+        sql = "set ann_params='{\"lance.vector_column\":\"vector\"}'";
+        analyzeFail(sql, "Unsupported lance ann_params: lance.vector_column");
+
+        sql = "set ann_params='{\"lance.use_index\":\"false\"}'";
+        analyzeFail(sql, "Unsupported lance ann_params: lance.use_index");
     }
 }

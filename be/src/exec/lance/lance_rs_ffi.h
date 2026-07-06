@@ -45,7 +45,7 @@ typedef struct SrLanceVectorOptions {
     int32_t nprobes;
     int32_t refine_factor;
     int32_t ef;
-    int32_t use_index;
+    int32_t query_parallelism;
 } SrLanceVectorOptions;
 
 int sr_lance_reader_open(SrLanceString dataset_uri, int32_t fragment_id, const SrLanceString* columns,

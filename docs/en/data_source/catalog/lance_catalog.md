@@ -15,7 +15,7 @@ StarRocks supports Lance catalogs as external catalogs. You can use a Lance cata
 
 - The current implementation supports read-only table scans.
 - The supported catalog type is `directory`. StarRocks discovers Lance datasets from a warehouse directory.
-- Lance vector index search and KNN query acceleration are not supported.
+- Lance vector index search is supported only by the native reader.
 - Each Lance dataset directory must end with `.lance`.
 - If Lance datasets are stored on a local file system, the FE and all BE/CN nodes that may run the scan must be able to access the same path.
 - If Lance datasets are stored on object storage, we recommend using an S3-compatible path in the format `s3://<bucket>/<prefix>` and passing the object store options required by the Lance SDK through `lance.option.*`.
@@ -257,6 +257,43 @@ SET lance_force_native_reader = true;
 
 If both `lance_force_jni_reader=true` and `lance_force_native_reader=true` are set, `lance_force_jni_reader` takes precedence and the query uses the Java SDK reader.
 
+## Vector index search
+
+Lance vector index search supports `approx_l2_distance` on `ARRAY<FLOAT>` columns. The query must order by one `approx_l2_distance` expression in ascending order and use a constant query vector.
+
+Example:
+
+```SQL
+SET lance_force_jni_reader = false;
+SET lance_force_native_reader = true;
+
+SELECT id,
+       approx_l2_distance(CAST('[1.0,2.0,3.0]' AS ARRAY<FLOAT>), vector) AS score
+FROM lance_oss.`default`.sift1m_ivfpq
+ORDER BY score
+LIMIT 10;
+```
+
+Use `ann_params` to tune Lance search parameters. The value is a JSON string, and Lance parameter keys must be lowercase.
+
+```SQL
+SET ann_params = '{"lance.nprobes":"32","lance.refine_factor":"4","lance.ef":"128","lance.query_parallelism":"4"}';
+```
+
+| Parameter | Value | Description |
+| --- | --- | --- |
+| `lance.nprobes` | Positive integer | Number of IVF partitions to probe. Applies to IVF-based Lance vector indexes. |
+| `lance.refine_factor` | Positive integer | Refine factor used by Lance after an approximate vector search. This is useful for compressed indexes such as IVF_PQ or IVF_HNSW_SQ. |
+| `lance.ef` | Positive integer | HNSW search `ef` parameter. Applies to IVF_HNSW_* Lance vector indexes. |
+| `lance.query_parallelism` | `-1` or non-negative integer | Partition-search concurrency for each Lance vector query. `0` uses the Lance default policy, `-1` uses the CPU pool size, and positive values specify the requested concurrency. |
+
+Lance vector search currently has the following limitations:
+
+- It supports only the native reader. If `lance_force_jni_reader=true`, the query fails.
+- It supports only L2 distance through `approx_l2_distance`.
+- It does not support ordinary scan predicates in v1.
+- The selected Lance vector index must cover all live fragments in the dataset.
+
 ## How it works
 
 The Lance catalog read path consists of metadata discovery, query planning, and BE/CN scanning.
@@ -296,10 +333,12 @@ The FE Lance scan node uses the Lance Java SDK to read dataset fragments. Each f
 
 The Lance scan node uses the connector scan scheduler, and StarRocks assigns the scan ranges to available BE/CN nodes.
 
+For vector index search, the FE loads Lance index metadata, validates that the selected vector index covers all live fragments, and creates one scan range for each Lance index segment. The BE/CN then executes the search with the Lance native reader. Search parameters from `ann_params`, such as `lance.nprobes`, `lance.refine_factor`, `lance.ef`, and `lance.query_parallelism`, are passed to the Lance Rust scanner.
+
 ### BE/CN scanning
 
 After a BE/CN receives a scan range, it enables the Lance native reader by default. The native reader calls the Lance Rust SDK through Rust FFI and passes the dataset URI, fragment ID, selected columns, and storage options to the Rust-side reader. The Rust-side reader opens the dataset again, reads Arrow batches for the requested fragment and columns, and returns the batches to C++ through the Arrow C Data Interface. The BE/CN then reuses StarRocks' Arrow-to-Column conversion path, writes the values into StarRocks columns, and returns the data to the execution engine.
 
 When the session variable `lance_force_jni_reader` is set to `true`, the BE/CN uses the Lance Java SDK reader instead. This mode is mainly intended for compatibility verification and native reader troubleshooting.
 
-The current implementation is a read-only scan path. It does not write Lance datasets, run Lance vector index search, or accelerate KNN queries.
+The current implementation is a read-only scan path. It does not write Lance datasets.

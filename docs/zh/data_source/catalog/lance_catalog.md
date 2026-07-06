@@ -15,7 +15,7 @@ StarRocks 支持 Lance catalog 作为 external catalog。您可以通过 Lance c
 
 - 当前实现支持只读表扫描。
 - 当前支持的 catalog 类型为 `directory`。StarRocks 从一个 warehouse 目录中发现 Lance 数据集。
-- 当前不支持 Lance 向量索引搜索和 KNN 查询加速。
+- Lance 向量索引搜索仅支持 native reader。
 - Lance 数据集目录名必须以 `.lance` 结尾。
 - 如果 Lance 数据集存放在本地文件系统上，FE 和所有参与扫描的 BE/CN 都必须能访问相同路径。
 - 如果 Lance 数据集存放在对象存储上，建议使用 S3 兼容路径 `s3://<bucket>/<prefix>`，并通过 `lance.option.*` 传递 Lance SDK 需要的 object store 选项。
@@ -257,6 +257,43 @@ SET lance_force_native_reader = true;
 
 如果同时设置 `lance_force_jni_reader=true` 和 `lance_force_native_reader=true`，`lance_force_jni_reader` 优先，查询会走 Java SDK reader。
 
+## 向量索引搜索
+
+Lance 向量索引搜索支持 `ARRAY<FLOAT>` 列上的 `approx_l2_distance`。查询必须按一个 `approx_l2_distance` 表达式升序排序，并使用常量查询向量。
+
+示例：
+
+```SQL
+SET lance_force_jni_reader = false;
+SET lance_force_native_reader = true;
+
+SELECT id,
+       approx_l2_distance(CAST('[1.0,2.0,3.0]' AS ARRAY<FLOAT>), vector) AS score
+FROM lance_oss.`default`.sift1m_ivfpq
+ORDER BY score
+LIMIT 10;
+```
+
+可以通过 `ann_params` 调整 Lance 搜索参数。`ann_params` 是 JSON 字符串，Lance 参数名必须使用小写。
+
+```SQL
+SET ann_params = '{"lance.nprobes":"32","lance.refine_factor":"4","lance.ef":"128","lance.query_parallelism":"4"}';
+```
+
+| 参数 | 取值 | 说明 |
+| --- | --- | --- |
+| `lance.nprobes` | 正整数 | IVF 分区探测数量。适用于基于 IVF 的 Lance 向量索引。 |
+| `lance.refine_factor` | 正整数 | Lance 近似向量搜索后的 refine factor。常用于 IVF_PQ、IVF_HNSW_SQ 等压缩索引。 |
+| `lance.ef` | 正整数 | HNSW 搜索的 `ef` 参数。适用于 IVF_HNSW_* Lance 向量索引。 |
+| `lance.query_parallelism` | `-1` 或非负整数 | 每个 Lance 向量查询的分区搜索并发度。`0` 使用 Lance 默认策略，`-1` 使用 CPU pool 大小，正数表示指定并发度。 |
+
+当前 Lance 向量搜索有以下限制：
+
+- 仅支持 native reader。如果设置 `lance_force_jni_reader=true`，查询会失败。
+- 仅通过 `approx_l2_distance` 支持 L2 距离。
+- v1 不支持普通 scan predicate。
+- 被选中的 Lance 向量索引必须覆盖 dataset 中所有 live fragment。
+
 ## 实现原理
 
 Lance catalog 的读路径分为元数据发现、查询规划和 BE/CN 扫描三个阶段。
@@ -296,10 +333,12 @@ FE 的 Lance scan node 使用 Lance Java SDK 读取 dataset fragments。每个 f
 
 Lance scan node 会走 connector scan scheduler，由 StarRocks 将 scan range 分配给可用 BE/CN。
 
+对于向量索引搜索，FE 会加载 Lance index metadata，校验被选中的向量索引是否覆盖所有 live fragment，并为每个 Lance index segment 生成一个 scan range。BE/CN 随后通过 Lance native reader 执行搜索。`ann_params` 中的 `lance.nprobes`、`lance.refine_factor`、`lance.ef`、`lance.query_parallelism` 等搜索参数会传递给 Lance Rust scanner。
+
 ### BE/CN 扫描
 
 BE/CN 收到 scan range 后，默认启用 Lance native reader。Native reader 通过 Rust FFI 调用 Lance Rust SDK，并将 dataset URI、fragment ID、列裁剪结果和 storage options 传给 Rust 侧 reader。Rust 侧 reader 再次打开 dataset，按 fragment 和所需列读取 Arrow batch，并通过 Arrow C Data Interface 将 batch 传回 C++。BE/CN 随后复用 StarRocks 的 Arrow 到 Column 转换逻辑，把数据写入 StarRocks column，最终返回给执行引擎。
 
 当会话变量 `lance_force_jni_reader` 设置为 `true` 时，BE/CN 会改用 Lance Java SDK reader。该模式主要用于兼容性验证和 native reader 问题排查。
 
-当前实现是只读扫描链路，不涉及 Lance 写入、向量索引检索或 KNN 加速。
+当前实现是只读扫描链路，不涉及 Lance 写入。
