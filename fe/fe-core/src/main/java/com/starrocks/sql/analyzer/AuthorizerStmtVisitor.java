@@ -1884,6 +1884,61 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ---------------------------------------- AI Provider Statement ---------------------------------------
+
+    private void requireSystemOperate(ConnectContext context, String action) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    action, ObjectType.SYSTEM.name(), null);
+        }
+    }
+
+    @Override
+    public Void visitCreateAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "CREATE AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "ALTER AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitDropAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DROP AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitSetDefaultAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SET DEFAULT AI PROVIDER");
+        return null;
+    }
+
+    @Override
+    public Void visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "SHOW AI PROVIDERS");
+        return null;
+    }
+
+    @Override
+    public Void visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+        requireSystemOperate(context, "DESC AI PROVIDER");
+        return null;
+    }
+
     // ---------------------------------------- View Statement ---------------------------------------
 
     @Override

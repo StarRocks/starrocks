@@ -3109,6 +3109,64 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProviderType typeFilter = statement.getTypeFilter().isEmpty()
+                    ? null : com.starrocks.context.ai.AIProviderType.fromString(statement.getTypeFilter());
+            PatternMatcher matcher = null;
+            if (!statement.getPattern().isEmpty()) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.STORAGEVOLUME.getCaseSensibility());
+            }
+            List<com.starrocks.context.ai.AIProvider> providers =
+                    typeFilter == null ? mgr.listProviders() : mgr.listProviders(typeFilter);
+            List<List<String>> rows = Lists.newArrayList();
+            for (com.starrocks.context.ai.AIProvider provider : providers) {
+                if (matcher != null && !matcher.match(provider.getName())) {
+                    continue;
+                }
+                java.util.Map<String, String> masked = provider.getMaskedParams();
+                String defaultId = mgr.getDefaultProviderId(provider.getType());
+                rows.add(Lists.newArrayList(
+                        provider.getName(),
+                        provider.getType().lower(),
+                        provider.getId().equals(defaultId) ? "true" : "false",
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_ENDPOINT, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MODEL, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_DIMENSIONS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MAX_DOCUMENTS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_TIMEOUT_MS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_API_KEY, ""),
+                        provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProvider provider = mgr.getProvider(statement.getName());
+            if (provider == null) {
+                throw new SemanticException("Unknown AI provider: " + statement.getName());
+            }
+            String defaultId = mgr.getDefaultProviderId(provider.getType());
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList("Name", provider.getName()));
+            rows.add(Lists.newArrayList("Type", provider.getType().lower()));
+            rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
+            java.util.Map<String, String> masked = provider.getMaskedParams();
+            for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+            }
+            if (!provider.getComment().isEmpty()) {
+                rows.add(Lists.newArrayList("Comment", provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
         public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
             List<List<Comparable>> rows = Lists.newArrayList();
             String dbName = statement.getDbName();

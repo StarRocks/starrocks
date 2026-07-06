@@ -536,6 +536,8 @@ public class GlobalStateMgr {
 
     private final StorageVolumeMgr storageVolumeMgr;
 
+    private final AIProviderMgr aiProviderMgr;
+
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
 
@@ -957,6 +959,8 @@ public class GlobalStateMgr {
         this.showExecutor = new ShowExecutor(ShowExecutorVisitorEPack.getInstance());
         this.sqlBlackList = new SqlBlackList();
         this.sqlDigestBlackList = new SqlDigestBlackList();
+
+        this.aiProviderMgr = new AIProviderMgr();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1269,6 +1273,10 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public AIProviderMgr getAIProviderMgr() {
+        return aiProviderMgr;
     }
 
     public PipeManager getPipeManager() {
@@ -2102,6 +2110,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
+                .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
@@ -2349,6 +2358,7 @@ public class GlobalStateMgr {
                 licenseMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
                 bookmarkManager.save(imageWriter);
+                aiProviderMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

@@ -957,6 +957,49 @@ public class Analyzer {
             return null;
         }
 
+        // ---------------------------------------- AI Provider Statement --------------------------------------------------
+        @Override
+        public Void visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // -------------------------------------- Data Cache Management Statement -----------------------------------------
 
         @Override

@@ -57,6 +57,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.failover.FailoverGroup;
@@ -1240,6 +1241,26 @@ public class EditLog {
                 case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
                     TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
                     globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
+                    break;
+                }
+                case OperationType.OP_CREATE_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayCreateProvider(provider);
+                    break;
+                }
+                case OperationType.OP_ALTER_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayAlterProvider(provider);
+                    break;
+                }
+                case OperationType.OP_DROP_AI_PROVIDER: {
+                    DropAIProviderLog log = (DropAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayDropProvider(log);
+                    break;
+                }
+                case OperationType.OP_SET_DEFAULT_AI_PROVIDER: {
+                    SetDefaultAIProviderLog log = (SetDefaultAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
                     break;
                 }
                 case OperationType.OP_PIPE: {
@@ -2441,6 +2462,22 @@ public class EditLog {
 
     public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos, WALApplier walApplier) {
         logJsonObject(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos, walApplier);
+    }
+
+    public void logCreateAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logAlterAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logDropAIProvider(DropAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_AI_PROVIDER, log, walApplier);
+    }
+
+    public void logSetDefaultAIProvider(SetDefaultAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_DEFAULT_AI_PROVIDER, log, walApplier);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob, WALApplier walApplier) {
