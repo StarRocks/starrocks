@@ -1465,7 +1465,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     int64_t full_rowset_size = 0;
     if (rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
-            st = state.load_upserts(rowset.get(), i);
+            st = state.load_upserts(i);
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: load upserts failed: $0 $1",
                                                       st.to_string(), debug_string());
@@ -1513,7 +1513,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
         // 1. upgrade from old version. delfile_idxes in rowset meta is empty, we still need to load delete files
         // 2. pure upsert. no delete files, the following logic will be skip
         for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
-            st = state.load_deletes(rowset.get(), i);
+            st = state.load_deletes(i);
             if (!st.ok()) {
                 std::string msg = strings::Substitute("_apply_rowset_commit error: load deletes failed: $0 $1",
                                                       st.to_string(), debug_string());
@@ -1545,7 +1545,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 del_idx = rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(loaded_delfile);
             }
             while (i < del_idx) {
-                st = state.load_upserts(rowset.get(), loaded_upsert);
+                st = state.load_upserts(loaded_upsert);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_upserts_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_upserts_failed"); });
                 if (!st.ok()) {
@@ -1601,7 +1601,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             }
             if (loaded_delfile < delfile_num) {
                 DCHECK(i == del_idx);
-                st = state.load_deletes(rowset.get(), loaded_delfile);
+                st = state.load_deletes(loaded_delfile);
                 FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_deletes_failed,
                                            { st = Status::InternalError("inject tablet_apply_load_deletes_failed"); });
                 if (!st.ok()) {
