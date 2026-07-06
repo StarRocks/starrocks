@@ -436,16 +436,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return true;
         }
 
-<<<<<<< HEAD
-        boolean safe = true;
-        Map<Long, AlterJobV2> alterJobs = new HashMap<>(
-                GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2());
-=======
         long safeDeletionTimeMs = getSafeDeletionTimeMs();
 
         Map<Long, AlterJobV2> alterJobs =
                 new HashMap<>(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2());
->>>>>>> bf0ccec8518... [BugFix] Keep automated cluster snapshots restorable across tablet split/merge (#75638)
         alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
         for (AlterJobV2 alterJob : alterJobs.values()) {
             if (alterJob.getTableId() == tableId) {

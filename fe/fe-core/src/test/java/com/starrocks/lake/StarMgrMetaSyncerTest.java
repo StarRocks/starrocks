@@ -129,12 +129,8 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private EditLog editLog;
 
-<<<<<<< HEAD
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgrEPack();
-=======
-    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
     private TabletReshardJobMgr tabletReshardJobMgr = new TabletReshardJobMgr();
->>>>>>> bf0ccec8518... [BugFix] Keep automated cluster snapshots restorable across tablet split/merge (#75638)
     private StorageVolumeMgr storageVolumeMgr = new SharedDataStorageVolumeMgr();
 
     // PACK shard group ids surfaced by ColocateRangeMgr. Tests mutate this to register
