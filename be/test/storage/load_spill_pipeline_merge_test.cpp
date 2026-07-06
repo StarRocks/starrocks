@@ -24,6 +24,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/spill/spiller.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/load_chunk_spiller.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/storage_env.h"
@@ -55,7 +55,8 @@ public:
                 std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
         _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
         StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
-        _block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+        _block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
         ASSERT_OK(_block_manager->init());
         _profile = std::make_unique<RuntimeProfile>("test");
         _pipeline_merge_context = std::make_unique<LoadSpillPipelineMergeContext>(nullptr);

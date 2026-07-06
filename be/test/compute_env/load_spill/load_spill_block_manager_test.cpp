@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/load_spill_block_manager.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 
 #include <gtest/gtest.h>
 
@@ -24,7 +24,6 @@
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -36,12 +35,9 @@ public:
         ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(local_spill_dir()));
         _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
                 std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
-        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
-        StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
     }
 
     void TearDown() override {
-        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
         _local_spill_dir_mgr.reset();
         (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
     }
@@ -50,7 +46,6 @@ protected:
     std::string local_spill_dir() const { return std::string(kTestDir) + "/local_spill"; }
 
     constexpr static const char* const kTestDir = "./lake_load_spill_block_manager_test";
-    spill::DirManager* _previous_spill_dir_mgr = nullptr;
     std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
 };
 
@@ -58,30 +53,30 @@ protected:
 // This covers the case where init() fails or is never called, and the destructor
 // should safely skip clear_parent_path() when _remote_dir_manager is null.
 TEST_F(LoadSpillBlockManagerTest, test_destroy_without_init) {
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
     // Destroy without calling init() — should not crash
     block_manager.reset();
 }
 
 TEST_F(LoadSpillBlockManagerTest, test_basic) {
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), TUniqueId(), kTestDir, nullptr, _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_FALSE(block->is_remote());
     ASSERT_OK(block_manager->release_block(block));
 }
 
-TEST_F(LoadSpillBlockManagerTest, test_init_without_storage_env_spill_dir_manager_fails) {
-    StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+TEST_F(LoadSpillBlockManagerTest, test_init_without_local_spill_dir_manager_fails) {
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr, nullptr);
     auto status = block_manager->init();
     ASSERT_TRUE(status.is_internal_error()) << status;
 }
 
 TEST_F(LoadSpillBlockManagerTest, test_write_read) {
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), TUniqueId(), kTestDir, nullptr, _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
     ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024));
     ASSERT_OK(block->append({Slice("hello"), Slice("world")}));
@@ -100,7 +95,8 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path) {
     TUniqueId load_id;
     load_id.hi = 12345;
     load_id.lo = 67890;
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr);
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
 
     // Acquire a block with force_remote=true to create the remote spill directory
@@ -130,7 +126,8 @@ TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
     TUniqueId load_id;
     load_id.hi = 12345;
     load_id.lo = 67890;
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr);
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
 
     // Acquire a block with force_remote=true to create the remote spill directory
@@ -155,7 +152,8 @@ TEST_F(LoadSpillBlockManagerTest, test_destroy_does_not_clear_parent_path) {
 
 // Test that clear_parent_path() is safe to call when init() was not called.
 TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path_without_init) {
-    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
     // Call clear_parent_path() without init() — should return OK without crashing
     ASSERT_OK(block_manager->clear_parent_path());
 }
@@ -168,11 +166,8 @@ public:
         ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(local_spill_dir()));
         _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
                 std::make_shared<spill::Dir>(local_spill_dir(), local_fs, std::numeric_limits<int64_t>::max())});
-        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
-        StorageEnv::GetInstance()->set_spill_dir_mgr(_local_spill_dir_mgr.get());
     }
     void TearDown() override {
-        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
         _local_spill_dir_mgr.reset();
         (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
     }
@@ -181,13 +176,12 @@ protected:
     std::string local_spill_dir() const { return std::string(kTestDir) + "/local_spill"; }
 
     constexpr static const char* const kTestDir = "./lake_load_spill_block_container_test";
-    spill::DirManager* _previous_spill_dir_mgr = nullptr;
     std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
 };
 
 TEST_F(LoadSpillBlockContainerTest, test_block_group_with_slot_idx) {
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
-            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr);
+            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr, _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
 
     auto container = block_manager->block_container();
@@ -235,7 +229,7 @@ TEST_F(LoadSpillBlockContainerTest, test_block_group_with_slot_idx) {
 
 TEST_F(LoadSpillBlockContainerTest, test_block_group_ordering) {
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
-            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr);
+            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr, _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
 
     auto container = block_manager->block_container();
@@ -289,7 +283,7 @@ TEST_F(LoadSpillBlockContainerTest, test_block_group_ordering) {
 
 TEST_F(LoadSpillBlockContainerTest, test_multiple_blocks_per_group) {
     std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
-            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr);
+            TUniqueId(), TUniqueId(), "./lake_load_spill_block_container_test", nullptr, _local_spill_dir_mgr.get());
     ASSERT_OK(block_manager->init());
 
     auto container = block_manager->block_container();
@@ -331,6 +325,7 @@ TEST_F(LoadSpillBlockContainerTest, test_multiple_blocks_per_group) {
 TEST_F(LoadSpillBlockManagerTest, flat_layout_mode_writes_to_load_spill_txns_dir) {
     constexpr int64_t kTxnId = 0x123456;
     auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, /*fs=*/nullptr,
+                                                                 _local_spill_dir_mgr.get(),
                                                                  /*enable_flat_layout=*/true, /*txn_id=*/kTxnId);
     ASSERT_OK(block_manager->init());
 
@@ -363,6 +358,7 @@ TEST_F(LoadSpillBlockManagerTest, flat_layout_mode_writes_to_load_spill_txns_dir
 TEST_F(LoadSpillBlockManagerTest, flat_layout_mode_filename_starts_with_hex_txn_id) {
     constexpr int64_t kTxnId = 0xABCD1234;
     auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, /*fs=*/nullptr,
+                                                                 _local_spill_dir_mgr.get(),
                                                                  /*enable_flat_layout=*/true, /*txn_id=*/kTxnId);
     ASSERT_OK(block_manager->init());
 
@@ -397,6 +393,7 @@ TEST_F(LoadSpillBlockManagerTest, flat_layout_mode_filename_starts_with_hex_txn_
 // future refactor does not silently migrate them onto the flat layout.
 TEST_F(LoadSpillBlockManagerTest, legacy_mode_writes_to_load_spill_dir) {
     auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, /*fs=*/nullptr,
+                                                                 _local_spill_dir_mgr.get(),
                                                                  /*enable_flat_layout=*/false);
     ASSERT_OK(block_manager->init());
 
@@ -425,6 +422,7 @@ TEST_F(LoadSpillBlockManagerTest, legacy_mode_writes_to_load_spill_dir) {
 TEST_F(LoadSpillBlockManagerTest, flat_layout_mode_release_block_does_not_delete_file) {
     constexpr int64_t kTxnId = 0xCAFE;
     auto block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, /*fs=*/nullptr,
+                                                                 _local_spill_dir_mgr.get(),
                                                                  /*enable_flat_layout=*/true, /*txn_id=*/kTxnId);
     ASSERT_OK(block_manager->init());
 

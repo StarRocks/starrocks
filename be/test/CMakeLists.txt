@@ -361,7 +361,6 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
     ./storage/lake/tablet_write_log_manager_test.cpp
-    ./storage/load_spill_block_manager_test.cpp
     ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
@@ -471,12 +470,18 @@ if (APPLE)
     target_sources(engine_storage_migration_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 ADD_BE_TEST(storage/lake/compaction_task_test)
+if (APPLE)
+    target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
 
 # Standalone executable for builtin_functions_fuzzy_test
 ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
+if (APPLE)
+    target_sources(builtin_functions_fuzzy_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)

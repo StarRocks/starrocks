@@ -29,6 +29,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
+#include "common/storage_path_constants.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gutil/stl_util.h"

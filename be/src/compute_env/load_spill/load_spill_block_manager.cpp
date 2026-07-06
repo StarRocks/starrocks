@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/load_spill_block_manager.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 
 #include <vector>
 
@@ -20,9 +20,9 @@
 #include "compute_env/spill/file_block_manager.h"
 #include "compute_env/spill/hybird_block_manager.h"
 #include "compute_env/spill/log_block_manager.h"
+#include "fmt/format.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "storage/storage_env.h"
 
 namespace starrocks {
 
@@ -97,11 +97,10 @@ Status LoadSpillBlockManager::init() {
     _remote_dir_manager = std::make_unique<spill::DirManager>(remote_dirs);
 
     // init block manager
-    auto* local_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
-    if (local_spill_dir_mgr == nullptr) {
+    if (_local_spill_dir_mgr == nullptr) {
         return Status::InternalError("LoadSpillBlockManager requires local spill dir manager");
     }
-    auto local_block_manager = std::make_unique<spill::LogBlockManager>(_load_id, local_spill_dir_mgr);
+    auto local_block_manager = std::make_unique<spill::LogBlockManager>(_load_id, _local_spill_dir_mgr);
     auto remote_block_manager = std::make_unique<spill::FileBlockManager>(_load_id, _remote_dir_manager.get());
     _block_manager = std::make_unique<spill::HyBirdBlockManager>(_load_id, std::move(local_block_manager),
                                                                  std::move(remote_block_manager));

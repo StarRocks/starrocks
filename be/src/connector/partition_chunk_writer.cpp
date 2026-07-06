@@ -19,6 +19,7 @@
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
@@ -30,7 +31,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/types.h"
 
 namespace starrocks::connector {
@@ -199,8 +199,13 @@ SpillPartitionChunkWriter::~SpillPartitionChunkWriter() {
 
 Status SpillPartitionChunkWriter::init() {
     std::string root_location = _location_provider->root_location();
-    _load_spill_block_mgr =
-            std::make_unique<LoadSpillBlockManager>(_fragment_context->query_id(), _writer_id, root_location, _fs);
+    auto* services = _fragment_context->runtime_state()->query_execution_services();
+    DCHECK(services != nullptr);
+    DCHECK(services->runtime != nullptr);
+    auto* spill_dir_mgr =
+            services == nullptr || services->runtime == nullptr ? nullptr : services->runtime->spill_dir_mgr;
+    _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(_fragment_context->query_id(), _writer_id,
+                                                                    root_location, _fs, spill_dir_mgr);
     RETURN_IF_ERROR(_load_spill_block_mgr->init());
     _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(_load_spill_block_mgr.get(),
                                                              _fragment_context->runtime_state()->runtime_profile());

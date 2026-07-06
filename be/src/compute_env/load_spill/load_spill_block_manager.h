@@ -20,11 +20,10 @@
 #include <utility>
 #include <vector>
 
+#include "common/storage_path_constants.h"
 #include "compute_env/spill/block_group.h"
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/dir_manager.h"
-#include "fmt/format.h"
-#include "storage/lake/location_provider.h"
 
 namespace starrocks {
 
@@ -61,8 +60,8 @@ private:
 
 class LoadSpillBlockManager {
 public:
-    // |enable_flat_layout| selects the Lake flat-layout mode (see lake::kLoadSpillTxnsDirectoryName
-    // for the full schema). It bundles three coupled behaviors that always travel together:
+    // |enable_flat_layout| selects the Lake flat-layout mode (see kLoadSpillTxnsDirectoryName for the
+    // full schema). It bundles three coupled behaviors that always travel together:
     //   (a) write under load_spill_txns/ instead of load_spill/;
     //   (b) inject the "<txn_id_hex>_<load_id>_<frag_id>_<seq>" name prefix;
     //   (c) skip per-file deletion on release (reclaimed by merge hot-delete + vacuum_full).
@@ -70,17 +69,18 @@ public:
     // layout used by non-Lake callers (e.g. SpillPartitionChunkWriter).
     LoadSpillBlockManager(const TUniqueId& load_id, const TUniqueId& fragment_instance_id,
                           const std::string& remote_spill_path, std::shared_ptr<FileSystem> fs,
-                          bool enable_flat_layout = false, int64_t txn_id = 0)
+                          spill::DirManager* local_spill_dir_mgr, bool enable_flat_layout = false, int64_t txn_id = 0)
             : _load_id(load_id),
               _fragment_instance_id(fragment_instance_id),
               _fs(std::move(fs)),
+              _local_spill_dir_mgr(local_spill_dir_mgr),
               _enable_flat_layout(enable_flat_layout),
               _txn_id(txn_id) {
         if (enable_flat_layout) {
             DCHECK(txn_id != 0) << "flat layout mode requires non-zero txn_id";
-            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillTxnsDirectoryName;
+            _remote_spill_path = remote_spill_path + "/" + kLoadSpillTxnsDirectoryName;
         } else {
-            _remote_spill_path = remote_spill_path + "/" + lake::kLoadSpillDirectoryName;
+            _remote_spill_path = remote_spill_path + "/" + kLoadSpillDirectoryName;
         }
     }
 
@@ -118,6 +118,7 @@ private:
     TUniqueId _fragment_instance_id;                           // Unique ID for the fragment instance.
     std::string _remote_spill_path;                            // Path for remote spill storage.
     std::shared_ptr<FileSystem> _fs;                           // File system for remote storage.
+    spill::DirManager* _local_spill_dir_mgr = nullptr;         // Local spill directories, not owned.
     std::unique_ptr<spill::DirManager> _remote_dir_manager;    // Manager for remote directories.
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.

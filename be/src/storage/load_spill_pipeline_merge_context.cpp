@@ -18,7 +18,6 @@
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/storage_env.h"
 
 namespace starrocks {

@@ -43,7 +43,6 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/storage_env.h"
