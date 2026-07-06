@@ -145,7 +145,9 @@ jobs:
           VERSION: ${{ matrix.version }}
         run: |
           body=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.body // ""')
-          has_label=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq "[.[].name] | contains([\"${VERSION}\"])")
+          # any(. == $v), not contains(): jq array containment matches strings
+          # by substring, so labels like "4.1-merged" or "4.1.0" would count as "4.1"
+          has_label=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq "any(.[].name; . == \"${VERSION}\")")
           version_re=${VERSION//./\\.}
           if grep -qiE "^[[:space:]]*-[[:space:]]*\[x\][[:space:]]+${version_re}[[:space:]]*$" <<< "$body"; then
             if [[ "$has_label" == "false" ]]; then
