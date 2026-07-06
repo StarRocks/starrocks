@@ -232,7 +232,7 @@ TEST(StorageMetricsTest, RegisterThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
-    metrics.register_thread_pool_metrics("pindex_load", threadpool.get());
+    metrics.register_thread_pool_metrics("pindex_load", &metrics.pindex_load, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);
@@ -252,7 +252,7 @@ TEST(StorageMetricsTest, RegisterStorageCleanupThreadPoolMetricsBeforeInstall) {
     ASSERT_TRUE(status.ok()) << status;
 
     StorageMetrics metrics;
-    metrics.register_thread_pool_metrics("storage_cleanup", threadpool.get());
+    metrics.register_thread_pool_metrics("storage_cleanup", &metrics.storage_cleanup, threadpool.get());
 
     MetricRegistry registry("test_registry");
     metrics.install(&registry);

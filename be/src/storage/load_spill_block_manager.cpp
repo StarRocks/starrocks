@@ -60,8 +60,8 @@ Status LoadSpillBlockMergeExecutor::init() {
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_tablet_internal_parallel_merge_pool));
-    StorageMetrics::instance()->register_thread_pool_metrics("tablet_internal_parallel_merge",
-                                                             _tablet_internal_parallel_merge_pool.get());
+    REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), tablet_internal_parallel_merge,
+                                         _tablet_internal_parallel_merge_pool.get());
     return Status::OK();
 }
 

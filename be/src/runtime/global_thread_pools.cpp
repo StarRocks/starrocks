@@ -66,7 +66,7 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                             .set_max_queue_size(automatic_partition_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, automatic_partition, _automatic_partition_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, automatic_partition, _automatic_partition_pool.get());
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -165,7 +165,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, put_aggregate_metadata, _put_aggregate_metadata_thread_pool.get());
 
     max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
     if (max_thread_count <= 0) {
@@ -176,7 +176,8 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
                             .build(&_pk_index_execution_thread_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, cloud_native_pk_index_execution,
+                                         _pk_index_execution_thread_pool.get());
 
     max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
     if (max_thread_count <= 0) {
@@ -188,7 +189,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
                             .build(&_pk_index_memtable_flush_thread_pool));
     REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, cloud_native_pk_index_memtable_flush,
-                                         _pk_index_memtable_flush_thread_pool);
+                                         _pk_index_memtable_flush_thread_pool.get());
 
     max_thread_count = config::lake_partial_update_thread_pool_max_threads;
     if (max_thread_count <= 0) {
@@ -199,7 +200,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_threads(std::max(1, max_thread_count))
                             .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
                             .build(&_lake_partial_update_thread_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_partial_update, _lake_partial_update_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_partial_update, _lake_partial_update_thread_pool.get());
 #elif defined(BE_TEST)
     RETURN_IF_ERROR(ThreadPoolBuilder("put_agg_meta")
                             .set_min_threads(1)
@@ -228,7 +229,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_threads(std::max(1, static_cast<int>(config::lake_metadata_fetch_thread_count)))
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_metadata_fetch_thread_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_metadata_fetch, _lake_metadata_fetch_thread_pool.get());
 
     int nproc = CpuInfo::num_cores();
     int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
@@ -241,7 +242,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
                             .set_max_threads(effective_pool)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_lake_vector_index_build_thread_pool));
-    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_vi_build, _lake_vector_index_build_thread_pool);
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, lake_vi_build, _lake_vector_index_build_thread_pool.get());
 
     return Status::OK();
 }

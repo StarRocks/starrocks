@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metric_group.h"
 
 namespace starrocks {
 
@@ -33,7 +34,8 @@ public:
     static StorageMetrics* instance();
 
     void install(MetricRegistry* registry);
-    void register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                      ThreadPool* threadpool);
     void register_metadata_cache_bytes_total_hook(std::function<int64_t()> value_fn);
     void register_unused_rowsets_count_hook(std::function<uint64_t()> value_fn);
     void register_rowset_count_generated_and_in_use_hook(std::function<uint64_t()> value_fn);
@@ -200,6 +202,7 @@ public:
 private:
     struct PendingThreadPoolMetrics {
         std::string name;
+        ThreadPoolMetricGroup* metric_group;
         ThreadPool* threadpool;
     };
 
@@ -215,7 +218,8 @@ private:
         std::function<uint64_t()> value_fn;
     };
 
-    void _register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void _register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                       ThreadPool* threadpool);
     void _register_int_gauge_hook(const std::string& name, IntGauge* metric, std::function<int64_t()> value_fn);
     void _register_uint_gauge_hook(const std::string& name, UIntGauge* metric, std::function<uint64_t()> value_fn);
 
@@ -226,3 +230,9 @@ private:
 };
 
 } // namespace starrocks
+
+#define REGISTER_STORAGE_THREAD_POOL_METRICS(storage_metrics, metric_name, threadpool)                      \
+    do {                                                                                                    \
+        auto* metric_owner = (storage_metrics);                                                             \
+        metric_owner->register_thread_pool_metrics(#metric_name, &metric_owner->metric_name, (threadpool)); \
+    } while (false)
