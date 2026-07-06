@@ -18,13 +18,11 @@
 
 #include <filesystem>
 
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "base/types/int96.h"
-#include "types/time_types.h"
-#include "types/timestamp_value.h"
 #include "common/config_exec_fwd.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
@@ -34,6 +32,8 @@
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
+#include "types/time_types.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::parquet {
 
