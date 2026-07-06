@@ -405,6 +405,114 @@ PROPERTIES (
 | type      | The type of the UDF. Set the value to `StarrocksJar`, which specifies that the UDF is a Java-based function. |
 | file      | The HTTP URL from which you can download the JAR file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<jar_package_name>` format. |
 | isolation | (Optional) To share function instances across UDF executions and support static variables, set this to "shared". |
+| input     | (Optional) Input format. Valid values: `scalar` (default, one boxed Java object per row) and `arrow` (vectorized — one Apache Arrow `FieldVector` per argument for the whole batch). See [Vectorized (Arrow) input](#vectorized-arrow-input). |
+
+#### Vectorized (Arrow) input
+
+Setting `"input" = "arrow"` switches a Java UDF from the per-row boxed calling convention to a
+**vectorized** one: your method receives one Apache Arrow
+`FieldVector` per argument covering the whole batch, and
+(for scalar/UDTF) returns a `FieldVector`. Columns are exchanged with the backend zero-copy over the
+[Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html), avoiding the
+per-row boxing/unboxing of the default path.
+
+Add the Arrow dependency to your Maven project (the version must match the one bundled with your
+StarRocks release), scoped `provided` since the BE already ships it:
+
+```xml
+<dependency>
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>arrow-vector</artifactId>
+    <version>17.0.0</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+Allocate result vectors from the framework-managed allocator via `arg.getAllocator()` so the engine
+owns their lifecycle.
+
+:::note
+The BE runs the UDF in an embedded JVM that must expose `java.nio` to Arrow's off-heap memory
+layer. The shipped `conf/be.conf` already sets this via
+`JAVA_OPTS="... --add-opens=java.base/java.nio=ALL-UNNAMED ..."`; if you customize `JAVA_OPTS`,
+keep that flag or arrow-input UDFs fail to initialize.
+:::
+
+**Scalar** — `evaluate(FieldVector...)` returns a `FieldVector`:
+
+```java
+public class ArrowAdd {
+    public IntVector evaluate(IntVector a, IntVector b) {
+        IntVector out = new IntVector("result", a.getAllocator());
+        int n = a.getValueCount();
+        out.allocateNew(n);
+        for (int i = 0; i < n; i++) {
+            if (a.isNull(i) || b.isNull(i)) {
+                out.setNull(i);
+            } else {
+                out.set(i, a.get(i) + b.get(i));
+            }
+        }
+        out.setValueCount(n);
+        return out;
+    }
+}
+```
+
+```SQL
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.udf.sample.ArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
+);
+```
+
+**UDTF** — `process(FieldVector...)` returns `T[][]` (one `T[]` of output rows per input row; only the
+input is vectorized):
+
+```java
+public class ArrowRepeat {
+    public Integer[][] process(IntVector v) {
+        Integer[][] out = new Integer[v.getValueCount()][];
+        for (int i = 0; i < v.getValueCount(); i++) {
+            out[i] = v.isNull(i) ? new Integer[0] : new Integer[] {v.get(i), v.get(i)};
+        }
+        return out;
+    }
+}
+```
+
+**UDAF** — `update(State, FieldVector...)` receives the whole batch destined for one state;
+`create`/`merge`/`serialize`/`finalize` keep their normal (boxed) signatures.
+
+> **LIMITATIONS**
+>
+> - Arrow-input UDAFs are supported only for **global aggregation** and **sorted-streaming
+>   aggregation** (a whole batch belongs to one state). A query that routes an arrow UDAF through a
+>   hash `GROUP BY` fails with a clear error — use the default (boxed) input for `GROUP BY` UDAFs.
+> - Arrow input is **not** supported for window functions (`analytic = "true"`) yet.
+
+Mapping between SQL types and the Arrow `FieldVector` your method receives:
+
+| SQL type   | Arrow FieldVector          |
+| ---------- | -------------------------- |
+| BOOLEAN    | `BitVector`                |
+| TINYINT    | `TinyIntVector`            |
+| SMALLINT   | `SmallIntVector`           |
+| INT        | `IntVector`                |
+| BIGINT     | `BigIntVector`             |
+| FLOAT      | `Float4Vector`             |
+| DOUBLE     | `Float8Vector`             |
+| VARCHAR    | `VarCharVector`            |
+| DECIMAL    | `DecimalVector`            |
+| DATE       | `DateDayVector`            |
+| DATETIME   | `TimeStampMicroVector`     |
+| ARRAY      | `ListVector`               |
+| MAP        | `MapVector`                |
+| STRUCT     | `StructVector`             |
 
 #### Create a UDAF
 

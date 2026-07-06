@@ -112,6 +112,8 @@ set(EXPR_FILES
   udf/java/java_udf_context.cpp
   udf/java/java_udf_reflection.cpp
   udf/java/java_data_converter.cpp
+  udf/java/arrow_udf_jni.cpp
+  udf/java/jni_arrow_func_call_stub.cpp
   udf/python/env.cpp
   udf/python/callstub.cpp
   udf/udf_call_stub.cpp
