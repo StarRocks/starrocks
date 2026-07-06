@@ -17,7 +17,7 @@
 #include "column/field.h"
 #include "common/memory/mem_hook_allocator.h"
 #include "common/statusor.h"
-#include "storage/column_aggregator.h"
+#include "storage_primitive/column_aggregator.h"
 
 namespace starrocks {
 

@@ -374,7 +374,7 @@
     {
       "id": "storageprimitive",
       "doc_label": "StoragePrimitive",
-      "summary": "Shared storage-access primitives, predicate contracts, predicate trees, iterator contracts, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
+      "summary": "Shared storage-access primitives, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types used by Storage, Exec, Connector, Format, and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
       "owned_targets": ["StoragePrimitive"],
       "owned_roots": ["be/src/storage_primitive"],
       "allowed_include_prefixes": [
@@ -390,15 +390,15 @@
       ],
       "forbidden_include_prefixes": ["storage/", "exec/", "service/", "connector/", "http/", "cache/", "util/"],
       "forbidden_includes": ["exec/exec_env.h"],
-      "allowed_target_deps": ["Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["storage_primitive_test"],
-      "allowed_test_link_deps": ["StoragePrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator contracts, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward."
+      "allowed_test_link_deps": ["StoragePrimitive", "Expr", "Runtime", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep StoragePrimitive limited to reusable storage-access contracts, predicate contracts, predicate trees, iterator/merge/aggregation helpers, and value/schema types; move concrete storage engine, tablet, rowset, lake, service, concrete connector, and full Exec integration upward."
     },
     {
       "id": "storagebase",
       "doc_label": "StorageBase",
-      "summary": "Base storage algorithms and mask-buffer helpers above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
+      "summary": "Base storage algorithms above StoragePrimitive and ComputeEnv without concrete Storage engine, tablet, rowset, lake, service, or full Exec coupling.",
       "owned_targets": ["StorageBase"],
       "owned_roots": ["be/src/storage/base"],
       "allowed_include_prefixes": [

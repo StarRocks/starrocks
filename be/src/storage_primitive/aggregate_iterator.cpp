@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/aggregate_iterator.h"
+#include "storage_primitive/aggregate_iterator.h"
 
 #include <memory>
 
@@ -22,7 +22,7 @@
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "runtime/chunk_helper.h"
-#include "storage/chunk_aggregator.h"
+#include "storage_primitive/chunk_aggregator.h"
 
 namespace starrocks {
 

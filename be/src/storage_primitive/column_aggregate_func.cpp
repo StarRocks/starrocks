@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/column_aggregate_func.h"
+#include "storage_primitive/column_aggregate_func.h"
 
 #include <fmt/format.h>
 
@@ -30,7 +30,8 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "storage/column_aggregator.h"
+#include "storage_primitive/aggregate_type.h"
+#include "storage_primitive/column_aggregator.h"
 #include "types/percentile_value.h"
 
 namespace starrocks {

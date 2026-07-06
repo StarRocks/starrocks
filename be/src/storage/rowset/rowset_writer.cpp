@@ -59,9 +59,6 @@
 #include "platform/key_cache.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
-#include "storage/base/row_source_mask.h"
 #include "storage/chunk_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/metadata_util.h"
@@ -70,8 +67,11 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/aggregate_iterator.h"
 #include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/row_source_mask_buffer.h"
 #include "storage_primitive/type_utils.h"
 
 namespace starrocks {

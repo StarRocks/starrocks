@@ -19,9 +19,8 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "storage/chunk_helper.h"
-#include "storage/column_aggregate_func.h"
 #include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_aggregate_func.h"
 #include "storage_primitive/row_source_mask.h"
 
 namespace starrocks {
