@@ -20,6 +20,22 @@ SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
 SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
 SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name}';
+SELECT TASK_SOURCE FROM information_schema.task_runs WHERE task_name = '${task_name}';
+
+submit task task_src_insert_${uuid0} as insert into ss select * from ss;
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for INSERT task run to appear"}
+  result=select count(*) from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+submit task task_src_ctas_${uuid0} as create table ss_ctas as select event_day, pv from ss;
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for CTAS task run to appear"}
+  result=select count(*) from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+  CHECK: int(${result}[-1][0]) > 0
+} END LOOP
+select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
 
 admin set frontend config('enable_task_run_fe_evaluation'='false');
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;

@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -266,5 +267,26 @@ public class CatalogConnectorMetadataTest {
 
         Map<String, String> actualProperties = catalogConnectorMetadata.getCatalogProperties();
         assertEquals(expectedProperties, actualProperties);
+    }
+
+    @Test
+    void testGetVersionCommitTimeMillisDelegatesToChild(@Mocked ConnectorMetadata connectorMetadata,
+                                                        @Mocked Table table) {
+        Optional<Long> expected = Optional.of(1781000000000L);
+        new Expectations() {
+            {
+                connectorMetadata.getVersionCommitTimeMillis("test_db", table, 42L);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        assertEquals(expected, catalogConnectorMetadata.getVersionCommitTimeMillis("test_db", table, 42L));
     }
 }

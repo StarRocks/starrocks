@@ -44,7 +44,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     private final List<Metric> metrics = Lists.newArrayList();
 
     // refresh
-    // increased once the materialized view's refresh job is triggered.
+    // increased once per refresh job, when it reaches a terminal state.
     public LongCounterMetric counterRefreshJobTotal;
     // increased only if the materialized view's refresh job is success refreshed.
     public LongCounterMetric counterRefreshJobSuccessTotal;
@@ -85,7 +85,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     public GaugeMetric<Integer> counterPartitionCount;
 
     // histogram(ms)
-    // record the materialized view's refresh job duration only if it's refreshed successfully.
+    // records the refresh job's wall-clock duration, once per job on its terminal run.
     public Histogram histRefreshJobDuration;
 
     public Optional<String> dbNameOpt = Optional.empty();
@@ -369,6 +369,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         if (status == null || !status.isFinishState()) {
             return;
         }
+        // Counted once per refresh job, on its terminal task run.
         this.counterRefreshJobTotal.increase(1L);
         switch (status) {
             case MERGED:

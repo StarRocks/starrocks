@@ -77,6 +77,7 @@ import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.catalog.system.information.TablesSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
@@ -308,6 +309,7 @@ import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TIsMethodSupportedRequest;
 import com.starrocks.thrift.TListConnectionRequest;
 import com.starrocks.thrift.TListConnectionResponse;
+import com.starrocks.thrift.TListMaterializedViewRefreshJobsResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListPipeFilesInfo;
 import com.starrocks.thrift.TListPipeFilesParams;
@@ -587,6 +589,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get list table request: {}", params);
         ConnectContext context = new ConnectContext();
         return MaterializedViewsSystemTable.query(params, context);
+    }
+
+    @Override
+    public TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(TGetTasksParams params) throws TException {
+        ConnectContext context = new ConnectContext();
+        return MaterializedViewRefreshJobsSystemTable.query(params, context);
     }
 
     @Override

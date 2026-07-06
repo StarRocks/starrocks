@@ -157,6 +157,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getVersionCommitTimeMillis(dbName, table, version);
+    }
+
+    @Override
     public List<String> listDbNames(ConnectContext context) {
         return hiveMetadata.listDbNames(context);
     }

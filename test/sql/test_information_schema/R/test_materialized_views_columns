@@ -1,0 +1,60 @@
+-- name: test_materialized_views_columns @native
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table ss (event_day date, pv bigint) duplicate key(event_day)
+distributed by hash(event_day) buckets 2 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into ss values ('2020-01-14', 1), ('2020-01-15', 2);
+-- result:
+-- !result
+create materialized view mv_manual distributed by hash(event_day)
+refresh deferred manual
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+-- result:
+-- !result
+create materialized view mv_onchange distributed by hash(event_day)
+refresh deferred async
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+-- result:
+-- !result
+create materialized view mv_sched distributed by hash(event_day)
+refresh deferred async start('2024-01-01 00:00:00') every(interval 1 hour)
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+-- result:
+-- !result
+select TABLE_NAME, REFRESH_TYPE, REFRESH_MODE, REFRESH_TRIGGER, REFRESH_POLICY, RESOURCE_GROUP, WAREHOUSE
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' order by TABLE_NAME;
+-- result:
+mv_manual	ASYNC	PCT	MANUAL	MANUAL	default_mv_wg	
+mv_onchange	ASYNC	PCT	ON_BASE_TABLE_CHANGE	ON_BASE_TABLE_CHANGE	default_mv_wg	
+mv_sched	ASYNC	PCT	SCHEDULED	START("2024-01-01 00:00:00") EVERY(INTERVAL 1 HOUR)	default_mv_wg	
+-- !result
+create resource group rg_${uuid0} to (user = 'rguser_${uuid0}') with ('cpu_core_limit' = '1', 'mem_limit' = '10%');
+-- result:
+-- !result
+create materialized view mv_rg distributed by hash(event_day)
+refresh deferred manual properties('resource_group' = 'rg_${uuid0}')
+as select event_day, sum(pv) as sum_pv from ss group by event_day;
+-- result:
+-- !result
+select if(RESOURCE_GROUP = 'rg_${uuid0}', 'OK', concat('FAILED: ', RESOURCE_GROUP))
+from information_schema.materialized_views
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_rg';
+-- result:
+OK
+-- !result
+drop materialized view mv_rg;
+-- result:
+-- !result
+drop resource group rg_${uuid0};
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

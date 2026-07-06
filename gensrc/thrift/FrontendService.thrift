@@ -424,6 +424,14 @@ struct TMaterializedViewStatus {
     28: optional string creator
     29: optional string last_refresh_process_time
     30: optional string last_refresh_job_id
+    31: optional string last_refresh_time
+    32: optional string warehouse
+    33: optional string refresh_mode
+    34: optional string refresh_trigger
+    35: optional string refresh_policy
+    36: optional string resource_group
+    37: optional string query_rewrite_status_reason
+    38: optional string base_table_refresh_version_times
 }
 
 struct TListPipesParams {
@@ -494,6 +502,36 @@ struct TListMaterializedViewStatusResult {
     1: optional list<TMaterializedViewStatus> materialized_views
 }
 
+struct TMaterializedViewRefreshJobInfo {
+    1: optional string job_id
+    2: optional string materialized_view_id
+    3: optional string table_schema
+    4: optional string table_name
+    5: optional string task_id
+    6: optional string warehouse
+    7: optional string resource_group
+    8: optional string creator
+    9: optional string submit_user
+    10: optional string run_as_user
+    11: optional string submit_time
+    12: optional string refresh_state
+    13: optional string finish_time
+    14: optional string duration_time
+    15: optional string refresh_trigger
+    16: optional string refresh_mode
+    17: optional string imv_source_version_range
+    18: optional string imv_source_timestamp_range
+    19: optional string imv_source_pinned_snapshot_id_map
+    20: optional string failed_task_run_id
+    21: optional string failed_query_id
+    22: optional string error_code
+    23: optional string error_message
+}
+
+struct TListMaterializedViewRefreshJobsResult {
+    1: optional list<TMaterializedViewRefreshJobInfo> jobs
+}
+
 // Pagination cursor for request segmentation
 struct TRequestPagination {
     1: optional i64 offset
@@ -551,6 +589,8 @@ struct TTaskRunInfo {
 
     16: optional string job_id
     17: optional i64 process_time
+
+    18: optional string task_source
 }
 
 struct TGetTaskRunInfoResult {
@@ -2429,6 +2469,7 @@ service FrontendService {
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
     TListMaterializedViewStatusResult listMaterializedViewStatus(1:TGetTablesParams params)
+    TListMaterializedViewRefreshJobsResult listMaterializedViewRefreshJobs(1: optional TGetTasksParams params)
     TListPipesResult listPipes(1: TListPipesParams params)
     TListPipeFilesResult listPipeFiles(1: TListPipeFilesParams params)
 

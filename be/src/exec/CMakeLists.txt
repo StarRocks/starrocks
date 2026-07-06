@@ -143,6 +143,7 @@ set(EXEC_FILES
     schema_scanner/schema_triggers_scanner.cpp
     schema_scanner/schema_events_scanner.cpp
     schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_view_refresh_jobs_scanner.cpp
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
