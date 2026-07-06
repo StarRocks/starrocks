@@ -1048,6 +1048,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_HIVE_WITHOUT_PARTITION_FILTER = "allow_hive_without_partition_filter";
 
+    public static final String ALLOW_LAKE_WITHOUT_PARTITION_FILTER = "allow_lake_without_partition_filter";
+
     public static final String SCAN_HIVE_PARTITION_NUM_LIMIT = "scan_hive_partition_num_limit";
 
     public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
@@ -3143,8 +3145,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;
 
-    @VarAttr(name = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
-    private boolean allowHiveWithoutPartitionFilter = true;
+    @VarAttr(name = ALLOW_LAKE_WITHOUT_PARTITION_FILTER, alias = ALLOW_HIVE_WITHOUT_PARTITION_FILTER)
+    private boolean allowLakeWithoutPartitionFilter = true;
 
     // For the maximum number of partitions allowed to be scanned in a single olap table, 0 means no limit.
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
@@ -5782,12 +5784,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
-    public boolean isAllowHiveWithoutPartitionFilter() {
-        return allowHiveWithoutPartitionFilter;
+    public boolean isAllowLakeWithoutPartitionFilter() {
+        return allowLakeWithoutPartitionFilter;
     }
 
-    public void setAllowHiveWithoutPartitionFilter(boolean allowHiveWithoutPartitionFilter) {
-        this.allowHiveWithoutPartitionFilter = allowHiveWithoutPartitionFilter;
+    public void setAllowLakeWithoutPartitionFilter(boolean allowLakeWithoutPartitionFilter) {
+        this.allowLakeWithoutPartitionFilter = allowLakeWithoutPartitionFilter;
     }
 
     public int getScanOlapPartitionNumLimit() {
