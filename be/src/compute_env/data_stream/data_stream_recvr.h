@@ -53,10 +53,6 @@ namespace google::protobuf {
 class Closure;
 } // namespace google::protobuf
 
-namespace butil {
-class IOBuf;
-} // namespace butil
-
 namespace starrocks {
 
 class SortedChunksMerger;
@@ -169,10 +165,7 @@ private:
                     PassThroughChunkBuffer* pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
-    // `attachment` holds the chunk payloads transmitted via the brpc attachment (nullptr if none). It is
-    // cut into each chunk's `data` here, under this receiver's instance mem tracker, so those (large)
-    // buffers are charged to the query rather than the process tracker.
-    Status add_chunks(PTransmitChunkParams& request, butil::IOBuf* attachment, ::google::protobuf::Closure** done);
+    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Indicate that a particular sender is done. Delegated to the appropriate
     // sender queue. Called from DataStreamMgr.

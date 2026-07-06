@@ -38,9 +38,6 @@
 #include <deque>
 #include <utility>
 
-#include <butil/iobuf.h>
-#include <fmt/format.h>
-
 #include "base/compression/block_compression.h"
 #include "base/phmap/phmap.h"
 #include "base/string/faststring.h"
@@ -245,33 +242,12 @@ bool DataStreamRecvr::is_data_ready() {
     return false;
 }
 
-Status DataStreamRecvr::add_chunks(PTransmitChunkParams& request, butil::IOBuf* attachment,
-                                   ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
     DeferOp op([&] {
         tls_thread_status.set_mem_tracker(prev_tracker);
         DCHECK(prev_tracker == nullptr || prev_tracker == RuntimeEnv::GetInstance()->process_mem_tracker());
     });
-
-    // Cut the chunk payloads out of the brpc attachment here, under the instance mem tracker set above, so
-    // the (potentially large) `data` buffers are charged to this query instead of the process tracker. The
-    // sender moves each chunk's data into the attachment and records its length in data_size(); see
-    // DataStreamSender::construct_brpc_attachment.
-    if (attachment != nullptr) {
-        for (int i = 0; i < request.chunks_size(); ++i) {
-            auto* chunk = request.mutable_chunks(i);
-            if (UNLIKELY(attachment->size() < chunk->data_size())) {
-                return Status::InternalError(
-                        fmt::format("iobuf's size {} < {}", attachment->size(), chunk->data_size()));
-            }
-            // Copies out of the (possibly discontinuous) attachment blocks into the chunk's data buffer.
-            auto size = attachment->cutn(chunk->mutable_data(), chunk->data_size());
-            if (UNLIKELY(size != static_cast<size_t>(chunk->data_size()))) {
-                return Status::InternalError(fmt::format("iobuf read {} != expected {}.", size, chunk->data_size()));
-            }
-        }
-    }
-
     // TODO: We just need to notify the affected channels.
     auto notify = this->defer_notify();
 

@@ -220,19 +220,19 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     }
 }
 
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
     return add_chunks<false>(request, metrics, done);
 }
 
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(PTransmitChunkParams& request,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                           Metrics& metrics,
                                                                           ::google::protobuf::Closure** done) {
     return add_chunks<true>(request, metrics, done);
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                            ::google::protobuf::Closure** done) {
     DCHECK(request.chunks_size() > 0);
     int32_t be_number = request.be_number();
@@ -522,12 +522,12 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     return true;
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
     return add_chunks<false>(request, metrics, done);
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(PTransmitChunkParams& request,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                        Metrics& metrics,
                                                                        ::google::protobuf::Closure** done) {
     return add_chunks<true>(request, metrics, done);
@@ -679,7 +679,7 @@ DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sende
 
 template <bool need_deserialization>
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
-        PTransmitChunkParams& request, Metrics& metrics, size_t& total_chunk_bytes) {
+        const PTransmitChunkParams& request, Metrics& metrics, size_t& total_chunk_bytes) {
     ChunkList chunks;
     faststring uncompressed_buffer;
     for (auto i = 0; i < request.chunks().size(); i++) {
@@ -691,11 +691,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), metrics, &uncompressed_buffer));
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
         } else {
-            // Lazy deserialization: the ChunkItem must own the serialized payload because it outlives
-            // the request (the brpc buffer is freed once the closure runs). Move the ChunkPB out of the
-            // request instead of deep-copying its `data` blob; nothing reads request.chunks(i) after
-            // this, so moving is safe and only swaps pointers.
-            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(*request.mutable_chunks(i)));
+            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, pchunk);
         }
         total_chunk_bytes += chunk_bytes;
     }
@@ -703,7 +699,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
 }
 
 template <bool keep_order>
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(PTransmitChunkParams& request, Metrics& metrics,
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, Metrics& metrics,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());

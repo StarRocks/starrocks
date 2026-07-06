@@ -191,12 +191,28 @@ void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcControlle
         }
         VLOG_ROW << transmit_info << " cost time = " << MonotonicNanos() - begin_ts;
     });
-    // The chunk payloads carried in the brpc attachment are cut into each chunk's `data` inside the
-    // receiver (DataStreamRecvr::add_chunks), under the query's instance mem tracker, so those buffers are
-    // charged to the query rather than to this brpc worker thread's (process) tracker.
-    butil::IOBuf* attachment = cntl->request_attachment().size() > 0 ? &cntl->request_attachment() : nullptr;
+    if (cntl->request_attachment().size() > 0) {
+        butil::IOBuf& io_buf = cntl->request_attachment();
+        for (size_t i = 0; i < req->chunks().size(); ++i) {
+            auto chunk = req->mutable_chunks(i);
+            if (UNLIKELY(io_buf.size() < chunk->data_size())) {
+                auto msg = fmt::format("iobuf's size {} < {}", io_buf.size(), chunk->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+            // also with copying due to the discontinuous memory in chunk
+            auto size = io_buf.cutn(chunk->mutable_data(), chunk->data_size());
+            if (UNLIKELY(size != chunk->data_size())) {
+                auto msg = fmt::format("iobuf read {} != expected {}.", size, chunk->data_size());
+                LOG(WARNING) << msg;
+                st = Status::InternalError(msg);
+                return;
+            }
+        }
+    }
 
-    st = _exec_env->stream_mgr()->transmit_chunk(*req, attachment, &wrapped_done);
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
 }
 
 template <typename T>
