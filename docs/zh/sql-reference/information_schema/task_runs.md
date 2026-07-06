@@ -27,6 +27,7 @@ description: "task_runs 提供异步任务执行的信息。"
 | PROPERTIES    | 任务的属性。                                                 |
 | JOB_ID        | 任务的作业 ID。                                              |
 | PROCESS_TIME  | 任务的处理时间。                                             |
+| TASK_SOURCE   | 提交任务的来源。有效值：`CTAS`、`MV`、`INSERT`、`PIPE` 和 `DATACACHE_SELECT`。对于未记录来源的历史记录，返回 `UNKNOWN`。 |
 
 Task Run 记录由 [SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 或 [CREATE MATRIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) 生成。
 

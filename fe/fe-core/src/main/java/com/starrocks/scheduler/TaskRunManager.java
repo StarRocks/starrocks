@@ -295,6 +295,10 @@ public class TaskRunManager implements MemoryTrackable {
                     // prefer older create time to be better scheduler
                     if (oldTaskRun.getStatus().getCreateTime() < taskRun.getStatus().getCreateTime()) {
                         taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
+                        String oldSubmitUser = oldTaskRun.getStatus().getSubmitUser();
+                        if (oldSubmitUser != null && !oldSubmitUser.isEmpty()) {
+                            taskRun.getStatus().setSubmitUser(oldSubmitUser);
+                        }
                     }
 
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",

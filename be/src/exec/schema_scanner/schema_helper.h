@@ -43,6 +43,9 @@ public:
     static Status list_materialized_view_status(const SchemaScannerState& state, const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+    static Status list_materialized_view_refresh_jobs(const SchemaScannerState& state, const TGetTasksParams& request,
+                                                      TListMaterializedViewRefreshJobsResult* result);
+
     static Status list_pipes(const SchemaScannerState& state, const TListPipesParams& req, TListPipesResult* res);
     static Status list_pipe_files(const SchemaScannerState& state, const TListPipeFilesParams& req,
                                   TListPipeFilesResult* res);
