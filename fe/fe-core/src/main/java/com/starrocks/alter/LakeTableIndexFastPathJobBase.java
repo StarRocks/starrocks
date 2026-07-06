@@ -123,7 +123,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // BOTH WAITING_TXN and RUNNING are in-memory only for this job family; PENDING is the
         // only durable predecessor (its same-state re-log carries the watershed and the
         // tablet snapshot, and the watershedTxnId != -1 guard makes the re-run idempotent).

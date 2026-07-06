@@ -127,7 +127,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
         // leader re-enters runWaitingTxnJob and re-sends the tasks.
         if (jobState == JobState.RUNNING) {

@@ -221,7 +221,7 @@ public abstract class AlterHandler extends LeaderDaemon {
         // Idempotent insurance for the onStopped() sweep: covers a stop path that never ran
         // onStopped (e.g. a plain setStop() without join) and guarantees every job is reset
         // before the first scheduling cycle can dispatch it by its in-memory state.
-        resetJobsOnLeaderHandoff();
+        resetJobsToLastDurableState();
         super.start();
     }
 
@@ -241,13 +241,13 @@ public abstract class AlterHandler extends LeaderDaemon {
         // unlike a restart which reloads them from the image/journal. Reset each non-final
         // job to its last durable state (drop unlogged in-memory transitions and leader-
         // session transients) so a re-elected leader resumes exactly like a restarted FE.
-        resetJobsOnLeaderHandoff();
+        resetJobsToLastDurableState();
     }
 
-    private void resetJobsOnLeaderHandoff() {
+    private void resetJobsToLastDurableState() {
         for (AlterJobV2 job : alterJobsV2.values()) {
             try {
-                job.resetOnLeaderHandoff();
+                job.resetToLastDurableState();
             } catch (Throwable t) {
                 LOG.warn("reset alter job {} on leader handoff failed", job.getJobId(), t);
             }

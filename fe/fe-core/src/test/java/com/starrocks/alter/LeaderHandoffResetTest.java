@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * In-place leader demotion keeps AlterJobV2 objects alive in memory, unlike a restart which
- * reloads them from the image/journal. resetOnLeaderHandoff() must therefore map the
+ * reloads them from the image/journal. resetToLastDurableState() must therefore map the
  * deliberately-unlogged in-memory states (e.g. WAITING_TXN -> RUNNING) back to the last durable
  * state and drop leader-session transients (batch tasks, futures), so a re-elected leader
  * resumes exactly like a restarted FE instead of waiting on stale dispatch state.
@@ -37,7 +37,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         AgentBatchTask staleBatch = job.schemaChangeBatchTask;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState(),
                 "unlogged RUNNING must map back to its durable predecessor");
@@ -53,7 +53,7 @@ public class LeaderHandoffResetTest {
         // the journal write never committed, so the durable image still has none.
         job.watershedTxnId = 42L;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.PENDING, job.getJobState());
         Assertions.assertEquals(-1L, job.watershedTxnId,
@@ -66,7 +66,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         AgentBatchTask staleBatch = job.rollupBatchTask;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
         Assertions.assertNotSame(staleBatch, job.rollupBatchTask);
@@ -78,7 +78,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         job.rewriteTasks.add(null);
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
         Assertions.assertTrue(job.rewriteTasks.isEmpty(),
@@ -93,7 +93,7 @@ public class LeaderHandoffResetTest {
         // partitions against N sources.
         job.getTmpPartitionIds().add(101L);
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.PENDING, job.getJobState());
         Assertions.assertTrue(job.getTmpPartitionIds().isEmpty());
@@ -106,7 +106,7 @@ public class LeaderHandoffResetTest {
         CompletableFuture<Constants.TaskRunState> staleFuture = new CompletableFuture<>();
         job.future = staleFuture;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
         Assertions.assertNull(job.future,
@@ -120,7 +120,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         AgentBatchTask staleBatch = job.schemaChangeBatchTask;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
         Assertions.assertNotSame(staleBatch, job.schemaChangeBatchTask);
@@ -132,7 +132,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         AgentBatchTask staleBatch = job.rollupBatchTask;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
         Assertions.assertNotSame(staleBatch, job.rollupBatchTask);
@@ -146,7 +146,7 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.RUNNING);
         job.batchTask = new AgentBatchTask();
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.PENDING, job.getJobState());
         Assertions.assertNull(job.batchTask);
@@ -161,14 +161,14 @@ public class LeaderHandoffResetTest {
         job.setJobState(JobState.WAITING_TXN);
         job.batchTask = new AgentBatchTask();
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.PENDING, job.getJobState());
         Assertions.assertNull(job.batchTask);
 
         job.setJobState(JobState.RUNNING);
         job.batchTask = new AgentBatchTask();
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
         Assertions.assertEquals(JobState.PENDING, job.getJobState());
         Assertions.assertNull(job.batchTask);
     }
@@ -181,7 +181,7 @@ public class LeaderHandoffResetTest {
         CompletableFuture<Boolean> publishFuture = new CompletableFuture<>();
         job.publishVersionFuture = publishFuture;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         Assertions.assertEquals(JobState.FINISHED, job.getJobState());
         Assertions.assertSame(batch, job.schemaChangeBatchTask, "final states must not be reset");
@@ -196,7 +196,7 @@ public class LeaderHandoffResetTest {
         CompletableFuture<Boolean> staleFuture = new CompletableFuture<>();
         job.publishVersionFuture = staleFuture;
 
-        job.resetOnLeaderHandoff();
+        job.resetToLastDurableState();
 
         // FINISHED_REWRITING itself is durable (stays), but the previous session's publish
         // future must not short-circuit the new session's first publishVersion() tick.

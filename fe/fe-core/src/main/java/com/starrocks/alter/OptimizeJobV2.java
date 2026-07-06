@@ -137,7 +137,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
         // leader re-enters runWaitingTxnJob (rebuild + re-register the rewrite tasks).
         if (jobState == JobState.RUNNING) {

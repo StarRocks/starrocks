@@ -175,7 +175,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
         // leader re-verifies the watershed and re-sends every AlterReplicaTask.
         if (jobState == JobState.RUNNING) {

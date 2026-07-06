@@ -147,7 +147,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         if (jobState == JobState.RUNNING) {
             jobState = JobState.WAITING_TXN;
         }
@@ -182,7 +182,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         } catch (Throwable t) {
             LOG.warn("clear double-write partitions failed on leader handoff, job: {}", jobId, t);
         }
-        // optimizeClause deliberately kept - see OptimizeJobV2.resetTransientStateForHandoff().
+        // optimizeClause deliberately kept - see OptimizeJobV2.resetTransientState().
     }
 
     public List<Long> getTmpPartitionIds() {

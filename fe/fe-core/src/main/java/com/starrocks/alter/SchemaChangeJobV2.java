@@ -204,7 +204,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // WAITING_TXN -> RUNNING is deliberately not journaled (runWaitingTxnJob: "DO NOT
         // write edit log here"); map it back so the re-elected leader re-enters
         // runWaitingTxnJob and re-sends every AlterReplicaTask, as a restarted FE would.

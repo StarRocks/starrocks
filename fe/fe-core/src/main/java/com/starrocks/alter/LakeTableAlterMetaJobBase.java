@@ -84,7 +84,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     }
 
     @Override
-    protected void resetTransientStateForHandoff() {
+    protected void resetTransientState() {
         // WAITING_TXN is skipped on the live path; RUNNING is the only in-memory-only state
         // and its durable predecessor is PENDING - the same-state re-log in runPendingJob
         // already persisted the watershed, and the -1 guard prevents re-allocation on re-run.
