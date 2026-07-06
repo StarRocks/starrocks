@@ -72,8 +72,11 @@ import java.util.Objects;
  *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
  *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
  *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
- *   <li>Parquet BINARY with UTF8 (string) annotation → StarRocks CHAR/VARCHAR
- *       (always marked truncated → forces data-tier fallback for string sort keys)</li>
+ *   <li>Parquet BINARY with UTF8 (string) annotation -> StarRocks VARCHAR
+ *       (footer min/max are decoded as UTF-8 and used directly; FE compares them in the
+ *       same unsigned-byte order the BE uses to route rows). CHAR is deferred -> data tier:
+ *       the BE pads/truncates a CHAR value to its fixed width before routing, so raw footer
+ *       stats would not match the routed key.</li>
  *   <li>Parquet INT32/INT64 with DECIMAL annotation → StarRocks DECIMAL of the SAME
  *       precision and scale (the unscaled integer's signed order equals the decimal order).</li>
  *   <li>Parquet FIXED_LEN_BYTE_ARRAY/BINARY with DECIMAL annotation → StarRocks DECIMAL of the
@@ -238,7 +241,11 @@ public final class ParquetRowGroupStatisticsReader {
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
-                    yield starRocksPrimitive == PrimitiveType.CHAR || starRocksPrimitive == PrimitiveType.VARCHAR;
+                    // VARCHAR only. A CHAR(N) load pads/truncates every value to the fixed width
+                    // before the BE routes the row (pad_char_values, be/src/exec/data_sinks/tablet_sink.cpp),
+                    // so the raw footer min/max would not match the routed key and could yield a
+                    // skewed split. CHAR falls back to the data tier, which samples the post-cast rows.
+                    yield starRocksPrimitive == PrimitiveType.VARCHAR;
                 }
                 yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
@@ -284,23 +291,21 @@ public final class ParquetRowGroupStatisticsReader {
                     "Parquet stats value not representable for sort-key column \"%s\": %s",
                     location.starRocksColumn.getName(), conversionFailure.getMessage()));
         }
-        // Parquet writers commonly truncate BINARY/string min/max (parquet-mr defaults
-        // to 64 bytes). Truncation does not just inflate spurious overlap — it can also
-        // hide real overlap when adjacent row groups share a long common prefix, which
-        // the downstream overlap detector cannot recover. Mark binary stats as
-        // truncated unconditionally so the pipeline falls back to data tier for string
-        // sort keys until column-index exactness flags are read explicitly. Numeric
-        // and boolean stats are always exact and stay false.
-        // Only string-annotated BINARY is truncation-prone (parquet-mr truncates long binary
-        // min/max at 64 bytes). Numeric stats — including BINARY-backed and FLBA-backed DECIMAL —
-        // are exact; marking a decimal truncated would force a needless data-tier fallback.
-        boolean truncated = location.parquetTypeName == PrimitiveTypeName.BINARY
-                && location.logicalAnnotation instanceof StringLogicalTypeAnnotation;
+        // String (BINARY+UTF8) chunk min/max are exact in practice: parquet-cpp and
+        // parquet-mr do not truncate chunk-level Statistics (parquet-mr's
+        // parquet.statistics.truncate.length defaults to Integer.MAX_VALUE; parquet-cpp
+        // drops stats past max_statistics_size, which the isEmpty() guard above already
+        // routes to data tier). Pre-split is a pure planning optimization: the BE routes
+        // every loaded row to a tablet by its true value, independent of these stats. So
+        // even under a hypothetical custom-truncating writer, a widened min/max can only
+        // skew split boundaries or trigger a conservative overlap fallback -- it can never
+        // misroute or drop data. All numeric/temporal stats are exact too, so this reader
+        // never marks a Parquet row group truncated.
         return new RowGroupStatistics(
                 new Tuple(List.of(minVariant)),
                 new Tuple(List.of(maxVariant)),
                 rowCount,
-                truncated);
+                /*truncated=*/ false);
     }
 
     private static Variant toVariant(Object parquetValue, SortKeyLocation location)
