@@ -796,12 +796,6 @@ public class UtFrameUtils {
             GlobalStateMgr.getCurrentState().setMetadataMgr(replayMetadataMgr);
         }
 
-        // Replay old-style resource-mapping iceberg external tables that the dump only captured as
-        // CREATE EXTERNAL TABLE ... ENGINE=ICEBERG ("resource"=...) statements in table_meta. Register
-        // the referenced iceberg resource and a mock resource-mapping catalog metadata built from the
-        // declared schema so these tables can be created and planned during replay.
-        registerReplayIcebergResourceTables(connectContext, starRocksAssert, replayDumpInfo);
-
         // create table
         int backendId = 10002;
         int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
