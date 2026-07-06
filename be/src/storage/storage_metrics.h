@@ -185,7 +185,6 @@ public:
     METRIC_DEFINE_INT_GAUGE(update_compaction_task_byte_per_second, MetricUnit::BYTES);
 
     METRICS_DEFINE_THREAD_POOL(async_delta_writer);
-    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(memtable_flush);
     METRICS_DEFINE_THREAD_POOL(lake_memtable_flush);
     METRICS_DEFINE_THREAD_POOL(storage_cleanup);
@@ -197,7 +196,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
-    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
 private:
     struct PendingThreadPoolMetrics {

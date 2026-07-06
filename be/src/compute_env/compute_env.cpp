@@ -27,6 +27,7 @@
 #include "compute_env/load/stream_context_mgr.h"
 #include "compute_env/load_path/dummy_load_path_mgr.h"
 #include "compute_env/load_path/load_path_mgr.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "compute_env/pipeline/pipeline_timer.h"
 #include "compute_env/profile_report_worker.h"
@@ -114,6 +115,12 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
         return status;
     }
 
+    status = _init_load_spill_executor(options.metrics);
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
+
     return Status::OK();
 }
 
@@ -194,6 +201,23 @@ Status ComputeEnv::_init_spill(const std::vector<std::string>& store_paths, Metr
     return Status::OK();
 }
 
+Status ComputeEnv::_init_load_spill_executor(MetricRegistry* metrics) {
+    if (_load_spill_block_merge_executor != nullptr) {
+        return Status::InternalError("LoadSpillBlockMergeExecutor has been initialized");
+    }
+    auto executor = std::make_unique<LoadSpillBlockMergeExecutor>();
+    RETURN_IF_ERROR(executor->init());
+    if (metrics != nullptr) {
+        auto* spill_metrics = SpillMetrics::instance();
+        spill_metrics->load_spill_block_merge.register_metrics(metrics, "load_spill_block_merge",
+                                                               executor->get_thread_pool());
+        spill_metrics->tablet_internal_parallel_merge.register_metrics(
+                metrics, "tablet_internal_parallel_merge", executor->get_tablet_internal_parallel_merge_thread_pool());
+    }
+    _load_spill_block_merge_executor = std::move(executor);
+    return Status::OK();
+}
+
 Status ComputeEnv::_init_query_cache(size_t capacity, MetricRegistry* metrics) {
     _cache_mgr = std::make_unique<query_cache::CacheManager>(capacity);
     RETURN_IF_ERROR(_cache_mgr->install_metrics(metrics));
@@ -264,6 +288,9 @@ void ComputeEnv::_destroy_load_path() {
 void ComputeEnv::destroy() {
     destroy_profile_report_worker();
     _destroy_load_path();
+    SpillMetrics::instance()->load_spill_block_merge.unregister_metrics();
+    SpillMetrics::instance()->tablet_internal_parallel_merge.unregister_metrics();
+    _load_spill_block_merge_executor.reset();
     _global_spill_manager.reset();
     _spill_dir_mgr.reset();
     if (_workgroup_manager != nullptr) {

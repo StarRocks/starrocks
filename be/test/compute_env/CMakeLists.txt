@@ -41,6 +41,9 @@ set(COMPUTE_ENV_WORKGROUP_TEST_FILES
 
 set(COMPUTE_ENV_SPILL_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    jni_env_stub.cpp
+    load_spill/load_spill_block_manager_test.cpp
+    load_spill/load_spill_block_merge_executor_test.cpp
     spill/operator_mem_resource_manager_test.cpp
     spill/query_spill_manager_test.cpp
     spill/spill_block_manager_test.cpp

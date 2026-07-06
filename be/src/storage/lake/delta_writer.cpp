@@ -29,6 +29,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/system/master_info.h"
+#include "compute_env/load_spill/load_spill_block_manager.h"
 #include "fs/bundle_file.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -49,11 +50,11 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -426,6 +427,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                         UniqueId(_tablet_id, _txn_id)
                                 .to_thrift(), // use tablet id + txn id to generate fragment instance id
                         _tablet_manager->tablet_root_location(_tablet_id), nullptr,
+                        StorageEnv::GetInstance()->spill_dir_mgr(),
                         /*enable_flat_layout=*/true, _txn_id);
                 RETURN_IF_ERROR(_load_spill_block_mgr->init());
             }
