@@ -173,8 +173,14 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
-    // Fetch lock guard before `lake_load`
-    guard = index.fetch_guard();
+    // Fetch lock guard before `lake_load`. Acquiring this per-tablet index lock
+    // can block on a concurrent apply/compaction/point-lookup that already holds
+    // it; that wait happens before `lake_load` and is otherwise invisible in the
+    // publish trace, so time it separately from the load below.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
+        guard = index.fetch_guard();
+    }
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
