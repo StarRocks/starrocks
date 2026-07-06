@@ -621,7 +621,16 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
 
             } else if (desc.isChar() || desc.isVarchar()) {
-                res =  ConstantOperator.createChar(childString, desc);
+                String charValue = childString;
+                if (desc.isChar()) {
+                    int declaredLen = ((ScalarType) desc).getLength();
+                    // MySQL semantics: CAST(x AS CHAR(N)) truncates to the first N characters.
+                    // Wildcard CHAR (len < 0) and VARCHAR keep the full value.
+                    if (declaredLen >= 0) {
+                        charValue = truncateToCodePoints(childString, declaredLen);
+                    }
+                }
+                res = ConstantOperator.createChar(charValue, desc);
             } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
                 res = ConstantOperator.createBinary(childString.getBytes(), desc);
             }
@@ -669,6 +678,23 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
         // The BE only supports casting a binary value to a string, so don't fold anything else either.
         return Optional.empty();
+    }
+
+    // Truncate to the first maxChars Unicode code points (MySQL CHAR(N) semantics). ASCII fast paths first.
+    private static String truncateToCodePoints(String value, int maxChars) {
+        if (maxChars <= 0) {
+            return "";
+        }
+        if (value.length() <= maxChars) {
+            // UTF-16 length is an upper bound on the code-point count, so the value already fits.
+            return value;
+        }
+        int codePointCount = value.codePointCount(0, value.length());
+        if (codePointCount <= maxChars) {
+            return value;
+        }
+        int endIndex = value.offsetByCodePoints(0, maxChars);
+        return value.substring(0, endIndex);
     }
 
     public Optional<ConstantOperator> successor() {
