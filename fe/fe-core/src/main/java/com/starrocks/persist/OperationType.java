@@ -694,6 +694,10 @@ public class OperationType {
     // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+    // Per-partition incremental (bounded, resumable) auto-vacuum state, written each round by the
+    // autovacuum coordinator. Non-critical operational state, so replay failure is ignorable.
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_PARTITION_VACUUM_STATE = 13559;
 
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

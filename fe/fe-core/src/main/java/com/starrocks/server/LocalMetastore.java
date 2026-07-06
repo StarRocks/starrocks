@@ -163,6 +163,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PartitionVacuumStateInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
@@ -1733,6 +1734,41 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             Table table = getTable(db.getId(), info.getTableId());
             recycleBin.replayRecoverPartition((OlapTable) table, info.getPartitionId());
+        }
+    }
+
+    public void replayModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        Database db = getDb(info.getDbId());
+        if (db == null) {
+            return;
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
+            Table table = getTable(db.getId(), info.getTableId());
+            if (!(table instanceof OlapTable)) {
+                return;
+            }
+            PhysicalPartition partition = ((OlapTable) table).getPhysicalPartition(info.getPhysicalPartitionId());
+            if (partition != null) {
+                partition.setVacuumState(info.getVacuumState());
+                // lastSuccVacuumVersion has no dedicated edit log (image-only); it equals the completed pass
+                // floor, which is also carried here as VacuumState.minRetainedVersion. Restore it from the
+                // replayed state so a frequent FE restart/failover (before the next image) keeps the vacuum
+                // watermark and shouldVacuum's "already caught up" skip, instead of reverting to a stale image
+                // value and re-vacuuming every already-drained partition after each restart.
+                long replayedFloor = info.getVacuumState().getMinRetainedVersion();
+                if (replayedFloor > partition.getLastSuccVacuumVersion()) {
+                    partition.setLastSuccVacuumVersion(replayedFloor);
+                }
+                // The switch-clearing is image-only too: the SET (by the alter) is journaled but the CLEAR
+                // (setMetadataSwitchVersion(0) in the vacuum) is not, so a failover replays the alter's set
+                // and reverts the clear -- pinning min_retain at the switch forever, leaving everything above
+                // it un-vacuumable. Re-derive the clear from the durable pass floor: once the pass has drained
+                // down to (>=) the switch version, the switch has served its purpose and is cleared.
+                if (partition.getMetadataSwitchVersion() != 0
+                        && replayedFloor >= partition.getMetadataSwitchVersion()) {
+                    partition.setMetadataSwitchVersion(0);
+                }
+            }
         }
     }
 
