@@ -116,6 +116,29 @@ public class ReduceCastRuleTest {
     }
 
     @Test
+    public void testBoundedCharCastIsNotReducedWhenTruncating() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // CAST(varchar(20) AS CHAR(5)) truncates to 5 chars (MySQL semantics) -> must NOT be reduced away.
+        ScalarOperator truncating = new CastOperator(new CharType(5),
+                new ColumnRefOperator(0, TypeFactory.createVarcharType(20), "s", false));
+        ScalarOperator kept = rule.apply(truncating, null);
+        assertTrue(kept instanceof CastOperator);
+        assertTrue(kept.getType().isChar());
+        assertEquals(5, ((ScalarType) kept.getType()).getLength());
+
+        // Wildcard CHAR (no length) does not truncate -> still reducible.
+        ScalarOperator wildcard = new CastOperator(CharType.CHAR,
+                new ColumnRefOperator(1, TypeFactory.createVarcharType(20), "s2", false));
+        Assertions.assertFalse(rule.apply(wildcard, null) instanceof CastOperator);
+
+        // Source no longer than the target can never be truncated -> still reducible.
+        ScalarOperator noTrunc = new CastOperator(new CharType(10),
+                new ColumnRefOperator(2, TypeFactory.createVarcharType(3), "s3", false));
+        Assertions.assertFalse(rule.apply(noTrunc, null) instanceof CastOperator);
+    }
+
+    @Test
     public void testVarcharLengthIsNotInheritedByDefault() {
         ScalarOperatorRewriteRule rule = new ReduceCastRule();
         ScalarOperator child =
