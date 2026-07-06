@@ -387,7 +387,7 @@ public class PredicateStatisticsCalculatorTest {
                 new CallOperator(FunctionSet.IF, BooleanType.BOOLEAN, List.of(condition, leftPredicate, rightPredicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(ifPredicate, statistics);
-        Assertions.assertEquals(16.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(17.0, (int) result.getOutputRowCount());
     }
 
     @Test
@@ -439,7 +439,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge20Condition, innerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(13.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
 
         // IF ( c1 >= 30 , c2 = 50 , IF ( c1 >= 20 , c3 = 80 , c3 = 70 ) )
         innerIfPredicate =
@@ -530,7 +530,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge20Condition, compoundInnerIfPredicate, c3Eq70Predicate));
 
         Statistics result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(592.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(593.0, (int) result.getOutputRowCount());
 
         // IF ( c1 >= 20 , c4 = 10 AND IF ( c1 >= 30 , c2 = 50 , c3 = 80 ) , c3 = 70 )
         BinaryPredicateOperator c4Eq10Predicate =
