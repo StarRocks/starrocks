@@ -10,6 +10,12 @@ sidebar_position: 0.9
 
 バージョン 2.4 から、StarRocks は ARRAY 型への変換をサポートしています。
 
+:::note
+
+`CAST(input AS CHAR(N))` は、MySQL と同様に結果を先頭 `N` 文字に切り詰めます。例えば `CAST(1775580223839 AS CHAR(10))` は `1775580223` を返します。長さを指定しない `CAST(input AS CHAR)` および `CAST(input AS VARCHAR(N))` は切り詰められません。
+
+:::
+
 ## 構文
 
 ```Haskell
