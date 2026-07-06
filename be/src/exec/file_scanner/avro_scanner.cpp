@@ -30,15 +30,14 @@
 #include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/file_scanner/json_scanner.h"
-#include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "exprs/json_functions.h"
 #include "formats/avro/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "types/simple_json_path.h"
 #include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {

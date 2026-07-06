@@ -80,7 +80,6 @@ set(EXEC_FILES
         ./exec/file_scan_node_rejected_record_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
-        ./exec/json_parser_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp

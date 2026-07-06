@@ -12,31 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/json_parser.h"
+#include "formats/json/json_parser.h"
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/simdjson_util.h"
-#include "exprs/json_functions.h"
+#include "types/simple_json_path.h"
 
 namespace starrocks {
+
+namespace {
+
+constexpr int32_t kDefaultJsonParseManyBatchSize = 1000000;
+constexpr bool kDefaultEnableDynamicBatchSizeForJsonParseMany = true;
+
+} // namespace
 
 class JsonParserTest : public ::testing::Test {
 public:
     JsonParserTest() = default;
     ~JsonParserTest() override = default;
 
-    void SetUp() override {}
+    void SetUp() override {
+        _old_json_parse_many_batch_size = config::json_parse_many_batch_size;
+        _old_enable_dynamic_batch_size_for_json_parse_many = config::enable_dynamic_batch_size_for_json_parse_many;
+        config::json_parse_many_batch_size = kDefaultJsonParseManyBatchSize;
+        config::enable_dynamic_batch_size_for_json_parse_many = kDefaultEnableDynamicBatchSizeForJsonParseMany;
+    }
+
+    void TearDown() override {
+        config::json_parse_many_batch_size = _old_json_parse_many_batch_size;
+        config::enable_dynamic_batch_size_for_json_parse_many = _old_enable_dynamic_batch_size_for_json_parse_many;
+    }
 
     void test_parse_error_msg_base(JsonParser* parser, std::string& data, const std::string& operation,
                                    const std::string& custom_msg);
+
+private:
+    int32_t _old_json_parse_many_batch_size = 0;
+    bool _old_enable_dynamic_batch_size_for_json_parse_many = true;
 };
 
 TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_1) {
@@ -50,7 +73,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -112,7 +135,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -174,7 +197,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -220,7 +243,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -282,7 +305,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -320,6 +343,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_dynamic_batch_size_
 class JsonDocumentStreamParserTest : public ::testing::Test {
 public:
     void SetUp() override;
+    void TearDown() override;
 
 protected:
     void _check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value);
@@ -327,10 +351,24 @@ protected:
     simdjson::ondemand::parser _simdjson_parser;
     std::unique_ptr<JsonDocumentStreamParser> _parser;
     faststring _buf;
+
+private:
+    int32_t _old_json_parse_many_batch_size = 0;
+    bool _old_enable_dynamic_batch_size_for_json_parse_many = true;
 };
 
 void JsonDocumentStreamParserTest::SetUp() {
+    _old_json_parse_many_batch_size = config::json_parse_many_batch_size;
+    _old_enable_dynamic_batch_size_for_json_parse_many = config::enable_dynamic_batch_size_for_json_parse_many;
+    config::json_parse_many_batch_size = kDefaultJsonParseManyBatchSize;
+    config::enable_dynamic_batch_size_for_json_parse_many = kDefaultEnableDynamicBatchSizeForJsonParseMany;
     _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+}
+
+void JsonDocumentStreamParserTest::TearDown() {
+    _parser.reset();
+    config::json_parse_many_batch_size = _old_json_parse_many_batch_size;
+    config::enable_dynamic_batch_size_for_json_parse_many = _old_enable_dynamic_batch_size_for_json_parse_many;
 }
 
 void JsonDocumentStreamParserTest::_check_row(simdjson::ondemand::object& row, const std::string& key, int64_t value) {
@@ -488,7 +526,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -549,7 +587,7 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -610,7 +648,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -672,7 +710,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
 
@@ -871,6 +909,9 @@ PARALLEL_TEST(JsonParserTest, test_big_value) {
 }
 
 PARALLEL_TEST(JsonParserTest, test_big_json) {
+    const auto old_json_parse_many_batch_size = config::json_parse_many_batch_size;
+    DeferOp restore_config(
+            [old_json_parse_many_batch_size] { config::json_parse_many_batch_size = old_json_parse_many_batch_size; });
     config::json_parse_many_batch_size = 1;
     simdjson::ondemand::parser simdjson_parser;
     // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
@@ -939,7 +980,7 @@ PARALLEL_TEST(JsonParserTest, test_document_stream_parser_with_jsonroot_invalid_
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
@@ -963,7 +1004,7 @@ PARALLEL_TEST(JsonParserTest, test_array_parser_with_jsonroot_invalid_type_array
     auto padded_size = input.size();
 
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.key0", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.key0", &jsonroot));
 
     simdjson::ondemand::parser simdjson_parser;
     std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
@@ -999,7 +1040,8 @@ void JsonParserTest::test_parse_error_msg_base(JsonParser* parser, std::string& 
     }
     ASSERT_TRUE(st.is_data_quality_error());
     ASSERT_TRUE(st.message().find("parse error") != std::string::npos);
-    ASSERT_TRUE(st.message().find(custom_msg) != std::string::npos);
+    ASSERT_TRUE(st.message().find(custom_msg) != std::string::npos)
+            << "actual message: " << st.message() << ", expected substring: " << custom_msg;
 }
 
 TEST_F(JsonParserTest, test_json_document_stream_parser_error) {
@@ -1020,22 +1062,23 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_error) {
                                   "The value should be object type in json document stream");
     }
 
-    // get_current() error because json is invalid
+    // get_current() error because simdjson exposes the invalid token as a non-object value.
     {
         std::string data = R"(:)";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
-        test_parse_error_msg_base(parser.get(), data, "get_current", "Failed to iterate document stream as object");
+        test_parse_error_msg_base(parser.get(), data, "get_current",
+                                  "The value should be object type in json document stream");
     }
 }
 
 TEST_F(JsonParserTest, test_json_array_parser_error) {
     simdjson::ondemand::parser simdjson_parser;
 
-    // parse() error because json is invalid
+    // parse() error because simdjson exposes the invalid token as a non-array value.
     {
         std::string data = R"(:)";
         std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
-        test_parse_error_msg_base(parser.get(), data, "parse", "Failed to parse json as array");
+        test_parse_error_msg_base(parser.get(), data, "parse", "the value should be array type");
     }
 
     // parse() error because doc is not an array
@@ -1055,7 +1098,7 @@ TEST_F(JsonParserTest, test_json_array_parser_error) {
 
 TEST_F(JsonParserTest, test_json_document_stream_parser_with_root_error) {
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
     // get_current() error because doc is an array
@@ -1074,18 +1117,18 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_root_error) {
                                   "The value should be object type in json document stream with json root");
     }
 
-    // get_current() error because the root is invalid
+    // get_current() error because simdjson exposes the invalid root as a non-object value.
     {
         std::string data = R"({"root": :})";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
-                                  "Failed to iterate document stream as object with json root");
+                                  "The value should be object type in json document stream with json root");
     }
 }
 
 TEST_F(JsonParserTest, test_json_array_parser_with_root_error) {
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
     // get_current() error because the root is an array
@@ -1104,18 +1147,18 @@ TEST_F(JsonParserTest, test_json_array_parser_with_root_error) {
                                   "The value should be object type in json array with json root");
     }
 
-    // get_current() error because it's invalid
+    // get_current() error because simdjson exposes the invalid root as a non-object value.
     {
         std::string data = R"([{"root": :}])";
         std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
-                                  "Failed to iterate json array as object with json root");
+                                  "The value should be object type in json array with json root");
     }
 }
 
 TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error) {
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
     // parse() error because the root is not an array
@@ -1125,20 +1168,19 @@ TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error
         test_parse_error_msg_base(parser.get(), data, "parse", "the value should be array type");
     }
 
-    // parse() error because the root is an invalid json
+    // parse() error because simdjson exposes the invalid root as a non-array value.
     {
         std::string data = R"({"root": :})";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
-        test_parse_error_msg_base(parser.get(), data, "parse",
-                                  "Failed to parse json as expanded document stream with json root");
+        test_parse_error_msg_base(parser.get(), data, "parse", "the value should be array type");
     }
 
-    // get_current() error because the root is an invalid array
+    // get_current() error because simdjson exposes the invalid array element as a non-object value.
     {
         std::string data = R"({"root": [:]})";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
-                                  "Failed to iterate expanded document stream as object with json root");
+                                  "the value should be object type in expanded json document stream with json root");
     }
 
     // get_current() error because the root array element is not object
@@ -1156,17 +1198,17 @@ TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error
         test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type ");
     }
 
-    // advance() error because the second root is an invalid json
+    // advance() error because simdjson exposes the invalid second root as a non-array value.
     {
         std::string data = R"({"root": [{"k1":1}]}{"root": :})";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
-        test_parse_error_msg_base(parser.get(), data, "advance", "Failed to iterate document stream sub-array");
+        test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type");
     }
 }
 
 TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
     std::vector<SimpleJsonPath> jsonroot;
-    ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
+    ASSERT_OK(parse_simple_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
     // parse() error because the root is not an array
@@ -1176,20 +1218,19 @@ TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
         test_parse_error_msg_base(parser.get(), data, "parse", "the value under json root should be array type");
     }
 
-    // parse() error because the root is not an array
+    // parse() error because simdjson exposes the invalid root as a non-array value.
     {
         std::string data = R"([{"root": :}])";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
-        test_parse_error_msg_base(parser.get(), data, "parse",
-                                  "Failed to parse json as expanded json array with json root");
+        test_parse_error_msg_base(parser.get(), data, "parse", "the value under json root should be array type");
     }
 
-    // get_current() error because the root is an invalid array
+    // get_current() error because simdjson exposes the invalid array element as a non-object value.
     {
         std::string data = R"([{"root": [:]}])";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
-                                  "Failed to iterate json array as object with json root");
+                                  "the value should be object type in expanded json array with json root");
     }
 
     // get_current() error because the array element is not object
@@ -1207,11 +1248,11 @@ TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
         test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type");
     }
 
-    // advance() error because the second document is an invalid json
+    // advance() error because simdjson exposes the invalid second root as a non-array value.
     {
         std::string data = R"([{"root": [{"k1":1}]},{"root": :}])";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
-        test_parse_error_msg_base(parser.get(), data, "advance", "Failed to iterate json array sub-array");
+        test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type");
     }
 }
 
