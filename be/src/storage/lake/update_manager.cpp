@@ -1967,14 +1967,25 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     } else {
         RETURN_IF_ERROR(resolver->execute());
     }
+    // A lost output segment (experimental_lake_ignore_lost_segment) has no data and its SST must not be
+    // ingested, otherwise the PK index would reference an rssid that scans skip. The resolver reports
+    // those positions; skip both the delvec and the SST ingest for them so the index stays consistent
+    // (the segment_metas are still kept in the output rowset -- its data is simply gone).
+    const auto& lost_segments = resolver->lost_segment_positions();
     // 3. add delvec to builder
-    for (auto&& each : delvecs) {
-        builder->append_delvec(each.second, each.first);
+    for (size_t i = 0; i < delvecs.size(); i++) {
+        if (lost_segments.count(static_cast<uint32_t>(i)) > 0) {
+            continue;
+        }
+        builder->append_delvec(delvecs[i].second, delvecs[i].first);
     }
     // 4. ingest ssts to index
     DCHECK(op_compaction.ssts_size() == 0 || delvecs.size() == op_compaction.ssts_size())
             << "delvecs.size(): " << delvecs.size() << ", op_compaction.ssts_size(): " << op_compaction.ssts_size();
     for (int i = 0; i < op_compaction.ssts_size() && use_cloud_native_pk_index(*metadata); i++) {
+        if (lost_segments.count(static_cast<uint32_t>(i)) > 0) {
+            continue;
+        }
         uint32_t rssid = metadata->next_rowset_id() + get_segment_idx(op_compaction.output_rowset(), i);
         DelvecPagePB delvec_page_pb = builder->delvec_page(rssid);
         delvec_page_pb.set_version(metadata->version());

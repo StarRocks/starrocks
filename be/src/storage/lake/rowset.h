@@ -151,10 +151,14 @@ public:
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
-    // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() packs
-    // its result densely (segment-range start, partial-compaction trim, lost segments), so an
-    // element's index there is NOT its metadata position; consult per-segment metadata (e.g. shared())
-    // via `segment_meta_pos` -- the segment_metas() array position, not Segment::id()/segment_idx.
+    // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() does not
+    // keep its result index-aligned with segment_metas -- segment-range start and partial-compaction
+    // trim shift/drop entries -- so an element's index there is NOT its metadata position; consult
+    // per-segment metadata (e.g. shared()) via `segment_meta_pos`, the segment_metas() array position,
+    // not Segment::id()/segment_idx. A lost segment (experimental_lake_ignore_lost_segment) is the
+    // exception: it is kept in place as a nullptr placeholder to preserve alignment. As a result the
+    // `segment` here -- and the SegmentPtr entries from segments()/get_segments() -- can be null, so
+    // every consumer must treat a null segment as "skip this one".
     struct LoadedSegment {
         SegmentPtr segment;           // nullptr if the segment was skipped, filtered out, or lost
         int32_t segment_meta_pos = 0; // position in _metadata->segment_metas()

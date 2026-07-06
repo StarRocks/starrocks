@@ -124,4 +124,20 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     });
 }
 
+std::vector<uint32_t> LakePrimaryKeyCompactionConflictResolver::output_segment_num_rows() const {
+    // segment_metas order matches the positionally-aligned segment/iterator vectors produced by
+    // load_segments / get_each_segment_iterator, so index i here is the i-th resolved segment.
+    const auto& rowset_meta = _rowset->metadata();
+    std::vector<uint32_t> result;
+    result.reserve(rowset_meta.segment_metas_size());
+    for (int i = 0; i < rowset_meta.segment_metas_size(); i++) {
+        const auto& seg_meta = rowset_meta.segment_metas(i);
+        // num_rows is optional; report "unknown" for an old rowset that lacks it so the base resolver
+        // fails clearly instead of under-advancing the rows-mapper. Sibling readers guard it the same
+        // way (see lake_persistent_index.cpp / rowset.cpp).
+        result.push_back(seg_meta.has_num_rows() ? static_cast<uint32_t>(seg_meta.num_rows()) : kUnknownSegmentNumRows);
+    }
+    return result;
+}
+
 } // namespace starrocks::lake
