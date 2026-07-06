@@ -14,9 +14,6 @@
 
 #include "formats/csv/map_converter.h"
 
-#include <string_view>
-#include <unordered_map>
-
 #include "column/map_column.h"
 #include "common/logging.h"
 #include "formats/csv/array_reader.h"
@@ -172,36 +169,46 @@ bool MapConverter::read_hive_map(Column* column, const Slice& s, const Options& 
         }
     }
 
-    // Deduplicate keys the same way the default (brace) format below does -- the
-    // last occurrence wins -- which also matches Hive's map overwrite semantics.
-    // A key is unique iff its own index is the LAST index at which its content
-    // appears: one pass records each key's last-seen index (later duplicates
-    // overwrite earlier ones), a second pass checks each index against it -- O(n)
-    // instead of the O(n^2) pairwise comparison this replaces.
-    std::unordered_map<std::string_view, size_t> last_index_of_key;
-    last_index_of_key.reserve(key_fields.size());
-    for (size_t i = 0; i < key_fields.size(); ++i) {
-        last_index_of_key[std::string_view(key_fields[i].data, key_fields[i].size)] = i;
-    }
-    std::vector<bool> unique_keys(key_fields.size());
-    int unique_num = 0;
-    for (size_t i = 0; i < key_fields.size(); ++i) {
-        bool unique = last_index_of_key[std::string_view(key_fields[i].data, key_fields[i].size)] == i;
-        unique_num += unique;
-        unique_keys[i] = unique;
-    }
-
     // A map at level L consumes separators L and L+1, so its keys/values parse at
     // level L+2 (mirrors LazyFactory). Hive text has no quotes: use read_string.
     Options sub_options = options;
     sub_options.array_hive_nested_level += 2;
-    for (auto i = 0; i < key_fields.size(); ++i) {
-        if (unique_keys[i] && !_key_converter->read_string(keys, key_fields[i], sub_options)) {
-            keys->resize(old_size);
+
+    // Convert ALL keys into the scratch column first, then deduplicate on the
+    // CONVERTED values -- last occurrence wins, matching Hive's map overwrite
+    // semantics, which apply to the DESERIALIZED key. Raw slices are not comparable
+    // identities under ESCAPED BY ("\a" and "a" unescape to the same logical key);
+    // comparing converted values also makes two NULL keys (raw "\N") equal and
+    // normalizes typed keys ("01" and "1" as an INT key) exactly the way appending
+    // them would. Conversion failures happen here, before the real keys column is
+    // touched. The pairwise compare is O(n^2) in the number of entries of ONE map
+    // field, which is small; the brace-format path below has the same shape.
+    if (_tmp_keys == nullptr) {
+        _tmp_keys = keys->clone_empty();
+    }
+    _tmp_keys->resize(0);
+    for (size_t i = 0; i < key_fields.size(); ++i) {
+        if (!_key_converter->read_string(_tmp_keys.get(), key_fields[i], sub_options)) {
             return false;
         }
     }
-    for (auto i = 0; i < value_fields.size(); ++i) {
+    std::vector<bool> unique_keys(key_fields.size());
+    int unique_num = 0;
+    for (size_t i = 0; i < key_fields.size(); ++i) {
+        bool unique = true;
+        for (size_t j = i + 1; unique && j < key_fields.size(); ++j) {
+            unique = _tmp_keys->compare_at(i, j, *_tmp_keys, -1) != 0;
+        }
+        unique_num += unique;
+        unique_keys[i] = unique;
+    }
+
+    for (size_t i = 0; i < key_fields.size(); ++i) {
+        if (unique_keys[i]) {
+            keys->append(*_tmp_keys, i, 1);
+        }
+    }
+    for (size_t i = 0; i < value_fields.size(); ++i) {
         if (!unique_keys[i]) {
             continue;
         }

@@ -5,3 +5,5 @@ p\\q,z,,\N
 m,\N,,
 x,y,a\|b|c,
 x,y,a|\N,
+x,y,,\a:v1|a:v2
+x,y,,a\:b:v1|a\:b:v2

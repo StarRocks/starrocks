@@ -2303,7 +2303,7 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 4096);
         status = scanner->get_next(_runtime_state, &chunk);
         ASSERT_TRUE(status.ok()) << status.message();
-        EXPECT_EQ(7, chunk->num_rows());
+        EXPECT_EQ(9, chunk->num_rows());
         // Escaped separator is field data; Hive text array/map parse without braces.
         EXPECT_EQ("['a,b', 'c', ['a','b','c'], {'k1':'v1','k2':'v2'}]", chunk->debug_row(0));
         // Raw "\N" is null (mid-row emission site); empty fields are EMPTY collections.
@@ -2322,10 +2322,17 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         // bytes one level down in NullableConverter, not corrupted by an eager
         // top-level unescape.
         EXPECT_EQ("['x', 'y', ['a',NULL], {}]", chunk->debug_row(6));
+        // Duplicate map keys must be detected on the CONVERTED key, not the raw bytes:
+        // "\a" and "a" are different raw slices but unescape to the same logical key,
+        // and Hive keeps only the last entry for a duplicate deserialized key.
+        EXPECT_EQ("['x', 'y', [], {'a':'v2'}]", chunk->debug_row(7));
+        // An escaped kv delimiter ("a\:b") is key DATA, not a boundary: both entries'
+        // keys unescape to "a:b", so they too deduplicate (last wins) after conversion.
+        EXPECT_EQ("['x', 'y', [], {'a:b':'v2'}]", chunk->debug_row(8));
         scanner->close();
     }
 
-    // Splittable: total rows must stay 7 regardless of the split point (the escape
+    // Splittable: total rows must stay 9 regardless of the split point (the escape
     // handling must not disturb the scan-range boundary bookkeeping).
     for (int offset = 4; offset < 80; offset++) {
         int records = 0;
@@ -2347,7 +2354,7 @@ TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
         };
         read_range(0, offset);
         read_range(offset, 0);
-        ASSERT_EQ(records, 7) << "offset=" << offset;
+        ASSERT_EQ(records, 9) << "offset=" << offset;
     }
 }
 
