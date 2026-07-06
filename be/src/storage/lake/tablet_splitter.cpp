@@ -1122,13 +1122,13 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
 //
 // Propagates per-segment split ownership of |rowset| (computed in |ownership| for
 // the new tablet at |new_tablet_index|) onto |new_tablet_metadata|'s non-segment
-// files (delvec pages, dcg entries), so they follow the per-segment shared decision
-// instead of all staying shared:
-//   - a segment pruned away from this new tablet (keep == false): erase its dcg
-//     entry (sstable projection never consults dcg), and erase its delvec page
-//     unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
-//   - an exclusive kept segment (shared == false): mark its dcg files private, so
-//     vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
+// files (delvec pages, dcg entries, idg entries), so they follow the per-segment
+// shared decision instead of all staying shared:
+//   - a segment pruned away from this new tablet (keep == false): erase its dcg and
+//     idg entries (sstable projection never consults dcg/idg), and erase its delvec
+//     page unless a surviving has_shared_rssid sstable still needs it (protected_rssids);
+//   - an exclusive kept segment (shared == false): mark its dcg and idg files private,
+//     so vacuum can reclaim them alongside the now-private segment. (Delvec FILES stay
 //     shared: one file holds pages for many segments, so it is not reclaimed per-rssid.)
 //
 // Must run BEFORE apply_segment_ownership_to_new_tablet_rowset, which compacts the
@@ -1144,12 +1144,16 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
                             : nullptr;
     auto* dcgs =
             new_tablet_metadata->has_dcg_meta() ? new_tablet_metadata->mutable_dcg_meta()->mutable_dcgs() : nullptr;
+    auto* idgs =
+            new_tablet_metadata->has_idg_meta() ? new_tablet_metadata->mutable_idg_meta()->mutable_idgs() : nullptr;
     bool has_pruned_protected_rssid = false;
     for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
         const uint32_t rssid = get_rssid(rowset, segment_index);
         const auto& segment_ownership = ownership.segments[segment_index];
         if (!segment_ownership.keep[new_tablet_index]) {
             if (dcgs != nullptr) dcgs->erase(rssid);
+            // IDG mirrors DCG: sstable projection never consults idg, so no protected_rssids gate.
+            if (idgs != nullptr) idgs->erase(rssid);
             if (protected_rssids.contains(rssid)) {
                 // Leave the delvec page as-is (all-shared) rather than erasing it: MERGE's
                 // modern sstable projection re-reads this rssid's delvec, so erasing risks
@@ -1169,6 +1173,12 @@ bool propagate_pruned_ownership_to_non_segment_files(const RowsetMetadataPB& row
                 auto dcg_it = dcgs->find(rssid);
                 if (dcg_it != dcgs->end()) {
                     tablet_reshard_helper::set_dcg_shared(&dcg_it->second, /*shared=*/false);
+                }
+            }
+            if (idgs != nullptr) {
+                auto idg_it = idgs->find(rssid);
+                if (idg_it != idgs->end()) {
+                    tablet_reshard_helper::set_idg_shared(&idg_it->second, /*shared=*/false);
                 }
             }
         }
