@@ -1693,6 +1693,22 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
 
+### allow_lake_without_partition_filter
+
+* **Description**: Whether to allow queries on lake tables (Hive, Iceberg, Delta Lake, Paimon, etc.) without a partition filter predicate. When set to `false`, queries that do not contain a valid partition predicate on these tables will be rejected to prevent accidental full-table scans.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Alias**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **Description**: The maximum number of partitions allowed to be scanned for a single lake table (Hive, Iceberg, Delta Lake, Paimon, etc.). When set to `0`, no limit is applied. When exceeded, the query will return an error. Note that for catalog types that enumerate splits incrementally (Iceberg, Delta Lake), the limit check is performed during scan-range dispatch and the query may fail mid-execution rather than being rejected upfront.
+* **Scope**: Session
+* **Default**: `0` (No limit)
+* **Data type**: Int
+* **Alias**: `scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **Description**: Session flag that instructs the FE, when building scan ranges, to mark each tablet's internal scan range with `skip_disk_cache`. When set to `true`, `OlapScanNode.addScanRangeLocations()` sets `internalRange.setSkip_disk_cache(true)` on the created `TInternalScanRange` objects so downstream BE scan nodes are told to bypass the local disk cache for that scan. It is applied per-session and is evaluated at plan/scan-range construction time. Use this together with `skip_page_cache` (to control page cache skipping) and data-cache related variables (`enable_scan_datacache` / `enable_populate_datacache`) as appropriate.

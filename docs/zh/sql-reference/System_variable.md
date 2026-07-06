@@ -1452,6 +1452,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：0 (无限制)
 * 引入版本：v3.3.9
 
+### allow_lake_without_partition_filter
+
+* 描述：是否允许对湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）进行无分区过滤条件的查询。当设置为 `false` 时，未包含有效分区过滤条件的查询将被拒绝，以防止意外的全表扫描。
+* 作用域：Session
+* 默认值：`true`
+* 数据类型：Boolean
+* 别名：`allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* 描述：单张湖仓表（Hive、Iceberg、Delta Lake、Paimon 等）允许扫描的最大分区数。设置为 `0` 表示无限制。超出限制时查询将报错。注意：对于增量式枚举分片的 catalog 类型（Iceberg、Delta Lake），分区数限制在 scan-range 分发阶段检查，查询可能在执行中途失败而非被立即拒绝。
+* 作用域：Session
+* 默认值：`0`（无限制）
+* 数据类型：Int
+* 别名：`scan_hive_partition_num_limit`
+
 ### skip_local_disk_cache
 
 * **描述**: 会话标志，指示 FE 在构建 scan ranges 时为每个 tablet 的内部扫描范围标记 `skip_disk_cache`。当设置为 `true` 时，`OlapScanNode.addScanRangeLocations()` 会在创建的 `TInternalScanRange` 对象上调用 `internalRange.setSkip_disk_cache(true)`，从而通知下游 BE 的扫描节点在该扫描中绕过本地磁盘缓存。该设置按会话应用，并在计划/扫描范围构建时评估。可与 `skip_page_cache`（控制页面缓存跳过）和数据缓存相关变量（`enable_scan_datacache` / `enable_populate_datacache`）结合使用。
