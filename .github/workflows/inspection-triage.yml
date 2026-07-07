@@ -1,0 +1,274 @@
+name: INSPECTION TRIAGE
+
+# On-demand unstable-case regression + AI triage on the native Ubuntu CI box
+# (runner labels [self-hosted, ubuntu, ai]). Split into three dispatch actions so
+# the slow apply→deploy→reproduce is done ONCE and the fast diagnose/verify loop
+# reuses the kept-alive cluster:
+#
+#   provision : apply ci-admit cluster (tag triage-<session>, NOT deleted) + deploy
+#               the latest inspection build + reproduce the SQL-Tester blacklist,
+#               keep the FE/BE cluster AND the MySQL reference ECI alive, and
+#               persist the session handle (deploy conf, sr.conf, meta, failing
+#               list) to OSS.
+#   triage    : (next milestone) restore the session, run `/inspection-triage`,
+#               and verify a single fixed case against the still-alive cluster.
+#   teardown  : restore the session and release the cluster + MySQL ECI.
+#
+# workflow_dispatch ONLY — never fires on prod push/schedule events.
+# Does NOT run the weekly-review report job: never writes unstable_case.json,
+# never opens a PR, never pings the RD Slack channel. ci-tool is copied read-only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'provision | triage | teardown'
+        type: choice
+        options: [provision, triage, teardown]
+        default: provision
+      session:
+        description: 'Unique session name for this debug session (a-zA-Z0-9_-). Reused across provision/triage/teardown.'
+        required: true
+        type: string
+      branch:
+        description: 'Branch to reproduce (default: main)'
+        required: false
+        default: 'main'
+        type: string
+      keepalive_hours:
+        description: 'How long to keep the cluster alive (provision only)'
+        required: false
+        default: '8'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  IS_INSPECTION: 'true'
+  SHARE_PATH: /var/local/env
+  OSS: /var/local/env/ossutil64 --config-file /root/.ossutilconfig
+
+jobs:
+  # ─── PROVISION ────────────────────────────────────────────────────────────
+  provision:
+    name: PROVISION
+    if: ${{ inputs.action == 'provision' }}
+    runs-on: [self-hosted, ubuntu, ai]
+    env:
+      WEEKLY_REVIEW: 'true'
+      LINUX_DISTRO:  ubuntu
+      BUILD_TYPE:    Release
+      CLUSTER_NAME:  ci-admit
+      BRANCH:        ${{ inputs.branch }}
+      SESSION:       ${{ inputs.session }}
+      PR_NUMBER:     triage-${{ inputs.session }}      # doubles as ECS tag suffix + OSS key
+      KEEPALIVE_HOURS: ${{ inputs.keepalive_hours }}
+    steps:
+      - name: Validate session & guard against a live session of the same name
+        run: |
+          set -eo pipefail
+          if [[ ! "${SESSION}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "::error::session must match ^[a-zA-Z0-9_-]+$ (got: '${SESSION}')" && exit 1
+          fi
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BUCKET="${owner}-ci-release"
+          echo "BUCKET=${BUCKET}" >> $GITHUB_ENV
+          # Refuse if this session's deploy-conf backup already exists in OSS —
+          # a same-named session is probably still alive; picking a fresh name
+          # avoids stealing/leaking its cluster.
+          if ${OSS} stat "oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf" >/dev/null 2>&1; then
+            echo "::error::session '${SESSION}' already has a live handle at oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf — teardown first or pick another name" && exit 1
+          fi
+          echo "Session OK: ${SESSION}  (tag triage-${SESSION}, bucket ${BUCKET})"
+
+      - name: Clean Workspace
+        run: rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply for ECS & Deploy SR (kept alive, tag triage-<session>)
+        id: deploy
+        timeout-minutes: 40
+        run: |
+          set -eo pipefail
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          # Locate the latest inspection build for this branch on OSS.
+          _base="oss://starrocks-ci-release/${BRANCH}/Release/inspection/pr/ubuntu"
+          LATEST_SHA=$(${OSS} ls "${_base}/" | grep "\-BE\.tar\.gz" | sort -r | head -1 | awk '{print $NF}' | grep -oE '[a-f0-9]{40}')
+          [[ -z "${LATEST_SHA}" ]] && echo "::error::No inspection package found for branch ${BRANCH}" && exit 1
+          SHORT_SHA=${LATEST_SHA:0:7}
+          echo "Inspection commit: ${LATEST_SHA}"
+          echo "commit=${LATEST_SHA}" >> $GITHUB_OUTPUT
+
+          # Align source to the deployed binary's commit so triage sees matching T/R files.
+          git -C "${GITHUB_WORKSPACE}" fetch --depth=1 origin "${LATEST_SHA}" >/dev/null 2>&1 || true
+          git -C "${GITHUB_WORKSPACE}" reset --hard "${LATEST_SHA}" || \
+            (echo "::warning::could not reset to ${LATEST_SHA}; staying on ${BRANCH} HEAD")
+
+          # Apply the cluster under a session-scoped tag; NO --delete → stays alive.
+          ./bin/elastic-cluster.sh --template ci-admit --tag "triage-${SESSION}" --linuxdistro ubuntu
+
+          export BE_OUTPUT_TAR="${_base}/${LATEST_SHA}/be/StarRocks-${SHORT_SHA}-BE.tar.gz"
+          export FE_OUTPUT_TAR="${_base}/${LATEST_SHA}/fe/StarRocks-${SHORT_SHA}-FE.tar.gz"
+          export LINUX_DISTRO=ubuntu
+          # deploy-cluster.sh backs the deploy conf up to oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf
+          ./bin/deploy-cluster.sh -c ci-admit
+
+      - name: Reproduce SQL-Tester blacklist (3 rounds, keep MySQL ECI alive)
+        id: repro
+        if: steps.deploy.outcome == 'success'
+        timeout-minutes: 360
+        env:
+          FE_NODE: ${{ steps.deploy.outputs.fe }}
+          BE_NODE: ${{ steps.deploy.outputs.be }}
+        run: |
+          set -eo pipefail
+          # run.py needs python 3.9. Both python envs on this box are managed by
+          # virtualenvwrapper: sr-ci (3.8.19, ci-tool orchestration) is first on
+          # the runner .path; sr-ci-py39 (3.9.19, run.py deps incl. cup==3.2.31 to
+          # match ci02) is activated HERE for this step only. run-sql-tester's
+          # `pyenv local 3.9` then no-ops (pyenv is not on PATH) and the active
+          # venv's python3=3.9.19 is used. deploy/orchestration steps keep sr-ci.
+          source /home/disk1/.virtualenvs/sr-ci-py39/bin/activate
+          python3 --version
+          cd ci-tool && source lib/init.sh
+          # WEEKLY_REVIEW=true → run-sql-tester runs ONLY the SQL-Tester blacklist,
+          # 3 rounds, and merges XML (a case is "passed" only if it passed all 3).
+          # It creates a throwaway MySQL reference ECI and emits its id/ip as outputs;
+          # we deliberately DO NOT `eci rm` it here so triage can reuse it.
+          ./bin/run-sql-tester.sh
+
+      - name: Persist session handle + still-failing snapshot to OSS
+        id: persist
+        if: always() && steps.deploy.outcome == 'success'
+        env:
+          FE_NODE: ${{ steps.deploy.outputs.fe }}
+          BE_NODE: ${{ steps.deploy.outputs.be }}
+          MYSQL_ECI_ID: ${{ steps.repro.outputs.MYSQL_ECI_ID }}
+          MYSQL_ECI_IP: ${{ steps.repro.outputs.MYSQL_ECI_IP }}
+          DEPLOY_COMMIT: ${{ steps.deploy.outputs.commit }}
+        run: |
+          set -eo pipefail
+          SESSION_OSS="oss://${BUCKET}/inspection-triage/${SESSION}"
+
+          # 1) sr.conf (fe/be/mysql wired by run-sql-tester) — triage/verify reuse it
+          if [[ -f test/conf/sr.conf ]]; then
+            ${OSS} cp test/conf/sr.conf "${SESSION_OSS}/sr.conf" -f
+          fi
+
+          # 2) session metadata: endpoints + MySQL ECI id (teardown needs the id) + commit
+          META=$(mktemp)
+          {
+            echo "SESSION=${SESSION}"
+            echo "TAG=triage-${SESSION}"
+            echo "BRANCH=${BRANCH}"
+            echo "DEPLOY_COMMIT=${DEPLOY_COMMIT}"
+            echo "FE_NODE=${FE_NODE}"
+            echo "BE_NODE=${BE_NODE}"
+            echo "MYSQL_ECI_ID=${MYSQL_ECI_ID}"
+            echo "MYSQL_ECI_IP=${MYSQL_ECI_IP}"
+            echo "CLUSTER_NAME=ci-admit"
+          } > "${META}"
+          ${OSS} cp "${META}" "${SESSION_OSS}/session.env" -f
+          echo "----- session.env -----"; cat "${META}"; rm -f "${META}"
+
+          # 3) still-failing list parsed from the merged weekly-review XML
+          XML="test/nosetests-weekly-review.xml"
+          FAILING=$(mktemp)
+          if [[ -f "${XML}" ]]; then
+            python3 -c "import xml.etree.ElementTree as ET; r=ET.parse('${XML}').getroot(); print('\n'.join((((tc.get('classname') or '')+'::'+(tc.get('name') or '')).strip(':')) for tc in r.iter('testcase') if tc.find('failure') is not None or tc.find('error') is not None))" > "${FAILING}"
+            ${OSS} cp "${XML}" "${SESSION_OSS}/nosetests-weekly-review.xml" -f
+          else
+            echo "::warning::${XML} not found — reproduce may have produced no XML"
+          fi
+          ${OSS} cp "${FAILING}" "${SESSION_OSS}/failing.txt" -f
+          echo "----- still-failing cases -----"; cat "${FAILING}"
+          echo "FAILING_COUNT=$(grep -c . "${FAILING}" || echo 0)" >> $GITHUB_OUTPUT
+          rm -f "${FAILING}"
+
+          # 4) run.log for debugging
+          [[ -f test/run.log ]] && ${OSS} cp test/run.log "${SESSION_OSS}/run.log" -f || true
+
+          echo "Session persisted under ${SESSION_OSS}/"
+
+      - name: Keep cluster alive (renew auto-release)
+        if: always() && steps.deploy.outcome == 'success'
+        run: |
+          set -eo pipefail
+          cd ci-tool && source lib/init.sh
+          ./bin/elastic-cluster.sh --tag "triage-${SESSION}" --renew "${KEEPALIVE_HOURS}" || true
+          echo "Cluster triage-${SESSION} kept alive for ~${KEEPALIVE_HOURS}h."
+          echo "::notice::PROVISIONED session '${SESSION}'. Failing cases: ${{ steps.persist.outputs.FAILING_COUNT }}. Run action=triage next, action=teardown when done."
+
+      - name: Clean workspace (keep cluster + MySQL ECI alive)
+        if: always()
+        run: rm -rf ${{ github.workspace }}/* || true
+
+  # ─── TRIAGE (next milestone — restore session, run /inspection-triage, verify) ─
+  triage:
+    name: TRIAGE
+    if: ${{ inputs.action == 'triage' }}
+    runs-on: [self-hosted, ubuntu, ai]
+    steps:
+      - name: Not yet implemented
+        run: |
+          echo "::warning::action=triage is not implemented yet."
+          echo "Planned: restore oss://<bucket>/inspection-triage/${{ inputs.session }}/ (sr.conf + session.env + failing.txt),"
+          echo "         run 'claude -p \"/inspection-triage ...\" < /dev/null' against the still-alive cluster,"
+          echo "         then re-run only the fixed case via run.py to prove red→green."
+          echo "For now: provision the session, then teardown when done."
+
+  # ─── TEARDOWN ─────────────────────────────────────────────────────────────
+  teardown:
+    name: TEARDOWN
+    if: ${{ inputs.action == 'teardown' }}
+    runs-on: [self-hosted, ubuntu, ai]
+    env:
+      SESSION:   ${{ inputs.session }}
+      BRANCH:    ${{ inputs.branch }}
+      PR_NUMBER: triage-${{ inputs.session }}
+    steps:
+      - name: Restore session handle from OSS & release cluster + MySQL ECI
+        run: |
+          set -eo pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          BUCKET="${owner}-ci-release"
+          SESSION_OSS="oss://${BUCKET}/inspection-triage/${SESSION}"
+
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
+
+          # Restore the deploy conf so ecs_lib can find this session's instance IDs.
+          if ${OSS} cp "oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf" conf/starrocks_deploy.conf -f >/dev/null 2>&1; then
+            echo "Restored deploy conf for ${PR_NUMBER}"
+          else
+            echo "::warning::no deploy conf backup at oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf — cluster may already be gone"
+          fi
+
+          # Restore session meta to get the MySQL ECI id, then release it.
+          META=$(mktemp)
+          if ${OSS} cp "${SESSION_OSS}/session.env" "${META}" -f >/dev/null 2>&1; then
+            . "${META}"
+            if [[ -n "${MYSQL_ECI_ID:-}" ]]; then
+              echo "Releasing MySQL ECI ${MYSQL_ECI_ID}"
+              eci rm "${MYSQL_ECI_ID}" || true
+            fi
+          fi
+          rm -f "${META}"
+
+          # Release the ECS cluster for this session tag.
+          ./bin/elastic-cluster.sh --tag "triage-${SESSION}" --delete || true
+
+          # Drop the OSS session handle so the name can be reused.
+          ${OSS} rm "oss://${BUCKET}/ecs-conf/${PR_NUMBER}.conf" -f >/dev/null 2>&1 || true
+          ${OSS} rm "${SESSION_OSS}/" -r -f >/dev/null 2>&1 || true
+          echo "::notice::TORE DOWN session '${SESSION}'."
+
+      - name: Clean workspace
+        if: always()
+        run: rm -rf ${{ github.workspace }}/* || true
