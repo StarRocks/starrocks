@@ -20,16 +20,7 @@
 #include <chrono>
 #include <thread>
 
-#include "base/compression/block_compression.h"
-#include "base/concurrency/countdown_latch.h"
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk.h"
-#include "common/brpc/internal_service_recoverable_stub.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_network_fwd.h"
-#include "common/system/backend_options.h"
-#include "exec/exec_env.h"
+#include "common/config.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
@@ -40,30 +31,15 @@
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/casts.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/column_test_helper.h"
+#include "service/backend_options.h"
+#include "testutil/assert.h"
+#include "util/countdown_latch.h"
+#include "util/defer_op.h"
+#include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {
-
-// Mock codec that always reports exceed_max_input_size for any non-zero payload.
-class AlwaysOverflowCodec final : public BlockCompressionCodec {
-public:
-    AlwaysOverflowCodec() : BlockCompressionCodec(LZ4) {}
-
-    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
-                    faststring* compressed_body1, raw::RawString* compressed_body2,
-                    const BlockCompressionOptions& /*options*/) const override {
-        return Status::NotSupported("mock");
-    }
-
-    Status decompress(const Slice& input, Slice* output) const override { return Status::NotSupported("mock"); }
-
-    size_t max_compressed_len(size_t len) const override { return len; }
-
-    bool exceed_max_input_size(size_t len) const override { return len > 0; }
-
-    size_t max_input_size() const override { return 0; }
-};
 
 class ExchangeSinkOperatorTest : public ::testing::Test {
 public:
@@ -73,24 +49,22 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
-        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
+        _query_context->set_exec_env(_exec_env);
+        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         // Use a large query timeout so an in-flight RPC does not complete on its own during the
         // cancellation test; the test relies on cancel_one_sinker() to abort it promptly instead.
         query_options.__set_query_timeout(300);
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
-                                                        &_exec_env->query_execution_services(), _exec_env);
-        _query_context->attach_to_runtime_state(_runtime_state.get());
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
+        _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
         _fragment_context = std::make_shared<FragmentContext>();
         _fragment_context->set_fragment_instance_id(_fragment_id);
-        _fragment_context->set_runtime_state(std::shared_ptr{_runtime_state});
-        _runtime_state->set_fragment_ctx(_fragment_context.get(), &_fragment_context->fragment_runtime_state());
-        _runtime_state->set_fragment_dict_state(_fragment_context->dict_state());
+        _fragment_context->set_runtime_state(std::shared_ptr<RuntimeState>{_runtime_state});
+        _runtime_state->set_fragment_ctx(_fragment_context.get());
 
         TNetworkAddress address;
         address.__set_hostname(BackendOptions::get_local_ip());
@@ -115,15 +89,7 @@ public:
         _factory->set_runtime_state(_runtime_state.get());
     }
 
-    void TearDown() override { _query_context->set_query_execution_services(nullptr); }
-
-    // Build a minimal single-column INT chunk.
-    static ChunkPtr make_chunk() {
-        auto chunk = std::make_shared<Chunk>();
-        auto col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
-        chunk->append_column(std::move(col), 0);
-        return chunk;
-    }
+    void TearDown() override {}
 
 protected:
     TUniqueId _fragment_id;
@@ -135,52 +101,7 @@ protected:
     std::shared_ptr<SinkBuffer> _sink_buffer;
     std::shared_ptr<ExchangeSinkOperatorFactory> _factory;
     TPlanFragmentDestination _destination;
-
-    AlwaysOverflowCodec _overflow_codec;
 };
-
-// When enable_rpc_compress_overflow_skip=true and the codec reports overflow,
-// serialize_chunk should succeed (skip compression rather than error).
-TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_enabled) {
-    auto op = _factory->create(1, 0);
-    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
-
-    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
-    sink->set_compress_codec_for_testing(&_overflow_codec);
-
-    bool prev = config::enable_rpc_compress_overflow_skip;
-    DeferOp restore([&] { config::enable_rpc_compress_overflow_skip = prev; });
-    config::enable_rpc_compress_overflow_skip = true;
-
-    ChunkPB chunk_pb;
-    bool is_first = true;
-    EXPECT_OK(sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first));
-    // No compression applied: compress_type stays at default (NO_COMPRESSION).
-    EXPECT_EQ(chunk_pb.compress_type(), CompressionTypePB::NO_COMPRESSION);
-
-    op->close(_runtime_state.get());
-}
-
-// When enable_rpc_compress_overflow_skip=false and the codec reports overflow,
-// serialize_chunk should return InternalError.
-TEST_F(ExchangeSinkOperatorTest, serialize_chunk_overflow_skip_disabled) {
-    auto op = _factory->create(1, 0);
-    ASSERT_OK(op->prepare_local_state(_runtime_state.get()));
-
-    auto* sink = down_cast<ExchangeSinkOperator*>(op.get());
-    sink->set_compress_codec_for_testing(&_overflow_codec);
-
-    bool prev = config::enable_rpc_compress_overflow_skip;
-    DeferOp restore([&] { config::enable_rpc_compress_overflow_skip = prev; });
-    config::enable_rpc_compress_overflow_skip = false;
-
-    ChunkPB chunk_pb;
-    bool is_first = true;
-    auto st = sink->serialize_chunk(make_chunk().get(), &chunk_pb, &is_first);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-
-    op->close(_runtime_state.get());
-}
 
 // A brpc PInternalService whose transmit_chunk blocks until explicitly released, so the client-side
 // RPC stays in-flight. This lets us assert that cancel_one_sinker() aborts outstanding RPCs actively
