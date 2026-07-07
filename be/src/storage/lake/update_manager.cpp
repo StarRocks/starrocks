@@ -294,6 +294,44 @@ StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
     return prepare_primary_index(metadata, builder, base_version, new_version, guard);
 }
 
+// Plan for interleaving del files with segments during a primary-key publish. Per del file:
+//   - del_rssids[i]      : the rssid stamped for that delete (rowset_id + op_offset).
+//   - dels_after_segment : global segment id -> del ids that logically follow it, so each delete is
+//                          applied right after that segment's index update (preserving upsert/delete
+//                          order within the transaction).
+//   - del_applied[i]     : whether del i has been applied; a final pass handles any not consumed by
+//                          the interleave (e.g. a pure-delete op_write with no segments).
+struct DelInterleavePlan {
+    std::vector<uint32_t> del_rssids;
+    std::map<uint32_t, std::vector<uint32_t>> dels_after_segment;
+    std::vector<bool> del_applied;
+};
+
+// Build the interleave plan from an op_write's del files. A del with a recorded op_offset follows
+// that segment (mapped into the global segment-id space via assigned_global_segments +
+// get_segment_idx); otherwise it falls back to del_rebuild_rssid (after all segments).
+static DelInterleavePlan build_del_interleave_plan(const TxnLogPB_OpWrite& op_write, uint32_t rowset_id,
+                                                   uint32_t assigned_global_segments, uint32_t max_segment_id,
+                                                   uint32_t del_rebuild_rssid) {
+    const uint32_t num_del_files = op_write.dels_meta_size();
+    DelInterleavePlan plan;
+    plan.del_rssids.assign(num_del_files, del_rebuild_rssid);
+    plan.del_applied.assign(num_del_files, false);
+    for (uint32_t del_id = 0; del_id < num_del_files; ++del_id) {
+        // A del's op_offset (parallel to dels_meta) maps it to the segment it follows; when not
+        // recorded it stays at max_segment_id, i.e. applied after all segments.
+        uint32_t target_segment = max_segment_id;
+        const int64_t op_offset = del_op_offset_or_unset(op_write, del_id);
+        if (op_offset >= 0) {
+            target_segment =
+                    assigned_global_segments + get_segment_idx(op_write.rowset(), static_cast<int32_t>(op_offset));
+        }
+        plan.del_rssids[del_id] = rowset_id + target_segment;
+        plan.dels_after_segment[target_segment].push_back(del_id);
+    }
+    return plan;
+}
+
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
@@ -360,15 +398,30 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         new_rowset_rssids.insert(rssid);
         new_deletes[rssid] = {};
     }
-    // The rssid for delete files equals `rowset_id + op_offset`. Since delete currently happens after upsert,
-    // we use the max segment id as the `op_offset` for rebuild. This is a simplification until mixed
-    // upsert+delete order in a single transaction is supported.
-    // TODO: Support the actual interleaving order of upsert and delete within one transaction.
+    // A delete file's rssid is `rowset_id + op_offset`, where op_offset is the in-transaction segment
+    // index the delete logically follows (delete sorts after that segment via the reserved UINT32_MAX
+    // rowid). Falls back to the max segment id when the writer could not determine the order (spill /
+    // older writers / column-mode), reproducing the legacy "all deletes after all upserts" behavior.
     uint32_t max_segment_id = 0;
     if (!rowset_segment_ids.empty()) {
         max_segment_id = *std::max_element(rowset_segment_ids.begin(), rowset_segment_ids.end());
     }
     const uint32_t del_rebuild_rssid = rowset_id + max_segment_id;
+    // Plan how del files interleave with segments (see DelInterleavePlan / build_del_interleave_plan).
+    DelInterleavePlan del_plan =
+            build_del_interleave_plan(op_write, rowset_id, assigned_global_segments, max_segment_id, del_rebuild_rssid);
+    // Apply one del file's erase into the index with its own rssid, recording shadowed rows in
+    // `new_deletes`. Called at the interleave point (right after the segment it follows) so the
+    // upsert/delete order within this transaction is preserved.
+    auto apply_one_del = [&](uint32_t del_id) -> Status {
+        RETURN_IF_ERROR(state.load_delete(del_id, params));
+        DCHECK(state.deletes(del_id) != nullptr);
+        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_plan.del_rssids[del_id]));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
+        state.release_delete(del_id);
+        del_plan.del_applied[del_id] = true;
+        return Status::OK();
+    };
     // When too many sst files, we need to compact them early.
     int32_t current_fileset_start_idx = index.current_fileset_index();
     AsyncCompactCBPtr async_compact_cb;
@@ -493,6 +546,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                  rowset_id + global_segment_id, metadata->version(), delvec_page_pb,
                                                  dv_generated_during_merge_update));
             }
+            // Apply del files that logically follow this segment, right after its index update, so the
+            // upsert/delete order within this transaction is preserved.
+            if (auto it = del_plan.dels_after_segment.find(global_segment_id);
+                it != del_plan.dels_after_segment.end()) {
+                for (uint32_t del_id : it->second) {
+                    RETURN_IF_ERROR(apply_one_del(del_id));
+                }
+            }
             if (async_compact_cb) {
                 TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
                 bool succ = true;
@@ -523,13 +584,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         RETURN_IF_ERROR(async_compact_cb->wait_for());
     }
 
-    // 3. Handle del files one by one.
-    for (uint32_t del_id = 0; del_id < op_write.dels_meta_size(); del_id++) {
-        RETURN_IF_ERROR(state.load_delete(del_id, params));
-        DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_rebuild_rssid));
-        _index_cache.update_object_size(index_entry, index.memory_usage());
-        state.release_delete(del_id);
+    // 3. Apply any del files not yet consumed by the interleave above. This covers rowsets with no
+    // segments (pure-delete op_write) and any del whose target segment was not iterated; their rssid
+    // is del_rebuild_rssid (after all segments), matching the legacy behavior.
+    for (uint32_t del_id = 0; del_id < del_plan.del_applied.size(); del_id++) {
+        if (del_plan.del_applied[del_id]) {
+            continue;
+        }
+        RETURN_IF_ERROR(apply_one_del(del_id));
     }
 
     _block_cache->update_memory_usage();
@@ -863,6 +925,10 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (const auto& del_meta : op_write.dels_meta()) {
         new_rows_op.add_dels_meta()->CopyFrom(del_meta);
     }
+    // Column-upsert mode applies these deletes after all synthesized new-row segments
+    // (new_del_rebuild_rssid below), not interleaved by op_offset. new_rows_op intentionally carries
+    // no del_op_offsets array, so apply/persist fall back to the max segment id, keeping
+    // rebuild/recover consistent with this apply path.
     if (new_rows_op.rowset().segment_metas_size() > 0 || new_rows_op.dels_meta_size() > 0) {
         // Give the synthesized new_rows rowset a uid. In COLUMN_UPSERT_MODE the
         // original op_write.rowset() never enters tablet metadata as a top-level

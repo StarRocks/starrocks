@@ -390,6 +390,15 @@ message TxnLogPB {
         repeated FileMetaPB dels_meta = 19;
         // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
         repeated FileMetaPB rewrite_segments_meta = 20;
+        // Parallel to `dels_meta` (index by del_id): the in-rowset segment index each delete
+        // logically follows, so its rssid is `rowset_id + op_offset`. Used to preserve the
+        // in-transaction upsert/delete order. A UINT32_MAX entry means "not recorded" (e.g.
+        // spill / concurrent flush); readers then fall back to the max segment index (legacy
+        // "all deletes after all upserts"). Empty (size != dels_meta_size) means no del carries
+        // an offset -- the downgrade-safe default until the cluster is fully upgraded
+        // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
+        // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
+        repeated uint32 del_op_offsets = 21;
     }
 
     message OpCompaction {
