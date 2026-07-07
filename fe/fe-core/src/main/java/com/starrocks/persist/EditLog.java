@@ -1263,6 +1263,46 @@ public class EditLog {
                     globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
                     break;
                 }
+                case OperationType.OP_CREATE_CONTEXTBASE: {
+                    globalStateMgr.getContextMgr().replayCreateContextBase((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_ALTER_CONTEXTBASE: {
+                    globalStateMgr.getContextMgr().replayAlterContextBase((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_RENAME_CONTEXTBASE: {
+                    globalStateMgr.getContextMgr().replayRenameContextBase((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_DROP_CONTEXTBASE: {
+                    globalStateMgr.getContextMgr().replayDropContextBase((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_CREATE_CONTEXT_COLLECTION: {
+                    globalStateMgr.getContextMgr().replayCreateCollection((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_DROP_CONTEXT_COLLECTION: {
+                    globalStateMgr.getContextMgr().replayDropCollection((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_CREATE_CONTEXT_WORKSPACE: {
+                    globalStateMgr.getContextMgr().replayCreateWorkspace((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_DROP_CONTEXT_WORKSPACE: {
+                    globalStateMgr.getContextMgr().replayDropWorkspace((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_CREATE_CONTEXT_RETRIEVAL_PROFILE: {
+                    globalStateMgr.getContextMgr().replayCreateRetrievalProfile((ContextOpLog) journal.data());
+                    break;
+                }
+                case OperationType.OP_DROP_CONTEXT_RETRIEVAL_PROFILE: {
+                    globalStateMgr.getContextMgr().replayDropRetrievalProfile((ContextOpLog) journal.data());
+                    break;
+                }
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.data();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
@@ -2430,6 +2470,46 @@ public class EditLog {
 
     public void logPipeOp(PipeOpEntry opEntry, WALApplier walApplier) {
         logJsonObject(OperationType.OP_PIPE, opEntry, walApplier);
+    }
+
+    public void logCreateContextBase(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_CONTEXTBASE, log, walApplier);
+    }
+
+    public void logAlterContextBase(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_CONTEXTBASE, log, walApplier);
+    }
+
+    public void logRenameContextBase(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_CONTEXTBASE, log, walApplier);
+    }
+
+    public void logDropContextBase(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_CONTEXTBASE, log, walApplier);
+    }
+
+    public void logCreateContextCollection(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_CONTEXT_COLLECTION, log, walApplier);
+    }
+
+    public void logDropContextCollection(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_CONTEXT_COLLECTION, log, walApplier);
+    }
+
+    public void logCreateContextWorkspace(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_CONTEXT_WORKSPACE, log, walApplier);
+    }
+
+    public void logDropContextWorkspace(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_CONTEXT_WORKSPACE, log, walApplier);
+    }
+
+    public void logCreateContextRetrievalProfile(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_CONTEXT_RETRIEVAL_PROFILE, log, walApplier);
+    }
+
+    public void logDropContextRetrievalProfile(ContextOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_CONTEXT_RETRIEVAL_PROFILE, log, walApplier);
     }
 
     public void logAlterPipe(AlterPipeLog log, WALApplier walApplier) {

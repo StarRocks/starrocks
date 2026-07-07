@@ -116,6 +116,7 @@ import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.context.ContextMgr;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.epack.alter.SystemHandlerEPack;
@@ -537,6 +538,8 @@ public class GlobalStateMgr {
     private final StorageVolumeMgr storageVolumeMgr;
 
     private final AIProviderMgr aiProviderMgr;
+
+    private final ContextMgr contextMgr;
 
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
@@ -961,6 +964,7 @@ public class GlobalStateMgr {
         this.sqlDigestBlackList = new SqlDigestBlackList();
 
         this.aiProviderMgr = new AIProviderMgr();
+        this.contextMgr = new ContextMgr();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1277,6 +1281,10 @@ public class GlobalStateMgr {
 
     public AIProviderMgr getAIProviderMgr() {
         return aiProviderMgr;
+    }
+
+    public ContextMgr getContextMgr() {
+        return contextMgr;
     }
 
     public PipeManager getPipeManager() {
@@ -2111,6 +2119,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockIDEPack.RECOMMENDATIONS_TASK_MGR, recommendationsTaskMgr::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
+                .put(SRMetaBlockID.CONTEXT_MGR, contextMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .put(SRMetaBlockIDEPack.LICENSE_MGR, licenseMgr::load)
@@ -2359,6 +2368,7 @@ public class GlobalStateMgr {
                 sqlDigestBlackList.save(imageWriter);
                 bookmarkManager.save(imageWriter);
                 aiProviderMgr.save(imageWriter);
+                contextMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

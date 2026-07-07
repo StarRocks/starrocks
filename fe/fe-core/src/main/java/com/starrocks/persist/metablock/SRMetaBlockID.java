@@ -110,6 +110,9 @@ public class SRMetaBlockID {
     // AIProviderMgr image block (SQL-managed embedding / rerank providers).
     public static final SRMetaBlockID AI_PROVIDER_MGR = new SRMetaBlockID(38);
 
+    // ContextMgr image block (Context Base / semantic-context metadata).
+    public static final SRMetaBlockID CONTEXT_MGR = new SRMetaBlockID(39);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */
