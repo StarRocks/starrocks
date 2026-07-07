@@ -219,11 +219,20 @@ Status LakeDataSource::open(RuntimeState* state) {
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
-    auto runtime_filter_snapshots = capture_runtime_filter_snapshots();
+    // Runtime-filter snapshot bookkeeping and the reusable-reader key only feed the prepared-split
+    // reuse/reopen path. Skip them when that optimization is off so the flag-off open() stays as
+    // cheap as the pre-optimization path.
+    const bool prepared_split_enabled = _provider->enable_lake_prepared_physical_split_scan();
+    RuntimeFilterSnapshots runtime_filter_snapshots;
+    if (prepared_split_enabled) {
+        runtime_filter_snapshots = capture_runtime_filter_snapshots();
+    }
     RETURN_IF_ERROR(rebuild_scan_conjuncts(state));
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
-    refresh_reusable_reader_key();
-    remember_runtime_filter_snapshots(std::move(runtime_filter_snapshots));
+    if (prepared_split_enabled) {
+        refresh_reusable_reader_key();
+        remember_runtime_filter_snapshots(std::move(runtime_filter_snapshots));
+    }
     return Status::OK();
 }
 

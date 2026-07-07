@@ -296,6 +296,12 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     bool shared_scan = _scan_node->is_shared_scan_enabled();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
+    {
+        auto* provider = down_cast<ConnectorScanNode*>(_scan_node)->data_source_provider();
+        auto* lake_provider = dynamic_cast<connector::LakeDataSourceProvider*>(provider);
+        _prepared_split_reuse_enabled =
+                lake_provider != nullptr && lake_provider->enable_lake_prepared_physical_split_scan();
+    }
     const std::string chunk_source_reuse_name = "ChunkSourceReuse";
     ADD_COUNTER(_unique_metrics, chunk_source_reuse_name, TUnit::NONE);
     _chunk_source_reuse_candidate_counter =
@@ -353,6 +359,9 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
 }
 
 bool ConnectorScanOperator::_can_reuse_chunk_source_for(Morsel& morsel) const {
+    if (!_prepared_split_reuse_enabled) {
+        return false;
+    }
     if (connector_type() != connector::ConnectorType::LAKE || morsel.from_version() != 0) {
         return false;
     }
@@ -382,6 +391,9 @@ void ConnectorScanOperator::_record_reusable_chunk_source_event(ReusableChunkSou
 }
 
 bool ConnectorScanOperator::_is_empty_slot_for_new_morsel(int chunk_source_index) const {
+    if (!_prepared_split_reuse_enabled) {
+        return false;
+    }
     if (connector_type() != connector::ConnectorType::LAKE) {
         return false;
     }

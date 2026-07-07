@@ -130,6 +130,10 @@ private:
                                       ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
+    // Only the lake prepared-physical-split path uses chunk-source reuse. Cache the flag once so the
+    // per-morsel reuse hot path (slot classification lock, dynamic_cast) is skipped when it is off,
+    // keeping the flag-off scan path identical to the pre-optimization behavior.
+    bool _prepared_split_reuse_enabled = false;
     std::vector<ChunkSourcePtr> _reusable_chunk_sources;
     RuntimeProfile::Counter* _chunk_source_reuse_candidate_counter = nullptr;
     RuntimeProfile::Counter* _chunk_source_reuse_hit_counter = nullptr;
