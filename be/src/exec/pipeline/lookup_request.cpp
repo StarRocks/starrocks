@@ -870,12 +870,10 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
     auto accumulated = accumulator.pull();
     if (accumulated == nullptr) {
         // [GLM-DIAG] distinguish empty-batch (a) from located-but-materialized-nothing (b).
-        LOG(WARNING) << "[GLM-DIAG empty-accum] scan_id=" << _ctx->scan_id
-                     << " n_locators=" << row_locators.size()
-                     << (row_locators.empty()
-                                 ? std::string()
-                                 : fmt::format(" first=(tablet={},rssid={})", std::get<0>(row_locators[0]),
-                                               std::get<1>(row_locators[0])));
+        LOG(WARNING) << "[GLM-DIAG empty-accum] scan_id=" << _ctx->scan_id << " n_locators=" << row_locators.size()
+                     << (row_locators.empty() ? std::string()
+                                              : fmt::format(" first=(tablet={},rssid={})", std::get<0>(row_locators[0]),
+                                                            std::get<1>(row_locators[0])));
         // pull() returns nullptr when the accumulator produced no chunk, i.e. nothing was
         // materialized. Previously this null was dereferenced unconditionally below
         // (accumulated->schema()), which crashes the CN with SIGSEGV.

@@ -346,8 +346,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
         // [GLM-DIAG] dump captured vs live rowset ranges to expose the scan-vs-fetch snapshot
         // mismatch behind "not found lake rssid". All PB access lives in debug_dump_ranges.
         LOG(WARNING) << "[GLM-DIAG notfound] query_id=" << _query_id_str << " tablet=" << _tablet_id
-                     << " rssid=" << rssid << " "
-                     << _glm_ctx->debug_dump_ranges(static_cast<int32_t>(_tablet_id))
+                     << " rssid=" << rssid << " " << _glm_ctx->debug_dump_ranges(static_cast<int32_t>(_tablet_id))
                      << " live_" << _glm_ctx->debug_dump_ranges(_rowsets);
         // [GLM-DIAG sstprov] Dump the tablet's PK-index SST filesets with split provenance, to pin
         // whether the failing rssid was served by a shared=1 (inherited-from-split-parent) SST vs a
@@ -388,8 +387,8 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
             }
             LOG(WARNING) << "[GLM-DIAG sstprov] query_id=" << _query_id_str << " tablet=" << _tablet_id
                          << " rssid=" << rssid << " meta_version=" << meta_version << " n_sst=" << n_sst
-                         << " n_shared=" << n_shared << " n_local=" << n_local
-                         << " shared_hit_idx=" << shared_hit_idx << dump;
+                         << " n_shared=" << n_shared << " n_local=" << n_local << " shared_hit_idx=" << shared_hit_idx
+                         << dump;
         }
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
     }
