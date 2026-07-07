@@ -42,6 +42,12 @@ struct LoadSpillMergeInputBatch {
     // sorted merge (for aggregation/ordering) and union (for DUP_KEYS tables).
     ChunkIteratorPtr merge_itr;
 
+    // Smallest slot_idx (original memtable flush order) among this batch's block groups. Batches are
+    // formed from a contiguous, monotonically increasing slot range, so this gives each batch a stable
+    // order key. The result-consolidation step sorts batches by it so segments/del files are merged in
+    // flush order regardless of the (concurrent, hence unordered) order in which tasks were registered.
+    int64_t slot_idx = -1;
+
     // Metrics for monitoring merge workload distribution across pipeline tasks.
     // Used to ensure roughly equal work distribution and for performance analysis.
     size_t total_block_groups = 0;
