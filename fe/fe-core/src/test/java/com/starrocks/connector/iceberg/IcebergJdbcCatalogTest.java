@@ -307,6 +307,7 @@ public class IcebergJdbcCatalogTest {
         new IcebergJdbcCatalog("sr_catalog", new Configuration(),
                 ImmutableMap.of("iceberg.catalog.warehouse", LOCATION,
                         "iceberg.catalog.uri", URI));
+
         assertEquals("sr_catalog", capturedName[0]);
         Assertions.assertNotNull(capturedProps[0]);
         Assertions.assertFalse(capturedProps[0].containsKey("jdbc.catalog-name"));
