@@ -224,7 +224,15 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
+<<<<<<< HEAD
         index->minor_compact();
+=======
+        ASSERT_OK(index->flush_memtable(true));
+        // Wait for async flush to complete so every sstable is committed; otherwise a
+        // still-pending memtable would be dropped from the committed metadata and the
+        // compaction below would have nothing (or too few sstables) to merge.
+        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
+>>>>>>> 84710515bd ([UT] Fix flaky LakePersistentIndexTest.test_major_compaction (#75949))
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
