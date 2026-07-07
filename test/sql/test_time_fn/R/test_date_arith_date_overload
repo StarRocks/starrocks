@@ -1,0 +1,98 @@
+-- name: test_date_arith_date_overload
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int, d date)
+duplicate key(id) distributed by hash(id) properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t values
+    (1, '2020-05-15'),
+    (2, '2020-02-29'),
+    (3, '2020-12-31'),
+    (4, '2020-01-31');
+-- result:
+-- !result
+select id, days_add(d, 7) from t order by id;
+-- result:
+1	2020-05-22
+2	2020-03-07
+3	2021-01-07
+4	2020-02-07
+-- !result
+select id, weeks_add(d, 1) from t order by id;
+-- result:
+1	2020-05-22
+2	2020-03-07
+3	2021-01-07
+4	2020-02-07
+-- !result
+select id, weeks_sub(d, 1) from t order by id;
+-- result:
+1	2020-05-08
+2	2020-02-22
+3	2020-12-24
+4	2020-01-24
+-- !result
+select id, months_add(d, 1) from t order by id;
+-- result:
+1	2020-06-15
+2	2020-03-29
+3	2021-01-31
+4	2020-02-29
+-- !result
+select id, months_sub(d, 1) from t order by id;
+-- result:
+1	2020-04-15
+2	2020-01-29
+3	2020-11-30
+4	2019-12-31
+-- !result
+select id, add_months(d, 1) from t order by id;
+-- result:
+1	2020-06-15
+2	2020-03-29
+3	2021-01-31
+4	2020-02-29
+-- !result
+select id, quarters_add(d, 1) from t order by id;
+-- result:
+1	2020-08-15
+2	2020-05-29
+3	2021-03-31
+4	2020-04-30
+-- !result
+select id, quarters_sub(d, 1) from t order by id;
+-- result:
+1	2020-02-15
+2	2019-11-29
+3	2020-09-30
+4	2019-10-31
+-- !result
+select id, years_add(d, 1) from t order by id;
+-- result:
+1	2021-05-15
+2	2021-02-28
+3	2021-12-31
+4	2021-01-31
+-- !result
+select id, years_sub(d, 1) from t order by id;
+-- result:
+1	2019-05-15
+2	2019-02-28
+3	2019-12-31
+4	2019-01-31
+-- !result
+select id, months_add(days_add(d, 1), 1) from t order by id;
+-- result:
+1	2020-06-16
+2	2020-04-01
+3	2021-02-01
+4	2020-03-01
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

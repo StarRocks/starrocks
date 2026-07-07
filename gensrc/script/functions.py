@@ -528,26 +528,48 @@ vectorized_functions = [
 
     [50100, 'weekday', True, False, 'INT', ['DATETIME'], 'TimeFunctions::week_day'],
 
+    # The DATE overload is listed first and given a smaller id (the free slot just below the DATETIME
+    # overload) so a DATE argument binds it (returns DATE); a DATETIME argument cannot narrow to DATE and
+    # still binds the DATETIME overload. DATETIME overload ids are kept at their original values for
+    # upgrade compatibility; only the newly added DATE overloads take new (smaller) ids.
+    [50108, 'years_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::years_add_date'],
+    [50109, 'years_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::years_sub_date'],
     [50110, 'years_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_add'],
     [50111, 'years_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::years_sub'],
+
+    [50113, 'quarters_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::quarters_add_date'],
+    [50114, 'quarters_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::quarters_sub_date'],
     [50115, 'quarters_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_add'],
     [50116, 'quarters_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::quarters_sub'],
+
+    [50117, 'months_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::months_add_date'],
+    [50118, 'months_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::months_sub_date'],
+    [50119, 'add_months', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::months_add_date'],
     [50120, 'months_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_add'],
     [50121, 'months_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_sub'],
     [50122, 'add_months', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::months_add'],
+
+    [50128, 'weeks_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::weeks_add_date'],
+    [50129, 'weeks_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::weeks_sub_date'],
     [50130, 'weeks_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::weeks_add'],
     [50131, 'weeks_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::weeks_sub'],
+
+    [50134, 'days_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_add_date'],
+    [50135, 'days_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_sub_date'],
+    [50136, 'date_add', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_add_date'],
+    [50137, 'date_sub', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_sub_date'],
+    [50138, 'adddate', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_add_date'],
+    [50139, 'subdate', True, False, 'DATE', ['DATE', 'INT'], 'TimeFunctions::days_sub_date'],
     [50140, 'days_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_add'],
     [50141, 'days_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_sub'],
-
     [50142, 'date_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_add'],
     [50143, 'date_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_sub'],
-
     [50144, 'adddate', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_add'],
     [50145, 'subdate', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::days_sub'],
 
     [50150, 'hours_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_add'],
     [50151, 'hours_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::hours_sub'],
+
     [50160, 'minutes_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_add'],
     [50161, 'minutes_sub', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::minutes_sub'],
     [50170, 'seconds_add', True, False, 'DATETIME', ['DATETIME', 'INT'], 'TimeFunctions::seconds_add'],

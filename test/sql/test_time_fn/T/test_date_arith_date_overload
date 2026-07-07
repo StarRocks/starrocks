@@ -1,0 +1,43 @@
+-- name: test_date_arith_date_overload
+-- description: Direct calls to the date-arithmetic builtins on a DATE *column* (a non-constant argument, so
+-- FE constant folding cannot apply) resolve to the new (DATE, INT) -> DATE overloads and are evaluated by
+-- the BE. The result renders as 'yyyy-MM-dd' (DATE), not 'yyyy-MM-dd 00:00:00' (DATETIME). Only the direct
+-- function-call form is exercised here: date_add/date_sub/adddate/subdate/days_sub and the operator
+-- (+/- INTERVAL) form still route through the analyzer and stay DATETIME without the analyzer change.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (id int, d date)
+duplicate key(id) distributed by hash(id) properties("replication_num" = "1");
+
+insert into t values
+    (1, '2020-05-15'),
+    (2, '2020-02-29'),
+    (3, '2020-12-31'),
+    (4, '2020-01-31');
+
+-- days_add: not in DATE_FUNCTIONS, so it is a plain function call that resolves to the DATE overload
+select id, days_add(d, 7) from t order by id;
+
+-- weeks_add / weeks_sub
+select id, weeks_add(d, 1) from t order by id;
+select id, weeks_sub(d, 1) from t order by id;
+
+-- months_add / months_sub / add_months (month-end clamp exercised by id 3 and 4)
+select id, months_add(d, 1) from t order by id;
+select id, months_sub(d, 1) from t order by id;
+select id, add_months(d, 1) from t order by id;
+
+-- quarters_add / quarters_sub
+select id, quarters_add(d, 1) from t order by id;
+select id, quarters_sub(d, 1) from t order by id;
+
+-- years_add / years_sub (leap-day clamp exercised by id 2)
+select id, years_add(d, 1) from t order by id;
+select id, years_sub(d, 1) from t order by id;
+
+-- multiple date columns / expression argument still evaluate at the BE and keep DATE
+select id, months_add(days_add(d, 1), 1) from t order by id;
+
+drop database db_${uuid0};

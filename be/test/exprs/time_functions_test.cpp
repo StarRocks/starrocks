@@ -142,6 +142,391 @@ TEST_F(TimeFunctionsTest, yearAddTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, yearsAddDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto year = Int32Column::create();
+    for (int j = 0; j < 20; ++j) {
+        tc->append(DateValue::create(2000, 1, 1));
+        year->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(year);
+
+    ColumnPtr result = TimeFunctions::years_add_date(_utils->get_fn_ctx(), columns).value();
+
+    // DATE input keeps a DATE result (no promotion to DATETIME).
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 20; ++k) {
+        ASSERT_EQ(DateValue::create(2000 + k, 1, 1), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, yearsSubDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto year = Int32Column::create();
+    for (int j = 0; j < 20; ++j) {
+        tc->append(DateValue::create(2020, 6, 15));
+        year->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(year);
+
+    ColumnPtr result = TimeFunctions::years_sub_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 20; ++k) {
+        ASSERT_EQ(DateValue::create(2020 - k, 6, 15), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, yearsAddSubDateLeapDayTest) {
+    // Feb 29 clamps to Feb 28 on non-leap target years, stays Feb 29 on leap ones.
+    auto tc = DateColumn::create();
+    auto year = Int32Column::create();
+    tc->append(DateValue::create(2000, 2, 29)); // + 1 year  -> 2001-02-28 (non-leap)
+    year->append(1);
+    tc->append(DateValue::create(2000, 2, 29)); // + 4 years -> 2004-02-29 (leap)
+    year->append(4);
+
+    Columns add_columns = {tc, year};
+    ColumnPtr add_result = TimeFunctions::years_add_date(_utils->get_fn_ctx(), add_columns).value();
+    auto av = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(add_result)->data_column());
+    ASSERT_EQ(DateValue::create(2001, 2, 28), av->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2004, 2, 29), av->immutable_data()[1]);
+
+    // 2004-02-29 - 4 years -> 2000-02-29 (leap); 2004-02-29 - 1 year -> 2003-02-28 (non-leap)
+    auto tc2 = DateColumn::create();
+    auto year2 = Int32Column::create();
+    tc2->append(DateValue::create(2004, 2, 29));
+    year2->append(4);
+    tc2->append(DateValue::create(2004, 2, 29));
+    year2->append(1);
+
+    Columns sub_columns = {tc2, year2};
+    ColumnPtr sub_result = TimeFunctions::years_sub_date(_utils->get_fn_ctx(), sub_columns).value();
+    auto sv = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(sub_result)->data_column());
+    ASSERT_EQ(DateValue::create(2000, 2, 29), sv->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2003, 2, 28), sv->immutable_data()[1]);
+}
+
+TEST_F(TimeFunctionsTest, daysAddDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto day = Int32Column::create();
+    for (int j = 0; j < 10; ++j) {
+        tc->append(DateValue::create(2020, 6, 1));
+        day->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(day);
+
+    ColumnPtr result = TimeFunctions::days_add_date(_utils->get_fn_ctx(), columns).value();
+
+    // DATE input keeps a DATE result (no promotion to DATETIME).
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 10; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 6, 1 + k), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, daysSubDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto day = Int32Column::create();
+    for (int j = 0; j < 10; ++j) {
+        tc->append(DateValue::create(2020, 6, 20));
+        day->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(day);
+
+    ColumnPtr result = TimeFunctions::days_sub_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 10; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 6, 20 - k), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, daysAddSubDateBoundaryTest) {
+    // Crossing month / leap-day / year boundaries.
+    auto tc = DateColumn::create();
+    auto day = Int32Column::create();
+    tc->append(DateValue::create(2020, 2, 28)); // + 1 day  -> 2020-02-29 (leap)
+    day->append(1);
+    tc->append(DateValue::create(2020, 2, 28)); // + 2 days -> 2020-03-01
+    day->append(2);
+    tc->append(DateValue::create(2020, 12, 31)); // + 1 day -> 2021-01-01 (year boundary)
+    day->append(1);
+
+    Columns add_columns = {tc, day};
+    ColumnPtr add_result = TimeFunctions::days_add_date(_utils->get_fn_ctx(), add_columns).value();
+    auto av = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(add_result)->data_column());
+    ASSERT_EQ(DateValue::create(2020, 2, 29), av->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2020, 3, 1), av->immutable_data()[1]);
+    ASSERT_EQ(DateValue::create(2021, 1, 1), av->immutable_data()[2]);
+
+    auto tc2 = DateColumn::create();
+    auto day2 = Int32Column::create();
+    tc2->append(DateValue::create(2020, 3, 1)); // - 1 day -> 2020-02-29 (leap)
+    day2->append(1);
+    tc2->append(DateValue::create(2021, 1, 1)); // - 1 day -> 2020-12-31 (year boundary)
+    day2->append(1);
+
+    Columns sub_columns = {tc2, day2};
+    ColumnPtr sub_result = TimeFunctions::days_sub_date(_utils->get_fn_ctx(), sub_columns).value();
+    auto sv = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(sub_result)->data_column());
+    ASSERT_EQ(DateValue::create(2020, 2, 29), sv->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2020, 12, 31), sv->immutable_data()[1]);
+}
+
+TEST_F(TimeFunctionsTest, weeksAddDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto week = Int32Column::create();
+    for (int j = 0; j < 5; ++j) {
+        tc->append(DateValue::create(2020, 6, 1));
+        week->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(week);
+
+    ColumnPtr result = TimeFunctions::weeks_add_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 5; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 6, 1 + 7 * k), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, weeksSubDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto week = Int32Column::create();
+    for (int j = 0; j < 5; ++j) {
+        tc->append(DateValue::create(2020, 6, 29));
+        week->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(week);
+
+    ColumnPtr result = TimeFunctions::weeks_sub_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 5; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 6, 29 - 7 * k), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, weeksAddSubDateBoundaryTest) {
+    // A week crossing month / leap-Feb / year boundaries.
+    auto tc = DateColumn::create();
+    auto week = Int32Column::create();
+    tc->append(DateValue::create(2020, 12, 28)); // + 1 week -> 2021-01-04 (year boundary)
+    week->append(1);
+    tc->append(DateValue::create(2020, 2, 26)); // + 1 week -> 2020-03-04 (across leap Feb)
+    week->append(1);
+
+    Columns add_columns = {tc, week};
+    ColumnPtr add_result = TimeFunctions::weeks_add_date(_utils->get_fn_ctx(), add_columns).value();
+    auto av = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(add_result)->data_column());
+    ASSERT_EQ(DateValue::create(2021, 1, 4), av->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2020, 3, 4), av->immutable_data()[1]);
+
+    auto tc2 = DateColumn::create();
+    auto week2 = Int32Column::create();
+    tc2->append(DateValue::create(2021, 1, 4)); // - 1 week -> 2020-12-28 (year boundary)
+    week2->append(1);
+
+    Columns sub_columns = {tc2, week2};
+    ColumnPtr sub_result = TimeFunctions::weeks_sub_date(_utils->get_fn_ctx(), sub_columns).value();
+    auto sv = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(sub_result)->data_column());
+    ASSERT_EQ(DateValue::create(2020, 12, 28), sv->immutable_data()[0]);
+}
+
+TEST_F(TimeFunctionsTest, monthsAddDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto month = Int32Column::create();
+    for (int j = 0; j < 6; ++j) {
+        tc->append(DateValue::create(2020, 3, 10));
+        month->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(month);
+
+    ColumnPtr result = TimeFunctions::months_add_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 6; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 3 + k, 10), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, monthsSubDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto month = Int32Column::create();
+    for (int j = 0; j < 6; ++j) {
+        tc->append(DateValue::create(2020, 8, 10));
+        month->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(month);
+
+    ColumnPtr result = TimeFunctions::months_sub_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 6; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 8 - k, 10), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, monthsAddSubDateBoundaryTest) {
+    // Month-end day clamps to the target month's last day; year boundary crosses cleanly.
+    auto tc = DateColumn::create();
+    auto month = Int32Column::create();
+    tc->append(DateValue::create(2021, 1, 31)); // + 1 month -> 2021-02-28 (clamp, non-leap)
+    month->append(1);
+    tc->append(DateValue::create(2020, 1, 31)); // + 1 month -> 2020-02-29 (clamp, leap)
+    month->append(1);
+    tc->append(DateValue::create(2020, 12, 15)); // + 1 month -> 2021-01-15 (year boundary)
+    month->append(1);
+
+    Columns add_columns = {tc, month};
+    ColumnPtr add_result = TimeFunctions::months_add_date(_utils->get_fn_ctx(), add_columns).value();
+    auto av = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(add_result)->data_column());
+    ASSERT_EQ(DateValue::create(2021, 2, 28), av->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2020, 2, 29), av->immutable_data()[1]);
+    ASSERT_EQ(DateValue::create(2021, 1, 15), av->immutable_data()[2]);
+
+    auto tc2 = DateColumn::create();
+    auto month2 = Int32Column::create();
+    tc2->append(DateValue::create(2021, 3, 31)); // - 1 month -> 2021-02-28 (clamp)
+    month2->append(1);
+    tc2->append(DateValue::create(2021, 1, 15)); // - 1 month -> 2020-12-15 (year boundary)
+    month2->append(1);
+
+    Columns sub_columns = {tc2, month2};
+    ColumnPtr sub_result = TimeFunctions::months_sub_date(_utils->get_fn_ctx(), sub_columns).value();
+    auto sv = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(sub_result)->data_column());
+    ASSERT_EQ(DateValue::create(2021, 2, 28), sv->immutable_data()[0]);
+    ASSERT_EQ(DateValue::create(2020, 12, 15), sv->immutable_data()[1]);
+}
+
+TEST_F(TimeFunctionsTest, quartersAddDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto quarter = Int32Column::create();
+    for (int j = 0; j < 4; ++j) {
+        tc->append(DateValue::create(2020, 1, 15));
+        quarter->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(quarter);
+
+    ColumnPtr result = TimeFunctions::quarters_add_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 4; ++k) {
+        ASSERT_EQ(DateValue::create(2020, 1 + 3 * k, 15), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, quartersSubDateTest) {
+    Columns columns;
+
+    auto tc = DateColumn::create();
+    auto quarter = Int32Column::create();
+    for (int j = 0; j < 4; ++j) {
+        tc->append(DateValue::create(2021, 12, 15));
+        quarter->append(j);
+    }
+
+    columns.emplace_back(tc);
+    columns.emplace_back(quarter);
+
+    ColumnPtr result = TimeFunctions::quarters_sub_date(_utils->get_fn_ctx(), columns).value();
+
+    ASSERT_TRUE(result->is_nullable());
+
+    auto v = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
+    for (int k = 0; k < 4; ++k) {
+        ASSERT_EQ(DateValue::create(2021, 12 - 3 * k, 15), v->immutable_data()[k]);
+        ASSERT_FALSE(result->is_null(k));
+    }
+}
+
+TEST_F(TimeFunctionsTest, quartersAddSubDateBoundaryTest) {
+    // A quarter is 3 months; month-end day clamps to the target month's last day.
+    auto tc = DateColumn::create();
+    auto quarter = Int32Column::create();
+    tc->append(DateValue::create(2020, 11, 30)); // + 1 quarter -> 2021-02-28 (clamp, non-leap)
+    quarter->append(1);
+
+    Columns add_columns = {tc, quarter};
+    ColumnPtr add_result = TimeFunctions::quarters_add_date(_utils->get_fn_ctx(), add_columns).value();
+    auto av = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(add_result)->data_column());
+    ASSERT_EQ(DateValue::create(2021, 2, 28), av->immutable_data()[0]);
+
+    auto tc2 = DateColumn::create();
+    auto quarter2 = Int32Column::create();
+    tc2->append(DateValue::create(2020, 5, 31)); // - 1 quarter -> 2020-02-29 (clamp, leap)
+    quarter2->append(1);
+
+    Columns sub_columns = {tc2, quarter2};
+    ColumnPtr sub_result = TimeFunctions::quarters_sub_date(_utils->get_fn_ctx(), sub_columns).value();
+    auto sv = ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(sub_result)->data_column());
+    ASSERT_EQ(DateValue::create(2020, 2, 29), sv->immutable_data()[0]);
+}
+
 TEST_F(TimeFunctionsTest, quarterAddTest) {
     Columns columns;
 

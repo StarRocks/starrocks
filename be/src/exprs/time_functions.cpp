@@ -1003,6 +1003,46 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
+// DATE-typed add/sub: DATE input -> DATE output (only meaningful for date-granularity units).
+// Keeps the result in the DATE domain so a folded `current_date() - interval '1' day` stays
+// '2026-07-05' instead of the DATETIME '2026-07-05 00:00:00', which lets connector push-down
+// and partition pruning match string date columns / partition values correctly.
+template <TimeUnit UNIT>
+DateValue date_value_add(DateValue dv, int count) {
+    return dv.add<UNIT>(count);
+}
+
+#define DEFINE_DATE_ADD_FN(FN, UNIT)                                                                       \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, date, value) { return date_value_add<UNIT>(date, value); }  \
+    DEFINE_TIME_CALC_FN(FN, TYPE_DATE, TYPE_INT, TYPE_DATE);
+
+#define DEFINE_DATE_SUB_FN(FN, UNIT)                                                                       \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, date, value) { return date_value_add<UNIT>(date, -value); } \
+    DEFINE_TIME_CALC_FN(FN, TYPE_DATE, TYPE_INT, TYPE_DATE);
+
+// days_add / days_sub for DATE input
+DEFINE_DATE_ADD_FN(days_add_date, TimeUnit::DAY);
+DEFINE_DATE_SUB_FN(days_sub_date, TimeUnit::DAY);
+
+// months_add / months_sub for DATE input
+DEFINE_DATE_ADD_FN(months_add_date, TimeUnit::MONTH);
+DEFINE_DATE_SUB_FN(months_sub_date, TimeUnit::MONTH);
+
+// years_add / years_sub for DATE input
+DEFINE_DATE_ADD_FN(years_add_date, TimeUnit::YEAR);
+DEFINE_DATE_SUB_FN(years_sub_date, TimeUnit::YEAR);
+
+// weeks_add / weeks_sub for DATE input
+DEFINE_DATE_ADD_FN(weeks_add_date, TimeUnit::WEEK);
+DEFINE_DATE_SUB_FN(weeks_sub_date, TimeUnit::WEEK);
+
+// quarters_add / quarters_sub for DATE input
+DEFINE_DATE_ADD_FN(quarters_add_date, TimeUnit::QUARTER);
+DEFINE_DATE_SUB_FN(quarters_sub_date, TimeUnit::QUARTER);
+
+#undef DEFINE_DATE_ADD_FN
+#undef DEFINE_DATE_SUB_FN
+
 Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();

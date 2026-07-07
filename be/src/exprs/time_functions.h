@@ -454,12 +454,28 @@ public:
     DEFINE_VECTORIZED_FN(years_sub);
 
     /**
+     * @param: [date, year]
+     * @paramType columns: [DateColumn, IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(years_add_date);
+    DEFINE_VECTORIZED_FN(years_sub_date);
+
+    /**
      * @param: [timestmap, quarter]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
      */
     DEFINE_VECTORIZED_FN(quarters_add);
     DEFINE_VECTORIZED_FN(quarters_sub);
+
+    /**
+     * @param: [date, quarter]
+     * @paramType columns: [DateColumn, IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(quarters_add_date);
+    DEFINE_VECTORIZED_FN(quarters_sub_date);
 
     /**
      * @param: [timestmap, month]
@@ -470,6 +486,14 @@ public:
     DEFINE_VECTORIZED_FN(months_sub);
 
     /**
+     * @param: [date, month]
+     * @paramType columns: [DateColumn, IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(months_add_date);
+    DEFINE_VECTORIZED_FN(months_sub_date);
+
+    /**
      * @param: [timestmap, month]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
@@ -478,12 +502,30 @@ public:
     DEFINE_VECTORIZED_FN(weeks_sub);
 
     /**
+     * @param: [date, week]
+     * @paramType columns: [DateColumn, IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(weeks_add_date);
+    DEFINE_VECTORIZED_FN(weeks_sub_date);
+
+    /**
      * @param: [timestmap, days]
      * @paramType columns: [TimestampColumn, IntColumn]
      * @return TimestampColumn
      */
     DEFINE_VECTORIZED_FN(days_add);
     DEFINE_VECTORIZED_FN(days_sub);
+
+    /**
+     * @param: [date, days]
+     * @paramType columns: [DateColumn, IntColumn]
+     * @return DateColumn
+     * DATE input keeps DATE result (no promotion to DATETIME), so lexicographic/temporal
+     * order is preserved for downstream connector push-down and partition pruning.
+     */
+    DEFINE_VECTORIZED_FN(days_add_date);
+    DEFINE_VECTORIZED_FN(days_sub_date);
 
     /**
      * @param: [timestmap, hours]
