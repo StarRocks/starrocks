@@ -16,6 +16,7 @@
 
 #include <type_traits>
 
+#include "base/simd/simd.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "runtime/current_thread.h"
@@ -50,6 +51,77 @@ enum AggStateTableKind { RESULT = 0, INTERMEDIATE = 1, DETAIL_RESULT = 2, DETAIL
 
 using AggDataPtr = uint8_t*;
 using ConstAggDataPtr = const uint8_t*;
+
+// Dispatch helpers for the *_batch_selectively paths: pick between the plain
+// scalar branch loop and the SIMD find_zero (memchr) skip loop based on a
+// density probe of the filter. Filter semantics: 0 = selected, 1 = skipped.
+namespace agg_selective {
+
+// Sample four 64-byte windows spread across the filter instead of one
+// contiguous prefix: filters produced over sorted/clustered keys come in
+// runs, and a prefix-only probe misreads a chunk that opens with a skipped
+// run (measured 31x slower than the scalar loop at 4096 rows when the rest
+// of the chunk is densely selected; see bench/agg_simd_bench.cpp).
+//
+// `sparse_divisor` is the inverse kept-row ratio below which the skip loop
+// beats the branch loop. The crossover is a property of the call-site loop
+// shape, so callers pass their own: ~1/32 for the flat loops in this header,
+// ~1/8 for the 32-byte-window walk in nullable_aggregate.h.
+inline bool probe_filter_sparse(const uint8_t* filter, size_t n, size_t sparse_divisor) {
+    constexpr size_t kProbeWindow = 64;
+    constexpr size_t kProbeWindows = 4;
+    if (n <= kProbeWindows * kProbeWindow) {
+        return SIMD::count_zero(filter, n) <= n / sparse_divisor;
+    }
+    const size_t starts[kProbeWindows] = {0, n / 3, 2 * n / 3, n - kProbeWindow};
+    size_t zeros = 0;
+    for (size_t start : starts) {
+        zeros += SIMD::count_zero(filter + start, kProbeWindow);
+    }
+    return zeros <= (kProbeWindows * kProbeWindow) / sparse_divisor;
+}
+
+// Invoke fn(i) for every i in [0, chunk_size) with filter[i] == 0.
+// The skip loop counts the rows it keeps and falls back to the branch loop
+// once it exceeds the sparse budget the probe promised, so a filter clustered
+// enough to fool all four probe windows costs ~2x the branch loop instead of
+// 31x. The bookkeeping is free: it only runs inside the sparse loop, whose
+// kept-row count is bounded by the budget.
+template <typename UpdateRow>
+inline void for_each_selected(const Filter& filter, size_t chunk_size, UpdateRow&& fn) {
+    constexpr size_t kSparseDivisor = 32;
+    if (!probe_filter_sparse(filter.data(), chunk_size, kSparseDivisor)) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (filter[i] == 0) {
+                fn(i);
+            }
+        }
+        return;
+    }
+    // The +16 slack absorbs probe sampling noise on legitimately-sparse
+    // filters sitting right at the threshold.
+    const size_t budget = chunk_size / kSparseDivisor + 16;
+    size_t kept = 0;
+    size_t idx = 0;
+    while (idx < chunk_size) {
+        idx = SIMD::find_zero(filter, idx, chunk_size - idx);
+        if (idx >= chunk_size) {
+            return;
+        }
+        fn(idx);
+        ++idx;
+        if (++kept > budget) {
+            break;
+        }
+    }
+    for (size_t i = idx; i < chunk_size; ++i) {
+        if (filter[i] == 0) {
+            fn(i);
+        }
+    }
+}
+
+} // namespace agg_selective
 
 // Aggregate function interface
 // Aggregate function instances don't contain aggregation state, the aggregation state is stored in
@@ -413,12 +485,9 @@ public:
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const Filter& filter) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            // TODO: optimize with simd ?
-            if (filter[i] == 0) {
-                static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
-            }
-        }
+        agg_selective::for_each_selected(filter, chunk_size, [&](size_t i) {
+            static_cast<const Derived*>(this)->update(ctx, columns, states[i] + state_offset, i);
+        });
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
@@ -447,11 +516,9 @@ public:
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const Filter& filter) const override {
         auto merge_selectively = [&](const Column* merge_column) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (filter[i] == 0) {
-                    static_cast<const Derived*>(this)->merge(ctx, merge_column, states[i] + state_offset, i);
-                }
-            }
+            agg_selective::for_each_selected(filter, chunk_size, [&](size_t i) {
+                static_cast<const Derived*>(this)->merge(ctx, merge_column, states[i] + state_offset, i);
+            });
         };
 
         if (!this->support_nullable_immediate_input() && column->is_nullable()) {

@@ -562,9 +562,8 @@ public:
             }
             if (src[j]->is_nullable()) {
                 auto null_col = down_cast<const NullableColumn*>(src[j].get())->null_column_data();
-                for (int i = 0; i < chunk_size; ++i) {
-                    null_data[i] |= null_col[i];
-                }
+                // Use SIMD-optimized OR
+                ColumnHelper::or_two_filters(chunk_size, null_data.data(), null_col.data());
             }
         }
         if (dst->is_nullable()) {
