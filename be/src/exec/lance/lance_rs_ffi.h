@@ -37,6 +37,7 @@ typedef struct SrLanceStringPair {
 
 typedef struct SrLanceVectorOptions {
     SrLanceString vector_column;
+    SrLanceString metric_type;
     const SrLanceString* query_vector;
     size_t query_vector_len;
     int64_t limit_k;

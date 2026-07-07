@@ -51,6 +51,7 @@ pub struct SrLanceStringPair {
 #[derive(Clone, Copy)]
 pub struct SrLanceVectorOptions {
     vector_column: SrLanceString,
+    metric_type: SrLanceString,
     query_vector: *const SrLanceString,
     query_vector_len: usize,
     limit_k: i64,
@@ -68,6 +69,7 @@ pub struct SrLanceReader {
 
 struct VectorOptions {
     vector_column: String,
+    metric_type: MetricType,
     query_vector: Vec<f32>,
     limit_k: usize,
     index_segment_uuids: Vec<Uuid>,
@@ -199,6 +201,33 @@ fn parse_query_vector(values: Vec<String>) -> Result<Vec<f32>, String> {
         .collect()
 }
 
+fn parse_metric_type(value: &str) -> Result<MetricType, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "l2" | "euclidean" => Ok(MetricType::L2),
+        "cosine" | "cosine_distance" => Ok(MetricType::Cosine),
+        "dot" | "inner_product" => Ok(MetricType::Dot),
+        _ => Err(format!("unsupported Lance vector metric type '{value}'")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_metric_type() {
+        assert_eq!(parse_metric_type("l2").unwrap(), MetricType::L2);
+        assert_eq!(parse_metric_type("cosine").unwrap(), MetricType::Cosine);
+        assert_eq!(
+            parse_metric_type("cosine_distance").unwrap(),
+            MetricType::Cosine
+        );
+        assert_eq!(parse_metric_type("dot").unwrap(), MetricType::Dot);
+        assert_eq!(parse_metric_type("inner_product").unwrap(), MetricType::Dot);
+        assert!(parse_metric_type("hamming").is_err());
+    }
+}
+
 unsafe fn vector_options_from_raw(
     value: *const SrLanceVectorOptions,
 ) -> Result<Option<VectorOptions>, String> {
@@ -210,6 +239,8 @@ unsafe fn vector_options_from_raw(
     if vector_column.is_empty() {
         return Err("Lance vector column must not be empty".to_string());
     }
+    let metric_type = string_from_raw(value.metric_type)?;
+    let metric_type = parse_metric_type(&metric_type)?;
     if value.limit_k <= 0 {
         return Err(format!(
             "invalid Lance vector search limit {}",
@@ -237,6 +268,7 @@ unsafe fn vector_options_from_raw(
 
     Ok(Some(VectorOptions {
         vector_column,
+        metric_type,
         query_vector,
         limit_k: value.limit_k as usize,
         index_segment_uuids,
@@ -301,7 +333,7 @@ async fn open_reader(
                 vector_options.limit_k,
             )
             .map_err(|e| format!("failed to set Lance vector search: {e}"))?;
-        scanner.distance_metric(MetricType::L2);
+        scanner.distance_metric(vector_options.metric_type);
         scanner.use_index(true);
         if let Some(nprobes) = vector_options.nprobes {
             scanner.nprobes(nprobes);
