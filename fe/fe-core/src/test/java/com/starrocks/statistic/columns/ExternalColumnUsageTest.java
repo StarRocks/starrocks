@@ -68,6 +68,21 @@ class ExternalColumnUsageTest {
     }
 
     @Test
+    public void testColumnNameBoundaryStaysUnderBePrimaryKeyLimit() {
+        // BE's primary_key_limit_size defaults to 128 bytes; with a 3-field VARCHAR PK
+        // (fe_id, table_uuid, column_name) where column_name is last, the worst-case budget
+        // (10-digit fe_id + 2, 32-char table_uuid + 2, column_name with no separator) allows up
+        // to 82 bytes for column_name. MAX_COLUMN_NAME_LENGTH (80) must stay under that ceiling.
+        IcebergTable table = mockTable("catalog.db.t", "catalog", "db", "t");
+
+        Column atLimit = new Column("c".repeat(80), IntegerType.INT);
+        Assertions.assertTrue(ExternalColumnUsage.build(atLimit, table, ColumnUsage.UseCase.PREDICATE).isPresent());
+
+        Column overLimit = new Column("c".repeat(81), IntegerType.INT);
+        Assertions.assertTrue(ExternalColumnUsage.build(overLimit, table, ColumnUsage.UseCase.PREDICATE).isEmpty());
+    }
+
+    @Test
     public void testEqualityIsByTableUuidHashAndColumnName() {
         ExternalColumnUsage usage1 = new ExternalColumnUsage("hash1", "catalogA", "dbA", "tA", "c1",
                 ColumnUsage.UseCase.PREDICATE);

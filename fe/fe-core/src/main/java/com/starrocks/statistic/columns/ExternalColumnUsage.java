@@ -42,9 +42,12 @@ public class ExternalColumnUsage {
 
     private static final Logger LOG = LogManager.getLogger(ExternalColumnUsage.class);
 
-    // table_uuid is always the fixed-length hash (32 hex chars), so column_name is the only
-    // variable-length part of the PK; guard against pathological schemas blowing the PK size limit.
-    private static final int MAX_COLUMN_NAME_LENGTH = 96;
+    // BE's primary_key_limit_size defaults to 128 bytes (be/src/common/config_primary_key_fwd.h).
+    // PrimaryKeyEncoder::encode_exceed_limit adds a 2-byte separator per non-last VARCHAR PK field;
+    // our PK is (fe_id, table_uuid, column_name) with column_name last. Budget: fe_id up to 10 digits
+    // (+2) + table_uuid fixed 32 hex chars (+2) + column_name (no +2, last field) <= 128, i.e.
+    // column_name <= 82. Capped at 80 to leave a small margin.
+    private static final int MAX_COLUMN_NAME_LENGTH = 80;
 
     @SerializedName("tableUuidHash")
     private final String tableUuidHash;
