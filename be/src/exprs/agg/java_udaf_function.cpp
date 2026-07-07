@@ -34,6 +34,11 @@ const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
     return &no_nullable_udaf_func;
 }
 
+const AggregateFunction* getArrowJavaUDAFFunction() {
+    static ArrowJavaUDAFAggregateFunction arrow_udaf_func;
+    return &arrow_udaf_func;
+}
+
 // Build a JavaUDAFSharedContext (class-level, shareable/cacheable).
 // This is the expensive part: class loading, method introspection, and stub class generation.
 // The UDAF object instance is NOT created here — it is per-aggregator (see build_udaf_unique_context).
@@ -76,7 +81,9 @@ static StatusOr<std::shared_ptr<JavaUDAFSharedContext>> build_udaf_shared_contex
     RETURN_IF_ERROR(add_method("serialize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->serialize));
     RETURN_IF_ERROR(add_method("serializeLength", udaf_ctx->udaf_state_class.clazz(), &udaf_ctx->serialize_size));
 
-    // Generate and store the stub class/method — each unique context creates its own AggBatchCallStub from these
+    // Generate and store the stub class/method — each unique context creates its own AggBatchCallStub from these.
+    // Also generated for vectorized ("input"="arrow") UDAFs: the stub generator accepts FieldVector params
+    // (only primitives are rejected) and the arrow update path simply does not use the stub.
     const char* stub_clazz_name = AggBatchCallStub::stub_clazz_name;
     const char* stub_method_name = AggBatchCallStub::batch_update_method_name;
     jclass udaf_clazz = udaf_ctx->udaf_class.clazz();

@@ -33,7 +33,8 @@ const AggregateFunction* get_window_function(const std::string& name, LogicalTyp
 
 const AggregateFunction* get_aggregate_function(const std::string& agg_func_name, const TypeDescriptor& return_type,
                                                 const std::vector<TypeDescriptor>& arg_types, bool is_input_nullable,
-                                                TFunctionBinaryType::type binary_type, int func_version = 1);
+                                                TFunctionBinaryType::type binary_type, int func_version = 1,
+                                                bool is_arrow_input = false);
 
 const AggregateFunction* get_aggregate_function(const AggStateDesc& agg_state_desc);
 } // namespace starrocks

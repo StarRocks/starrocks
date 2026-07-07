@@ -21,6 +21,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/arrow_udf_jni.h"
 #include "exprs/udf/java/java_udf_reflection.h"
 #include "gutil/casts.h"
 #include "runtime/java/jni_env.h"
@@ -127,6 +128,18 @@ double JavaUDFTest::_expected_time_seconds(jobject time_obj) {
         seconds += 24 * 3600;
     }
     return static_cast<double>(seconds);
+}
+
+// The process-global com.starrocks.udf.ArrowUDFHelper class (used by the vectorized UDF paths)
+// resolves via JNI and is cached — the second call returns the same borrowed jclass.
+TEST_F(JavaUDFTest, arrow_udf_helper_class_resolves_and_caches) {
+    auto first = arrow_udf_helper_class();
+    ASSERT_TRUE(first.ok());
+    ASSERT_NE(nullptr, first.value());
+
+    auto second = arrow_udf_helper_class();
+    ASSERT_TRUE(second.ok());
+    EXPECT_EQ(first.value(), second.value());
 }
 
 TEST_F(JavaUDFTest, test_time_convert) {

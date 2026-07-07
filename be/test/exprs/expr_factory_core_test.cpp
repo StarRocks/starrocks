@@ -123,6 +123,26 @@ TEST_F(ExprFactoryCoreTest, SrjarFunctionCallHasPriorityOverCoreCondition) {
     ASSERT_NE(nullptr, dynamic_cast<JavaFunctionCallExpr*>(root_expr));
 }
 
+TEST_F(ExprFactoryCoreTest, SrjarArrowInputUsesArrowFunctionCallExpr) {
+    reset_hook_counters();
+    ExprFactory::set_non_core_create_post_hook(post_hook_handle_all);
+
+    auto node = make_function_call_node("if", TFunctionBinaryType::SRJAR);
+    node.fn.__set_input_type("arrow");
+    TExpr texpr;
+    texpr.nodes.emplace_back(node);
+
+    ObjectPool pool;
+    RuntimeState state;
+    Expr* root_expr = nullptr;
+    ASSERT_TRUE(ExprFactory::create_expr_tree(&pool, texpr, &root_expr, &state).ok());
+    ASSERT_EQ(0, g_post_hook_calls);
+
+    // SRJAR + input=arrow routes to the Arrow call path, not the boxed JavaFunctionCallExpr.
+    ASSERT_NE(nullptr, dynamic_cast<ArrowFunctionCallExpr*>(root_expr));
+    ASSERT_EQ(nullptr, dynamic_cast<JavaFunctionCallExpr*>(root_expr));
+}
+
 TEST_F(ExprFactoryCoreTest, PythonFunctionCallHasPriorityOverCoreCondition) {
     reset_hook_counters();
     ExprFactory::set_non_core_create_post_hook(post_hook_handle_all);

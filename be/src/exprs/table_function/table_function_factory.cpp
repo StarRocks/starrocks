@@ -137,11 +137,11 @@ void register_builtin_table_function(std::string name, const std::vector<Logical
 
 const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
                                         const std::vector<LogicalType>& return_type,
-                                        TFunctionBinaryType::type binary_type) {
+                                        TFunctionBinaryType::type binary_type, bool is_arrow_input) {
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
-        return getJavaUDTFFunction();
+        return is_arrow_input ? getArrowJavaUDTFFunction() : getJavaUDTFFunction();
     }
     return nullptr;
 }

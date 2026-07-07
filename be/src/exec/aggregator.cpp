@@ -639,8 +639,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             const TypeDescriptor& arg_type = arg_types[0];
+            bool is_arrow_input = fn.__isset.input_type && fn.input_type == "arrow";
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
-                                                state->func_version());
+                                                state->func_version(), is_arrow_input);
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",

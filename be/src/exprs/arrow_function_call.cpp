@@ -26,10 +26,12 @@
 #include "common/constexpr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/jni_arrow_func_call_stub.h"
 #include "exprs/udf/python/callstub.h"
 #include "gen_cpp/Types_types.h"
 #include "platform/user_function_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/java/java_runtime.h"
 
 namespace starrocks {
 
@@ -90,6 +92,10 @@ Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context)
 Status ArrowFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                                    FunctionContext::FunctionStateScope scope) {
     RETURN_IF_ERROR(Expr::open(state, context, scope));
+    // Arrow-input Java UDFs run their evaluate() in the JVM; make sure the JVM is up.
+    if (_fn.binary_type == TFunctionBinaryType::SRJAR) {
+        RETURN_IF_ERROR(detect_java_runtime());
+    }
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     Columns const_columns;
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
@@ -125,6 +131,9 @@ bool ArrowFunctionCallExpr::is_constant() const {
 
 std::unique_ptr<UDFCallStub> ArrowFunctionCallExpr::_build_stub(int32_t driver_id, FunctionContext* context) {
     auto binary_type = _fn.binary_type;
+    if (binary_type == TFunctionBinaryType::SRJAR) {
+        return create_jni_arrow_call_stub(context, _runtime_state, _lib_path, _fn.scalar_fn.symbol);
+    }
     if (binary_type == TFunctionBinaryType::PYTHON) {
         PyFunctionDescriptor py_func_desc;
         py_func_desc.symbol = _fn.scalar_fn.symbol;

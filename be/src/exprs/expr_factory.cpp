@@ -128,7 +128,13 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-            *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+            // Vectorized ("input"="arrow") Java UDFs share the Arrow call path; the boxed
+            // per-row path stays on JavaFunctionCallExpr.
+            if (texpr_node.fn.__isset.input_type && texpr_node.fn.input_type == "arrow") {
+                *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
+            } else {
+                *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+            }
         } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
             *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
         }
