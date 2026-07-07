@@ -1304,7 +1304,8 @@ class TestCanonicalizationNoPhantomDiff(TestAutogenerateBase):
     using the *model* SQL, declares the identical view in the metadata, and asserts that
     autogenerate detects NO change (no phantom migration).
 
-    See starrocks.common.utils.TableAttributeNormalizer._canonicalize_statement.
+    See starrocks.common.sql_canonical.canonicalize_sql (the AST-based canonicalizer that
+    reconciles these rewrites when the temp-view round-trip is unavailable).
     """
 
     def _assert_no_phantom_diff(self, view_name: str, model_template: str) -> None:

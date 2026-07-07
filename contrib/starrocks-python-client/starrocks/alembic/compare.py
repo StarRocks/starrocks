@@ -14,8 +14,8 @@
 
 from functools import wraps
 import logging
-import uuid
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+import uuid
 import warnings
 
 from alembic.autogenerate import comparators
@@ -25,7 +25,7 @@ from alembic.operations.ops import AlterColumnOp, AlterTableOp, UpgradeOps
 from sqlalchemy import Column
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.sql import schema as sa_schema, sqltypes, quoted_name
+from sqlalchemy.sql import quoted_name, schema as sa_schema, sqltypes
 from sqlalchemy.sql.schema import Table
 from sqlalchemy.util import OrderedSet
 
@@ -39,7 +39,7 @@ from starrocks.alembic.ops import (
     DropMaterializedViewOp,
     DropViewOp,
 )
-from starrocks.common import utils
+from starrocks.common import sql_canonical, utils
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
 from starrocks.common.params import (
     AlterMVEnablement,
@@ -562,6 +562,22 @@ def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[st
             )
 
 
+def _normalize_definitions_for_compare(conn_sql: str, meta_sql: str) -> Tuple[Optional[str], Optional[str]]:
+    """Canonicalize a (connection, metadata) definition pair when the temp-view path is
+    unavailable (no CREATE VIEW privilege, referenced object missing, or no connection).
+    """
+    conn_canonical = sql_canonical.canonicalize_sql(conn_sql, remove_qualifiers=True)
+    meta_canonical = sql_canonical.canonicalize_sql(meta_sql, remove_qualifiers=True)
+    if conn_canonical is not None and meta_canonical is not None:
+        logger.debug("Definition comparison via sqlglot AST canonicalization.")
+        return conn_canonical, meta_canonical
+    logger.debug("sqlglot canonicalization unavailable for the pair; using plain string normalization.")
+    return (
+        TableAttributeNormalizer.normalize_sql(conn_sql, remove_qualifiers=True),
+        TableAttributeNormalizer.normalize_sql(meta_sql, remove_qualifiers=True),
+    )
+
+
 def _compare_view_definition_and_columns(
     alter_view_op: AlterViewOp,
     view_fqn: str,
@@ -596,16 +612,14 @@ def _compare_view_definition_and_columns(
     if conn is not None and schema is not None:
         canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_definition)
         if canonical_meta is not None:
-            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, canonicalize=False)
-            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta, canonicalize=False)
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
             logger.debug("View definition comparison via temp-view canonicalization.")
         else:
-            logger.debug("Temp-view canonicalization failed for %r; falling back to regex normalizer.", view_fqn)
-            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
-            meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
+            logger.debug("Temp-view canonicalization failed for %r; falling back to AST/regex normalizer.", view_fqn)
+            conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_definition, meta_definition)
     else:
-        conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
-        meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
+        conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_definition, meta_definition)
     definition_changed = conn_def_norm != meta_def_norm
 
     # Compare columns (if metadata specifies columns explicitly)
@@ -1032,17 +1046,15 @@ def _compare_mv_definition(
         canonical_conn = _get_canonical_sql_via_temp_view(conn, schema, conn_def_raw)
         canonical_meta = _get_canonical_sql_via_temp_view(conn, schema, meta_def_raw)
         if canonical_conn is not None and canonical_meta is not None:
-            conn_def_norm = TableAttributeNormalizer.normalize_sql(canonical_conn, canonicalize=False)
-            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta, canonicalize=False)
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(canonical_conn)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
             logger.debug("MV definition comparison via temp-view canonicalization.")
         else:
-            logger.debug("Temp-view canonicalization failed for MV %r; falling back to regex normalizer.", mv_name)
-            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
-            meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
+            logger.debug("Temp-view canonicalization failed for MV %r; falling back to AST/regex normalizer.", mv_name)
+            conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_def_raw, meta_def_raw)
     else:
-        # Normalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
-        conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
-        meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
+        # Canonicalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
+        conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_def_raw, meta_def_raw)
 
     if conn_def_norm != meta_def_norm:
         check_similar_string_and_warn(

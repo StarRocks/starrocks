@@ -133,58 +133,6 @@ class TableAttributeNormalizer:
     # Matches spaces around closing parenthesis
     _CLOSE_PAREN_SPACE_PATTERN = re.compile(r'\s*(\)\s?)\s*')
     _COMMA_SPACE_PATTERN = re.compile(r'\s*,\s*')
-    # Same as _COMMA_SPACE_PATTERN, but the leading string-literal alternation ensures
-    # commas inside single- or double-quoted string literals
-    _COMMA_SPACE_LITERAL_SAFE_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\s*,\s*)"""
-    )
-
-    # ---------------------------------------------------------------------------
-    # Patterns to canonicalize StarRocks' own rewrites of view / materialized-view
-    # definitions. On clusters older than 4.0.6, StarRocks stores a view definition
-    # in a canonical form that differs syntactically (but not semantically) from the
-    # SQL the user wrote. These patterns reconcile both sides so that equivalent
-    # definitions compare equal. See ``_canonicalize_statement``.
-    # ---------------------------------------------------------------------------
-    # "JOIN" is stored as "INNER JOIN"; collapse it back to a bare "JOIN".
-    # The leading string-literal alternation (same technique as _ALIAS_AS_PATTERN) ensures
-    # the rewrite never fires inside a quoted string; group(1) is None for those matches.
-    _INNER_JOIN_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\binner\s+join\b)""", re.IGNORECASE
-    )
-    # "<x> OUTER JOIN" is equivalent to "<x> JOIN"; drop the redundant OUTER.
-    # group(1) is the whole "<dir> outer join" match (None inside a string literal);
-    # group(2) is the retained direction (left/right/full).
-    _OUTER_JOIN_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\b(left|right|full)\s+outer\s+join\b)""",
-        re.IGNORECASE,
-    )
-    # StarRocks may add or drop LATERAL before a table function (e.g. "lateral unnest(...)").
-    # The trailing lookahead requires an immediately following function call (identifier + "(")
-    # so the rewrite only fires where StarRocks actually emits LATERAL. Without it, a column
-    # named `lateral` (backticks are already stripped by this point) in e.g. "select lateral
-    # as x" would be dropped, collapsing it to "select x" and hiding a real definition change.
-    # group(1) is None when the alternation matched a string literal (skip it).
-    _LATERAL_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\blateral\s+(?=\w+\s*\())""", re.IGNORECASE
-    )
-    # The optional AS keyword (column alias "x AS y", table alias "t AS a", CAST(x AS int))
-    # is removed entirely. StarRocks is inconsistent about emitting it (e.g. on 3.5.x it
-    # stores "src AS a" but "unnest(x) k(c)"), and AS is never semantically meaningful, so
-    # dropping it symmetrically on both sides reconciles the difference without ever hiding a
-    # real change. Alternation skips single- and double-quoted strings so that ' as ' inside a
-    # literal is not touched; group(1) is non-None only for the real alias match outside a string.
-    _ALIAS_AS_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\s+as\s+)""", re.IGNORECASE
-    )
-    # StarRocks wraps simple predicates in redundant parentheses: "(x > 100)" -> "x > 100".
-    # Restricted to a single flat comparison (no nested parens, no commas, no AND/OR) so the
-    # removed parentheses are guaranteed redundant and grouping is never altered.
-    # The string-literal alternation (same technique as _ALIAS_AS_PATTERN) ensures parens
-    # inside quoted strings are never touched; group(1) is None for those matches.
-    _REDUNDANT_PREDICATE_PAREN_PATTERN = re.compile(
-        r"""'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|(\(\s*[^(),]*?(?:>=|<=|<>|!=|=|>|<)[^(),]*?\s*\))"""
-    )
 
     @staticmethod
     def strip_identifier_backticks(sql: str) -> str:
@@ -235,14 +183,8 @@ class TableAttributeNormalizer:
 
     @staticmethod
     def _strip_line_comments(sql: str) -> str:
-        """Replace ``-- ...`` line comments (through the end of the line) with a single space.
-
-        A plain regex would also strip a ``--`` that appears inside a string literal or a
-        backtick-quoted identifier, where it is data rather than a comment — and, worse, would
-        leave the literal unterminated. This state machine skips both so that e.g.
-        ``SELECT 'a -- b'`` keeps its literal intact. Mirrors the quote/backtick tracking used
-        by ``strip_identifier_backticks``; runs before backticks are removed.
-        """
+        """Replace ``-- ...`` line comments with a space, skipping ``--`` inside string
+        literals or backtick identifiers (where it is data, not a comment)."""
         result: List[str] = []
         in_string = False
         in_backtick = False
@@ -267,12 +209,12 @@ class TableAttributeNormalizer:
                 quote_char = ch
                 result.append(ch)
             elif ch == '-' and i + 1 < n and sql[i + 1] == '-':
-                # Line comment: replace "-- ... \n" (newline included) with one space.
+                # Replace "-- ... \n" (newline included) with one space.
                 result.append(' ')
                 i += 2
                 while i < n and sql[i] != '\n':
                     i += 1
-                i += 1  # also consume the terminating newline (no-op past end of string)
+                i += 1
                 continue
             else:
                 result.append(ch)
@@ -281,11 +223,8 @@ class TableAttributeNormalizer:
 
     @staticmethod
     def _collapse_whitespace_outside_strings(sql: str) -> str:
-        """Collapse each run of whitespace to a single space, but leave whitespace inside
-        string literals untouched so that e.g. ``'a   b'`` and ``'a b'`` stay distinct.
-
-        Runs after backticks have been removed, so only quoted string literals need guarding.
-        """
+        """Collapse runs of whitespace to a single space, leaving whitespace inside string
+        literals untouched so that e.g. ``'a   b'`` and ``'a b'`` stay distinct."""
         result: List[str] = []
         in_string = False
         quote_char = None
@@ -311,123 +250,33 @@ class TableAttributeNormalizer:
         return ''.join(result)
 
     @staticmethod
-    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False, canonicalize: bool = True) -> Optional[str]:
-        """
-        Normalize an SQL string for comparison.
-        - Converts to lowercase
-        - Removes leading/trailing whitespace
-        - Replaces multiple spaces with a single space
-        - Standardizes comma spacing (``a , b`` / ``a,b`` -> ``a, b``)
-        - Removes trailing semicolons
-        - Removes all qualifiers (e.g., ``schema.table.``) from identifiers.
-        - Canonicalizes StarRocks' own view/MV definition rewrites (INNER/OUTER JOIN,
-          LATERAL, the optional AS keyword, CTE column lists, redundant predicate
-          parentheses) so that semantically equivalent definitions compare equal. See
-          ``_canonicalize_statement``. Controlled by the ``canonicalize`` parameter —
-          set to False when both sides have already been canonicalized by the database
-          (e.g. via the temp-view round-trip) and regex rewrites are not needed.
+    def normalize_sql(sql: Optional[str], lowercase: bool = True, remove_qualifiers: bool = False) -> Optional[str]:
+        """Normalize an SQL string for comparison (string hygiene only, no semantic
+        canonicalization — that lives in :mod:`starrocks.common.sql_canonical`).
 
-        Args:
-            sql: The SQL string to normalize.
-            lowercase: Whether to convert the SQL string to lowercase.
-            remove_qualifiers: Whether to remove all qualifiers (e.g., ``schema.table.``) from identifiers.
-            canonicalize: Whether to apply ``_canonicalize_statement`` regex rewrites.
+        Lowercases, strips ``--`` comments and backtick quotes, collapses whitespace and
+        trailing semicolons (all string-literal-safe), and optionally removes ``schema.table.``
+        qualifiers.
         """
         if sql is None:
             return None
-        # string with \ in SQL statement
         sql = sql.replace('\\n', '\n').replace('\\t', '\t')
-        # This is for MySQL-like escaping of single quotes in string literals
-        # e.g., 'O\'Brien' becomes 'O''Brien' for standard SQL
+        # MySQL-style escaping: 'O\'Brien' -> 'O''Brien'
         sql = sql.replace("\\'", "''")
 
         sql = TableAttributeNormalizer._strip_line_comments(sql)
         if lowercase:
             sql = sql.lower().strip()
 
-        # Removes qualifiers like `schema`. from `schema`.`table`.`column`
-        # It handles multiple qualifiers.
         if remove_qualifiers:
             sql = re.sub(r"((?:`[^`]+`|\w+)\.)+", "", sql)
 
-        # Removes backticks
         sql = TableAttributeNormalizer.strip_identifier_backticks(sql)
 
         sql = TableAttributeNormalizer._collapse_whitespace_outside_strings(sql).strip()
-        if canonicalize:
-            sql = TableAttributeNormalizer._canonicalize_statement(sql)
         # Strip trailing semicolons together with any surrounding whitespace.
         sql = sql.rstrip(" ;")
         return sql
-
-    @staticmethod
-    def _canonicalize_statement(sql: str) -> str:
-        """Reconcile StarRocks' canonical view/MV definition form with user-written SQL.
-
-        On clusters older than 4.0.6 StarRocks stores view definitions in a canonical form
-        that is semantically identical but syntactically different from the SQL the user wrote.
-        This step rewrites both the stored and the model definition into a common form so that
-        equivalent definitions compare equal during Alembic autogeneration. It is applied
-        symmetrically to both sides, so it can only ever erase a *syntactic* difference, never
-        a real schema change.
-
-        Operates on already lower-cased, backtick-stripped, single-spaced SQL.
-        """
-        if not sql:
-            return sql
-        # Standardize comma spacing: "a , b" / "a,b" -> "a, b", but leave commas inside
-        # string literals alone so that e.g. 'a,b' and 'a, b' stay distinct.
-        # group(1) is None when the alternation matched a string literal (skip it).
-        sql = TableAttributeNormalizer._COMMA_SPACE_LITERAL_SAFE_PATTERN.sub(
-            lambda m: m.group(0) if m.group(1) is None else ', ', sql
-        )
-        # "INNER JOIN" -> "JOIN"; "<x> OUTER JOIN" -> "<x> JOIN".
-        # group(1) is None when the alternation matched a string literal (skip it).
-        sql = TableAttributeNormalizer._INNER_JOIN_PATTERN.sub(
-            lambda m: m.group(0) if m.group(1) is None else 'join', sql
-        )
-        sql = TableAttributeNormalizer._OUTER_JOIN_PATTERN.sub(
-            lambda m: m.group(0) if m.group(1) is None else m.group(2) + ' join', sql
-        )
-        # Drop LATERAL before unnest / table functions.
-        sql = TableAttributeNormalizer._LATERAL_PATTERN.sub(
-            lambda m: m.group(0) if m.group(1) is None else '', sql
-        )
-        # Drop the optional AS keyword for all aliases (column, table, CAST).
-        # group(1) is None when the alternation matched a string literal (skip it).
-        sql = TableAttributeNormalizer._ALIAS_AS_PATTERN.sub(
-            lambda m: m.group(0) if m.group(1) is None else ' ', sql
-        )
-        # Remove redundant parentheses around simple predicates: "(x > 100)" -> "x > 100".
-        sql = TableAttributeNormalizer._strip_redundant_predicate_parens(sql)
-        return sql
-
-    @staticmethod
-    def _strip_redundant_predicate_parens(sql: str) -> str:
-        """Remove parentheses that merely wrap a single flat comparison predicate.
-
-        A parenthesized group is stripped only when it contains exactly one comparison and no
-        nested parentheses, commas, or AND/OR — so the parentheses are unambiguously redundant
-        and removing them cannot change operator grouping. Parentheses that belong to a function
-        call (``foo(x = y)``) are left untouched by requiring that the ``(`` is not preceded by
-        an identifier character.
-        """
-        def _replace(match: 're.Match[str]') -> str:
-            if match.group(1) is None:
-                # Matched a string literal — leave it untouched.
-                return match.group(0)
-            full = match.group(1)  # e.g. "( x > 1 )"
-            inner = full[1:-1].strip()
-            lowered = inner.lower()
-            if ' and ' in lowered or ' or ' in lowered:
-                return full
-            start = match.start()
-            if start > 0 and (sql[start - 1].isalnum() or sql[start - 1] == '_'):
-                # Preceded by an identifier char -> this is a function call, keep the parens.
-                return full
-            return inner
-
-        return TableAttributeNormalizer._REDUNDANT_PREDICATE_PAREN_PATTERN.sub(_replace, sql)
 
     @staticmethod
     def _simple_normalize(value: str) -> str:
