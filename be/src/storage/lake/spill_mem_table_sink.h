@@ -34,7 +34,10 @@ class TabletWriter;
 // The slot_idx parameter is used to track the original flush order for correct merging.
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
+    // @param keep_op_column: snapshot of config::lake_enable_pk_preserve_txn_delete_order taken once by
+    // the DeltaWriter for the whole load, so the __op-keeping decision cannot change mid-load (see below).
+    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile,
+                      bool keep_op_column);
     ~SpillMemTableSink() override;
 
     // Spill chunk to temporary storage or write directly if eos and no prior spills
@@ -53,7 +56,9 @@ public:
     // feature is enabled. When it is off (the default), return false so the memtable takes the legacy
     // _split_upserts_deletes path (deletes split into a del file, applied after all segments) -- keeping
     // the spill path's behavior, del-file layout, and delete-with-merge-condition rejection identical to
-    // before this feature. Gated by config::lake_enable_pk_preserve_txn_delete_order.
+    // before this feature. Backed by _keep_op_column, a per-load snapshot of
+    // config::lake_enable_pk_preserve_txn_delete_order taken by the DeltaWriter, so the decision is
+    // stable for the whole load even if the mutable config is flipped mid-load.
     bool keep_op_column() const override;
 
     // Spill a chunk that still carries the trailing __op column (see keep_op_column()).
@@ -69,6 +74,9 @@ public:
 
 private:
     TabletWriter* _writer;
+
+    // Per-load snapshot of config::lake_enable_pk_preserve_txn_delete_order (see keep_op_column()).
+    const bool _keep_op_column;
 
     // Memory tracker for merge operations, parent is compaction tracker.
     // RATIONALE: Merge phase uses separate memory budget from normal load operations

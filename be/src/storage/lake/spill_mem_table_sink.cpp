@@ -29,8 +29,9 @@
 namespace starrocks::lake {
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile)
+                                     RuntimeProfile* profile, bool keep_op_column)
         : _writer(writer),
+          _keep_op_column(keep_op_column),
           _pipeline_merge_context(std::make_unique<LoadSpillPipelineMergeContext>(_writer)),
           _load_chunk_spiller(
                   std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get())) {
@@ -53,7 +54,7 @@ SpillMemTableSink::~SpillMemTableSink() {
 }
 
 bool SpillMemTableSink::keep_op_column() const {
-    return config::lake_enable_pk_preserve_txn_delete_order;
+    return _keep_op_column;
 }
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
