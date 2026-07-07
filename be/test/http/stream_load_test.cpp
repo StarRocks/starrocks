@@ -743,4 +743,19 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     }
 }
 
+TEST_F(StreamLoadActionTest, format_arrow) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _limiter.get());
+    HttpRequest request(_evhttp_req);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_FORMAT_KEY, "arrow");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request.set_handler(&action);
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_EQ(TFileFormatType::FORMAT_ARROW, ctx->format);
+}
+
 } // namespace starrocks

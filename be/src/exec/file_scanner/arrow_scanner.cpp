@@ -272,7 +272,10 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
         auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array_ptr == nullptr) {
-            (void)column->append_nulls(num_elements);
+            if (!column->append_nulls(num_elements)) {
+                return Status::InvalidArgument(strings::Substitute("column $0 is non-nullable but missing in the file",
+                                                                   slot_desc->col_name()));
+            }
         } else {
             auto st = convert_arrow_array_to_column(_conv_funcs[i].get(), num_elements, array_ptr.get(), column,
                                                     _batch_start_idx, _chunk_start_idx, &_chunk_filter, &_conv_ctx);
