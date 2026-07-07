@@ -20,6 +20,7 @@
 #include <system_error>
 
 #include "arrow/array.h"
+#include "arrow/builder.h"
 #include "arrow/c/abi.h"
 #include "arrow/c/bridge.h"
 #include "column/chunk.h"
@@ -39,6 +40,7 @@ constexpr int SR_LANCE_NEXT_BATCH = 1;
 constexpr int SR_LANCE_ERROR = -1;
 constexpr const char* LANCE_DISTANCE_COLUMN = "_distance";
 constexpr const char* LANCE_VECTOR_COLUMN_PARAM = "lance.vector_column";
+constexpr const char* LANCE_VECTOR_METRIC_PARAM = "lance.metric_type";
 constexpr const char* LANCE_NPROBES_PARAM = "lance.nprobes";
 constexpr const char* LANCE_REFINE_FACTOR_PARAM = "lance.refine_factor";
 constexpr const char* LANCE_EF_PARAM = "lance.ef";
@@ -68,6 +70,68 @@ std::shared_ptr<arrow::Array> get_lance_arrow_array(const std::shared_ptr<arrow:
         return batch->GetColumnByName(LANCE_DISTANCE_COLUMN);
     }
     return batch->GetColumnByName(column_name);
+}
+
+bool needs_lance_distance_to_similarity_conversion(const HdfsScannerParams& params) {
+    if (!params.table_specific.use_lance_vector_search) {
+        return false;
+    }
+    const auto& query_params = params.table_specific.lance_vector_search_options.query_params;
+    auto it = query_params.find(LANCE_VECTOR_METRIC_PARAM);
+    if (it == query_params.end()) {
+        return false;
+    }
+    return it->second == "dot" || it->second == "inner_product";
+}
+
+StatusOr<std::shared_ptr<arrow::Array>> convert_lance_distance_to_similarity(
+        const std::shared_ptr<arrow::Array>& array) {
+    if (array->type_id() != arrow::Type::FLOAT) {
+        return Status::InternalError(
+                fmt::format("Lance vector distance column must be FLOAT, got {}", array->type()->ToString()));
+    }
+    auto distance_array = std::static_pointer_cast<arrow::FloatArray>(array);
+    arrow::FloatBuilder builder;
+    auto status = builder.Reserve(distance_array->length());
+    if (!status.ok()) {
+        return Status::InternalError(
+                fmt::format("Failed to reserve Lance vector similarity column: {}", status.ToString()));
+    }
+    for (int64_t i = 0; i < distance_array->length(); ++i) {
+        if (distance_array->IsNull(i)) {
+            status = builder.AppendNull();
+        } else {
+            status = builder.Append(1.0f - distance_array->Value(i));
+        }
+        if (!status.ok()) {
+            return Status::InternalError(
+                    fmt::format("Failed to append Lance vector similarity value: {}", status.ToString()));
+        }
+    }
+    std::shared_ptr<arrow::Array> output;
+    status = builder.Finish(&output);
+    if (!status.ok()) {
+        return Status::InternalError(
+                fmt::format("Failed to build Lance vector similarity column: {}", status.ToString()));
+    }
+    return output;
+}
+
+Status convert_lance_vector_distance_column(const HdfsScannerParams& params,
+                                            std::shared_ptr<arrow::RecordBatch>* batch) {
+    if (!needs_lance_distance_to_similarity_conversion(params)) {
+        return Status::OK();
+    }
+    int distance_column_index = (*batch)->schema()->GetFieldIndex(LANCE_DISTANCE_COLUMN);
+    if (distance_column_index < 0) {
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto similarity_array,
+                     convert_lance_distance_to_similarity((*batch)->column(distance_column_index)));
+    auto columns = (*batch)->columns();
+    columns[distance_column_index] = std::move(similarity_array);
+    *batch = arrow::RecordBatch::Make((*batch)->schema(), (*batch)->num_rows(), std::move(columns));
+    return Status::OK();
 }
 
 StatusOr<std::string> get_required_query_param(const TVectorSearchOptions& options, const std::string& key) {
@@ -162,6 +226,7 @@ Status LanceNativeReader::_open_reader() {
     SrLanceVectorOptions vector_options;
     const SrLanceVectorOptions* vector_options_ptr = nullptr;
     std::string vector_column;
+    std::string metric_type;
     std::vector<SrLanceString> query_vector;
     std::vector<SrLanceString> index_segment_uuids;
     if (_scanner_params.table_specific.use_lance_vector_search) {
@@ -178,6 +243,9 @@ Status LanceNativeReader::_open_reader() {
         ASSIGN_OR_RETURN(vector_column,
                          get_required_query_param(_scanner_params.table_specific.lance_vector_search_options,
                                                   LANCE_VECTOR_COLUMN_PARAM));
+        ASSIGN_OR_RETURN(metric_type,
+                         get_required_query_param(_scanner_params.table_specific.lance_vector_search_options,
+                                                  LANCE_VECTOR_METRIC_PARAM));
         query_vector.reserve(_scanner_params.table_specific.lance_vector_search_options.query_vector.size());
         for (const auto& value : _scanner_params.table_specific.lance_vector_search_options.query_vector) {
             query_vector.emplace_back(to_lance_string(value));
@@ -202,6 +270,7 @@ Status LanceNativeReader::_open_reader() {
                                  LANCE_QUERY_PARALLELISM_PARAM));
 
         vector_options = SrLanceVectorOptions{to_lance_string(vector_column),
+                                              to_lance_string(metric_type),
                                               query_vector.data(),
                                               query_vector.size(),
                                               _scanner_params.table_specific.lance_vector_search_options.vector_limit_k,
@@ -306,6 +375,7 @@ Status LanceNativeReader::_next_batch() {
                 fmt::format("Arrow ImportRecordBatch: {}", arrow_batch_result.status().ToString()));
     }
     _arrow_batch = arrow_batch_result.ValueOrDie();
+    RETURN_IF_ERROR(convert_lance_vector_distance_column(_scanner_params, &_arrow_batch));
     return Status::OK();
 }
 

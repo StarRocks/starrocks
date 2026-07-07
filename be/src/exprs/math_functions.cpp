@@ -1545,6 +1545,22 @@ template StatusOr<ColumnPtr> MathFunctions::cosine_similarity<TYPE_FLOAT, false>
                                                                                  const Columns& columns);
 
 template <LogicalType TYPE>
+StatusOr<ColumnPtr> MathFunctions::cosine_distance(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto result, (cosine_similarity<TYPE, false>(context, columns)));
+    using CppType = RunTimeCppType<TYPE>;
+    using ColumnType = RunTimeColumnType<TYPE>;
+    auto* result_data_column = down_cast<ColumnType*>(ColumnHelper::get_data_column(result.get()));
+    auto& result_data = result_data_column->get_data();
+    for (CppType& value : result_data) {
+        value = 1 - value;
+    }
+    return result;
+}
+
+template StatusOr<ColumnPtr> MathFunctions::cosine_distance<TYPE_FLOAT>(FunctionContext* context,
+                                                                        const Columns& columns);
+
+template <LogicalType TYPE>
 StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 

@@ -44,10 +44,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.APPROX_COSINE_DISTANCE;
+import static com.starrocks.catalog.FunctionSet.APPROX_INNER_PRODUCT;
 import static com.starrocks.catalog.FunctionSet.APPROX_L2_DISTANCE;
 
 public class RewriteLanceToVectorPlanRule extends TransformationRule {
     public static final String LANCE_VECTOR_COLUMN_PARAM = "lance.vector_column";
+    public static final String LANCE_VECTOR_METRIC_PARAM = "lance.metric_type";
+    private static final String LANCE_VECTOR_METRIC_L2 = "l2";
+    private static final String LANCE_VECTOR_METRIC_COSINE = "cosine";
+    private static final String LANCE_VECTOR_METRIC_DOT = "dot";
 
     public RewriteLanceToVectorPlanRule() {
         super(RuleType.TF_LANCE_VECTOR_REWRITE_RULE,
@@ -84,11 +90,12 @@ public class RewriteLanceToVectorPlanRule extends TransformationRule {
         opts.setEnableUseANN(true);
         opts.setRefineDistance(false);
         opts.setLimitK(resolveK(topNOp, context));
-        opts.setResultOrder(true);
+        opts.setResultOrder(info.isAscending);
         opts.setDistanceColumnName("__vector_" + info.outColumnRef.getName());
         opts.setQueryVector(info.vectorQuery);
         Map<String, String> queryParams = new HashMap<>(context.getSessionVariable().getAnnParams());
         queryParams.put(LANCE_VECTOR_COLUMN_PARAM, info.inColumnRef.getName());
+        queryParams.put(LANCE_VECTOR_METRIC_PARAM, info.metricType);
         opts.setQueryParams(queryParams);
 
         return List.of(rewriteOptByDistanceColumn(topNOp, scanOp, context, info, opts));
@@ -171,17 +178,27 @@ public class RewriteLanceToVectorPlanRule extends TransformationRule {
     private Optional<VectorFuncInfo> extractOrderByVectorFuncInfo(LogicalTopNOperator topNOp,
                                                                   LogicalLanceScanOperator scanOp) {
         ColumnRefOperator outColRef = topNOp.getOrderByElements().get(0).getColumnRef();
-        if (!topNOp.getOrderByElements().get(0).isAscending()) {
-            return Optional.empty();
-        }
+        boolean isAscending = topNOp.getOrderByElements().get(0).isAscending();
 
         ScalarOperator inOperator = scanOp.getProjection().getColumnRefMap().get(outColRef);
         if (!(inOperator instanceof CallOperator)) {
             return Optional.empty();
         }
         CallOperator inCallOperator = (CallOperator) inOperator;
-        if (!inCallOperator.getFnName().equalsIgnoreCase(APPROX_L2_DISTANCE)) {
+        String fnName = inCallOperator.getFnName();
+        boolean isL2Distance = fnName.equalsIgnoreCase(APPROX_L2_DISTANCE);
+        boolean isCosineDistance = fnName.equalsIgnoreCase(APPROX_COSINE_DISTANCE);
+        boolean isInnerProduct = fnName.equalsIgnoreCase(APPROX_INNER_PRODUCT);
+        if (!(((isL2Distance || isCosineDistance) && isAscending) || (isInnerProduct && !isAscending))) {
             return Optional.empty();
+        }
+        String metricType;
+        if (isL2Distance) {
+            metricType = LANCE_VECTOR_METRIC_L2;
+        } else if (isCosineDistance) {
+            metricType = LANCE_VECTOR_METRIC_COSINE;
+        } else {
+            metricType = LANCE_VECTOR_METRIC_DOT;
         }
 
         ScalarOperator lhs = inCallOperator.getChild(0);
@@ -209,7 +226,8 @@ public class RewriteLanceToVectorPlanRule extends TransformationRule {
 
         List<String> vectorQuery = new ArrayList<>();
         extractValuesFromConstantArray(queryArgument, vectorQuery);
-        return Optional.of(new VectorFuncInfo(colRefArgument, outColRef, inCallOperator, vectorQuery));
+        return Optional.of(new VectorFuncInfo(colRefArgument, outColRef, inCallOperator, vectorQuery, isAscending,
+                metricType));
     }
 
     private static boolean isConstantArrayFloat(ScalarOperator scalarOperator) {
@@ -302,13 +320,18 @@ public class RewriteLanceToVectorPlanRule extends TransformationRule {
         private final ColumnRefOperator outColumnRef;
         private final CallOperator vectorFuncCallOperator;
         private final List<String> vectorQuery;
+        private final boolean isAscending;
+        private final String metricType;
 
         private VectorFuncInfo(ColumnRefOperator inColumnRef, ColumnRefOperator outColumnRef,
-                               CallOperator vectorFuncCallOperator, List<String> vectorQuery) {
+                               CallOperator vectorFuncCallOperator, List<String> vectorQuery, boolean isAscending,
+                               String metricType) {
             this.inColumnRef = inColumnRef;
             this.outColumnRef = outColumnRef;
             this.vectorFuncCallOperator = vectorFuncCallOperator;
             this.vectorQuery = vectorQuery;
+            this.isAscending = isAscending;
+            this.metricType = metricType;
         }
     }
 }
