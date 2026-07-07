@@ -209,4 +209,63 @@ public class RangeColocateScanRangeDispatchTest {
         Assertions.assertDoesNotThrow(() -> UtFrameUtils.getPlanAndFragment(connectContext,
                 "select v1 from t_avail"));
     }
+
+    @Test
+    public void testGetBucketNumsFailsClosedOnObservedUnalignedFlag() throws Exception {
+        // Even when the group is currently ALIGNED (a fresh recompute would return a bucket count),
+        // an observation that the bucketSeq fill fell back to position-based must make getBucketNums()
+        // fail closed. This closes the fill-vs-guard TOCTOU that let a position-based assignment reach
+        // a colocate join and silently return wrong results.
+        starRocksAssert.withTable(
+                "create table t_dispatch_flag (k1 int, k2 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_dispatch_flag:k1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_dispatch_flag");
+        OlapScanNode scanNode = newOlapScanNode(table, 11);
+        scanNode.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+
+        // Aligned single default range -> without the flag, getBucketNums returns 1.
+        Assertions.assertEquals(1, scanNode.getBucketNums());
+
+        scanNode.markRangeColocateUnaligned();
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                scanNode::getBucketNums);
+        Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
+                "actual: " + exception.getMessage());
+    }
+
+    @Test
+    public void testPlanFragmentBuilderRecordsUnalignedObservation() throws Exception {
+        // The optimizer/PlanFragmentBuilder bucketSeq fill must record the unaligned observation when
+        // computeBucketSeq returns null, so the later getBucketNums() colocate-dispatch guard fails
+        // closed rather than pairing by a position fallback.
+        starRocksAssert.withTable(
+                "create table t_pfb_unaligned (k1 int, k2 int, v1 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_pfb_unaligned:k1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_pfb_unaligned");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long grpId = colocateTableIndex.getGroup(table.getId()).grpId;
+        // 3 ColocateRanges but the single tablet still spans [MIN, MAX) -> computeBucketSeq == null.
+        // The group is left stable so PlanFragmentBuilder's colocate fill path (not shuffle) runs.
+        colocateTableIndex.getColocateRangeMgr().setColocateRanges(grpId, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 9101L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 9102L),
+                new ColocateRange(Range.ge(makeTuple(200)), 9103L)));
+
+        com.starrocks.sql.plan.ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext,
+                "select k1, k2 from t_pfb_unaligned").second;
+        OlapScanNode scan = null;
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode && scanNode.getTableName().contains("t_pfb_unaligned")) {
+                scan = (OlapScanNode) scanNode;
+            }
+        }
+        Assertions.assertNotNull(scan, "expected an OlapScanNode for t_pfb_unaligned");
+        Assertions.assertTrue(scan.isRangeColocateUnaligned(),
+                "PlanFragmentBuilder fill must record the unaligned observation");
+        Assertions.assertThrows(IllegalStateException.class, scan::getBucketNums);
+    }
 }
