@@ -4866,10 +4866,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.maxPipelineDop;
     }
 
-    // TODO(murphy) support this variable
-    // It's always false since version 3.5, due to incompatibility with event-based scheduling
+    // Shared scan was hard-disabled in 3.5 (#63543) because the shared round-robin chunk
+    // buffer could drop driver wakeups under event-based scheduling: a chunk produced by one
+    // scan driver lands in a sibling driver's buffer slot, but only the producer's own
+    // observer was notified, so the slot owner could hang. The BE scan operators now notify
+    // all sibling drivers whenever shared scan is active (see {Olap,Connector}ScanOperator::
+    // need_notify_all), making shared scan compatible with event scheduling again. Honor the
+    // session variable. (Query cache still forces shared scan off in the BE; see
+    // fragment_executor.cpp.)
     public boolean isEnableSharedScan() {
-        return false;
+        return enableSharedScan;
     }
 
     public int getResourceGroupId() {

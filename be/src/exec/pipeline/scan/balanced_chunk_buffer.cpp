@@ -73,20 +73,22 @@ bool BalancedChunkBuffer::try_get(int buffer_index, ChunkPtr* output_chunk) {
     return ok;
 }
 
-bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+int BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
     // CRITICAL (by satanson)
     // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
     // has been processed.
-    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
+    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return -1;
     bool ret;
+    int target_index;
     size_t memory_usage = chunk->memory_usage();
     if (_strategy == BalanceStrategy::kDirect) {
-        ret = _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
+        target_index = buffer_index % _output_operators;
+        ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
         // TODO: try to balance data according to number of rows
         // But the hard part is, that may needs to maintain a min-heap to account the rows of each
         // output operator, which would introduce some extra overhead
-        int target_index = _output_index.fetch_add(1);
+        target_index = _output_index.fetch_add(1);
         target_index %= _output_operators;
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
@@ -95,7 +97,9 @@ bool BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferToken
     if (ret) {
         _memory_usage += memory_usage;
     }
-    return ret;
+    // The chunk now lives in sub-buffer `target_index`, whose consumer is the driver with that
+    // driver_sequence. Return it so the caller can wake exactly that driver.
+    return ret ? target_index : -1;
 }
 
 void BalancedChunkBuffer::set_finished(int buffer_index) {

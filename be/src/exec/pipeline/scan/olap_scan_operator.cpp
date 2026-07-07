@@ -131,6 +131,11 @@ BalancedChunkBuffer& OlapScanOperator::get_chunk_buffer() const {
 }
 
 bool OlapScanOperator::need_notify_all() {
+    // Edge-triggered fan-out wakeups only: notify every sibling driver when all shared
+    // producers just drained (so parked consumers can finish) or when the shared buffer just
+    // freed space (so blocked producers resume). The common producer->consumer wakeup for each
+    // produced chunk is handled by a targeted notify in ChunkSource (see
+    // ScanOperator::notify_chunk_buffer_consumer), so this stays a rare edge event.
     return (!_ctx->only_one_observer() && _ctx->active_inputs_empty_event()) || has_full_events();
 }
 

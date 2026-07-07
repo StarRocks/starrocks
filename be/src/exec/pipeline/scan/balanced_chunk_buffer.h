@@ -38,7 +38,11 @@ public:
     size_t size(int buffer_index) const;
     bool empty(int buffer_index) const;
     bool try_get(int buffer_index, ChunkPtr* output_chunk);
-    bool put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
+    // Stores `chunk` and returns the sub-buffer index it was written to (== the consumer
+    // driver_sequence that must be woken). Returns -1 when nothing was stored (null/empty
+    // non-last chunk). For kDirect the index is `buffer_index`; for kRoundRobin it is the
+    // round-robin target, which is generally a different driver than the producer.
+    int put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenPtr chunk_token);
     void close();
     // Mark that it needn't produce any chunk anymore.
     void set_finished(int buffer_index);

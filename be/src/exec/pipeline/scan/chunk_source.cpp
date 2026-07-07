@@ -16,6 +16,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "compute_env/workgroup/scan_task_queue.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -70,8 +71,13 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
-            // notify when generate new chunk
-            auto notify = scan_defer_notify(_scan_op);
+            // Wake exactly the consumer driver that owns the chunk-buffer slot this chunk is
+            // written to (the put() return value). In shared scan the round-robin buffer puts
+            // the chunk into a sibling driver's slot, so the producer must wake that driver or
+            // it hangs under event-based scheduling; routing the wakeup per-slot avoids the
+            // notify storm of waking every sibling on every chunk.
+            int put_index = -1;
+            DeferOp notify([this, &put_index]() { _scan_op->notify_chunk_buffer_consumer(put_index); });
             // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
             // in the chunk.
             if (chunk == nullptr) {
@@ -90,11 +96,11 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     chunk->owner_info().set_owner_id(owner_id, true);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                    put_index = _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     break;
                 } else if (_status.is_time_out()) {
                     chunk->owner_info().set_owner_id(owner_id, false);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                    put_index = _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
                     break;
                 } else if (_status.is_eagain()) {
@@ -109,7 +115,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             // schema won't be used by the computing layer, here we just reset it.
             chunk->reset_schema();
             chunk->owner_info().set_owner_id(owner_id, false);
-            _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+            put_index = _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
 
             FAIL_POINT_TRIGGER_EXECUTE(scan_chunk_sleep_after_read, { sleep(1); });
         }

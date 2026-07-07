@@ -678,6 +678,8 @@ std::string ConnectorScanOperator::get_name() const {
 }
 
 bool ConnectorScanOperator::need_notify_all() {
+    // Edge-triggered fan-out wakeups only (see OlapScanOperator::need_notify_all). The
+    // per-chunk producer->consumer wakeup is handled by a targeted notify in ChunkSource.
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     return factory->active_inputs_empty_event() || has_full_events();
 }
