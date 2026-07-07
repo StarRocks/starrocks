@@ -39,6 +39,7 @@ set(FORMAT_CSV_TEST_FILES
 )
 
 set(FORMAT_JSON_TEST_FILES
+    json/json_parser_test.cpp
     json/binary_column_test.cpp
     json/map_column_test.cpp
     json/nullable_column_test.cpp

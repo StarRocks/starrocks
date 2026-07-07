@@ -313,7 +313,6 @@ set(EXEC_NON_PIPELINE_FILES
     enforce_unique_row_locator_node.cpp
     intersect_hash_set.cpp
     intersect_node.cpp
-    json_parser.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -513,4 +512,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatCore Platform ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorBuiltinRegistry)

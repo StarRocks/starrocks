@@ -16,8 +16,9 @@
 
 #include <utility>
 
-#include "exprs/json_functions.h"
+#include "common/status.h"
 #include "simdjson.h"
+#include "types/simple_json_path.h"
 
 namespace starrocks {
 

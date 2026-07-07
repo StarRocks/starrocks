@@ -30,16 +30,16 @@
 #include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
 #include "compute_env/load_path/load_path_state_helper.h"
-#include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
-#include "exprs/json_functions.h"
+#include "formats/json/json_parser.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "types/simple_json_path.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -77,7 +77,7 @@ Status JsonScanner::open() {
         RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
-        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(range.json_root, &_root_paths));
+        RETURN_IF_ERROR(parse_simple_json_paths(range.json_root, &_root_paths));
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
@@ -191,7 +191,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
             std::vector<SimpleJsonPath> parsed_paths;
             const char* cstr = path.get_c_str();
 
-            RETURN_IF_ERROR(JsonFunctions::parse_json_paths(std::string(cstr), &parsed_paths));
+            RETURN_IF_ERROR(parse_simple_json_paths(std::string(cstr), &parsed_paths));
             path_vecs->emplace_back(std::move(parsed_paths));
         }
         return Status::OK();
@@ -647,7 +647,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                     column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row, !_strict_mode));
         } else {
             simdjson::ondemand::value val;
-            auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
+            auto st = extract_from_object(*row, _scanner->_json_paths[i], &val);
             if (st.ok()) {
                 RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
             } else if (st.is_not_found()) {
