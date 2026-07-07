@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 description: "SHOW PROCESSLIST 列出服务器内线程当前正在执行的操作。"
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 ---
 
 # SHOW PROCESSLIST
@@ -30,19 +27,6 @@ SHOW [FULL] PROCESSLIST
 
 ## 返回值
 
-<<<<<<< HEAD
-| 返回                | 说明                           |
-| ------------------- | ------------------------------ |
-| Id                  | 连接ID                         |
-| User                | 线程所属用户名                 |
-| Host                | 发出语句的客户端的主机名       |
-| Db                  | 线程所属数据库名               |
-| Command             | 线程执行的命令类型             |
-| ConnectionStartTime | 连接开始时间                   |
-| Time                | 线程处于其当前状态的时间（单位：秒） |
-| State               | 线程运行状态                   |
-| Info                | 线程正在执行的语句             |
-=======
 | 返回值              | 描述                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | Server              | 服务器 ID。                                                   |
@@ -60,21 +44,17 @@ SHOW [FULL] PROCESSLIST
 | CNGroup             | 运行查询的计算节点组名称。   |
 | Catalog             | Catalog 名称。                                     |
 | QueryId             | 当 Command 为 "Query" 时的查询 ID。                       |
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 
 ## 使用说明
 
 如果当前用户为 `root`，该语句将列出集群中所有用户的操作。否则，仅列出当前用户的操作。
 
-<<<<<<< HEAD
-=======
 `IsPending`、`Warehouse` 和 `CNGroup` 字段提供了有关在仓库环境中查询执行的附加信息：
 
 - `IsPending`：显示查询是否在队列中等待（`true`）或正在执行（`false`）
 - `Warehouse`：显示执行查询的仓库名称
 - `CNGroup`：显示负责执行查询的计算节点组名称
 
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 ## 示例
 
 示例 1：通过用户 `root` 列出操作状态。
@@ -82,13 +62,6 @@ SHOW [FULL] PROCESSLIST
 ```SQL
 SHOW PROCESSLIST\G
 
-<<<<<<< HEAD
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+
-| Id   | User | Host                | Db    | Command | ConnectionStartTime | Time | State | Info             |
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+
-|  0   | root | x.x.x.x:xxxx        | tpcds | Query   | 2022-10-09 19:58:25 |    0 | OK    | SHOW PROCESSLIST |
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+
-=======
 *************************** 6. row ***************************
          ServerName: starrocks-fe_9010_1782850099498
                  Id: 33560554
@@ -105,5 +78,4 @@ ConnectionStartTime: 2026-07-02 01:21:14
             CNGroup:
             Catalog: default_catalog
             QueryId: 019f1eb3-246c-7899-ab3e-40a018645bba
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 ```
