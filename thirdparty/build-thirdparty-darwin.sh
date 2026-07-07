@@ -2022,7 +2022,7 @@ build_arrow() {
         -DARROW_TESTING=ON \
         -DGTest_SOURCE=SYSTEM \
         -DGTest_ROOT="${TP_INSTALL_DIR}" \
-        -DCMAKE_CXX_FLAGS="-fno-sized-deallocation" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DARROW_BUILD_EXAMPLES=OFF \
         -DARROW_BUILD_INTEGRATION=OFF \
         -DARROW_BUILD_UTILITIES=OFF \
@@ -2918,7 +2918,7 @@ build_benchgen() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
-        -DCMAKE_CXX_FLAGS="-fno-sized-deallocation" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" \
         -S . -B build
     "${CMAKE_CMD}" --build build -j "${PARALLEL}"
