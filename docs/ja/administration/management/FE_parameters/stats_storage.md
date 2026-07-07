@@ -79,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `statistic_external_sample_max_rows_per_round`
+
+- デフォルト：2000000
+- タイプ：Long
+- 単位：行
+- 変更可能：Yes
+- 説明：Iceberg 外部表統計収集ループ（`ANALYZE SAMPLE`）における 1 サンプリングラウンドあたりの最大行数目標。最初のラウンドはこの行数を対象とし、その後のラウンドは同じ実行内でキャップを倍増し、全体表スキャンまたは `statistic_external_sample_max_rounds` に達するまで継続する。値を大きくすると NDV 精度が向上するが、ラウンドあたりのスキャン IO も増加する。
+- 導入時期：-
+
+### `statistic_external_sample_max_rounds`
+
+- デフォルト：4
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：1 回の Iceberg 外部表 `ANALYZE SAMPLE` 実行における最大サンプリングラウンド数。各ラウンドは前ラウンドの行数上限を倍増する（全体表行数でキャップされる）。NDV 収束検出によりこの上限に達する前に停止する場合がある。
+- 導入時期：-
+
+### `statistic_external_sample_ndv_convergence_threshold`
+
+- デフォルト：0.05
+- タイプ：Double
+- 単位：割合 (0.0–1.0)
+- 変更可能：Yes
+- 説明：NDV が安定した場合に Iceberg 外部表サンプリングループを早期停止するための相対変化閾値。最初のラウンドの後、連続する 2 ラウンド間ですべての収集列の HyperLogLog カーディナリティ推定値を比較し、すべての列の相対変化がこの閾値を下回った場合にループを早期停止する。`0` に設定すると収束ベースの早期停止を無効化する。値を大きくすると早期に停止するが、高カーディナリティ列が過小評価される可能性がある。
+- 導入時期：-
+
 ## ストレージ
 
 ### `alter_table_timeout_second`

@@ -171,6 +171,23 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
 
                 Map<String, Long> cardinalityByColumn = runOneSampleRound(context, analyzeStatus, ratio);
 
+                // On tables with relatively few splits, Bernoulli sampling at low ratios can drop
+                // every split.  With p=(1-ratio)^splitCount, a 15-split table at ratio=0.13 has a
+                // ~12 % chance of dropping everything, and the sentinel stats row would be all-zero
+                // — the subsequent cleanup would then erase authoritative FULL rows.
+                //
+                // Retry this round with ratio=1.0 (full scan).  Tables small enough to hit this
+                // edge case have negligible full-scan cost; the retry also produces better-quality
+                // stats than any partial-keep heuristic would.  The PK-based sentinel overwrite
+                // guarantees no zero-row-row survives; if *both* attempts return empty (table truly
+                // empty), that is the correct answer.
+                if (cardinalityByColumn.isEmpty() && fileCount > 0) {
+                    LOG.warn("[ExternalStats][Sample] all splits Bernoulli-dropped at ratio={} " +
+                                    "fileCount={} rowCount={}, retrying with full scan",
+                            ratio, fileCount, rowCount);
+                    cardinalityByColumn = runOneSampleRound(context, analyzeStatus, 1.0);
+                }
+
                 LOG.info("[ExternalStats][Sample] round done | jobId={} catalog={} db={} table={} round={} " +
                                 "rowsThisRound={} ratio={}",
                         jobId, getCatalogName(), db.getOriginName(), table.getName(), round, rowsThisRound, ratio);

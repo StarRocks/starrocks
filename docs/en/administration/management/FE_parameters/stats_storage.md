@@ -79,6 +79,33 @@ This topic introduces the following types of FE configurations:
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
 
+### `statistic_external_sample_max_rows_per_round`
+
+- Default: 2000000
+- Type: Long
+- Unit: rows
+- Is mutable: Yes
+- Description: Maximum rows targeted per sampling round in the Iceberg external-table statistics collection loop (`ANALYZE SAMPLE`). The first round aims for this many rows; subsequent rounds double the cap within the same run until either the full table is scanned or `statistic_external_sample_max_rounds` is reached. Larger values improve NDV accuracy at the cost of additional scan IO per round.
+- Introduced in: -
+
+### `statistic_external_sample_max_rounds`
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of sampling rounds in a single Iceberg external-table `ANALYZE SAMPLE` run. Each round doubles the row cap of the previous round (capped at the table's total row count). Run-time convergence detection may stop the loop before this limit is reached.
+- Introduced in: -
+
+### `statistic_external_sample_ndv_convergence_threshold`
+
+- Default: 0.05
+- Type: Double
+- Unit: fraction (0.0–1.0)
+- Is mutable: Yes
+- Description: Relative-change threshold for early stopping the Iceberg external-table sampling loop when NDV has stabilized. After the first round, every collected column's HyperLogLog cardinality estimate is compared between consecutive rounds; if every column's relative change falls below this threshold the loop stops early. Set to `0` to disable convergence-based early stopping. Larger values stop sooner but may leave high-cardinality columns under-estimated.
+- Introduced in: -
+
 ## Storage
 
 ### `alter_table_timeout_second`

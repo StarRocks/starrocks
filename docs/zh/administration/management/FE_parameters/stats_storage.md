@@ -79,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `statistic_external_sample_max_rows_per_round`
+
+- 默认值: 2000000
+- 类型: Long
+- 单位: 行
+- 是否可变: Yes
+- 描述: Iceberg 外部表统计信息采样循环中每轮目标的最大行数（`ANALYZE SAMPLE`）。首轮以此为目标值采样；后续轮次在同一轮运行中按 2 倍递增，直到到达全表覆盖或 `statistic_external_sample_max_rounds` 上限。增大此值可提高 NDV 精度，但每轮 scan IO 会相应增加。
+- 引入版本: -
+
+### `statistic_external_sample_max_rounds`
+
+- 默认值: 4
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 单次 Iceberg 外部表 `ANALYZE SAMPLE` 中的最大采样轮数。每轮将上轮的行数上限翻倍（以全表行数为上限）。NDV 收敛检测可能在达到此上限前提前结束。
+- 引入版本: -
+
+### `statistic_external_sample_ndv_convergence_threshold`
+
+- 默认值: 0.05
+- 类型: Double
+- 单位: 比例 (0.0–1.0)
+- 是否可变: Yes
+- 描述: Iceberg 外部表采样循环中 NDV 收敛提前结束的相对变化阈值。首轮之后，比较相邻两轮所有列的 HyperLogLog 基数估计值，全部列的相对变化低于此阈值时提前结束循环。设为 `0` 可禁用收敛提前结束（始终跑满所有轮次）。更大的值会更早停止，但可能导致高基数列被低估。
+- 引入版本: -
+
 ## 存储
 
 ### `alter_table_timeout_second`
