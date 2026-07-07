@@ -74,6 +74,15 @@ public class RuntimeFilterDescription {
     private boolean hasRemoteTargets;
     private final List<TNetworkAddress> mergeNodes;
     private JoinNode.DistributionMode joinMode;
+    // Range-distributed colocate joins bucket their data by range containment,
+    // but every partitioned/global runtime-filter layout routes probe rows to a
+    // bloom filter by hashing the key. A hash layout over range-bucketed data
+    // would test rows against the wrong partition and silently drop join matches.
+    // Such joins therefore keep their runtime filters local and singleton: the
+    // local layout is forced to SINGLETON, and the filter is never pushed across
+    // an exchange (a global RF is merged as disjoint per-instance partitions that
+    // no singleton layout can probe correctly).
+    private boolean colocateWithRangeDistribution;
     private TUniqueId senderFragmentInstanceId;
 
     private Set<TUniqueId> broadcastGRFSenders;
@@ -367,6 +376,10 @@ public class RuntimeFilterDescription {
         joinMode = mode;
     }
 
+    public void setColocateWithRangeDistribution(boolean colocateWithRangeDistribution) {
+        this.colocateWithRangeDistribution = colocateWithRangeDistribution;
+    }
+
     public boolean isColocateOrBucketShuffle() {
         return joinMode.equals(COLOCATE) ||
                 joinMode.equals(LOCAL_HASH_BUCKET);
@@ -447,7 +460,10 @@ public class RuntimeFilterDescription {
     }
 
     public boolean canPushAcrossExchangeNode() {
-        if (onlyLocal) {
+        // A range-colocate RF must stay local: a global (remote) RF is merged as
+        // disjoint per-instance partitions, and no singleton/hash layout can probe
+        // those correctly over range-bucketed data (rows would be silently dropped).
+        if (onlyLocal || colocateWithRangeDistribution) {
             return false;
         }
         // skew join's broadcast join rf can not be pushed across exchange node
@@ -521,6 +537,9 @@ public class RuntimeFilterDescription {
     }
 
     private TRuntimeFilterLayoutMode computeLocalLayout() {
+        if (colocateWithRangeDistribution) {
+            return TRuntimeFilterLayoutMode.SINGLETON;
+        }
         if (sessionVariable.isEnablePipelineLevelMultiPartitionedRf()) {
             if (joinMode == BROADCAST || joinMode == REPLICATED) {
                 return TRuntimeFilterLayoutMode.SINGLETON;
@@ -573,7 +592,8 @@ public class RuntimeFilterDescription {
         layout.setFilter_id(filterId);
         layout.setLocal_layout(computeLocalLayout());
         layout.setGlobal_layout(computeGlobalLayout());
-        layout.setPipeline_level_multi_partitioned(sessionVariable.isEnablePipelineLevelMultiPartitionedRf());
+        layout.setPipeline_level_multi_partitioned(
+                !colocateWithRangeDistribution && sessionVariable.isEnablePipelineLevelMultiPartitionedRf());
         layout.setNum_instances(numInstances);
         layout.setNum_drivers_per_instance(numDriversPerInstance);
         if (bucketSeqToInstance != null && !bucketSeqToInstance.isEmpty()) {

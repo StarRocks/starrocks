@@ -107,4 +107,36 @@ public class RuntimeFilterLayoutTest {
             Assertions.assertEquals(layout.local_layout, TRuntimeFilterLayoutMode.SINGLETON);
         }
     }
+
+    @Test
+    public void testLayoutForRangeColocateJoin() {
+        SessionVariable sv = new SessionVariable();
+        sv.setEnablePipelineEngine(true);
+        sv.setEnablePipelineLevelMultiPartitionedRf(true);
+        RuntimeFilterDescription desc = new RuntimeFilterDescription(sv);
+        desc.setFilterId(1);
+        desc.setJoinMode(JoinNode.DistributionMode.COLOCATE);
+        desc.setBucketSeqToInstance(Arrays.asList(1, 1, 1, 2, 2, 2, 2, 2, 2));
+        desc.setBucketSeqToDriverSeq(Arrays.asList(0, 1, 2, 0, 1, 2, 0, 1, 2));
+        desc.setBucketSeqToPartition(Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7, 8));
+
+        // Control: a hash-colocate join keeps the partitioned bucket layout and
+        // may push its runtime filter across an exchange.
+        TRuntimeFilterLayout hashColocate = desc.toLayout();
+        Assertions.assertEquals(TRuntimeFilterLayoutMode.PIPELINE_BUCKET, hashColocate.local_layout);
+        Assertions.assertEquals(TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L, hashColocate.global_layout);
+        Assertions.assertTrue(hashColocate.pipeline_level_multi_partitioned);
+        Assertions.assertTrue(desc.canPushAcrossExchangeNode());
+
+        // Range colocate: data is bucketed by range containment, which no
+        // hash-partitioned runtime-filter layout can match. The filter must stay
+        // local and singleton: SINGLETON local layout, not multi-partitioned, and
+        // never pushed across an exchange (a global RF would be merged as disjoint
+        // per-instance partitions that a singleton layout cannot probe correctly).
+        desc.setColocateWithRangeDistribution(true);
+        TRuntimeFilterLayout rangeColocate = desc.toLayout();
+        Assertions.assertEquals(TRuntimeFilterLayoutMode.SINGLETON, rangeColocate.local_layout);
+        Assertions.assertFalse(rangeColocate.pipeline_level_multi_partitioned);
+        Assertions.assertFalse(desc.canPushAcrossExchangeNode());
+    }
 }

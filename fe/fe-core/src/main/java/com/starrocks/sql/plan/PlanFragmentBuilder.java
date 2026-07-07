@@ -3327,6 +3327,17 @@ public class PlanFragmentBuilder {
             fillSlotsInfo(node.getProjection(), joinNode, optExpr);
 
             joinNode.setDistributionMode(distributionMode);
+            // A range-distributed colocate join buckets its data by range, which no
+            // hash-partitioned runtime-filter layout can match; flag it so its
+            // runtime filters stay singleton (a hash layout would silently drop rows).
+            // A range colocate join has both sides range; the check stays fail-closed
+            // (either side range) so a hash-partitioned RF can never be applied over a
+            // range-bucketed side.
+            if (distributionMode == JoinNode.DistributionMode.COLOCATE &&
+                    (leftDistributionSpec instanceof RangeDistributionSpec ||
+                            rightDistributionSpec instanceof RangeDistributionSpec)) {
+                joinNode.setColocateWithRangeDistribution(true);
+            }
             joinNode.getConjuncts().addAll(conjuncts);
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());

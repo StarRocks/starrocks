@@ -93,6 +93,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
+    // True for a colocate join whose colocate columns are range-distributed. Such
+    // joins bucket data by range, which no hash-partitioned runtime-filter layout
+    // can match, so their runtime filters must stay singleton.
+    protected boolean colocateWithRangeDistribution = false;
     protected boolean canLocalShuffle = false;
     protected Map<SlotId, Expr> commonSlotMap;
 
@@ -152,6 +156,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return this.probePartitionByExprs;
     }
 
+    public void setColocateWithRangeDistribution(boolean colocateWithRangeDistribution) {
+        this.colocateWithRangeDistribution = colocateWithRangeDistribution;
+    }
+
+    public boolean isColocateWithRangeDistribution() {
+        return this.colocateWithRangeDistribution;
+    }
+
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
                                     ExecGroupSets execGroupSets) {
@@ -208,6 +220,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             rf.setBuildPlanNode(this);
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
+            rf.setColocateWithRangeDistribution(colocateWithRangeDistribution);
             rf.setEqualCount(eqJoinConjuncts.size());
             rf.setBuildCardinality(inner.getCardinality());
             rf.setEqualForNull(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct));

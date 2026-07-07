@@ -33,6 +33,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * F2 follow-up (colocate.md): mixed range-colocate × hash JOIN must not surface
  * as MySQL "Unknown error" — the optimizer should plan a shuffle/bucket join.
@@ -244,5 +247,64 @@ public class RangeColocateMixedJoinPlanTest {
             count = checkNoRangeSpecOnJoinChildren(node.inputAt(i), count);
         }
         return count;
+    }
+
+    /**
+     * A range × range colocate join must be flagged so its runtime filters fall
+     * back to a singleton layout; a hash-partitioned runtime-filter layout over
+     * range-bucketed data would route probe rows by hash and silently drop
+     * matching rows. The mixed range × hash bucket-shuffle join must NOT be
+     * flagged — its probe side is hash-distributed, so hash routing is correct.
+     */
+    @Test
+    public void rangeColocateJoinIsFlaggedForRuntimeFilterSingleton() throws Exception {
+        ExecPlan rangePlan = UtFrameUtils.getPlanAndFragment(connectContext,
+                "select count(*) from cd a join cd2 b on a.k1 = b.k1").second;
+        List<JoinNode> rangeJoins = collectJoinNodes(rangePlan);
+        Assertions.assertFalse(rangeJoins.isEmpty(), "expected a join node in the range colocate plan");
+
+        boolean sawFlaggedJoin = false;
+        for (JoinNode joinNode : rangeJoins) {
+            if (!joinNode.isColocateWithRangeDistribution()) {
+                continue;
+            }
+            sawFlaggedJoin = true;
+            // The flag must reach every runtime filter the join builds, so each one
+            // stays local and can never be pushed across an exchange into a
+            // hash-partitioned global filter (which would silently drop rows).
+            List<RuntimeFilterDescription> runtimeFilters = joinNode.getBuildRuntimeFilters();
+            Assertions.assertFalse(runtimeFilters.isEmpty(),
+                    "flagged range colocate join must build a runtime filter");
+            for (RuntimeFilterDescription rf : runtimeFilters) {
+                Assertions.assertFalse(rf.canPushAcrossExchangeNode(),
+                        "range colocate runtime filter must stay local");
+            }
+        }
+        Assertions.assertTrue(sawFlaggedJoin,
+                "range colocate join must be flagged colocateWithRangeDistribution");
+
+        ExecPlan mixedPlan = UtFrameUtils.getPlanAndFragment(connectContext,
+                "select count(*) from cd join dim on cd.k1 = dim.k1").second;
+        List<JoinNode> mixedJoins = collectJoinNodes(mixedPlan);
+        Assertions.assertFalse(mixedJoins.isEmpty(), "expected a join node in the mixed plan");
+        Assertions.assertTrue(mixedJoins.stream().noneMatch(JoinNode::isColocateWithRangeDistribution),
+                "mixed bucket-shuffle join must not be flagged colocateWithRangeDistribution");
+    }
+
+    private static List<JoinNode> collectJoinNodes(ExecPlan execPlan) {
+        List<JoinNode> result = new ArrayList<>();
+        for (PlanFragment fragment : execPlan.getFragments()) {
+            collectJoinNodes(fragment.getPlanRoot(), result);
+        }
+        return result;
+    }
+
+    private static void collectJoinNodes(PlanNode node, List<JoinNode> result) {
+        if (node instanceof JoinNode) {
+            result.add((JoinNode) node);
+        }
+        for (PlanNode child : node.getChildren()) {
+            collectJoinNodes(child, result);
+        }
     }
 }
