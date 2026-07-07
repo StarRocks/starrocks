@@ -158,6 +158,12 @@ If the disk is an SSD, it is recommended to set it to `true`. If the disk is an 
 
 Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters support index persistence onto local disks. And from v3.3.2 onwards, StarRocks shared-data clusters further support index persistence onto object storage. You can enable this feature by setting the table property `persistent_index_type` to `CLOUD_NATIVE`.
 
+:::note
+
+In shared-data clusters, Primary Key tables now support only the cloud-native persistent index (`persistent_index_type = CLOUD_NATIVE`). Setting `persistent_index_type` to `LOCAL` is no longer supported when you create or alter a table. Existing tables that use a `LOCAL` persistent index are not affected.
+
+:::
+
 </TabItem>
 
 <TabItem value="example2" label="Fully in-memory primary key index">
