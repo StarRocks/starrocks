@@ -38,6 +38,7 @@ class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
 class ThreadPoolToken;
 
+class SegmentRequestRef;
 class DeltaWriter;
 
 struct SegmentFlushStat {
@@ -52,7 +53,7 @@ class SegmentFlushToken {
 public:
     SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
 
-    Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+    Status submit(DeltaWriter* writer, brpc::Controller* cntl, SegmentRequestRef request,
                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
     Status status() const {

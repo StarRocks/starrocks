@@ -45,6 +45,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/segment_request_ref.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -535,7 +536,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_add_segment) {
         request.set_eos(false);
         request.set_num_segments(0);
 
-        _load_channel->add_segment(nullptr, &request, &response, nullptr);
+        _load_channel->add_segment(nullptr, SegmentRequestRef::borrowed(&request), &response, nullptr);
         EXPECT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
         EXPECT_EQ("channel is not local tablets channel.", response.status().error_msgs()[0]);
     }

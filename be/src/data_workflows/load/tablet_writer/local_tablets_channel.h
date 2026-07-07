@@ -18,6 +18,8 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include <memory>
+
 #include "base/brpc/reusable_closure.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
@@ -60,8 +62,8 @@ public:
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
+    void add_segment(brpc::Controller* cntl, SegmentRequestRef request, PTabletWriterAddSegmentResult* response,
+                     google::protobuf::Closure* done) const;
 
     void cancel(const std::string& reason) override;
 

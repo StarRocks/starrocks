@@ -15,9 +15,12 @@
 #include "storage/segment_flush_executor.h"
 
 #include <brpc/controller.h>
+#include <butil/iobuf.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <fstream>
+#include <memory>
 #include <thread>
 #include <utility>
 
@@ -25,6 +28,7 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/walltime.h"
@@ -39,6 +43,8 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/segment_replicate_executor.h"
+#include "storage/segment_request_ref.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
@@ -73,6 +79,39 @@ public:
         _primary_tablet_segment_dir = std::move(path);
         RETURN_IF_ERROR(fs::remove_all(_primary_tablet_segment_dir));
         return fs::create_directories(_primary_tablet_segment_dir);
+    }
+
+    void write_file(const std::string& path, const std::string& content) {
+        std::ofstream output(path, std::ios::binary);
+        ASSERT_TRUE(output.good());
+        output.write(content.data(), content.size());
+        ASSERT_TRUE(output.good());
+    }
+
+    DeltaWriterOptions create_replicate_options() {
+        DeltaWriterOptions options{};
+        options.tablet_id = _tablet->tablet_id();
+        options.schema_hash = _tablet->schema_hash();
+        options.txn_id = rand();
+        options.partition_id = _partition_id;
+        options.sink_id = 0;
+        options.load_id.set_lo(rand());
+        options.load_id.set_hi(rand());
+        options.index_id = _index_id;
+        options.node_id = 0;
+        options.timeout_ms = 3600000;
+        options.write_quorum = WriteQuorumTypePB::ONE;
+        options.replica_state = ReplicaState::Primary;
+        return options;
+    }
+
+    Status replicate_segment_once(std::unique_ptr<SegmentPB> segment) {
+        std::unique_ptr<ThreadPool> pool;
+        RETURN_IF_ERROR(ThreadPoolBuilder("seg_repl_once").set_min_threads(1).set_max_threads(1).build(&pool));
+        auto options = create_replicate_options();
+        ReplicateToken token(pool->new_token(ThreadPool::ExecutionMode::SERIAL), &options);
+        RETURN_IF_ERROR(token.submit(std::move(segment), false));
+        return token.wait();
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
@@ -267,8 +306,10 @@ TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {
 
     PTabletWriterAddSegmentResult response;
     MockClosure closure;
-    AsyncDeltaWriterSegmentRequest async_request{
-            .cntl = &controller, .request = &request, .response = &response, .done = &closure};
+    AsyncDeltaWriterSegmentRequest async_request{.cntl = &controller,
+                                                 .request = SegmentRequestRef::borrowed(&request),
+                                                 .response = &response,
+                                                 .done = &closure};
     async_delta_writer->write_segment(async_request);
     ASSERT_OK(delta_writer->segment_flush_token()->wait());
     ASSERT_TRUE(closure.has_run());
@@ -282,6 +323,218 @@ TEST_F(SegmentFlushExecutorTest, test_write_and_commit_segment) {
     // run tests in parallel, and it's hard to get the accurate value
     ASSERT_TRUE(StorageMetrics::instance()->segment_flush_total.value() > 0);
     ASSERT_TRUE(StorageMetrics::instance()->segment_flush_bytes_total.value() > 0);
+}
+
+TEST_F(SegmentFlushExecutorTest, test_owned_segment_request_ref_keeps_request_alive) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir("./ut_dir/SegmentFlushExecutorTest_test_owned_segment_request_ref"));
+    RowsetSharedPtr primary_rowset;
+    std::unique_ptr<SegmentPB> segment_pb = std::make_unique<SegmentPB>();
+    create_single_seg_rowset(_tablet.get(), 10, _primary_tablet_segment_dir, primary_rowset, segment_pb.get());
+
+    std::shared_ptr<AsyncDeltaWriter> async_delta_writer =
+            create_delta_writer(_tablet->tablet_id(), _tablet->schema_hash(), _mem_tracker.get());
+    DeltaWriter* delta_writer = async_delta_writer->writer();
+
+    brpc::Controller controller;
+    attach_segment_data(*segment_pb.get(), &controller);
+
+    PTabletWriterAddSegmentResult response;
+    MockClosure closure;
+    std::weak_ptr<PTabletWriterAddSegmentRequest> weak_request;
+    {
+        auto request = std::make_shared<PTabletWriterAddSegmentRequest>();
+        weak_request = request;
+        request->mutable_id()->set_lo(delta_writer->load_id().lo());
+        request->mutable_id()->set_hi(delta_writer->load_id().hi());
+        request->set_txn_id(delta_writer->txn_id());
+        request->set_index_id(delta_writer->index_id());
+        request->set_tablet_id(delta_writer->tablet()->tablet_id());
+        request->set_eos(true);
+        request->set_allocated_segment(segment_pb.release());
+
+        AsyncDeltaWriterSegmentRequest async_request{.cntl = &controller,
+                                                     .request = SegmentRequestRef::owned(std::move(request)),
+                                                     .response = &response,
+                                                     .done = &closure};
+        async_delta_writer->write_segment(async_request);
+    }
+
+    ASSERT_OK(delta_writer->segment_flush_token()->wait());
+    ASSERT_TRUE(closure.has_run());
+    EXPECT_TRUE(weak_request.expired());
+    RowsetSharedPtr prepared_rowset;
+    ASSERT_OK(get_prepared_rowset(_tablet->tablet_id(), delta_writer->txn_id(), _partition_id, &prepared_rowset));
+    check_single_segment_rowset_result(prepared_rowset, 10);
+    ASSERT_OK(StorageEngine::instance()->txn_manager()->delete_txn(_partition_id, _tablet, delta_writer->txn_id()));
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reads_local_files) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reads_local_files"));
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("seg_repl_read_files").set_min_threads(1).set_max_threads(1).build(&pool));
+    auto options = create_replicate_options();
+    ReplicateToken token(pool->new_token(ThreadPool::ExecutionMode::SERIAL), &options);
+
+    const std::string segment_path = _primary_tablet_segment_dir + "/segment.dat";
+    const std::string delete_path = _primary_tablet_segment_dir + "/delete.dat";
+    const std::string update_path = _primary_tablet_segment_dir + "/update.dat";
+    const std::string index_path = _primary_tablet_segment_dir + "/vector_index.vi";
+    const std::string missing_index_path = _primary_tablet_segment_dir + "/missing_vector_index.vi";
+    const std::string segment_content = "segment-data";
+    const std::string delete_content = "delete-data";
+    const std::string update_content = "update-data";
+    const std::string index_content = "index-data";
+    write_file(segment_path, segment_content);
+    write_file(delete_path, delete_content);
+    write_file(update_path, update_content);
+    write_file(index_path, index_content);
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(segment_path);
+    segment->set_data_size(segment_content.size());
+    segment->set_delete_path(delete_path);
+    segment->set_delete_data_size(delete_content.size());
+    segment->set_update_path(update_path);
+    segment->set_update_data_size(update_content.size());
+
+    auto* existing_index = segment->add_seg_indexes();
+    existing_index->set_index_type(VECTOR);
+    existing_index->set_index_path(index_path);
+    auto* missing_index = segment->add_seg_indexes();
+    missing_index->set_index_type(VECTOR);
+    missing_index->set_index_path(missing_index_path);
+
+    ASSERT_OK(token.submit(std::move(segment), false));
+    ASSERT_OK(token.wait());
+    EXPECT_TRUE(token.failed_node_ids().empty());
+    EXPECT_EQ(1, token.get_stat().num_finished_tasks.load());
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_skips_zero_size_segment_file) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_skips_zero_size_segment_file"));
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(_primary_tablet_segment_dir + "/missing-zero-size-segment.dat");
+    segment->set_data_size(0);
+
+    ASSERT_OK(replicate_segment_once(std::move(segment)));
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_sends_segment_to_secondary) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_sends_segment_to_secondary"));
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("seg_repl_send_secondary").set_min_threads(1).set_max_threads(1).build(&pool));
+
+    auto options = create_replicate_options();
+    options.timeout_ms = 10;
+    PNetworkAddress primary_replica;
+    primary_replica.set_host("127.0.0.1");
+    primary_replica.set_port(0);
+    primary_replica.set_node_id(0);
+    PNetworkAddress secondary_replica;
+    secondary_replica.set_host("127.0.0.1");
+    secondary_replica.set_port(1);
+    secondary_replica.set_node_id(1);
+    options.replicas = {primary_replica, secondary_replica};
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(_primary_tablet_segment_dir + "/missing-zero-size-segment.dat");
+    segment->set_data_size(0);
+
+    ReplicateToken token(pool->new_token(ThreadPool::ExecutionMode::SERIAL), &options);
+    ASSERT_OK(token.submit(std::move(segment), true));
+    ASSERT_OK(token.wait());
+    EXPECT_EQ(1, token.failed_node_ids().size());
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reports_segment_read_error) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reports_segment_read_error"));
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("seg_repl_read_err").set_min_threads(1).set_max_threads(1).build(&pool));
+    auto options = create_replicate_options();
+    ReplicateToken token(pool->new_token(ThreadPool::ExecutionMode::SERIAL), &options);
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(_primary_tablet_segment_dir + "/segment.dat");
+    segment->set_data_size(-1);
+
+    ASSERT_OK(token.submit(std::move(segment), false));
+    auto st = token.wait();
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("negative size"));
+    EXPECT_EQ(1, token.get_stat().num_finished_tasks.load());
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reports_short_segment_read_error) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reports_short_segment_read_error"));
+    const std::string segment_path = _primary_tablet_segment_dir + "/segment.dat";
+    const std::string segment_content = "segment-data";
+    write_file(segment_path, segment_content);
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(segment_path);
+    segment->set_data_size(segment_content.size() + 1);
+
+    auto st = replicate_segment_once(std::move(segment));
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("Failed to read segment file"));
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reports_delete_read_error) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reports_delete_read_error"));
+    const std::string segment_path = _primary_tablet_segment_dir + "/segment.dat";
+    const std::string segment_content = "segment-data";
+    write_file(segment_path, segment_content);
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(segment_path);
+    segment->set_data_size(segment_content.size());
+    segment->set_delete_path(_primary_tablet_segment_dir + "/missing-delete.dat");
+    segment->set_delete_data_size(1);
+
+    auto st = replicate_segment_once(std::move(segment));
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("delete"));
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reports_update_read_error) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reports_update_read_error"));
+    const std::string segment_path = _primary_tablet_segment_dir + "/segment.dat";
+    const std::string segment_content = "segment-data";
+    write_file(segment_path, segment_content);
+
+    auto segment = std::make_unique<SegmentPB>();
+    segment->set_path(segment_path);
+    segment->set_data_size(segment_content.size());
+    segment->set_update_path(_primary_tablet_segment_dir + "/missing-update.dat");
+    segment->set_update_data_size(1);
+
+    auto st = replicate_segment_once(std::move(segment));
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("update"));
+}
+
+TEST_F(SegmentFlushExecutorTest, test_segment_replicate_token_reports_index_read_error) {
+    ASSERT_OK(prepare_primary_tablet_segment_dir(
+            "./ut_dir/SegmentFlushExecutorTest_test_segment_replicate_token_reports_index_read_error"));
+    const std::string index_path = _primary_tablet_segment_dir + "/vector_index_dir.vi";
+    ASSERT_OK(fs::create_directories(index_path));
+
+    auto segment = std::make_unique<SegmentPB>();
+    auto* index = segment->add_seg_indexes();
+    index->set_index_type(VECTOR);
+    index->set_index_path(index_path);
+
+    auto st = replicate_segment_once(std::move(segment));
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("index"));
 }
 
 TEST_F(SegmentFlushExecutorTest, test_submit_after_cancel) {
@@ -304,7 +557,8 @@ TEST_F(SegmentFlushExecutorTest, test_submit_after_cancel) {
     MockClosure closure;
     // submit should fail after the writer is canceled, and the closure should be run to respond the brpc
     async_delta_writer->cancel(Status::Cancelled("Artificial cancel"));
-    Status st = delta_writer->segment_flush_token()->submit(delta_writer, &controller, &request, &response, &closure);
+    Status st = delta_writer->segment_flush_token()->submit(delta_writer, &controller,
+                                                            SegmentRequestRef::borrowed(&request), &response, &closure);
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(closure.has_run());
 }

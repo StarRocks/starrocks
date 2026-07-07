@@ -28,6 +28,7 @@
 #include "runtime/closure_guard.h"
 #include "runtime/current_thread.h"
 #include "storage/delta_writer.h"
+#include "storage/segment_request_ref.h"
 
 namespace starrocks {
 
@@ -37,12 +38,12 @@ namespace starrocks {
 class SegmentFlushTask final : public Runnable {
 public:
     SegmentFlushTask(SegmentFlushToken* flush_token, DeltaWriter* writer, brpc::Controller* cntl,
-                     const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
+                     SegmentRequestRef request, PTabletWriterAddSegmentResult* response,
                      google::protobuf::Closure* done)
             : _flush_token(flush_token),
               _writer(writer),
               _cntl(cntl),
-              _request(request),
+              _request(std::move(request)),
               _response(response),
               _done(done),
               _create_time_ns(MonotonicNanos()) {}
@@ -162,7 +163,7 @@ private:
     SegmentFlushToken* _flush_token;
     DeltaWriter* _writer;
     brpc::Controller* _cntl;
-    const PTabletWriterAddSegmentRequest* _request;
+    SegmentRequestRef _request;
     PTabletWriterAddSegmentResult* _response;
     google::protobuf::Closure* _done;
     int64_t _create_time_ns;
@@ -173,9 +174,8 @@ private:
 SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
         : _flush_token(std::move(flush_pool_token)) {}
 
-Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
-                                 const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                                 google::protobuf::Closure* done) {
+Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl, SegmentRequestRef request,
+                                 PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
@@ -184,7 +184,7 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
         return st;
     }
 
-    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
+    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, std::move(request), response, done);
     auto submit_st = _flush_token->submit(task);
     if (submit_st.ok()) {
         _stat.num_pending_tasks.fetch_add(1, std::memory_order_relaxed);

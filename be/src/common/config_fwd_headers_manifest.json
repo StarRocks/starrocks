@@ -156,6 +156,7 @@
         "pipeline_timeout_diagnostic",
         "enable_pipeline_event_scheduler",
         "enable_glm_lookup_http_fallback",
+        "enable_segment_replication_http_fallback",
         "pipeline_driver_queue_level_time_slice_base_ns",
         "pipeline_driver_queue_ratio_of_adjacent_queue",
         "pipeline_analytic_max_buffer_size",

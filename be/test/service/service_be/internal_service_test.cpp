@@ -15,6 +15,7 @@
 #include "service/service_be/internal_service.h"
 
 #include <brpc/controller.h>
+#include <butil/iobuf.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -30,6 +31,23 @@
 #include "service/brpc_service_test_util.h"
 
 namespace starrocks {
+
+namespace {
+
+bool serialize_segment_request_to_iobuf(const PTabletWriterAddSegmentRequest& request, butil::IOBuf* iobuf) {
+    butil::IOBuf proto_iobuf;
+    butil::IOBufAsZeroCopyOutputStream wrapper(&proto_iobuf);
+    if (!request.SerializeToZeroCopyStream(&wrapper)) {
+        return false;
+    }
+
+    const size_t proto_iobuf_size = proto_iobuf.size();
+    iobuf->append(&proto_iobuf_size, sizeof(proto_iobuf_size));
+    iobuf->append(proto_iobuf);
+    return true;
+}
+
+} // namespace
 
 class InternalServiceTest : public testing::Test {
 public:
@@ -170,6 +188,53 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
         service.PInternalServiceImplBase::tablet_writer_add_chunk_via_http(&cntl, &request, &response, &closure);
         auto st = Status(response.status());
         ASSERT_TRUE(st.is_not_supported());
+    }
+}
+
+TEST_F(InternalServiceTest, test_tablet_writer_add_segment_via_http) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
+    {
+        PHttpRequest request;
+        PTabletWriterAddSegmentResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.tablet_writer_add_segment_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(closure.has_run());
+    }
+    {
+        brpc::Controller cntl;
+        PTabletWriterAddSegmentRequest req;
+        req.mutable_id()->set_hi(100);
+        req.mutable_id()->set_lo(200);
+        req.set_txn_id(1000);
+        req.set_index_id(2000);
+        req.set_sink_id(3000);
+        req.set_tablet_id(4000);
+        req.set_eos(false);
+        req.mutable_segment()->set_segment_id(1);
+        req.mutable_segment()->set_data_size(0);
+        ASSERT_TRUE(serialize_segment_request_to_iobuf(req, &cntl.request_attachment()));
+
+        PHttpRequest request;
+        PTabletWriterAddSegmentResult response;
+        MockClosure closure;
+        service.tablet_writer_add_segment_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(closure.has_run());
+        ASSERT_TRUE(response.status().error_msgs().at(0).find("no associated load channel") != std::string::npos);
+    }
+    {
+        PHttpRequest request;
+        PTabletWriterAddSegmentResult response;
+        brpc::Controller cntl;
+        MockClosure closure;
+        service.PInternalServiceImplBase::tablet_writer_add_segment_via_http(&cntl, &request, &response, &closure);
+        auto st = Status(response.status());
+        ASSERT_TRUE(st.is_not_supported());
+        ASSERT_TRUE(closure.has_run());
     }
 }
 

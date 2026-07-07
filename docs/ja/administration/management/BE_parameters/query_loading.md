@@ -99,6 +99,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: GLM lookup 応答で HTTP fallback RPC を有効にするかどうかを制御します。ローリングアップグレードまたはダウングレード中は、すべての BE と CN ノードが `lookup_via_http` をサポートするまで無効のままにしてください。無効な場合、GLM lookup fetch は通常の `lookup` RPC を使用します。
 - 導入バージョン: -
 
+### enable_segment_replication_http_fallback
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: はい
+- 説明: Segment Replication で HTTP fallback RPC を有効にするかどうかを制御します。ローリングアップグレードまたはダウングレード中は、参加するすべての BE ノードが `tablet_writer_add_segment_via_http` をサポートするまで無効のままにしてください。無効な場合、Segment Replication は通常の `tablet_writer_add_segment` RPC を使用します。
+- 導入バージョン: -
+
 ### enable_bitmap_index_memory_page_cache
 
 - デフォルト: true

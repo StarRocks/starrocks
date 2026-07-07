@@ -18,9 +18,12 @@
 #include <google/protobuf/service.h>
 
 #include <atomic>
+#include <memory>
+#include <utility>
 
 #include "common/compiler_util.h"
 #include "storage/delta_writer.h"
+#include "storage/segment_request_ref.h"
 
 namespace brpc {
 class Controller;
@@ -161,7 +164,7 @@ public:
 class AsyncDeltaWriterSegmentRequest {
 public:
     brpc::Controller* cntl;
-    const PTabletWriterAddSegmentRequest* request;
+    SegmentRequestRef request;
     PTabletWriterAddSegmentResult* response;
     google::protobuf::Closure* done;
 };

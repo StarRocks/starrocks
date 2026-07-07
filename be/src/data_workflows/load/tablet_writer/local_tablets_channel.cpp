@@ -197,7 +197,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     return Status::OK();
 }
 
-void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+void LocalTabletsChannel::add_segment(brpc::Controller* cntl, SegmentRequestRef request,
                                       PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
     // NOTE: This entrypoint does NOT deduplicate duplicate RPCs (unlike
     // add_chunk below, which dedups by packet_seq sliding window).
@@ -239,12 +239,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     }
     auto& delta_writer = it->second;
 
-    AsyncDeltaWriterSegmentRequest req;
-    req.cntl = cntl;
-    req.request = request;
-    req.response = response;
-    req.done = done;
-
+    AsyncDeltaWriterSegmentRequest req{cntl, std::move(request), response, done};
     delta_writer->write_segment(req);
     closure_guard.release();
 }

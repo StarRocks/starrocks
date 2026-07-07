@@ -98,6 +98,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable the HTTP fallback RPC for GLM lookup responses. Keep this disabled during rolling upgrades or downgrades until all BE and CN nodes support `lookup_via_http`. When disabled, GLM lookup fetches use the regular `lookup` RPC.
 - Introduced in: -
 
+### enable_segment_replication_http_fallback
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the HTTP fallback RPC for segment replication. Keep this disabled during rolling upgrades or downgrades until all participating BE nodes support `tablet_writer_add_segment_via_http`. When disabled, segment replication uses the regular `tablet_writer_add_segment` RPC.
+- Introduced in: -
+
 ### enable_bitmap_index_memory_page_cache
 
 - Default: true 

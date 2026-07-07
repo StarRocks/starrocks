@@ -95,6 +95,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为 GLM lookup 响应启用 HTTP fallback RPC。滚动升级或降级期间，在所有 BE 和 CN 节点都支持 `lookup_via_http` 前，应保持关闭。关闭时，GLM lookup fetch 使用普通 `lookup` RPC。
 - 引入版本：-
 
+### enable_segment_replication_http_fallback
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Segment Replication 启用 HTTP fallback RPC。滚动升级或降级期间，在所有参与的 BE 节点都支持 `tablet_writer_add_segment_via_http` 前，应保持关闭。关闭时，Segment Replication 使用普通 `tablet_writer_add_segment` RPC。
+- 引入版本：-
+
 ### enable_bitmap_index_memory_page_cache
 
 - 默认值：true

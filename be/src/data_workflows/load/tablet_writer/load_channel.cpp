@@ -15,6 +15,7 @@
 #include "data_workflows/load/tablet_writer/load_channel.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
@@ -35,6 +36,7 @@
 #include "runtime/diagnose_daemon.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
+#include "storage/segment_request_ref.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \
@@ -272,7 +274,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
 }
 
-void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+void LoadChannel::add_segment(brpc::Controller* cntl, SegmentRequestRef request,
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _num_segment++;
@@ -292,7 +294,7 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
         return;
     }
 
-    local_tablets_channel->add_segment(cntl, request, response, done);
+    local_tablets_channel->add_segment(cntl, std::move(request), response, done);
     closure_guard.release();
 }
 

@@ -18,6 +18,7 @@
 #include <butil/endpoint.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/concurrency/stopwatch.hpp"
 #include "common/config_ingest_fwd.h"
@@ -31,6 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_metrics.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/segment_request_ref.h"
 #include "storage/utils.h"
 
 namespace starrocks {
@@ -243,13 +245,13 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
     }
 }
 
-void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+void LoadChannelMgr::add_segment(brpc::Controller* cntl, SegmentRequestRef request,
                                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     UniqueId load_id(request->id());
     auto channel = _find_load_channel(load_id);
     if (channel != nullptr) {
-        channel->add_segment(cntl, request, response, done);
+        channel->add_segment(cntl, std::move(request), response, done);
         closure_guard.release();
     } else {
         _fail_rpc_request(load_id, response->mutable_status());
