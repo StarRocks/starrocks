@@ -71,6 +71,10 @@ private:
 
     const int _output_operators;
     const BalanceStrategy _strategy;
+    // kRoundRobin only: route this many consecutive chunks to the same output before advancing,
+    // so a consumer drains a run per wakeup instead of one chunk at a time (see
+    // config::shared_scan_output_chunk_batch_size). Always >= 1.
+    const int64_t _output_batch;
     std::vector<SubBuffer> _sub_buffers;
     std::atomic_int64_t _output_index = 0;
     std::atomic_int64_t _memory_usage = 0;

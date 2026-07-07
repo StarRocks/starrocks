@@ -497,6 +497,7 @@
         "metric_late_materialization_ratio",
         "pre_aggregate_factor",
         "use_default_dop_when_shared_scan",
+        "shared_scan_output_chunk_batch_size",
         "tablet_internal_parallel_min_splitted_scan_rows",
         "tablet_internal_parallel_max_splitted_scan_rows",
         "lake_prepared_split_max_splitted_scan_rows",

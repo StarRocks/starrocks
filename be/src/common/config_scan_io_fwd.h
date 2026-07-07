@@ -23,6 +23,13 @@ namespace starrocks::config {
 // Single read execute fragment row size.
 CONF_mInt32(scanner_row_num, "16384");
 
+// Shared scan only: number of consecutive chunks the round-robin chunk buffer routes to the
+// same output (consumer driver) before advancing to the next one. Larger values coarsen the
+// distribution granularity so a consumer drains a small run per wakeup instead of one chunk at
+// a time, reducing pipeline scheduling churn; 1 restores strict per-chunk round-robin. Read
+// once when the chunk buffer is created (i.e. per query fragment).
+CONF_mInt32(shared_scan_output_chunk_batch_size, "8");
+
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
 

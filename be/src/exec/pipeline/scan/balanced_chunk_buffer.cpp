@@ -15,12 +15,16 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
 #include "base/concurrency/blocking_queue.hpp"
+#include "common/config_scan_io_fwd.h"
 #include "fmt/format.h"
 
 namespace starrocks::pipeline {
 
 BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_operators, ChunkBufferLimiterPtr limiter)
-        : _output_operators(output_operators), _strategy(strategy), _limiter(std::move(limiter)) {
+        : _output_operators(output_operators),
+          _strategy(strategy),
+          _output_batch(std::max<int64_t>(1, config::shared_scan_output_chunk_batch_size)),
+          _limiter(std::move(limiter)) {
     DCHECK_GT(output_operators, 0);
     for (int i = 0; i < output_operators; i++) {
         _sub_buffers.emplace_back(std::make_unique<QueueT>());
@@ -88,8 +92,13 @@ int BalancedChunkBuffer::put(int buffer_index, ChunkPtr chunk, ChunkBufferTokenP
         // TODO: try to balance data according to number of rows
         // But the hard part is, that may needs to maintain a min-heap to account the rows of each
         // output operator, which would introduce some extra overhead
-        target_index = _output_index.fetch_add(1);
-        target_index %= _output_operators;
+        //
+        // Route _output_batch consecutive chunks to the same output before advancing. Coarsening
+        // the granularity lets a consumer drain a run per wakeup instead of being rescheduled once
+        // per chunk, which cuts pipeline scheduling churn while keeping the load spread across all
+        // outputs. _output_batch == 1 is strict per-chunk round-robin.
+        int64_t seq = _output_index.fetch_add(1);
+        target_index = static_cast<int>((seq / _output_batch) % _output_operators);
         ret = _get_sub_buffer(target_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else {
         CHECK(false) << "unreachable";
