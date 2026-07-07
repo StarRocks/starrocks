@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 description: "SHOW PROCESSLIST は、サーバー内で実行中のスレッドが現在実行している操作を一覧表示します。"
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 ---
 
 # SHOW PROCESSLIST
