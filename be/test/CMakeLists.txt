@@ -357,8 +357,8 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_fileset_test.cpp
     ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
+    ./storage/lake/load_spill_pipeline_merge_context_test.cpp
     ./storage/lake/tablet_write_log_manager_test.cpp
-    ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
     ./storage/metadata_util_test.cpp

@@ -100,6 +100,7 @@ set(COMPUTE_ENV_LOAD_FILES
 )
 
 set(COMPUTE_ENV_LOAD_SPILL_FILES
+    load_spill/load_chunk_spiller.cpp
     load_spill/load_spill_block_manager.cpp
     load_spill/load_spill_block_merge_executor.cpp
 )
