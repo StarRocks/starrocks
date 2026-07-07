@@ -300,8 +300,7 @@ private:
     PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
     // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
-                                               int64_t tablet_id, int64_t txn_id);
+    bool _use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

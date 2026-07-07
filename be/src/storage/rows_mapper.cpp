@@ -30,7 +30,7 @@
 #include "runtime/runtime_env.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/storage_engine.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -377,33 +377,16 @@ Status RowsMapperIterator::status() {
 }
 
 StatusOr<std::string> new_lake_rows_mapper_filename(lake::TabletManager* mgr, int64_t tablet_id, int64_t txn_id) {
-    // DESIGN DECISION: Storage location depends on execution mode
-    if (config::enable_pk_index_parallel_execution) {
-        // WHY: Remote storage (.lcrm) for parallel execution mode
-        // TRADEOFF: Slower I/O (~50-200ms) vs multi-node accessibility
-        // During parallel pk index execution, multiple compute nodes may need to read
-        // the same mapper file simultaneously. Storing on S3/HDFS allows all nodes to
-        // access it without file replication, enabling true distributed processing.
-        // Performance impact is acceptable since parallel execution gains outweigh I/O overhead.
-        return mgr->lcrm_location(tablet_id, lake::gen_lcrm_filename(txn_id));
-    }
-    // WHY: Local disk (.crm) for single-node execution mode
-    // TRADEOFF: Fast I/O (~1-5ms) vs single-node limitation
-    // When parallel execution is disabled, using local disk provides 10-100x faster I/O.
-    // This is the optimal choice for single-node compaction where distributed access isn't needed.
-    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-    if (data_dir == nullptr) {
-        return Status::NotFound(fmt::format("Not local disk found. tablet id: {}", tablet_id));
-    }
-    return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}.crm", tablet_id, txn_id);
-}
-
-StatusOr<std::string> lake_rows_mapper_filename(int64_t tablet_id, int64_t txn_id) {
-    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-    if (data_dir == nullptr) {
-        return Status::NotFound(fmt::format("Not local disk found. tablet id: {}", tablet_id));
-    }
-    return data_dir->get_tmp_path() + "/" + fmt::format("{:016X}_{:016X}.crm", tablet_id, txn_id);
+    // Always store the rows mapper on remote storage (.lcrm), independent of
+    // config::enable_pk_index_parallel_execution.
+    // WHY: The mapper file must be reachable by whichever compute node publishes the
+    // compaction, and remote storage (S3/HDFS) guarantees shared access without file
+    // replication. Keeping this unconditional avoids a class of local-vs-remote mismatch
+    // bugs (writer picks .crm while the publisher looks for .lcrm, or vice versa) when the
+    // config is toggled between the write and publish phases.
+    // TRADEOFF: Slower I/O (~50-200ms) than local .crm, accepted for correctness and
+    // multi-node accessibility.
+    return mgr->lcrm_location(tablet_id, lake::gen_lcrm_filename(txn_id));
 }
 
 StatusOr<std::string> lake_rows_mapper_filename(lake::TabletManager* mgr, int64_t tablet_id,

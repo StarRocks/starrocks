@@ -30,13 +30,12 @@ class LakePrimaryIndex;
 
 class LakePrimaryKeyCompactionConflictResolver : public PrimaryKeyCompactionConflictResolver {
 public:
-    // WHY: lcrm_file parameter added to support remote storage mapper files
-    // When enable_pk_index_parallel_execution is on, mapper files are stored on remote storage
-    // (S3/HDFS) and tracked in metadata. This FileMetaPB contains both the filename and size,
-    // avoiding expensive get_size() calls during conflict resolution.
+    // WHY: mapper files are always stored on remote storage (.lcrm) and tracked in metadata.
+    // This FileMetaPB carries both the filename and size, avoiding expensive get_size() calls
+    // during conflict resolution.
     explicit LakePrimaryKeyCompactionConflictResolver(const TabletMetadata* metadata, Rowset* rowset,
                                                       TabletManager* tablet_mgr, MetaFileBuilder* builder,
-                                                      LakePrimaryIndex* index, int64_t txn_id, int64_t base_version,
+                                                      LakePrimaryIndex* index, int64_t base_version,
                                                       FileMetaPB lcrm_file,
                                                       std::map<uint32_t, size_t>* segment_id_to_add_dels,
                                                       std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
@@ -45,7 +44,6 @@ public:
               _tablet_mgr(tablet_mgr),
               _builder(builder),
               _index(index),
-              _txn_id(txn_id),
               _base_version(base_version),
               _lcrm_file(std::move(lcrm_file)),
               _segment_id_to_add_dels(segment_id_to_add_dels),
@@ -77,11 +75,9 @@ private:
     TabletManager* _tablet_mgr = nullptr;
     MetaFileBuilder* _builder = nullptr;
     LakePrimaryIndex* _index = nullptr;
-    int64_t _txn_id = 0;
     int64_t _base_version = 0;
     // Lake Compaction Rows Mapper file metadata
-    // WHY: Stores metadata (name + size) for remote storage mapper files (.lcrm extension)
-    // CONSTRAINT: Empty name indicates local disk storage (.crm extension) should be used
+    // WHY: Stores metadata (name + size) for the remote storage mapper file (.lcrm extension).
     // BENEFIT: Carrying file size avoids ~10-50ms get_size() calls to S3/HDFS per mapper file
     FileMetaPB _lcrm_file;
     // output
