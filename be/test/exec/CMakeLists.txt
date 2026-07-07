@@ -19,6 +19,7 @@ endif()
 
 set(EXEC_RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    jni_env_stub.cpp
     pipeline_driver_exec_runtime_test.cpp
     pipeline_event_scheduler_exec_runtime_test.cpp
     pipeline_execution_group_exec_runtime_test.cpp
@@ -63,6 +64,7 @@ target_link_libraries(exec_runtime_test ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_mai
 
 set(SCHEMA_SCANNER_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    jni_env_stub.cpp
     schema_scanner/schema_scanner_core_test.cpp
 )
 
@@ -94,6 +96,7 @@ target_link_libraries(schema_scanner_core_test ${SCHEMA_SCANNER_CORE_TEST_LINK_L
 
 set(EXEC_SCHEMA_SCANNERS_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    jni_env_stub.cpp
     schema_scanner/exec_schema_scanners_test.cpp
 )
 
@@ -125,6 +128,7 @@ target_link_libraries(exec_schema_scanners_test ${EXEC_SCHEMA_SCANNERS_TEST_LINK
 
 set(JOIN_CORE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
+    jni_env_stub.cpp
     join_hash_map_test.cpp
 )
 
