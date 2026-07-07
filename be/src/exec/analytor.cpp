@@ -435,8 +435,13 @@ void Analytor::close(RuntimeState* state) {
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
     _remove_unused_rows(state);
 
+    // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
+    // computation are checked against the BE memory limit, including the column data copied while upgrading
+    // BinaryColumn to LargeBinaryColumn in upgrade_if_overflow.
+    TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     return _check_has_error();
 }
@@ -636,10 +641,14 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 // When chunk's column is const, maybe need to unpack it.
+<<<<<<< HEAD
                 if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                     ColumnHelper::ensure_large_binary_column(_agg_intput_columns[i][j]);
                 }
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+=======
+                _append_column(chunk_size, _agg_intput_columns[i][j].get(), column);
+>>>>>>> 61a5ea388f ([Enhancement] Check memory limit for column upgrade in Analytor::process (backport #75821) (#75887))
 
                 // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
                 Column* agg_column = _agg_intput_columns[i][j].get();
@@ -653,6 +662,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
+<<<<<<< HEAD
             if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                 ColumnHelper::ensure_large_binary_column(_partition_columns[i]);
             }
@@ -663,11 +673,15 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             if (upgrade_col != nullptr) {
                 _partition_columns[i] = std::move(upgrade_col);
             }
+=======
+            _append_column(chunk_size, _partition_columns[i].get(), column);
+>>>>>>> 61a5ea388f ([Enhancement] Check memory limit for column upgrade in Analytor::process (backport #75821) (#75887))
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
+<<<<<<< HEAD
             if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
                 ColumnHelper::ensure_large_binary_column(_order_columns[i]);
             }
@@ -678,6 +692,9 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             if (order_upgrade_col != nullptr) {
                 _order_columns[i] = std::move(order_upgrade_col);
             }
+=======
+            _append_column(chunk_size, _order_columns[i].get(), column);
+>>>>>>> 61a5ea388f ([Enhancement] Check memory limit for column upgrade in Analytor::process (backport #75821) (#75887))
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
     }
