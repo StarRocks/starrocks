@@ -491,6 +491,14 @@ SHOW DATABASES FROM r2;
 
 描述：是否在 `iceberg.catalog.uri` 指定的数据库中创建用于存储元数据的表 `iceberg_namespace_properties` 和 `iceberg_tables`，默认值为`false`。当`iceberg.catalog.uri` 指定的数据库中尚未创建上述两张表时需要指定为`true`。
 
+##### iceberg.catalog.jdbc.catalog-name
+
+必需：否
+
+描述：显式指定 Iceberg JDBC 底层元数据表（`iceberg_tables` 和 `iceberg_namespace_properties`）中 `catalog_name` 字段的值。未设置时，默认使用 StarRocks 侧的 Catalog 名（即 `CREATE EXTERNAL CATALOG` 后的 `<catalog_name>`），保持向后兼容。
+
+当您需要在 StarRocks 中接入由其他引擎（例如 Spark、Flink）已经建立的 Iceberg JDBC Catalog、并复用同一份元数据时，需要将该参数设置为对方使用的 catalog name，否则底层查询 SQL `WHERE catalog_name = ?` 将无法命中已有元数据，导致 StarRocks 侧看不到任何库表。
+
 以下示例创建了一个名为 `iceberg_jdbc` 的 Iceberg catalog，并使用 JDBC 作为元存储：
 
 ```SQL
@@ -508,7 +516,27 @@ PROPERTIES
     "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
-若使用MySQL或其他自定义的JDBC驱动程序，需要将相应的JAR包放置于 `fe/lib` 和 `be/lib/jni-packages` 目录下。
+
+若使用 MySQL 或其他自定义的 JDBC 驱动程序，需要将相应的 JAR 包放置于 `fe/lib` 和 `be/lib/jni-packages` 目录下。
+
+以下示例演示了如何接入由其他引擎（例如 Spark）已经建立、底层 `catalog_name = "spark_ice"` 的 Iceberg JDBC Catalog。此时 StarRocks 侧 Catalog 名 `sr_side_view` 可以与底层 `catalog_name` 不同，只需通过 `iceberg.catalog.jdbc.catalog-name` 显式指定即可：
+
+```SQL
+CREATE EXTERNAL CATALOG sr_side_view
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password",
+    "iceberg.catalog.jdbc.catalog-name" = "spark_ice",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 </TabItem>
 
