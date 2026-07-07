@@ -48,6 +48,18 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
+    // The spill sink keeps the __op column so the merge resolves upsert/delete order by slot.
+    // Keep the __op column (drive the op-aware merge) only when the in-transaction upsert/delete order
+    // feature is enabled. When it is off (the default), return false so the memtable takes the legacy
+    // _split_upserts_deletes path (deletes split into a del file, applied after all segments) -- keeping
+    // the spill path's behavior, del-file layout, and delete-with-merge-condition rejection identical to
+    // before this feature. Gated by config::lake_enable_pk_preserve_txn_delete_order.
+    bool keep_op_column() const override;
+
+    // Spill a chunk that still carries the trailing __op column (see keep_op_column()).
+    Status flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                               int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
+
     Status merge_blocks_to_segments();
 
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }

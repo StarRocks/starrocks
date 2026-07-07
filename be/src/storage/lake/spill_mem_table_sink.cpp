@@ -52,6 +52,10 @@ SpillMemTableSink::~SpillMemTableSink() {
     _load_chunk_spiller.reset();
 }
 
+bool SpillMemTableSink::keep_op_column() const {
+    return config::lake_enable_pk_preserve_txn_delete_order;
+}
+
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
                                       int64_t* flush_data_size, int64_t slot_idx) {
     if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
