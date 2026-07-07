@@ -914,14 +914,14 @@ public class ColocateCheckerTest {
     @Test
     public void testDecideAlignmentFiresOnNewOrChangedSignature() {
         // No prior attempt -> fire, abort counter reset.
-        ColocateChecker.AlignmentDecision first = ColocateChecker.decideAlignment(null, 100L, false);
+        TableAlignmentLatch.AlignmentDecision first = TableAlignmentLatch.decideAlignment(null, 100L, false);
         Assertions.assertTrue(first.fire());
         Assertions.assertEquals(0, first.nextAbortRetries());
 
         // Signature changed (real progress / new data possible) -> fire, abort counter reset.
-        ColocateChecker.TableAlignmentAttempt prev =
-                new ColocateChecker.TableAlignmentAttempt(100L, 1L, 2);
-        ColocateChecker.AlignmentDecision changed = ColocateChecker.decideAlignment(prev, 200L, false);
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 2);
+        TableAlignmentLatch.AlignmentDecision changed = TableAlignmentLatch.decideAlignment(prev, 200L, false);
         Assertions.assertTrue(changed.fire());
         Assertions.assertEquals(0, changed.nextAbortRetries());
     }
@@ -929,25 +929,25 @@ public class ColocateCheckerTest {
     @Test
     public void testDecideAlignmentSuppressesUnchangedNonAborted() {
         // Same signature, previous job finished (not aborted): deterministic no-progress -> suppress.
-        ColocateChecker.TableAlignmentAttempt prev =
-                new ColocateChecker.TableAlignmentAttempt(100L, 1L, 0);
-        Assertions.assertFalse(ColocateChecker.decideAlignment(prev, 100L, false).fire());
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 0);
+        Assertions.assertFalse(TableAlignmentLatch.decideAlignment(prev, 100L, false).fire());
     }
 
     @Test
     public void testDecideAlignmentBoundedAbortRelease() {
         // Same signature but the previous attempt aborted (transient) and under the cap -> fire, and
         // the abort counter increments so a persistent abort cannot re-fire forever.
-        ColocateChecker.TableAlignmentAttempt prev =
-                new ColocateChecker.TableAlignmentAttempt(100L, 1L, 0);
-        ColocateChecker.AlignmentDecision aborted = ColocateChecker.decideAlignment(prev, 100L, true);
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 0);
+        TableAlignmentLatch.AlignmentDecision aborted = TableAlignmentLatch.decideAlignment(prev, 100L, true);
         Assertions.assertTrue(aborted.fire());
         Assertions.assertEquals(1, aborted.nextAbortRetries());
 
         // Aborted but at the cap -> stop re-firing (bounded abort-release).
-        ColocateChecker.TableAlignmentAttempt capped = new ColocateChecker.TableAlignmentAttempt(
-                100L, 1L, ColocateChecker.ALIGNMENT_ABORT_RETRY_CAP);
-        Assertions.assertFalse(ColocateChecker.decideAlignment(capped, 100L, true).fire());
+        TableAlignmentLatch.TableAlignmentAttempt capped = new TableAlignmentLatch.TableAlignmentAttempt(
+                100L, 1L, TableAlignmentLatch.ALIGNMENT_ABORT_RETRY_CAP);
+        Assertions.assertFalse(TableAlignmentLatch.decideAlignment(capped, 100L, true).fire());
     }
 
     @Test

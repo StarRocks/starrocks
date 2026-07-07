@@ -37,11 +37,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * End-to-end coordinator-side scan-range dispatch tests for range-distribution
- * colocate tables (P4). Exercises the observable behavior of
+ * colocate tables. Exercises the observable behavior of
  * {@link OlapScanNode#getBucketNums()} and the optimizer-built
  * {@link com.starrocks.sql.plan.PlanFragmentBuilder} path against real
  * shared-data tables.
@@ -93,6 +95,14 @@ public class RangeColocateScanRangeDispatchTest {
 
         OlapScanNode scanNode = newOlapScanNode(table, 1);
         scanNode.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+
+        // In production the bucketSeq fill runs before getBucketNums() (getScanRangeLocations precedes
+        // backend selection); mirror that here by populating the aligned assignment the fill would build.
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(table);
+        Assertions.assertNotNull(dispatch);
+        var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        scanNode.setTabletId2BucketSeq(new HashMap<>(
+                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()))));
 
         // Initial state: ColocateRangeMgr seeded with [MIN, MAX) -> 1 PACK shard group,
         // and createRangeColocateLakeTablets created exactly 1 tablet per partition.
@@ -211,11 +221,11 @@ public class RangeColocateScanRangeDispatchTest {
     }
 
     @Test
-    public void testGetBucketNumsFailsClosedOnObservedUnalignedFlag() throws Exception {
-        // Even when the group is currently ALIGNED (a fresh recompute would return a bucket count),
-        // an observation that the bucketSeq fill fell back to position-based must make getBucketNums()
-        // fail closed. This closes the fill-vs-guard TOCTOU that let a position-based assignment reach
-        // a colocate join and silently return wrong results.
+    public void testGetBucketNumsFailsClosedOnStaleAssignment() throws Exception {
+        // Even when the group is currently ALIGNED (a fresh recompute returns a bucket count), a scan
+        // whose built bucketSeq does not match the aligned mapping must make getBucketNums() fail closed.
+        // This closes the fill-vs-dispatch TOCTOU that let a position-based assignment (built while the
+        // group was momentarily unaligned) reach a colocate join and silently return wrong results.
         starRocksAssert.withTable(
                 "create table t_dispatch_flag (k1 int, k2 int)\n"
                         + "order by(k1, k2)\n"
@@ -225,21 +235,32 @@ public class RangeColocateScanRangeDispatchTest {
         OlapScanNode scanNode = newOlapScanNode(table, 11);
         scanNode.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
 
-        // Aligned single default range -> without the flag, getBucketNums returns 1.
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(table);
+        Assertions.assertNotNull(dispatch);
+        var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        Map<Long, Integer> aligned =
+                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
+        Assertions.assertNotNull(aligned, "single default range should be aligned");
+
+        // Built assignment matches the aligned mapping -> getBucketNums returns the bucket count.
+        scanNode.setTabletId2BucketSeq(new HashMap<>(aligned));
         Assertions.assertEquals(1, scanNode.getBucketNums());
 
-        scanNode.markRangeColocateUnaligned();
+        // Stale assignment (bucketSeq perturbed, e.g. a position fallback) -> fail closed.
+        Map<Long, Integer> stale = new HashMap<>();
+        aligned.forEach((tabletId, seq) -> stale.put(tabletId, seq + 1));
+        scanNode.setTabletId2BucketSeq(stale);
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
                 scanNode::getBucketNums);
-        Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
+        Assertions.assertTrue(exception.getMessage().contains("stale bucket assignment"),
                 "actual: " + exception.getMessage());
     }
 
     @Test
-    public void testPlanFragmentBuilderRecordsUnalignedObservation() throws Exception {
-        // The optimizer/PlanFragmentBuilder bucketSeq fill must record the unaligned observation when
-        // computeBucketSeq returns null, so the later getBucketNums() colocate-dispatch guard fails
-        // closed rather than pairing by a position fallback.
+    public void testPlanFragmentBuilderUnalignedScanFailsClosed() throws Exception {
+        // When computeBucketSeq returns null, the optimizer/PlanFragmentBuilder bucketSeq fill falls back
+        // to position-based bucketSeq (so a non-colocate scan still works); the later getBucketNums()
+        // colocate-dispatch guard must fail closed rather than pairing by that position fallback.
         starRocksAssert.withTable(
                 "create table t_pfb_unaligned (k1 int, k2 int, v1 int)\n"
                         + "order by(k1, k2)\n"
@@ -264,8 +285,12 @@ public class RangeColocateScanRangeDispatchTest {
             }
         }
         Assertions.assertNotNull(scan, "expected an OlapScanNode for t_pfb_unaligned");
-        Assertions.assertTrue(scan.isRangeColocateUnaligned(),
-                "PlanFragmentBuilder fill must record the unaligned observation");
-        Assertions.assertThrows(IllegalStateException.class, scan::getBucketNums);
+        scan.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+        // The single tablet spans all 3 ColocateRanges, so the group is unaligned: getBucketNums() on
+        // the colocate-dispatch path must fail closed rather than pairing by the position fallback.
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                scan::getBucketNums);
+        Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
+                "actual: " + exception.getMessage());
     }
 }

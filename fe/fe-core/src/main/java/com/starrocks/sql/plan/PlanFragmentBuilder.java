@@ -1022,10 +1022,10 @@ public class PlanFragmentBuilder {
                             if (rangeColocateMap != null) {
                                 tabletId2BucketSeq.putAll(rangeColocateMap);
                             } else {
-                                // Range-colocate but transiently unaligned: record it so the later
-                                // getBucketNums() colocate-dispatch guard fails closed instead of
-                                // silently pairing by this position fallback (closes the TOCTOU).
-                                scanNode.markRangeColocateUnaligned();
+                                // Range-colocate but transiently unaligned: fall back to position-based
+                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
+                                // on the colocate-dispatch path by validating this built assignment against
+                                // the aligned mapping, so no unaligned observation needs to be recorded here.
                                 for (int i = 0; i < allTabletIds.size(); i++) {
                                     tabletId2BucketSeq.put(allTabletIds.get(i), i);
                                 }

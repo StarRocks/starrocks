@@ -97,78 +97,14 @@ public class ColocateChecker {
     // Throttles per-tick queryShardGroupStable load; all its semantics live in the cache class.
     private final ColocateConvergenceCache convergenceCache = new ColocateConvergenceCache();
 
-    // Cap on consecutive re-fires after an aborted alignment attempt on an unchanged layout, so a
-    // persistently-aborting job cannot become its own (slow) storm. Past the cap the table is
-    // treated like a deterministic dead-end and left unaligned until its layout/data changes.
-    static final int ALIGNMENT_ABORT_RETRY_CAP = 3;
-
-    // Per-table memory of the last alignment attempt (keyed by tableId). Split/merge is deterministic,
-    // so re-issuing identical alignment work on an unchanged layout makes no progress — it just churns
-    // tablets. This map lets the checker suppress that re-issue (the fix for the self-sustaining
-    // alignment-job storm). The latch is per TABLE (not per group) because alignment jobs are
-    // per-table: keying by group would let one table's attempt suppress a peer that had never been
-    // attempted, or miss a peer's abort. An entry is cleared when the table becomes aligned, and the
-    // whole map is cleared whenever no group is unstable; it also naturally re-arms when the table's
-    // layout/data changes, on a bounded number of aborts, or after an FE restart.
-    private final Map<Long, TableAlignmentAttempt> lastAttemptByTable = new HashMap<>();
-
-    /**
-     * What the checker last did for one table: the {@link #tableConvergenceSignature} observed when it
-     * fired, the alignment job id submitted, and how many times an aborted attempt has been re-fired on
-     * this same signature. {@code suppressionLogged} keeps the "no progress" warning to once per stuck
-     * state.
-     */
-    static final class TableAlignmentAttempt {
-        final long signature;
-        final long jobId;
-        final int abortRetries;
-        boolean suppressionLogged;
-
-        TableAlignmentAttempt(long signature, long jobId, int abortRetries) {
-            this.signature = signature;
-            this.jobId = jobId;
-            this.abortRetries = abortRetries;
-        }
-    }
-
-    /** Outcome of {@link #decideAlignment}: whether to fire this cycle and the abort counter to store. */
-    record AlignmentDecision(boolean fire, int nextAbortRetries) {
-    }
-
-    /**
-     * Should the checker (re)issue an alignment job for a table this cycle, and if it fires what
-     * abort-retry count should it record? Fire when this is the first attempt ({@code prev == null}) or
-     * the layout/data changed since the last attempt (real progress is possible); otherwise the last
-     * completed attempt made no progress on this exact input and — because split/merge is deterministic
-     * — a re-issue would too, so suppress. The sole exception is a previous attempt that ended in an
-     * abort (a transient failure, not a deterministic dead-end): re-fire, but only up to
-     * {@link #ALIGNMENT_ABORT_RETRY_CAP} times on an unchanged signature. {@code nextAbortRetries} is
-     * only meaningful when {@code fire} is true and a job is actually submitted.
-     */
-    static AlignmentDecision decideAlignment(TableAlignmentAttempt prev, long currentSignature,
-            boolean prevJobAborted) {
-        if (prev == null || prev.signature != currentSignature) {
-            return new AlignmentDecision(true, 0);
-        }
-        boolean fire = prevJobAborted && prev.abortRetries < ALIGNMENT_ABORT_RETRY_CAP;
-        return new AlignmentDecision(fire, prev.abortRetries + 1);
-    }
+    // Per-table edge-triggered latch that suppresses re-issuing deterministic alignment work on an
+    // unchanged table layout — the fix for the self-sustaining alignment-job storm. All of its state and
+    // decision logic live in {@link TableAlignmentLatch}; this checker just consults it each cycle.
+    private final TableAlignmentLatch alignmentLatch = new TableAlignmentLatch();
 
     /** Visible for testing: whether a table currently has a recorded alignment attempt (is latched). */
     boolean hasRecordedAttempt(long tableId) {
-        return lastAttemptByTable.containsKey(tableId);
-    }
-
-    /** True iff the alignment job is still tracked and ended in {@code ABORTED}. */
-    static boolean isJobAborted(long jobId) {
-        TabletReshardJob job = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJob(jobId);
-        return job != null && job.isAborted();
-    }
-
-    /** True iff the alignment job has reached a terminal state (or is no longer tracked). */
-    static boolean isJobSettled(long jobId) {
-        TabletReshardJob job = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJob(jobId);
-        return job == null || job.isDone();
+        return alignmentLatch.hasRecordedAttempt(tableId);
     }
 
     // murmur3-128 via Guava's Hashing (the idiom already used across FE, e.g. HDFSBackendSelector /
@@ -264,7 +200,7 @@ public class ColocateChecker {
             // bounded to the duration of active migrations (and reclaimed after a leader gap), and
             // drop the per-table alignment-attempt memory for the same reason.
             convergenceCache.clear();
-            lastAttemptByTable.clear();
+            alignmentLatch.clear();
             return;
         }
         Set<Long> processedColocateGroupIds = new HashSet<>();
@@ -336,7 +272,7 @@ public class ColocateChecker {
                     && isPlacementConverged(colocateTableIndex, peers, expectedRanges, colocateGroupId)) {
                 colocateTableIndex.markAllGroupsWithSameColocateGroupIdStable(colocateGroupId, true);
                 // allAligned means every peer table returned aligned this pass, which already cleared
-                // its own lastAttemptByTable entry, so no group-level cleanup is needed here.
+                // its own latch entry (alignmentLatch.forgetTable), so no group-level cleanup is needed.
                 LOG.info("marked colocate group id {} stable across {} peer GroupIds",
                         colocateGroupId, peers.size());
             }
@@ -624,19 +560,16 @@ public class ColocateChecker {
         }
         try {
             long signature = tableConvergenceSignature(db, olapTable, expectedRangesSig);
-            TableAlignmentAttempt prev = lastAttemptByTable.get(tableId);
-            AlignmentDecision decision =
-                    decideAlignment(prev, signature, prev != null && isJobAborted(prev.jobId));
+            TableAlignmentLatch.AlignmentDecision decision = alignmentLatch.evaluate(tableId, signature);
             if (!decision.fire()) {
                 // A completed attempt on an unchanged layout made no progress: don't re-issue until the
                 // table's layout/data changes. The table stays misaligned, so the group stays unstable
                 // and colocate joins fall back to a correct shuffle plan. Log once per stuck state.
-                if (prev != null && !prev.suppressionLogged && isJobSettled(prev.jobId)) {
+                if (alignmentLatch.claimSuppressionLog(tableId)) {
                     LOG.warn("colocate table {}.{} (group {}) alignment made no progress on an unchanged "
                             + "layout; suppressing further alignment jobs until its layout or data changes. "
                             + "The group stays unstable and colocate joins fall back to shuffle.",
                             db.getFullName(), olapTable.getName(), colocateGroupId);
-                    prev.suppressionLogged = true;
                 }
                 return false;
             }
@@ -704,7 +637,7 @@ public class ColocateChecker {
 
         if (alignmentMap.isEmpty()) {
             // Aligned (or nothing splittable): drop any latch entry so a future misalignment re-arms.
-            lastAttemptByTable.remove(table.getId());
+            alignmentLatch.forgetTable(table.getId());
             return alignedSoFar;
         }
 
@@ -713,8 +646,7 @@ public class ColocateChecker {
         // leader demotion at this point cannot leak external shards.
         TabletReshardJob job = SplitTabletJobFactory.forColocateAlignment(db, table, alignmentMap);
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(job);
-        lastAttemptByTable.put(table.getId(),
-                new TableAlignmentAttempt(signature, job.getJobId(), nextAbortRetries));
+        alignmentLatch.recordFired(table.getId(), signature, job.getJobId(), nextAbortRetries);
         LOG.info("submitted SplitTabletJob {} for table {}.{} covering {} partitions",
                 job.getJobId(), db.getFullName(), table.getName(), alignmentMap.size());
         return false;

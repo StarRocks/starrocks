@@ -183,19 +183,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
     private Optional<Boolean> partitionKeyAscHint = Optional.empty();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-    // Sticky observation, set during bucketSeq fill (here and in PlanFragmentBuilder) whenever a
-    // range-colocate table's computeBucketSeq returns null and the fill falls back to position-based
-    // bucketSeq. getBucketNums() (the colocate-dispatch guard) fails closed on it, so the fill and the
-    // guard act on the SAME observation — closing the TOCTOU that let a position-based bucket
-    // assignment reach a colocate join and silently return wrong results. It is reset in
-    // clearScanNodeForThriftBuild() (alongside bucketSeq2locations / tabletId2BucketSeq) so it always
-    // travels with the assignment it describes. Deliberately NOT reset in prepareRetry(): a reuse-plan
-    // retry reuses this scan node's already-computed scan ranges (computeTabletInfo runs once, guarded
-    // by scanBackendIds.isEmpty(), and is not re-run on retry), so the flag stays consistent with the
-    // reused bucketSeq2locations — failing closed on a genuinely-unaligned reused assignment. Clearing
-    // only the flag here would decouple it from that stale assignment and could reintroduce the
-    // wrong-results window; a full re-plan retry builds a fresh node where the flag defaults false.
-    private boolean rangeColocateUnaligned = false;
     private List<Expr> bucketExprs = Lists.newArrayList();
     private List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
     // record the selected physical partition with the selected tablets belong to it
@@ -364,17 +351,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             // would silently produce wrong join results under colocate dispatch.
             // Non-colocate scans go through NormalBackendSelector and never reach this point.
             //
-            // Fail closed on the observation the bucketSeq fill actually recorded: if the fill saw the
-            // group unaligned and fell back to position-based bucketSeq, the assignment already built
-            // in bucketSeq2locations is not colocate-correct, so throw regardless of what a fresh
-            // computeBucketSeq would now say (this closes the fill-vs-guard TOCTOU). The requireAligned
-            // recompute below still guards the case where no fill ran before this call.
-            if (rangeColocateUnaligned) {
-                throw new IllegalStateException(
-                        "range colocate group is in an unaligned state; cannot dispatch colocate join "
-                                + "until alignment is restored");
-            }
-            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId);
+            // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
+            // bucketSeq this scan actually built (tabletId2BucketSeq) does not match the aligned mapping.
+            // The second check closes the fill-vs-dispatch TOCTOU: the bucketSeq fill falls back to a
+            // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
+            // still works); if the group then re-aligns before this guard runs, comparing the built
+            // assignment against the aligned mapping catches the stale position pairing that would
+            // otherwise reach the colocate join and silently return wrong results.
+            dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId, tabletId2BucketSeq);
             return dispatch.bucketCount();
         }
         // Range distribution without a colocate group: RangeDistributionInfo always
@@ -922,22 +906,13 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 tabletId2BucketSeq.putAll(rangeColocateMap);
                 return;
             }
-            // Range-colocate but transiently unaligned: record it so getBucketNums() fails closed on
-            // the colocate-dispatch path instead of silently pairing by the position fallback below.
-            markRangeColocateUnaligned();
+            // Range-colocate but transiently unaligned: fall back to position-based bucketSeq so a
+            // non-colocate scan of this table still works. getBucketNums() fails closed on the
+            // colocate-dispatch path by validating this built assignment against the aligned mapping.
         }
         for (int i = 0; i < allTabletIds.size(); i++) {
             tabletId2BucketSeq.put(allTabletIds.get(i), i);
         }
-    }
-
-    /** Records that a range-colocate bucketSeq fill fell back to position-based bucketSeq (unaligned). */
-    public void markRangeColocateUnaligned() {
-        this.rangeColocateUnaligned = true;
-    }
-
-    public boolean isRangeColocateUnaligned() {
-        return rangeColocateUnaligned;
     }
 
     public void checkIfScanRangeNumSafe(long scanRangeSize) {
@@ -1847,7 +1822,6 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         selectedPartitionIds.clear();
         hintsReplicaIds.clear();
         tabletId2BucketSeq.clear();
-        rangeColocateUnaligned = false;
         bucketExprs.clear();
         bucketColumns.clear();
         rowStoreKeyLiterals = Lists.newArrayList();
