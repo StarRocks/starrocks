@@ -205,15 +205,19 @@ public class ColocateChecker {
      * Read-locks the table.
      *
      * <p>{@code dataVersion} — not {@code visibleVersion} — is included because BE's external-boundaries
-     * split can fall back to an identical tablet for data-distribution reasons, not only structural
-     * ones: it rejects a split whose effective segment envelope is empty or a degenerate single key, or
-     * whose per-rowset row/byte weight does not straddle the boundary (see {@code tablet_splitter.cpp}
-     * steps 5-6 and 10). So a tablet that cannot be split today can become splittable after a load
-     * widens its data — with no tablet-range change — and the latch must re-arm on that. A reshard
-     * publish (including the identical-tablet fallback) advances only {@code visibleVersion}, while a
-     * real load advances {@code dataVersion}, so keying on {@code dataVersion} re-arms on genuine data
-     * changes but not on fallback churn. Tablet ranges are still carried to detect reshard progress (a
-     * successful split changes ranges but not {@code dataVersion}).
+     * split can fall back to an identical tablet for data-distribution reasons: it rejects a split whose
+     * effective segment envelope — the tablet's global min/max data keys, intersected with its range — is
+     * empty or collapses to a single key (see {@code tablet_splitter.cpp} step 6; the other hard-fallback
+     * paths are corruption guards). That envelope is a function of which keys exist, so a tablet that
+     * cannot be split today becomes splittable only after a load widens its key span across the boundary —
+     * with no tablet-range change — and the latch must re-arm on that. A load advances {@code dataVersion};
+     * a reshard publish (including the identical-tablet fallback) advances only {@code visibleVersion}, so
+     * keying on {@code dataVersion} re-arms on genuine data changes but not on fallback churn — keying on
+     * {@code visibleVersion} would re-fire the identical split every tick, the alignment storm this latch
+     * exists to stop. Compaction rewrites rowsets but preserves the key set, so it cannot change the
+     * envelope or the split outcome (it advances only {@code visibleVersion}) and is deliberately not a
+     * re-arm trigger. Tablet ranges are still carried to detect reshard progress (a successful split
+     * changes ranges but not {@code dataVersion}).
      */
     static long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
         List<HashCode> indexParts = new ArrayList<>();
