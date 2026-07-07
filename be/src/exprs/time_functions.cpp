@@ -1012,8 +1012,8 @@ DateValue date_value_add(DateValue dv, int count) {
     return dv.add<UNIT>(count);
 }
 
-#define DEFINE_DATE_ADD_FN(FN, UNIT)                                                                       \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, date, value) { return date_value_add<UNIT>(date, value); }  \
+#define DEFINE_DATE_ADD_FN(FN, UNIT)                                                                      \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(FN##Impl, date, value) { return date_value_add<UNIT>(date, value); } \
     DEFINE_TIME_CALC_FN(FN, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 #define DEFINE_DATE_SUB_FN(FN, UNIT)                                                                       \
