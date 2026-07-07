@@ -618,10 +618,15 @@ public class SplitTabletJob extends TabletReshardJob {
         Set<Tuple> canonicalLowers = new LinkedHashSet<>();
         boolean oldStradlesBoundary = false;
         boolean nonCanonicalCrossing = false;
+        // New child ranges captured during the walk below, reused after the splice for the best-effort
+        // immediate PACK reassignment. sortKeyColumns is hoisted out of the lock so that same reassign
+        // can reuse it (it is immutable schema, always assigned inside the lock before the walk).
+        Map<Long, Range<Tuple>> newChildRanges = new HashMap<>();
+        List<Column> sortKeyColumns = null;
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
-            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+            sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
 
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition = olapTable
@@ -652,6 +657,7 @@ public class SplitTabletJob extends TabletReshardJob {
                                 continue;
                             }
                             Range<Tuple> newRange = newTablet.getRange().getRange();
+                            newChildRanges.put(newTabletId, newRange);
                             boolean canonicalLow = ColocateRangeUtils.hasCanonicalLowerBound(
                                     newRange, sortKeyColumns, colocateColumnCount);
                             if (canonicalLow) {
@@ -682,6 +688,31 @@ public class SplitTabletJob extends TabletReshardJob {
         } catch (DdlException e) {
             throw new TabletReshardException(
                     "Failed to apply range split result for grpId " + grpId + ": " + e.getMessage(), e);
+        }
+
+        // Best-effort: immediately move this split's originating-partition children that now belong in a
+        // newly-created PACK shard group, removing the cross-tick delay before the colocate checker
+        // backstop would reconcile them. Correctness does not depend on this — the backstop reaches the
+        // same terminal state — so a failure here must never abort the split (already published). The
+        // outer catch is what guarantees best-effort: the shared helper catches expected StarOS checked
+        // failures but is intentionally not blanket-wrapped, so an unexpected bug still surfaces here.
+        try {
+            List<ColocateRange> updatedRanges = colocateTableIndex.getColocateRanges(grpId);
+            // Only reconcile children that map cleanly into exactly one post-split ColocateRange. A child
+            // whose range straddles a boundary (legacy/mismatched BE, or a multi-way split with a
+            // non-canonical crossing) has no single well-defined PACK group; leave it to the backstop.
+            Map<Long, Range<Tuple>> containedChildRanges = new HashMap<>();
+            for (Map.Entry<Long, Range<Tuple>> entry : newChildRanges.entrySet()) {
+                if (ColocateRangeUtils.isContainedInOwningColocateRange(
+                        entry.getValue(), updatedRanges, sortKeyColumns, colocateColumnCount)) {
+                    containedChildRanges.put(entry.getKey(), entry.getValue());
+                }
+            }
+            ColocateChecker.reconcileTabletPackPlacement(containedChildRanges, updatedRanges,
+                    colocateColumnCount, "split of table " + tableId);
+        } catch (Exception e) {
+            LOG.warn("best-effort immediate PACK reassignment after split of table {} failed; "
+                    + "leaving convergence to the colocate checker: {}", tableId, e.getMessage());
         }
     }
 
