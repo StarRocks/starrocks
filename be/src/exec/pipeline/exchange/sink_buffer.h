@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <bthread/id.h>
 #include <bthread/mutex.h>
 
 #include <atomic>
@@ -153,6 +154,9 @@ private:
     /// because TUniqueId::hi is exactly the same in one query
 
     struct SinkContext {
+        SinkContext() { bthread_id_list_init(&in_flight_rpc_cids, 0, 0); }
+        ~SinkContext() { bthread_id_list_destroy(&in_flight_rpc_cids); }
+
         // num eos per instance
         int64_t num_sinker;
         int64_t request_seq;
@@ -175,6 +179,10 @@ private:
         TimeTrace network_time;
 
         Mutex mutex;
+
+        // call_ids of each in-flight RPC. Used to actively cancel outstanding RPCs when the fragment is cancelled.
+        bthread_id_list_t in_flight_rpc_cids;
+        Mutex in_flight_rpc_cids_mutex;
 
         TNetworkAddress dest_addrs;
     };
