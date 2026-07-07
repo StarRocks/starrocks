@@ -1656,6 +1656,12 @@ private:
             const char* begin = s.data;
             const char* end = s.data + s.size;
             const char* truncated_end = skip_leading_utf8(begin, end, static_cast<size_t>(len));
+            // skip_leading_utf8 advances by the UTF-8 lead-byte width, which can step past `end`
+            // for a truncated multi-byte char, invalid UTF-8, or raw VARBINARY bytes. Clamp so we
+            // never read beyond the slice.
+            if (truncated_end > end) {
+                truncated_end = end;
+            }
             builder.append(Slice(begin, truncated_end - begin));
         }
         return builder.build(column->is_constant());
