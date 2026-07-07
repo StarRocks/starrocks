@@ -14,6 +14,8 @@
 
 package com.starrocks.statistic.columns;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -24,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -31,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
@@ -41,6 +45,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -51,6 +56,15 @@ public class PredicateColumnsMgr {
 
     // Why Map? To update the usage
     private final Map<ColumnUsage, ColumnUsage> id2columnUsage = Maps.newConcurrentMap();
+    private final Map<ExternalColumnUsage, ExternalColumnUsage> externalId2columnUsage = Maps.newConcurrentMap();
+
+    // Keyed by hashed table_uuid; negative results (empty list, e.g. a table never queried) are
+    // cached too, since a wide external table with no predicate columns yet would otherwise hit
+    // the storage table on every auto-analyze cycle.
+    private final Cache<String, List<ExternalColumnUsage>> externalQueryCache = Caffeine.newBuilder()
+            .expireAfterWrite(Config.statistic_external_predicate_columns_cache_ttl_sec, TimeUnit.SECONDS)
+            .maximumSize(10000)
+            .<String, List<ExternalColumnUsage>>build();
 
     public static PredicateColumnsMgr getInstance() {
         return INSTANCE;
@@ -130,10 +144,14 @@ public class PredicateColumnsMgr {
     }
 
     private void addOrUpdateColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
-        // only support OLAP table right now
-        if (!table.isNativeTableOrMaterializedView()) {
-            return;
+        if (table.isNativeTableOrMaterializedView()) {
+            addOrUpdateNativeColumnUsage(table, column, useCase);
+        } else {
+            addOrUpdateExternalColumnUsage(table, column, useCase);
         }
+    }
+
+    private void addOrUpdateNativeColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
         Optional<ColumnUsage> mayUsage = ColumnUsage.build(column, table, useCase);
         if (mayUsage.isEmpty()) {
             return;
@@ -143,6 +161,22 @@ public class PredicateColumnsMgr {
         }
         ColumnUsage usage = mayUsage.get();
         ColumnUsage oldValue = id2columnUsage.computeIfAbsent(usage, k -> usage);
+        oldValue.useNow(useCase);
+    }
+
+    private void addOrUpdateExternalColumnUsage(Table table, Column column, ColumnUsage.UseCase useCase) {
+        if (!Config.enable_external_predicate_columns_collection) {
+            return;
+        }
+        if (!CatalogMgr.isExternalCatalog(table.getCatalogName()) || table.isTemporaryTable()) {
+            return;
+        }
+        Optional<ExternalColumnUsage> mayUsage = ExternalColumnUsage.build(column, table, useCase);
+        if (mayUsage.isEmpty()) {
+            return;
+        }
+        ExternalColumnUsage usage = mayUsage.get();
+        ExternalColumnUsage oldValue = externalId2columnUsage.computeIfAbsent(usage, k -> usage);
         oldValue.useNow(useCase);
     }
 
@@ -167,9 +201,26 @@ public class PredicateColumnsMgr {
         }
     }
 
+    public List<ExternalColumnUsage> queryExternalPredicateColumns(Table table) {
+        EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.UseCase.getPredicateColumnUseCase();
+        String tableUuidHash = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
+        if (FeConstants.runningUnitTest) {
+            Predicate<ExternalColumnUsage> pred = c -> !SetUtils.intersection(c.getUseCases(), useCases).isEmpty();
+            return externalId2columnUsage.values().stream()
+                    .filter(x -> x.getTableUuidHash().equals(tableUuidHash))
+                    .filter(pred)
+                    .collect(Collectors.toList());
+        }
+        return externalQueryCache.get(tableUuidHash, key -> getExternalStorage().queryGlobalState(key, useCases));
+    }
+
     //==================================== Maintenance ============================================ //
     public void persist() {
         getStorage().persist(id2columnUsage.values());
+    }
+
+    public void persistExternal() {
+        getExternalStorage().persist(externalId2columnUsage.values());
     }
 
     public void vacuum() {
@@ -192,6 +243,24 @@ public class PredicateColumnsMgr {
         getStorage().vacuum(ttlTime);
     }
 
+    public void vacuumExternal() {
+        long ttlHour = Config.statistic_external_predicate_columns_ttl_hours;
+        if (ttlHour < 0) {
+            return;
+        }
+        LocalDateTime ttlTime = TimeUtils.getSystemNow().minusHours(ttlHour);
+        Predicate<ExternalColumnUsage> outdated = x -> x.getLastUsed().isBefore(ttlTime);
+
+        long before = externalId2columnUsage.size();
+        if (before > 0 && externalId2columnUsage.values().removeIf(outdated)) {
+            long after = externalId2columnUsage.size();
+            LOG.info("removed {} objects from external predicate columns because of ttl {}", before - after,
+                    Config.statistic_external_predicate_columns_ttl_hours);
+        }
+
+        getExternalStorage().vacuum(ttlTime);
+    }
+
     public void restore() {
         List<ColumnUsage> state = getStorage().restore();
         for (ColumnUsage usage : ListUtils.emptyIfNull(state)) {
@@ -199,13 +268,31 @@ public class PredicateColumnsMgr {
         }
     }
 
+    public void restoreExternal() {
+        List<ExternalColumnUsage> state = getExternalStorage().restore();
+        for (ExternalColumnUsage usage : ListUtils.emptyIfNull(state)) {
+            externalId2columnUsage.merge(usage, usage, ExternalColumnUsage::merge);
+        }
+    }
+
     private PredicateColumnsStorage getStorage() {
         return PredicateColumnsStorage.getInstance();
+    }
+
+    private ExternalPredicateColumnsStorage getExternalStorage() {
+        return ExternalPredicateColumnsStorage.getInstance();
     }
 
     @VisibleForTesting
     public void reset() {
         id2columnUsage.clear();
+        externalId2columnUsage.clear();
+        externalQueryCache.invalidateAll();
+    }
+
+    @VisibleForTesting
+    public void recordColumnUsageForTest(Table table, Column column, ColumnUsage.UseCase useCase) {
+        addOrUpdateColumnUsage(table, column, useCase);
     }
 
     public void startDaemon() {
@@ -229,19 +316,30 @@ public class PredicateColumnsMgr {
             setInterval(Config.statistic_predicate_columns_persist_interval_sec * 1000L);
 
             PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
-            PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
 
+            // Native and external tables are tracked in separate in-memory maps and separate storage
+            // tables, each with its own restore-gating sentinel; drive them independently so one
+            // being un-restored (e.g. right after FE start) never blocks the other from persisting.
+            PredicateColumnsStorage storage = PredicateColumnsStorage.getInstance();
             if (!storage.isSystemTableReady()) {
                 LOG.warn("system table of predicate_columns is still not ready");
-                return;
-            }
-
-            if (!storage.isRestored()) {
+            } else if (!storage.isRestored()) {
                 mgr.restore();
                 storage.finishRestore();
             } else {
                 mgr.vacuum();
                 mgr.persist();
+            }
+
+            ExternalPredicateColumnsStorage externalStorage = ExternalPredicateColumnsStorage.getInstance();
+            if (!externalStorage.isSystemTableReady()) {
+                LOG.warn("system table of external_predicate_columns is still not ready");
+            } else if (!externalStorage.isRestored()) {
+                mgr.restoreExternal();
+                externalStorage.finishRestore();
+            } else {
+                mgr.vacuumExternal();
+                mgr.persistExternal();
             }
         }
     }

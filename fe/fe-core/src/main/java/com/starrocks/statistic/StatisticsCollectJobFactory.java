@@ -31,6 +31,7 @@ import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -328,9 +329,30 @@ public class StatisticsCollectJobFactory {
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
 
+        boolean userSpecifiedColumns = CollectionUtils.isNotEmpty(columnNames);
         if (columnNames == null || columnNames.isEmpty()) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
         }
+
+        // Use predicate columns if suitable: only when the user didn't pin down columns explicitly
+        // and the table is wide enough that collecting everything is wasteful. Falls back to the
+        // full column list when no predicate columns are known yet (e.g. table never queried).
+        if (!userSpecifiedColumns && Config.statistic_auto_collect_predicate_columns_threshold > 0
+                && columnNames.size() > Config.statistic_auto_collect_predicate_columns_threshold) {
+            List<ExternalColumnUsage> predicateColumns =
+                    PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table);
+            if (CollectionUtils.isNotEmpty(predicateColumns)) {
+                Set<String> predicateColumnNames = predicateColumns.stream()
+                        .map(ExternalColumnUsage::getColumnName)
+                        .collect(Collectors.toSet());
+                List<String> filtered =
+                        columnNames.stream().filter(predicateColumnNames::contains).collect(Collectors.toList());
+                if (!filtered.isEmpty()) {
+                    columnNames = filtered;
+                }
+            }
+        }
+
         List<String> needCollectStatsColumns;
         if (basicStatsMeta != null) {
             // check table row count
