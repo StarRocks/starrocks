@@ -337,7 +337,10 @@ public class StatisticsCollectJobFactory {
         // Use predicate columns if suitable: only when the user didn't pin down columns explicitly
         // and the table is wide enough that collecting everything is wasteful. Falls back to the
         // full column list when no predicate columns are known yet (e.g. table never queried).
-        if (!userSpecifiedColumns && Config.statistic_auto_collect_predicate_columns_threshold > 0
+        // Also gated on the collection toggle itself: once disabled, operators must be able to force
+        // full-column collection immediately rather than waiting for stale rows to age out via TTL.
+        if (Config.enable_external_predicate_columns_collection && !userSpecifiedColumns
+                && Config.statistic_auto_collect_predicate_columns_threshold > 0
                 && columnNames.size() > Config.statistic_auto_collect_predicate_columns_threshold) {
             List<ExternalColumnUsage> predicateColumns =
                     PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table);

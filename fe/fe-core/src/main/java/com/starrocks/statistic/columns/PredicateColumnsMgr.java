@@ -171,11 +171,7 @@ public class PredicateColumnsMgr {
         if (!CatalogMgr.isExternalCatalog(table.getCatalogName()) || table.isTemporaryTable()) {
             return;
         }
-        Optional<ExternalColumnUsage> mayUsage = ExternalColumnUsage.build(column, table, useCase);
-        if (mayUsage.isEmpty()) {
-            return;
-        }
-        ExternalColumnUsage usage = mayUsage.get();
+        ExternalColumnUsage usage = ExternalColumnUsage.build(column, table, useCase);
         ExternalColumnUsage oldValue = externalId2columnUsage.computeIfAbsent(usage, k -> usage);
         oldValue.useNow(useCase);
     }

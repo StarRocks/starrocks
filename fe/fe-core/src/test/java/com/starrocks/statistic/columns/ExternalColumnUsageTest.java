@@ -24,7 +24,6 @@ import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
-import java.util.Optional;
 
 class ExternalColumnUsageTest {
 
@@ -43,10 +42,7 @@ class ExternalColumnUsageTest {
         IcebergTable table = mockTable("iceberg_catalog.db1.t1.uuid-1234", "iceberg_catalog", "db1", "t1");
         Column column = new Column("c1", IntegerType.INT);
 
-        Optional<ExternalColumnUsage> mayUsage =
-                ExternalColumnUsage.build(column, table, ColumnUsage.UseCase.PREDICATE);
-        Assertions.assertTrue(mayUsage.isPresent());
-        ExternalColumnUsage usage = mayUsage.get();
+        ExternalColumnUsage usage = ExternalColumnUsage.build(column, table, ColumnUsage.UseCase.PREDICATE);
         Assertions.assertEquals(StatisticUtils.hashTableUuidForPkStorage("iceberg_catalog.db1.t1.uuid-1234"),
                 usage.getTableUuidHash());
         Assertions.assertEquals("iceberg_catalog", usage.getCatalogName());
@@ -57,29 +53,35 @@ class ExternalColumnUsageTest {
     }
 
     @Test
-    public void testBuildSkipsOverlongColumnName() {
+    public void testBuildAcceptsLongAndMultibyteColumnNames() {
+        // column_name is never part of the persisted PK directly (only its hash is), so its length
+        // and encoding (e.g. multibyte CJK characters, where Java's String.length() undercounts the
+        // actual UTF-8 byte size) can never make the PK exceed BE's primary_key_limit_size.
         IcebergTable table = mockTable("catalog.db.t", "catalog", "db", "t");
-        String longName = "c".repeat(200);
-        Column column = new Column(longName, IntegerType.INT);
 
-        Optional<ExternalColumnUsage> mayUsage =
-                ExternalColumnUsage.build(column, table, ColumnUsage.UseCase.PREDICATE);
-        Assertions.assertTrue(mayUsage.isEmpty());
+        Column longName = new Column("c".repeat(200), IntegerType.INT);
+        ExternalColumnUsage longUsage = ExternalColumnUsage.build(longName, table, ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertEquals(32, longUsage.getColumnNameHash().length());
+
+        Column multibyteName = new Column("列".repeat(50), IntegerType.INT);
+        ExternalColumnUsage multibyteUsage =
+                ExternalColumnUsage.build(multibyteName, table, ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertEquals("列".repeat(50), multibyteUsage.getColumnName());
+        Assertions.assertEquals(32, multibyteUsage.getColumnNameHash().length());
     }
 
     @Test
-    public void testColumnNameBoundaryStaysUnderBePrimaryKeyLimit() {
-        // BE's primary_key_limit_size defaults to 128 bytes; with a 3-field VARCHAR PK
-        // (fe_id, table_uuid, column_name) where column_name is last, the worst-case budget
-        // (10-digit fe_id + 2, 32-char table_uuid + 2, column_name with no separator) allows up
-        // to 82 bytes for column_name. MAX_COLUMN_NAME_LENGTH (80) must stay under that ceiling.
-        IcebergTable table = mockTable("catalog.db.t", "catalog", "db", "t");
+    public void testColumnNameHashIsDeterministicAndDistinguishesNames() {
+        ExternalColumnUsage usage1 = new ExternalColumnUsage("hash1", "catalog", "db", "t", "c1",
+                ColumnUsage.UseCase.PREDICATE);
+        ExternalColumnUsage usage1Again = new ExternalColumnUsage("hash1", "catalog", "db", "t", "c1",
+                ColumnUsage.UseCase.JOIN);
+        ExternalColumnUsage usage2 = new ExternalColumnUsage("hash1", "catalog", "db", "t", "c2",
+                ColumnUsage.UseCase.PREDICATE);
 
-        Column atLimit = new Column("c".repeat(80), IntegerType.INT);
-        Assertions.assertTrue(ExternalColumnUsage.build(atLimit, table, ColumnUsage.UseCase.PREDICATE).isPresent());
-
-        Column overLimit = new Column("c".repeat(81), IntegerType.INT);
-        Assertions.assertTrue(ExternalColumnUsage.build(overLimit, table, ColumnUsage.UseCase.PREDICATE).isEmpty());
+        Assertions.assertEquals(usage1.getColumnNameHash(), usage1Again.getColumnNameHash());
+        Assertions.assertNotEquals(usage1.getColumnNameHash(), usage2.getColumnNameHash());
+        Assertions.assertEquals(32, usage1.getColumnNameHash().length());
     }
 
     @Test

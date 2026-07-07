@@ -76,10 +76,11 @@ class ExternalPredicateColumnsStorageTest extends PlanTestBase {
         instance.persist(List.of(usage1));
 
         Mockito.verify(repo).executeDML(String.format(
-                "INSERT INTO _statistics_.external_predicate_columns(fe_id, table_uuid, column_name, catalog_name, "
-                        + "db_name, table_name, usage, last_used ) VALUES "
-                        + "('%s', 'hash1', 'c1', 'iceberg_catalog', 'db1', 't1', 'predicate', '2024-11-20 01:02:03')",
-                feName));
+                "INSERT INTO _statistics_.external_predicate_columns(fe_id, table_uuid, column_name_hash, "
+                        + "catalog_name, db_name, table_name, column_name, usage, last_used ) VALUES "
+                        + "('%s', 'hash1', '%s', 'iceberg_catalog', 'db1', 't1', 'c1', 'predicate', "
+                        + "'2024-11-20 01:02:03')",
+                feName, usage1.getColumnNameHash()));
 
         // query
         instance.queryGlobalState("hash1", EnumSet.noneOf(ColumnUsage.UseCase.class));
@@ -115,10 +116,11 @@ class ExternalPredicateColumnsStorageTest extends PlanTestBase {
         instance.persist(List.of(usage));
 
         Mockito.verify(repo).executeDML(String.format(
-                "INSERT INTO _statistics_.external_predicate_columns(fe_id, table_uuid, column_name, catalog_name, "
-                        + "db_name, table_name, usage, last_used ) VALUES "
-                        + "('%s', 'hash1', 'c''1', 'cat''alog', 'db\\\\name', 't1', 'predicate', '2024-11-20 01:02:03')",
-                feName));
+                "INSERT INTO _statistics_.external_predicate_columns(fe_id, table_uuid, column_name_hash, "
+                        + "catalog_name, db_name, table_name, column_name, usage, last_used ) VALUES "
+                        + "('%s', 'hash1', '%s', 'cat''alog', 'db\\\\name', 't1', 'c''1', 'predicate', "
+                        + "'2024-11-20 01:02:03')",
+                feName, usage.getColumnNameHash()));
 
         guard.close();
     }

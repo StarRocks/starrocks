@@ -20,13 +20,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.statistic.StatisticUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -34,20 +31,15 @@ import java.util.stream.Collectors;
  * <p>
  * Unlike {@link ColumnUsage}, the identity here is not a metastore-resolvable numeric id: external
  * tables have no stable db/table/column id, so the row carries its own catalog/db/table/column names
- * directly. table_uuid is always the fixed-length hash of {@link Table#getUUID()}
- * ({@link StatisticUtils#hashTableUuidForPkStorage}), matching the PK scheme of
- * {@code external_column_statistics} so both tables can be joined by table_uuid.
+ * directly. table_uuid and column_name are both persisted as fixed-length hashes
+ * ({@link #getTableUuidHash()}, {@link #getColumnNameHash()}) so the PK never depends on the byte
+ * length of externally-supplied identifiers (multibyte column names would otherwise make a
+ * character-count guard unsafe, since BE's primary_key_limit_size is measured in encoded bytes).
+ * table_uuid hashing also matches the PK scheme of {@code external_column_statistics} so both tables
+ * can be joined by table_uuid. The raw column_name is kept as a plain (non-key) value column so it can
+ * be read back.
  */
 public class ExternalColumnUsage {
-
-    private static final Logger LOG = LogManager.getLogger(ExternalColumnUsage.class);
-
-    // BE's primary_key_limit_size defaults to 128 bytes (be/src/common/config_primary_key_fwd.h).
-    // PrimaryKeyEncoder::encode_exceed_limit adds a 2-byte separator per non-last VARCHAR PK field;
-    // our PK is (fe_id, table_uuid, column_name) with column_name last. Budget: fe_id up to 10 digits
-    // (+2) + table_uuid fixed 32 hex chars (+2) + column_name (no +2, last field) <= 128, i.e.
-    // column_name <= 82. Capped at 80 to leave a small margin.
-    private static final int MAX_COLUMN_NAME_LENGTH = 80;
 
     @SerializedName("tableUuidHash")
     private final String tableUuidHash;
@@ -90,20 +82,22 @@ public class ExternalColumnUsage {
         this.created = TimeUtils.getSystemNow();
     }
 
-    public static Optional<ExternalColumnUsage> build(Column column, Table table, ColumnUsage.UseCase useCase) {
+    public static ExternalColumnUsage build(Column column, Table table, ColumnUsage.UseCase useCase) {
         String columnName = column.getName();
-        if (columnName.length() > MAX_COLUMN_NAME_LENGTH) {
-            LOG.warn("skip recording external predicate column usage, column name too long: {}.{}",
-                    table.getName(), columnName);
-            return Optional.empty();
-        }
         String tableUuidHash = StatisticUtils.hashTableUuidForPkStorage(table.getUUID());
-        return Optional.of(new ExternalColumnUsage(tableUuidHash, table.getCatalogName(), table.getCatalogDBName(),
-                table.getCatalogTableName(), columnName, useCase));
+        return new ExternalColumnUsage(tableUuidHash, table.getCatalogName(), table.getCatalogDBName(),
+                table.getCatalogTableName(), columnName, useCase);
     }
 
     public String getTableUuidHash() {
         return tableUuidHash;
+    }
+
+    // Reuses the generic murmur3-based hasher (despite its table_uuid-oriented name/javadoc, the
+    // implementation is just a fixed-length hash of an arbitrary string) so column_name never affects
+    // the PK's byte size, regardless of length or encoding (see the class doc for why this matters).
+    public String getColumnNameHash() {
+        return StatisticUtils.hashTableUuidForPkStorage(columnName);
     }
 
     public String getCatalogName() {

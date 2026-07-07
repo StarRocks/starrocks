@@ -108,13 +108,17 @@ class PredicateColumnsMgrTest extends PlanTestBase {
     }
 
     @Test
-    public void testOverlongColumnNameSkipped() {
+    public void testLongOrMultibyteColumnNameStillRecordedAndQueryable() {
+        // column_name is only ever hashed for PK storage, never truncated/rejected by length, so
+        // long or multibyte (e.g. CJK) column names round-trip through record -> query normally.
         IcebergTable table = mockExternalTable("iceberg_catalog.db1.t3.uuid-3", "iceberg_catalog", "db1", "t3");
-        Column column = new Column("c".repeat(200), IntegerType.INT);
+        Column column = new Column("列".repeat(50), IntegerType.INT);
 
         PredicateColumnsMgr.getInstance().recordColumnUsageForTest(table, column, ColumnUsage.UseCase.PREDICATE);
 
-        Assertions.assertTrue(PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table).isEmpty());
+        List<ExternalColumnUsage> result = PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals("列".repeat(50), result.get(0).getColumnName());
     }
 
     @Test

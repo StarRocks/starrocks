@@ -54,8 +54,11 @@ import java.util.stream.Collectors;
  * Storage for {@code _statistics_.external_predicate_columns}, mirroring
  * {@link PredicateColumnsStorage}'s persist/restore/vacuum lifecycle for external (non-native) table
  * columns. See the class doc there for the general persistence/query/vacuum/restore model; the only
- * structural difference is the identity columns (table_uuid hash + column_name instead of numeric
- * db/table/column ids), since external tables have no metastore-resolvable numeric ids.
+ * structural difference is the identity columns: the PK is (fe_id, table_uuid hash, column_name hash)
+ * instead of numeric db/table/column ids, since external tables have no metastore-resolvable numeric
+ * ids and raw catalog-supplied names are unbounded in byte length. The raw column_name is kept as a
+ * plain value column (not part of the PK) so it can still be read back; see
+ * {@link ExternalColumnUsage}'s class doc for why both identity fields are hashed.
  */
 public class ExternalPredicateColumnsStorage {
 
@@ -66,20 +69,22 @@ public class ExternalPredicateColumnsStorage {
     public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
     private static final String TABLE_DDL = "CREATE TABLE " + TABLE_NAME + "( " +
 
-            // PRIMARY KEYS
+            // PRIMARY KEYS: column_name_hash (not the raw column_name) keeps the PK's byte size
+            // fixed regardless of column name length/encoding; see ExternalColumnUsage's class doc.
             "fe_id STRING NOT NULL," +
             "table_uuid STRING NOT NULL," +
-            "column_name STRING NOT NULL," +
+            "column_name_hash STRING NOT NULL," +
 
             "catalog_name STRING NOT NULL," +
             "db_name STRING NOT NULL," +
             "table_name STRING NOT NULL," +
+            "column_name STRING NOT NULL," +
             "usage STRING NOT NULL," +
             "last_used DATETIME NOT NULL," +
             "created DATETIME DEFAULT CURRENT_TIMESTAMP" +
             ") " +
-            "PRIMARY KEY(fe_id, table_uuid, column_name) " +
-            "DISTRIBUTED BY HASH(fe_id, table_uuid, column_name) BUCKETS 8\n" +
+            "PRIMARY KEY(fe_id, table_uuid, column_name_hash) " +
+            "DISTRIBUTED BY HASH(fe_id, table_uuid, column_name_hash) BUCKETS 8\n" +
             "PROPERTIES('replication_num'='1')";
 
     private static final TableKeeper KEEPER = new TableKeeper(DATABASE_NAME, TABLE_NAME, TABLE_DDL, null);
@@ -93,12 +98,12 @@ public class ExternalPredicateColumnsStorage {
 
     private static final int INSERT_BATCH_SIZE = 1024;
     private static final String SQL_COLUMN_LIST =
-            "fe_id, table_uuid, column_name, catalog_name, db_name, table_name, usage, last_used ";
+            "fe_id, table_uuid, column_name_hash, catalog_name, db_name, table_name, column_name, usage, last_used ";
 
     private static final String ADD_RECORD = "INSERT INTO " + TABLE_FULL_NAME + "(" + SQL_COLUMN_LIST + ") VALUES ";
     private static final String INSERT_VALUE =
-            "('$feId', '$tableUuidHash', '$columnName', '$catalogName', '$dbName', '$tableName', " +
-                    "'$usage', '$lastUsed')";
+            "('$feId', '$tableUuidHash', '$columnNameHash', '$catalogName', '$dbName', '$tableName', " +
+                    "'$columnName', '$usage', '$lastUsed')";
 
     private static final String QUERY =
             "SELECT fe_id, table_uuid, column_name, catalog_name, db_name, table_name, usage, last_used, created FROM "
@@ -206,6 +211,7 @@ public class ExternalPredicateColumnsStorage {
             VelocityContext context = new VelocityContext();
             context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
             context.put("tableUuidHash", SqlUtils.escapeSqlString(usage.getTableUuidHash()));
+            context.put("columnNameHash", SqlUtils.escapeSqlString(usage.getColumnNameHash()));
             context.put("columnName", SqlUtils.escapeSqlString(usage.getColumnName()));
             context.put("catalogName", SqlUtils.escapeSqlString(usage.getCatalogName()));
             context.put("dbName", SqlUtils.escapeSqlString(usage.getDbName()));
