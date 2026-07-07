@@ -46,6 +46,21 @@ uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
 uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 
+// Resolve the segment index a del file logically follows (the delete's rssid is
+// `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
+// `op_offset` is the writer-provided local segment position (from OpWrite.del_op_offsets); it is
+// mapped through get_segment_idx() so it lands in the same index space as segment rssids.
+// Falls back to the max segment index -- the legacy "apply all deletes after all upserts" behavior --
+// when `column_mode` is true (column-mode partial update applies deletes after all column upserts,
+// never interleaved) or when `op_offset` < 0 ("not recorded": absent array or kUnknownDelOpOffset).
+// The recorded op_offset for del file `del_id` in `op_write`, or -1 when not recorded: the
+// del_op_offsets array is absent/misaligned with dels_meta, or the entry is kUnknownDelOpOffset
+// (spill / concurrent flush). Single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel)
+// representation to the signed value resolve_del_op_offset() expects.
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id);
+
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -67,7 +82,8 @@ public:
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels);
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
+                    const std::vector<int64_t>& del_op_offsets);
     Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
@@ -127,6 +143,9 @@ private:
         // parallel-array invariant between filename / shared / encryption can't drift.
         // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
         std::vector<FileMetaPB> dels;
+        // Parallel to `dels`: each del's op_offset already rebased into the merged rowset's segment
+        // space, or < 0 when not recorded (falls back to the max segment id at persist time).
+        std::vector<int64_t> del_op_offsets;
         uint32_t assigned_segment_idx = 0;
     };
 
