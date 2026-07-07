@@ -1517,4 +1517,35 @@ TEST_F(ParquetScannerTest, optional_map_key) {
     }
 }
 
+TEST_F(ParquetScannerTest, test_missing_column_with_small_chunk_size) {
+    std::string parquet_file_name;
+    create_dictionary_string_parquet("dictionary_string_missing_col.parquet",
+                                     {"Center", "Edge", "Middle", "Center", "North"}, &parquet_file_name);
+    DeferOp defer([&]() { std::filesystem::remove(parquet_file_name); });
+
+    SlotTypeDescInfoArray slot_infos = {{"zone", TypeDescriptor::create_varchar_type(1048576), true},
+                                        {"missing_col", TypeDescriptor::from_logical_type(TYPE_INT), true}};
+    auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2);
+
+    std::vector<std::string> actual_zone_values;
+    std::vector<size_t> chunk_rows;
+    auto check = [&](const ChunkPtr& chunk) {
+        ASSERT_EQ(2, chunk->num_columns());
+        chunk_rows.emplace_back(chunk->num_rows());
+        auto col_zone = chunk->columns()[0];
+        auto col_missing = chunk->columns()[1];
+        ASSERT_EQ(col_zone->size(), col_missing->size());
+        for (size_t i = 0; i < col_zone->size(); ++i) {
+            actual_zone_values.emplace_back(col_zone->debug_item(i));
+            EXPECT_TRUE(col_missing->is_null(i));
+        }
+    };
+    validate(scanner, 5, check);
+
+    ASSERT_EQ(std::vector<size_t>({2, 2, 1}), chunk_rows);
+    ASSERT_EQ((std::vector<std::string>{"'Center'", "'Edge'", "'Middle'", "'Center'", "'North'"}), actual_zone_values);
+}
+
 } // namespace starrocks
