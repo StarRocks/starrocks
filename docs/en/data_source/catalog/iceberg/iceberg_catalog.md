@@ -260,7 +260,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   - Required: No
   - Description: Configures the `ResourceShareType` sent to AWS Glue's GetDatabases API, controlling which databases are returned when listing them. This item is case-insensitive. Valid values:
     - `ALL`: Returns all local databases plus all shared and federated ones.
-    - `FOREIGN`: Returns databases/tables shared with your account by others.
+    - `FOREIGN`: Returns databases shared with your account by others.
     - `FEDERATED`: Returns external databases connected through AWS Lake Formation.
 
     When this item is unset or empty, the configuration returns an empty Optional, and the field is simply not set on the `GetDatabasesRequest` — in which case AWS Glue falls back to its own default, which only returns local databases.
