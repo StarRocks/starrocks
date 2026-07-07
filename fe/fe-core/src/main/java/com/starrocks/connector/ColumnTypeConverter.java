@@ -564,7 +564,10 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(TimestampType timestampType) {
-            return DATETIME;
+            // Paimon TIMESTAMP is timezone-naive (NTZ): carry the flag so the BE reader keeps the
+            // wall clock unshifted. The flag rides along on the type (survives clone, ignored by
+            // equals) and is read at slot toThrift. TIMESTAMP_LTZ (below) is a UTC instant -> default.
+            return ScalarType.createDatetimeNtzType();
         }
 
         public Type visit(LocalZonedTimestampType timestampType) {
