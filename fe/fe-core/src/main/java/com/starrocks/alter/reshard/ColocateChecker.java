@@ -348,7 +348,33 @@ public class ColocateChecker {
         if (tabletIdToRange.isEmpty()) {
             return true;
         }
+        return reconcileTabletPackPlacement(tabletIdToRange, expectedRanges, colocateColumnCount,
+                db.getFullName() + "." + table.getName());
+    }
 
+    /**
+     * Reads the actual PACK shard-group membership of the given tablets from StarOS in bounded
+     * batches, finds the ones whose membership disagrees with the {@link ColocateRange} their range
+     * belongs to, and reassigns each into its expected PACK shard group with the minimal add/remove
+     * delta. Shared by the placement backstop ({@link #reconcileTablePackPlacement}) and the
+     * post-publish split path ({@code SplitTabletJob}).
+     *
+     * <p>Best-effort per tablet. Catches the expected StarOS checked failures — the batched
+     * {@link StarOSAgent#getShardInfo} {@link StarClientException} and the per-tablet
+     * {@link StarOSAgent#reassignShardGroups} {@link DdlException} — but is intentionally not
+     * blanket-wrapped, so an unexpected bug still surfaces in the caller's diagnostics. Membership
+     * ({@code group_ids}) is central StarMgr state, independent of the worker group, so the read uses
+     * {@link StarOSAgent#DEFAULT_WORKER_GROUP_ID}.
+     *
+     * @return {@code true} iff nothing needed repair: the membership read covered every tablet and no
+     *         tablet was misplaced. A StarOS query failure, an incomplete response (a requested tablet
+     *         missing from the result — treated as an unread membership, never as "no groups", so it
+     *         cannot turn into a bogus add-only reassignment), or any misplaced tablet (reassignment
+     *         issued, confirmed by a re-read) ⇒ {@code false}.
+     */
+    static boolean reconcileTabletPackPlacement(Map<Long, Range<Tuple>> tabletIdToRange,
+                                                List<ColocateRange> expectedRanges, int colocateColumnCount,
+                                                String logContext) {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
@@ -362,16 +388,15 @@ public class ColocateChecker {
                     tabletIdToGroupIds.put(shardInfo.getShardId(), shardInfo.getGroupIdsList());
                 }
             } catch (StarClientException e) {
-                LOG.warn("failed to query shard membership for PACK reconcile of table {}.{}: {}",
-                        db.getFullName(), table.getName(), e.getMessage());
+                LOG.warn("failed to query shard membership for PACK reconcile of {}: {}",
+                        logContext, e.getMessage());
                 return false;
             }
         }
         // An incomplete response is an unread membership, not "tablet has no groups": treat it as a
         // failed read and retry next cycle, so a missing StarOS entry cannot become a bogus repair.
         if (!tabletIdToGroupIds.keySet().containsAll(tabletIdToRange.keySet())) {
-            LOG.warn("incomplete shard membership response during PACK reconcile of table {}.{}; retrying",
-                    db.getFullName(), table.getName());
+            LOG.warn("incomplete shard membership response during PACK reconcile of {}; retrying", logContext);
             return false;
         }
 
@@ -389,13 +414,12 @@ public class ColocateChecker {
                     : List.of(misplaced.currentPackGroupId());
             try {
                 starOSAgent.reassignShardGroups(misplaced.tabletId(), addGroupIds, removeGroupIds);
-                LOG.info("reassigned tablet {} from PACK shard group {} to {} in table {}.{}",
+                LOG.info("reassigned tablet {} from PACK shard group {} to {} in {}",
                         misplaced.tabletId(), misplaced.currentPackGroupId(), misplaced.expectedPackGroupId(),
-                        db.getFullName(), table.getName());
+                        logContext);
             } catch (DdlException e) {
-                LOG.warn("failed to reassign tablet {} to PACK shard group {} in table {}.{}: {}",
-                        misplaced.tabletId(), misplaced.expectedPackGroupId(),
-                        db.getFullName(), table.getName(), e.getMessage());
+                LOG.warn("failed to reassign tablet {} to PACK shard group {} in {}: {}",
+                        misplaced.tabletId(), misplaced.expectedPackGroupId(), logContext, e.getMessage());
             }
         }
         // Settled only when nothing needed repair; if reassignments were issued, stay unstable so
