@@ -1354,7 +1354,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Scan tableScan = scan;
-        return new CloseableIterator<>() {
+        return new SynchronizedCloseableIterator<>(new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -1403,7 +1403,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             public void close() {
                 closePlannedTaskIterator();
             }
-        };
+        });
     }
 
     private boolean hasPositionDeletes(FileScanTask task) {
