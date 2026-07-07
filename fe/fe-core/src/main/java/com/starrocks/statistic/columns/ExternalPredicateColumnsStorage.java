@@ -22,6 +22,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -140,7 +141,7 @@ public class ExternalPredicateColumnsStorage {
      */
     public List<ExternalColumnUsage> queryGlobalState(String tableUuidHash, EnumSet<ColumnUsage.UseCase> useCases) {
         StringBuilder sb = new StringBuilder(QUERY);
-        sb.append(" AND `table_uuid` = '").append(tableUuidHash).append("'");
+        sb.append(" AND `table_uuid` = '").append(SqlUtils.escapeSqlString(tableUuidHash)).append("'");
 
         if (!useCases.isEmpty()) {
             String useCaseRegex = useCases.stream().map(ColumnUsage.UseCase::toString).collect(Collectors.joining("|"));
@@ -200,14 +201,16 @@ public class ExternalPredicateColumnsStorage {
         for (ExternalColumnUsage usage : diff) {
             StringWriter sw = new StringWriter();
 
+            // catalog/db/table/column names come from external catalog metadata and are not trusted;
+            // escape before embedding them in the single-quoted SQL literals of INSERT_VALUE.
             VelocityContext context = new VelocityContext();
             context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
-            context.put("tableUuidHash", usage.getTableUuidHash());
-            context.put("columnName", usage.getColumnName());
-            context.put("catalogName", usage.getCatalogName());
-            context.put("dbName", usage.getDbName());
-            context.put("tableName", usage.getTableName());
-            context.put("usage", usage.getUseCaseString());
+            context.put("tableUuidHash", SqlUtils.escapeSqlString(usage.getTableUuidHash()));
+            context.put("columnName", SqlUtils.escapeSqlString(usage.getColumnName()));
+            context.put("catalogName", SqlUtils.escapeSqlString(usage.getCatalogName()));
+            context.put("dbName", SqlUtils.escapeSqlString(usage.getDbName()));
+            context.put("tableName", SqlUtils.escapeSqlString(usage.getTableName()));
+            context.put("usage", SqlUtils.escapeSqlString(usage.getUseCaseString()));
             context.put("lastUsed", DateUtils.formatDateTimeUnix(usage.getLastUsed()));
 
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_VALUE);

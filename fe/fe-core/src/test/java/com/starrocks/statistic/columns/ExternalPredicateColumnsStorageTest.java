@@ -97,6 +97,33 @@ class ExternalPredicateColumnsStorageTest extends PlanTestBase {
     }
 
     @Test
+    public void testPersistEscapesSpecialCharacters() {
+        // catalog/db/table/column names originate from external catalog metadata and must not be
+        // trusted; a quote or backslash in one of them must not break out of the SQL string literal.
+        TableKeeper keeper = ExternalPredicateColumnsStorage.createKeeper();
+        keeper.run();
+        ConnectContext.ScopeGuard guard = connectContext.bindScope();
+
+        SimpleExecutor repo = Mockito.mock(SimpleExecutor.class);
+        ExternalPredicateColumnsStorage instance = new ExternalPredicateColumnsStorage(repo);
+        instance.restore();
+        instance.finishRestore(LocalDateTime.parse("2024-11-10T01:00:00"));
+
+        ExternalColumnUsage usage = new ExternalColumnUsage("hash1", "cat'alog", "db\\name", "t1", "c'1",
+                ColumnUsage.UseCase.PREDICATE);
+        usage.setLastUsed(LocalDateTime.parse("2024-11-20T01:02:03"));
+        instance.persist(List.of(usage));
+
+        Mockito.verify(repo).executeDML(String.format(
+                "INSERT INTO _statistics_.external_predicate_columns(fe_id, table_uuid, column_name, catalog_name, "
+                        + "db_name, table_name, usage, last_used ) VALUES "
+                        + "('%s', 'hash1', 'c''1', 'cat''alog', 'db\\\\name', 't1', 'predicate', '2024-11-20 01:02:03')",
+                feName));
+
+        guard.close();
+    }
+
+    @Test
     public void testSerialization() {
         ExternalColumnUsage usage1 = new ExternalColumnUsage("hash1", "iceberg_catalog", "db1", "t1", "c1",
                 ColumnUsage.UseCase.PREDICATE);
