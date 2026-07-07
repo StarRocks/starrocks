@@ -315,6 +315,20 @@ Status MemTable::finalize() {
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
+            } else if (_has_op_slot && !_merge_condition.empty()) {
+                // The op-aware spill path (keep_op_column) skips _split_upserts_deletes, which is where a
+                // DELETE combined with a merge condition is rejected. Enforce the same rejection here so
+                // such a load fails consistently instead of the spill merge silently applying the delete.
+                size_t op_column_id = _result_chunk->num_columns() - 1;
+                RawDataVisitor visitor;
+                RETURN_IF_ERROR(_result_chunk->get_column_by_index(op_column_id)->accept(&visitor));
+                const auto* ops = visitor.result();
+                for (size_t i = 0; i < _result_chunk->num_rows(); i++) {
+                    if (ops[i] == TOpType::DELETE) {
+                        return Status::InternalError(fmt::format(
+                                "memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
+                    }
+                }
             }
             if (_keys_type == KeysType::PRIMARY_KEYS) {
                 std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
