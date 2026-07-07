@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 description: "SHOW PROCESSLIST 列出服务器内线程当前正在执行的操作。"
->>>>>>> 49c0466fd0 ([Doc] add server column (#75672))
 ---
 
 # SHOW PROCESSLIST
