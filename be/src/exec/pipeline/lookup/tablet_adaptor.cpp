@@ -349,6 +349,48 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
                      << " rssid=" << rssid << " "
                      << _glm_ctx->debug_dump_ranges(static_cast<int32_t>(_tablet_id))
                      << " live_" << _glm_ctx->debug_dump_ranges(_rowsets);
+        // [GLM-DIAG sstprov] Dump the tablet's PK-index SST filesets with split provenance, to pin
+        // whether the failing rssid was served by a shared=1 (inherited-from-split-parent) SST vs a
+        // shared=0 (locally-produced compaction) SST. A shared SST with shared_version>0 rewrites
+        // every key it serves to the single value (shared_rssid + rssid_offset) — see
+        // PersistentIndexSstable::multi_get. So `shared_hit_idx>=0` means the failing rssid was
+        // produced by that inherited SST => (S1) split-time handoff; a shared=0 SST that should cover
+        // the key yet lost to the inherited one => (S2) post-split compaction gap. See goal.
+        {
+            const auto& meta = _tablet.metadata();
+            std::string dump;
+            int shared_hit_idx = -1;
+            int n_shared = 0, n_local = 0, n_sst = 0;
+            int64_t meta_version = (meta != nullptr) ? meta->version() : -1;
+            if (meta != nullptr && meta->has_sstable_meta()) {
+                const auto& ssts = meta->sstable_meta().sstables();
+                n_sst = ssts.size();
+                for (int i = 0; i < ssts.size(); ++i) {
+                    const auto& s = ssts.Get(i);
+                    const bool is_shared = s.shared();
+                    if (is_shared) {
+                        ++n_shared;
+                    } else {
+                        ++n_local;
+                    }
+                    if (is_shared && s.has_shared_version() && s.shared_version() > 0) {
+                        const int64_t eff = static_cast<int64_t>(s.shared_rssid()) + s.rssid_offset();
+                        if (eff == rssid) {
+                            shared_hit_idx = i;
+                        }
+                    }
+                    dump += fmt::format(
+                            " sst[{}]{{shared={} shared_rssid={} shared_version={} rssid_offset={} "
+                            "has_range={} file={}}}",
+                            i, is_shared ? 1 : 0, s.shared_rssid(), s.shared_version(), s.rssid_offset(),
+                            s.has_range() ? 1 : 0, s.filename());
+                }
+            }
+            LOG(WARNING) << "[GLM-DIAG sstprov] query_id=" << _query_id_str << " tablet=" << _tablet_id
+                         << " rssid=" << rssid << " meta_version=" << meta_version << " n_sst=" << n_sst
+                         << " n_shared=" << n_shared << " n_local=" << n_local
+                         << " shared_hit_idx=" << shared_hit_idx << dump;
+        }
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
     }
 
