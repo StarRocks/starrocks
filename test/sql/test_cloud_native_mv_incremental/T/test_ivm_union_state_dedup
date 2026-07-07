@@ -1,0 +1,176 @@
+-- name: test_ivm_union_state_dedup @cloud
+-- Union-family aggregates (bitmap_union / hll_union / percentile_union) collapse to a single
+-- column in an incremental MV: the visible output IS the intermediate state, no hidden
+-- __AGG_STATE_ copy. On the cloud-native path this covers what test_ivm_metric_state_agg does
+-- not: a mixed MV (collapsed unions next to a finalizable sum), two same-signature unions bound
+-- to distinct source columns, and a wrapped union that must NOT collapse -- each verified across
+-- an initial refresh and an incremental delta refresh against a fresh GROUP BY (diff = 0).
+CREATE TABLE t (k INT, v INT, s VARCHAR(20), s2 VARCHAR(20), d DECIMAL(10, 2)) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1,100,'a','p',1.00),(1,200,'a','q',2.00),(2,300,'b','r',3.00);
+
+-- S1: pure unions (bitmap + hll + percentile) -- all collapse
+CREATE MATERIALIZED VIEW mv_pure
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(bitmap_hash(s)) AS b, hll_union(hll_hash(s)) AS h, percentile_union(percentile_hash(d)) AS p
+   FROM t GROUP BY k;
+
+-- S2: mixed -- collapsed hll + finalizable sum + collapsed bitmap
+CREATE MATERIALIZED VIEW mv_mixed
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, hll_union(hll_hash(s)) AS h, sum(v) AS ss, bitmap_union(bitmap_hash(s2)) AS b
+   FROM t GROUP BY k;
+
+-- S3: two same-signature bitmap_union columns on distinct sources
+CREATE MATERIALIZED VIEW mv_two_bmp
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(bitmap_hash(s)) AS b1, bitmap_union(bitmap_hash(s2)) AS b2
+   FROM t GROUP BY k;
+
+-- S4: wrapped union -- must NOT collapse (visible output is the finalized count)
+CREATE MATERIALIZED VIEW mv_wrapped
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_count(bitmap_union(bitmap_hash(s2))) AS cnt FROM t GROUP BY k;
+
+REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+
+-- initial values
+SELECT k, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k;
+SELECT k, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k;
+SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k;
+SELECT k, cnt FROM mv_wrapped ORDER BY k;
+
+-- delta: append into both groups, refresh incrementally
+INSERT INTO t VALUES (1,300,'c','s',4.00),(2,400,'b','r',5.00);
+REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+
+-- post-delta values
+SELECT k, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k;
+SELECT k, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k;
+SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k;
+SELECT k, cnt FROM mv_wrapped ORDER BY k;
+
+-- MV incremental output equals a fresh GROUP BY (both directions)
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, bitmap_count(b), hll_cardinality(h) FROM mv_pure
+    EXCEPT SELECT k, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s))) FROM t GROUP BY k) x;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s))) FROM t GROUP BY k
+    EXCEPT SELECT k, bitmap_count(b), hll_cardinality(h) FROM mv_pure) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed
+    EXCEPT SELECT k, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2))) FROM t GROUP BY k) x;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2))) FROM t GROUP BY k
+    EXCEPT SELECT k, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp
+    EXCEPT SELECT k, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2))) FROM t GROUP BY k) x;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2))) FROM t GROUP BY k
+    EXCEPT SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, cnt FROM mv_wrapped
+    EXCEPT SELECT k, bitmap_count(bitmap_union(bitmap_hash(s2))) FROM t GROUP BY k) x;
+
+-- refresh ran as INCREMENTAL (not a PCT full rebuild)
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_mixed%' OR DEFINITION LIKE '%mv_mixed%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
+
+-- name: test_ivm_union_state_dedup_aggbase @cloud
+-- Same dedup layouts rolled up from an AGGREGATE base (bitmap_union/hll_union/percentile_union
+-- over BITMAP_UNION/HLL_UNION/PERCENTILE_UNION columns, sum over a SUM column). This is the path
+-- test_ivm_metric_state_agg exercises for single unions; here it covers the mixed / same-signature
+-- / wrapped layouts, which the DUPLICATE-base case above cannot reach on the aggregate-rollup path.
+CREATE TABLE ta (k INT, city INT, cnt BIGINT SUM,
+                 uv1 BITMAP BITMAP_UNION, uv2 BITMAP BITMAP_UNION, hv HLL HLL_UNION, pv PERCENTILE PERCENTILE_UNION)
+AGGREGATE KEY(k, city) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ta VALUES
+  (1,100,5,to_bitmap(10),to_bitmap(70),hll_hash(10),percentile_hash(10)),
+  (1,100,3,to_bitmap(20),to_bitmap(70),hll_hash(20),percentile_hash(20)),
+  (1,200,2,to_bitmap(30),to_bitmap(70),hll_hash(30),percentile_hash(30)),
+  (2,100,4,to_bitmap(40),to_bitmap(80),hll_hash(40),percentile_hash(100));
+
+-- pure unions (all collapse)
+CREATE MATERIALIZED VIEW mv_agg_pure
+DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(uv1) AS b, hll_union(hv) AS h, percentile_union(pv) AS p FROM ta GROUP BY k;
+
+-- mixed -- finalizable sum (first) + collapsed hll + collapsed bitmap
+CREATE MATERIALIZED VIEW mv_agg_mixed
+DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, sum(cnt) AS ss, hll_union(hv) AS h, bitmap_union(uv1) AS b FROM ta GROUP BY k;
+
+-- two same-signature bitmap_union columns on distinct sources
+CREATE MATERIALIZED VIEW mv_agg_two
+DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_union(uv1) AS b1, bitmap_union(uv2) AS b2 FROM ta GROUP BY k;
+
+-- wrapped union -- must NOT collapse
+CREATE MATERIALIZED VIEW mv_agg_wrapped
+DISTRIBUTED BY HASH(k) BUCKETS 2 REFRESH DEFERRED MANUAL PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, bitmap_count(bitmap_union(uv1)) AS cnt FROM ta GROUP BY k;
+
+REFRESH MATERIALIZED VIEW mv_agg_pure WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_mixed WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_two WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_wrapped WITH SYNC MODE;
+
+-- initial values
+SELECT k, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_agg_pure ORDER BY k;
+SELECT k, ss, hll_cardinality(h), bitmap_count(b) FROM mv_agg_mixed ORDER BY k;
+SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_agg_two ORDER BY k;
+SELECT k, cnt FROM mv_agg_wrapped ORDER BY k;
+
+-- delta: append into existing groups and add new cities, refresh incrementally
+INSERT INTO ta VALUES
+  (1,300,6,to_bitmap(50),to_bitmap(90),hll_hash(50),percentile_hash(40)),
+  (2,200,1,to_bitmap(40),to_bitmap(80),hll_hash(40),percentile_hash(200));
+REFRESH MATERIALIZED VIEW mv_agg_pure WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_mixed WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_two WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_agg_wrapped WITH SYNC MODE;
+
+-- post-delta values
+SELECT k, bitmap_count(b), hll_cardinality(h), ROUND(percentile_approx_raw(p, 0.5), 3) FROM mv_agg_pure ORDER BY k;
+SELECT k, ss, hll_cardinality(h), bitmap_count(b) FROM mv_agg_mixed ORDER BY k;
+SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_agg_two ORDER BY k;
+SELECT k, cnt FROM mv_agg_wrapped ORDER BY k;
+
+-- MV incremental output equals a fresh GROUP BY roll-up
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, bitmap_count(b), hll_cardinality(h) FROM mv_agg_pure
+    EXCEPT SELECT k, bitmap_count(bitmap_union(uv1)), hll_cardinality(hll_union(hv)) FROM ta GROUP BY k) x;
+SELECT COUNT(*) AS diff_reverse FROM (
+    SELECT k, bitmap_count(bitmap_union(uv1)), hll_cardinality(hll_union(hv)) FROM ta GROUP BY k
+    EXCEPT SELECT k, bitmap_count(b), hll_cardinality(h) FROM mv_agg_pure) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, ss, hll_cardinality(h), bitmap_count(b) FROM mv_agg_mixed
+    EXCEPT SELECT k, sum(cnt), hll_cardinality(hll_union(hv)), bitmap_count(bitmap_union(uv1)) FROM ta GROUP BY k) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, bitmap_count(b1), bitmap_count(b2) FROM mv_agg_two
+    EXCEPT SELECT k, bitmap_count(bitmap_union(uv1)), bitmap_count(bitmap_union(uv2)) FROM ta GROUP BY k) x;
+SELECT COUNT(*) AS diff FROM (
+    SELECT k, cnt FROM mv_agg_wrapped
+    EXCEPT SELECT k, bitmap_count(bitmap_union(uv1)) FROM ta GROUP BY k) x;
+
+SELECT DISTINCT get_json_string(EXTRA_MESSAGE,'$.refreshMode') AS mode, STATE
+FROM information_schema.task_runs
+WHERE (EXTRA_MESSAGE LIKE '%mv_agg_mixed%' OR DEFINITION LIKE '%mv_agg_mixed%') AND get_json_double(EXTRA_MESSAGE,'$.processStartTime') > 0
+ORDER BY 1, 2;
