@@ -20,11 +20,12 @@
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
-#include "connector/connector_sink_profile.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
 #include "connector/utils.h"
+#include "connector_primitive/connector_sink_commit.h"
+#include "connector_primitive/connector_sink_profile.h"
 #include "formats/file_writer.h"
 #include "fs/fs_fwd.h"
-#include "storage/load_chunk_spiller.h"
 
 namespace starrocks {
 
@@ -39,10 +40,6 @@ class FragmentContext;
 namespace starrocks::connector {
 
 class ConnectorSinkSpillExecutor;
-
-using CommitResult = formats::FileWriter::CommitResult;
-using CommitFunc = std::function<void(const CommitResult& result)>;
-using ErrorHandleFunc = std::function<void(const Status& status)>;
 
 class AsyncFlushStreamPoller;
 

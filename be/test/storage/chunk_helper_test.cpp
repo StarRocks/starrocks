@@ -25,7 +25,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gtest/gtest.h"
-#include "storage/primitive/schema_helper.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace starrocks {
 

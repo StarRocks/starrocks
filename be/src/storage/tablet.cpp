@@ -61,7 +61,6 @@
 #include "storage/compaction_task.h"
 #include "storage/default_compaction_policy.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/tablet_basic_info.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/size_tiered_compaction_policy.h"
@@ -70,6 +69,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 

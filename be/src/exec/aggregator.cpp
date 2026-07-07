@@ -30,8 +30,8 @@
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
@@ -46,7 +46,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
 
 namespace starrocks {
@@ -639,8 +639,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             const TypeDescriptor& arg_type = arg_types[0];
+            bool is_arrow_input = fn.__isset.input_type && fn.input_type == "arrow";
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
-                                                state->func_version());
+                                                state->func_version(), is_arrow_input);
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",

@@ -21,8 +21,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/primary_key_encoding_types.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
 

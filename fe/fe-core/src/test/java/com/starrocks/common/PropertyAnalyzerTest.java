@@ -49,7 +49,6 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -281,29 +280,6 @@ public class PropertyAnalyzerTest {
         Map<String, String> property = new HashMap<>();
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
         Assertions.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
-    }
-
-    @Test
-    public void testPersistentIndexType() throws AnalysisException {
-        // empty property
-        Map<String, String> property = new HashMap<>();
-        Assertions.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
-
-        Map<String, String> property2 = new HashMap<>();
-        property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
-        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property2));
-
-        Map<String, String> property3 = new HashMap<>();
-        property3.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "local");
-        Assertions.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property3));
-
-        try {
-            Map<String, String> property4 = new HashMap<>();
-            property4.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL2");
-            TPersistentIndexType type = PropertyAnalyzer.analyzePersistentIndexType(property4);
-        } catch (AnalysisException e) {
-            Assertions.assertTrue(e.getMessage().contains("Invalid persistent index type: LOCAL2"));
-        }
     }
 
     @Test

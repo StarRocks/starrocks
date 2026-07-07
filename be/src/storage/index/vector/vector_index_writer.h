@@ -22,8 +22,8 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/index/vector/vector_index_builder_factory.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/bitmap_value.h"
 
 namespace starrocks {

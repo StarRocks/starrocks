@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
@@ -81,14 +82,27 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+    // table_uuid isn't part of the projection and the predicate already scopes rows to a single
+    // logical table via table_uuid in (hash, raw) (see buildTableUUIDInPredicate), so grouping by
+    // column_name alone is enough to merge a table's data regardless of which representation any
+    // given partition currently uses.
+    //
+    // The inner subquery additionally dedups to at most one row per (partition_name, column_name),
+    // keeping only the one with the latest update_time. This is what actually prevents double-
+    // counting when a partition has been re-collected (fresh row under the hashed key) but its
+    // superseded raw-keyed row hasn't been cleaned up yet - correctness does not depend on that
+    // best-effort cleanup (see ExternalFullStatisticsCollectJob#cleanupStaleRawKeyedRows) succeeding.
     private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
                     + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
                     + " max(update_time)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by partition_name, column_name order by update_time desc) as rn"
                     + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
-                    + " WHERE $predicate"
-                    + " GROUP BY table_uuid, column_name";
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1"
+                    + " GROUP BY column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
@@ -96,11 +110,16 @@ public class StatisticSQLBuilder {
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
+    // Same dedup rationale as QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE, keyed by column_name only
+    // (external_histogram_statistics has no partition dimension).
     private static final String QUERY_EXTERNAL_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT), column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by column_name order by update_time desc) as rn"
                     + " FROM " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
-                    + " WHERE $predicate";
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1";
 
     private static final String QUERY_MULTI_COLUMNS_COMBINED_STATISTICS_TEMPLATE =
             "SELECT cast(" + STATISTIC_QUERY_MULTI_COLUMN_VERSION + " as INT), db_id, table_id, column_ids, ndv"
@@ -206,18 +225,45 @@ public class StatisticSQLBuilder {
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
+        String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
             VelocityContext context = new VelocityContext();
             context.put("type", type);
             context.put("predicate",
-                    "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
+                    tableUUIDPredicate + " and column_name in (" +
                             names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
             querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
         });
 
         return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    // external_column_statistics / external_histogram_statistics store table_uuid hashed
+    // (StatisticUtils.hashTableUuidForPkStorage) to keep the PRIMARY KEY within BE's
+    // primary_key_limit_size. Matching on both the hashed and the raw value keeps historical
+    // rows (written before this hashing was introduced) visible until they naturally age out.
+    // tableUUID is derived from catalog/db/table names (Table.getUUID()), so it must be escaped
+    // like any other untrusted value before being embedded into a string literal.
+    private static String buildTableUUIDInPredicate(String tableUUID) {
+        String hash = escapeForDoubleQuotedSqlString(StatisticUtils.hashTableUuidForPkStorage(tableUUID));
+        String raw = escapeForDoubleQuotedSqlString(tableUUID);
+        return "table_uuid in (\"" + hash + "\", \"" + raw + "\")";
+    }
+
+    // Same as buildTableUUIDInPredicate but single-quoted, for call sites that build their SQL with '...'.
+    private static String buildTableUUIDInPredicateQuoted(String tableUUID) {
+        String hash = SqlUtils.escapeSqlString(StatisticUtils.hashTableUuidForPkStorage(tableUUID));
+        String raw = SqlUtils.escapeSqlString(tableUUID);
+        return "table_uuid in ('" + hash + "', '" + raw + "')";
+    }
+
+    // SqlUtils.escapeSqlString only targets single-quoted literals (escapes backslash then single
+    // quote); this is the double-quoted equivalent (escapes backslash then double quote), for the
+    // handful of templates in this class that use "..." string literals.
+    private static String escapeForDoubleQuotedSqlString(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     public static String buildMultiColumnCombinedStatisticsSQL(List<Long> tableIds) {
@@ -280,7 +326,33 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildDropExternalStatSQL(String tableUUID) {
-        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE TABLE_UUID = '" + tableUUID + "'";
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID);
+    }
+
+    // Cleans up the stale raw-keyed row(s) for exactly the (partition, column) pairs just
+    // (re-)written under the hashed table_uuid, so a partition never has both a raw and a hashed
+    // row alive at once. Purely storage hygiene - buildQueryExternalFullStatisticsSQL's dedup-by-
+    // update_time already makes correctness independent of this cleanup succeeding. Only ever
+    // targets the raw uuid - never the hash.
+    public static String buildDropExternalStatSQLForPartitions(String rawTableUUID, List<String> partitionNames,
+                                                                List<String> columnNames) {
+        String partitionsIn = partitionNames.stream()
+                .map(p -> "'" + SqlUtils.escapeSqlString(p) + "'").collect(Collectors.joining(", "));
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
+                " AND PARTITION_NAME IN (" + partitionsIn + ")" +
+                " AND COLUMN_NAME IN (" + columnsIn + ")";
+    }
+
+    // Same cleanup purpose as buildDropExternalStatSQLForPartitions, for external_histogram_statistics
+    // (PK is table_uuid + column_name, no partition dimension).
+    public static String buildDropExternalHistogramSQLForRawUuid(String rawTableUUID, List<String> columnNames) {
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME +
+                " where table_uuid = '" + SqlUtils.escapeSqlString(rawTableUUID) + "' and column_name in (" + columnsIn + ")";
     }
 
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
@@ -329,7 +401,7 @@ public class StatisticSQLBuilder {
 
         List<String> predicateList = Lists.newArrayList();
         if (tableUUID != null) {
-            predicateList.add("table_uuid = '" + tableUUID + "'");
+            predicateList.add(buildTableUUIDInPredicateQuoted(tableUUID));
         }
 
         if (!columnNames.isEmpty()) {
@@ -354,8 +426,8 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {
-        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where table_uuid = '"
-                + tableUUID + "' and column_name in (" + Joiner.on(", ")
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where "
+                + buildTableUUIDInPredicateQuoted(tableUUID) + " and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 

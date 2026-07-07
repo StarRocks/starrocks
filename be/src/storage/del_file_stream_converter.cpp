@@ -19,9 +19,9 @@
 #include "column/schema.h"
 #include "column/serde/column_array_serde.h"
 #include "gutil/strings/substitute.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {

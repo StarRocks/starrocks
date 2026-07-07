@@ -73,12 +73,12 @@
 #include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/primitive/storage_ids.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "storage_primitive/storage_ids.h"
 
 namespace starrocks {
 

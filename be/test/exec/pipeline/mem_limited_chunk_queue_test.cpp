@@ -29,9 +29,9 @@
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

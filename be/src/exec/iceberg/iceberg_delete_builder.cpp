@@ -131,18 +131,20 @@ Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file
     iceberg_schema.__set_fields(schema_fields);
 
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
-    scanner_ctx->timezone = timezone;
+    scanner_ctx->format_scan_context.timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
-    scanner_ctx->materialized_columns = std::move(columns);
+    scanner_ctx->format_scan_context.materialized_columns = std::move(columns);
     scanner_ctx->format_scan_context.stats = &app_stats;
     scanner_ctx->fs = _ctx.fs;
     scanner_ctx->datacache_options = _ctx.datacache_options;
     scanner_ctx->format_scan_context.options = _ctx.format_scan_context.options;
     scanner_ctx->format_scan_context.options.enable_split_tasks = false;
-    scanner_ctx->table_specific.iceberg_schema = &iceberg_schema;
+    scanner_ctx->format_scan_context.lake_schema = &iceberg_schema;
+    scanner_ctx->format_scan_context.scan_range_offset = scan_range.offset;
+    scanner_ctx->format_scan_context.scan_range_length = scan_range.length;
     scanner_ctx->scan_range = &scan_range;
-    scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
-    RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
+    scanner_ctx->format_scan_context.lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
+    RETURN_IF_ERROR(reader->init(&scanner_ctx->format_scan_context));
 
     while (true) {
         ASSIGN_OR_RETURN(ChunkPtr chunk,

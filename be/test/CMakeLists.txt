@@ -80,8 +80,6 @@ set(EXEC_FILES
         ./exec/file_scan_node_rejected_record_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
-        ./exec/json_parser_test.cpp
-        ./exec/cache_stats_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
         ./exec/parquet_schema_builder_test.cpp
@@ -108,40 +106,18 @@ set(EXEC_FILES
         ./exec/hdfs_scanner/jni_scanner_test.cpp
         ./exprs/agg/data_sketch/ds_theta_test.cpp
         ./exprs/agg/json_each_test.cpp
-        ./exprs/agg/aggregate_factory_extension_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
-        ./exprs/agg/aggregate_traits_test.cpp
-        ./exprs/arithmetic_operation_test.cpp
-        ./exprs/decimal_binary_function_test.cpp
-        ./exprs/binary_function_test.cpp
-        ./exprs/binary_predicate_test.cpp
-        ./exprs/bitmap_functions_test.cpp
-        ./exprs/cast_expr_test.cpp
-        ./exprs/unary_function_test.cpp
-        ./exprs/decimal_cast_expr_decimal_test.cpp
-        ./exprs/decimal_cast_expr_integer_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
-        ./exprs/decimal_cast_expr_time_test.cpp
-        ./exprs/decimal_cast_expr_decimalv2_test.cpp
-        ./exprs/coalesce_expr_test.cpp
-        ./exprs/compound_predicate_test.cpp
-        ./exprs/condition_expr_test.cpp
-        ./exprs/encryption_functions_test.cpp
-        ./exprs/function_call_expr_test.cpp
-        ./exprs/if_expr_test.cpp
         ./exprs/flat_json_functions_test.cpp
-        ./exprs/like_test.cpp
-        ./exprs/math_functions_test.cpp
-        ./exprs/null_if_expr_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/variant_functions_test.cpp
-        ./exprs/min_max_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
+        ./exprs/table_function/java_udtf_factory_test.cpp
         ./exprs/dict_expr_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
@@ -207,8 +183,6 @@ set(EXEC_FILES
         ./exec/data_sinks/memory_scratch_sink_test.cpp
         ./exec/data_sinks/mysql_result_writer_test.cpp
         ./runtime/exec_env_test.cpp
-        ./exec/jdbc/type_checker_test.cpp
-        ./exec/jdbc/type_checker_xml_loader_test.cpp
         ./storage/flat_json_metrics_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
@@ -232,10 +206,6 @@ if (NOT APPLE)
     )
 endif ()
 
-if (STARROCKS_JIT_ENABLE)
-    set(EXEC_FILES ${EXEC_FILES} ./exprs/jit_cache_test.cpp)
-endif()
-
 add_library(be_test_cxa_throw_wrap INTERFACE)
 if (NOT APPLE)
     target_sources(be_test_cxa_throw_wrap INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/base/cxa_throw_wrap.cpp)
@@ -245,10 +215,16 @@ function(target_link_be_test_cxa_throw_wrap TEST_TARGET)
     target_link_libraries(${TEST_TARGET} be_test_cxa_throw_wrap)
 endfunction()
 
+# Weak getJNIEnv fallback shared by the focused test binaries that link Runtime
+# but not libhdfs (which provides the real symbol). See base/jni_env_stub.cpp.
+set(BE_TEST_JNI_ENV_STUB ${CMAKE_CURRENT_SOURCE_DIR}/base/jni_env_stub.cpp)
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
+add_subdirectory(exec_primitive)
+add_subdirectory(connector_primitive)
 add_subdirectory(exec)
 add_subdirectory(connector)
 add_subdirectory(formats)
@@ -259,10 +235,10 @@ add_subdirectory(compute_env)
 add_subdirectory(orchestration)
 add_subdirectory(data_workflows)
 add_subdirectory(exprs)
-add_subdirectory(udf)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(fs_ext)
+add_subdirectory(module)
 add_subdirectory(platform)
 add_subdirectory(geo)
 add_subdirectory(cache)
@@ -283,27 +259,24 @@ endif ()
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
 if (NOT STARROCKS_JIT_ENABLE)
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_CORE_TEST_NO_JIT")
+    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
 else()
     SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif ()
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ServiceBE Service ${TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
+STARROCKS_FORCE_LOAD_LIBS(starrocks_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 SET(DW_TEST_FILES
-    ./storage/aggregate_iterator_test.cpp
     ./storage/base_compaction_test.cpp
     ./storage/binlog_builder_test.cpp
     ./storage/binlog_file_test.cpp
     ./storage/binlog_manager_test.cpp
     ./storage/binlog_reader_test.cpp
     ./storage/binlog_test_base.cpp
-    ./storage/chunk_aggregator_test.cpp
     ./storage/chunk_helper_test.cpp
-    ./storage/column_aggregator_test.cpp
     ./storage/column_predicate_inverted_index_fallback_test.cpp
     ./storage/compaction_manager_test.cpp
     ./storage/compaction_parallelization_test.cpp
@@ -389,9 +362,8 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_fileset_test.cpp
     ./storage/lake/lake_persistent_index_parallel_compact_mgr_test.cpp
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
+    ./storage/lake/load_spill_pipeline_merge_context_test.cpp
     ./storage/lake/tablet_write_log_manager_test.cpp
-    ./storage/load_spill_block_manager_test.cpp
-    ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
     ./storage/metadata_util_test.cpp
@@ -490,7 +462,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
-STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
+STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 
 # =================================================
@@ -500,12 +472,18 @@ if (APPLE)
     target_sources(engine_storage_migration_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 ADD_BE_TEST(storage/lake/compaction_task_test)
+if (APPLE)
+    target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)
 
 # Standalone executable for builtin_functions_fuzzy_test
 ADD_BE_TEST(fuzzy/builtin_functions_fuzzy_test)
+if (APPLE)
+    target_sources(builtin_functions_fuzzy_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
+endif()
 
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)
 add_dependencies(starrocks_dw_test engine_storage_migration_task_test compaction_task_test builtin_functions_fuzzy_test)

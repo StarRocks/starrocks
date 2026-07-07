@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
@@ -347,9 +348,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                                txns.back().gtid());
     }
 
-    // Read base version metadata
-    auto base_metadata_or =
-            tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    // Read base version metadata. This is an object-storage/metacache read that
+    // happens before the PublishTablet apply counters start, so time it here to
+    // keep it from hiding inside the overall publish cost.
+    auto base_metadata_or = [&] {
+        TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+    }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
@@ -408,7 +413,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             }
             txn_log_st = std::vector<TxnLogVector>{{std::move(schema_change_log_or).value()}};
         } else {
-            txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            // Loading the txn log reads one or more log files from object storage
+            // and is otherwise untraced; a slow/throttled read here would hide in
+            // the total publish cost.
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("load_txn_log_latency_us");
+                txn_log_st = load_txn_log(tablet_mgr, tablet_info.get_tablet_ids_in_txn_logs(), txns[i]);
+            }
 
             if (txn_log_st.status().is_not_found()) {
                 if (i == 0) {
@@ -627,8 +638,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
     }
 
-    // Save new metadata
-    RETURN_IF_ERROR(log_applier->finish());
+    // Save new metadata. finish() commits the primary index and writes the new
+    // tablet metadata (and delvecs) to object storage; that metadata write is not
+    // covered by the apply counters, so time the whole step here.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
+        RETURN_IF_ERROR(log_applier->finish());
+    }
 
     delete_files_async(std::move(files_to_delete));
 
@@ -696,6 +712,19 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     merged->MergeFrom(*txn_logs[k]);
                 }
                 merged->clear_load_id();
+                // MergeFrom concatenated each source log's del_op_offsets, but those offsets are in
+                // per-statement-local segment space and this path (unlike batch_apply_opwrite) does not
+                // re-index the merged segment_metas into a global order -- so a later statement's delete
+                // would map onto an earlier statement's segment. Drop them so the merged log uniformly
+                // falls back to the legacy "delete after all segments" ordering (safe; the read path
+                // treats an absent array as "not recorded", see del_op_offset_or_unset()).
+                // TODO: to also preserve intra-transaction upsert/delete order for multi-statement /
+                // merge-commit txns snapshotted through publish_log_version, re-index the merged
+                // segment_metas to a global order here and rebase del_op_offsets to match (as
+                // MetaFileBuilder::add_rowset does via assigned_segment_idx) instead of dropping them.
+                if (merged->has_op_write()) {
+                    merged->mutable_op_write()->clear_del_op_offsets();
+                }
                 if (merged->has_op_write() && merged->op_write().has_rowset()) {
                     auto* rowset = merged->mutable_op_write()->mutable_rowset();
                     int64_t num_rows = 0;
@@ -769,7 +798,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
         for (const auto& segment_meta : rowset.segment_metas()) {
             for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename(segment_meta.filename(), tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
@@ -794,9 +823,9 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
              ++idx, ++cnt) {
             const auto& segment_name = segment_metas[idx].filename();
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_name));
-            // Delete .vi files for this new segment
+            // Delete .vi files for this new segment, named by its recorded owner tablet id.
             for (int64_t vi_id : segment_metas[idx].vector_index_ids()) {
-                auto vi_name = gen_vector_index_filename(segment_name, tablet_id, vi_id);
+                auto vi_name = gen_vector_index_filename_for_segment(segment_metas[idx], vi_id);
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }

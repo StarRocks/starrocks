@@ -17,6 +17,7 @@ set(FORMAT_CORE_TEST_FILES
     disk_range_test.cpp
     io/async_flush_output_stream_test.cpp
     io/formatted_output_stream_file_test.cpp
+    ${BE_TEST_JNI_ENV_STUB}
 )
 
 set(FORMAT_CSV_TEST_FILES
@@ -38,6 +39,7 @@ set(FORMAT_CSV_TEST_FILES
 )
 
 set(FORMAT_JSON_TEST_FILES
+    json/json_parser_test.cpp
     json/binary_column_test.cpp
     json/map_column_test.cpp
     json/nullable_column_test.cpp
@@ -66,12 +68,8 @@ set(FORMAT_ORC_TEST_FILES
 )
 
 set(FORMAT_TEST_LINK_LIBS
-    FormatOrc
-    FormatAvro
-    FormatJson
-    FormatCsv
-    FormatCore
-    ExprCore
+    Formats
+    Expr
     Runtime
     FileSystem
     ChunkCore

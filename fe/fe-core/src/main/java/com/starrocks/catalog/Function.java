@@ -171,6 +171,11 @@ public class Function implements Writable {
     @SerializedName(value = "cloud_configuration")
     private CloudConfiguration cloudConfiguration;
 
+    // Input format passed to the BE ("arrow" for vectorized UDFs; null = the default per-row path).
+    // See TFunction.input_type and CreateFunctionStmt.INPUT_TYPE.
+    @SerializedName(value = "inputType")
+    private String inputType;
+
     // Only used for serialization
     protected Function() {
     }
@@ -248,6 +253,15 @@ public class Function implements Writable {
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
+        inputType = other.inputType;
+    }
+
+    public void setInputType(String inputType) {
+        this.inputType = inputType;
+    }
+
+    public String getInputType() {
+        return inputType;
     }
 
     public FunctionName getFunctionName() {
@@ -789,6 +803,9 @@ public class Function implements Writable {
         }
         if (aggStateDesc != null) {
             fn.setAgg_state_desc(TypeSerializer.toThrift(aggStateDesc));
+        }
+        if (inputType != null) {
+            fn.setInput_type(inputType);
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;

@@ -40,13 +40,12 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/compute_env.h"
 #include "compute_env/staros/staros_worker_runtime.h"
-#include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "exec/exec_env.h"
-#include "exec/jdbc/jdbc_driver_manager.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+#include "module/connector_bootstrap.h"
 #include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
 #include "platform/store_path.h"
@@ -149,6 +148,7 @@ Status init_storage_env(RuntimeEnv* runtime_env, PlatformEnv* platform_env, Comp
     RETURN_IF_ERROR_WITH_WARN(StorageEnv::GetInstance()->init(make_storage_env_options(runtime_env, platform_env)),
                               "init StorageEnv failed");
     StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(compute_env->load_spill_block_merge_executor());
     return Status::OK();
 }
 
@@ -166,9 +166,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": daemon threads start successfully";
 
 #ifndef __APPLE__
-    // init jdbc driver manager
-    EXIT_IF_ERROR(JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
-    LOG(INFO) << process_name << " start step " << start_step++ << ": jdbc driver manager init successfully";
+    EXIT_IF_ERROR(
+            connector::init_builtin_connector_runtime(std::string(getenv("STARROCKS_HOME")) + "/lib/jdbc_drivers"));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": connector runtime init successfully";
 #endif
 
     // init network option
@@ -515,6 +515,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": data workflows env destroy successfully";
 
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
     StorageEnv::GetInstance()->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": storage env destroy successfully";
 

@@ -33,8 +33,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
 #include "storage/options.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -45,6 +43,8 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

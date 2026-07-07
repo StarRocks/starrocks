@@ -42,6 +42,7 @@ class TFileBrokerServiceClient;
 class ThreadPool;
 class TransactionMgr;
 class FrontendServiceClient;
+class LoadSpillBlockMergeExecutor;
 class MetricRegistry;
 template <class T>
 class ClientCache;
@@ -128,6 +129,7 @@ struct RuntimeServices {
     query_cache::CacheManager* cache_mgr = nullptr;
     spill::DirManager* spill_dir_mgr = nullptr;
     spill::GlobalSpillManager* global_spill_manager = nullptr;
+    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor = nullptr;
     connector::ConnectorSinkSpillExecutor* connector_sink_spill_executor = nullptr;
     DiagnoseDaemon* diagnose_daemon = nullptr;
 };

@@ -45,7 +45,6 @@ import java.util.Optional;
  *
  * <p>The scan operator's {@code tvrVersionRange} (a {@link TvrTableDelta}) carries the from/to snapshot IDs,
  * set by {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer}.
- * This rule reads that same data source as {@code TvrTableScanRule}.
  *
  * <p>For append-only Iceberg tables, {@code __ACTION__} is a constant {@link IvmRuleUtils#INSERT_ACTION}
  * (INSERT = UPSERT).

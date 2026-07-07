@@ -40,7 +40,7 @@
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
+using FileCommitResult = formats::FileCommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
@@ -144,9 +144,9 @@ public:
 
     void set_flush_batch_size(int64_t flush_batch_size) { _flush_batch_size = flush_batch_size; }
 
-    CommitResult close() override {
+    FileCommitResult close() override {
         size_t num_rows = WriterHelper::instance()->commit();
-        CommitResult commit_result = {
+        FileCommitResult commit_result = {
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,
                 .file_statistics =

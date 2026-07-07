@@ -30,7 +30,7 @@
 #include "formats/reserved_columns.h"
 #include "fs/hdfs_metrics.h"
 #include "io/compressed_input_stream.h"
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/predicate_parser.h"
 
 namespace starrocks {
 
@@ -88,17 +88,35 @@ Status HdfsScanner::_build_scanner_context() {
 
     // Clear fields that this function populates so the call is idempotent
     // (same ctx pointer may be reused across scanners in tests).
-    ctx.partition_values.clear();
-    ctx.extended_values.clear();
-    ctx.materialized_columns.clear();
-    ctx.partition_columns.clear();
-    ctx.extended_columns.clear();
-    ctx.reserved_field_slots.clear();
-    ctx.conjunct_ctxs_by_slot.clear();
-    ctx.can_use_file_record_count = false;
-    ctx.is_first_split = false;
+    ctx.format_scan_context.partition_values.clear();
+    ctx.format_scan_context.extended_values.clear();
+    ctx.format_scan_context.materialized_columns.clear();
+    ctx.format_scan_context.partition_columns.clear();
+    ctx.format_scan_context.extended_columns.clear();
+    ctx.format_scan_context.reserved_field_slots.clear();
+    ctx.format_scan_context.not_existed_slots.clear();
+    ctx.format_scan_context.conjunct_ctxs_by_slot.clear();
+    ctx.format_scan_context.conjunct_ctxs_of_non_existed_slots.clear();
+    ctx.format_scan_context.has_file_record_count = false;
+    ctx.format_scan_context.file_record_count = 0;
+    ctx.format_scan_context.is_first_split = false;
+    ctx.format_scan_context.first_row_id.reset();
+    ctx.format_scan_context.min_max_values.clear();
+    ctx.format_scan_context.extended_column_exprs.clear();
+    ctx.format_scan_context.predicate_tree = nullptr;
+    ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
 
-    Columns& partition_values = ctx.partition_values;
+    ctx.format_scan_context.scan_range_offset = ctx.scan_range->offset;
+    ctx.format_scan_context.scan_range_length = ctx.scan_range->length;
+    ctx.format_scan_context.min_max_values = ctx.scan_range->min_max_values;
+    if (ctx.scan_range->__isset.extended_columns) {
+        ctx.format_scan_context.extended_column_exprs = ctx.scan_range->extended_columns;
+    }
+    if (ctx.scan_range->__isset.first_row_id) {
+        ctx.format_scan_context.first_row_id = ctx.scan_range->first_row_id;
+    }
+
+    Columns& partition_values = ctx.format_scan_context.partition_values;
 
     // evaluate partition values; ExprContexts are owned by HiveDataSource's
     // ObjectPool, made available via ctx.partition_expr_ctxs.
@@ -110,7 +128,7 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     // evaluate extended column values
-    Columns& extended_values = ctx.extended_values;
+    Columns& extended_values = ctx.format_scan_context.extended_values;
     for (size_t i = 0; i < _scanner_ctx->extended_col_slots.size(); i++) {
         int extended_col_idx = _scanner_ctx->index_in_extended_columns[i];
         ASSIGN_OR_RETURN(auto extended_value_column, ctx.extended_col_expr_ctxs[extended_col_idx]->evaluate(nullptr));
@@ -120,22 +138,22 @@ Status HdfsScanner::_build_scanner_context() {
 
     // conjunct_ctxs_by_slot is a mutable per-scanner shallow copy of by_slot;
     // update_with_none_existed_slot() erases entries when columns are absent.
-    ctx.conjunct_ctxs_by_slot = _scanner_ctx->conjuncts.by_slot;
+    ctx.format_scan_context.conjunct_ctxs_by_slot = _scanner_ctx->format_scan_context.conjuncts.by_slot;
 
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_ctx->materialize_slots.size(); i++) {
         auto* slot = _scanner_ctx->materialize_slots[i];
         if (formats::is_reserved_scan_column_name(slot->col_name())) {
-            ctx.reserved_field_slots.emplace_back(slot);
+            ctx.format_scan_context.reserved_field_slots.emplace_back(slot);
         } else {
             FormatColumnInfo column;
             column.slot_desc = slot;
             column.idx_in_chunk = _scanner_ctx->materialize_index_in_chunk[i];
             // A slot must be decoded eagerly if it is an output column OR if it
             // appears in a multi-field conjunct that the reader cannot push down.
-            column.decode_needed =
-                    slot->is_output_column() || _scanner_ctx->conjuncts.slots_of_multi_field.count(slot->id());
-            ctx.materialized_columns.emplace_back(column);
+            column.decode_needed = slot->is_output_column() ||
+                                   _scanner_ctx->format_scan_context.conjuncts.slots_of_multi_field.count(slot->id());
+            ctx.format_scan_context.materialized_columns.emplace_back(column);
         }
     }
 
@@ -144,7 +162,7 @@ Status HdfsScanner::_build_scanner_context() {
         FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_ctx->partition_index_in_chunk[i];
-        ctx.partition_columns.emplace_back(column);
+        ctx.format_scan_context.partition_columns.emplace_back(column);
     }
 
     for (size_t i = 0; i < _scanner_ctx->extended_col_slots.size(); i++) {
@@ -152,15 +170,15 @@ Status HdfsScanner::_build_scanner_context() {
         FormatColumnInfo column;
         column.slot_desc = slot;
         column.idx_in_chunk = _scanner_ctx->extended_col_index_in_chunk[i];
-        ctx.extended_columns.emplace_back(column);
+        ctx.format_scan_context.extended_columns.emplace_back(column);
     }
 
     ctx.slot_descs = _scanner_ctx->tuple_desc->slots();
-    ctx.timezone = _runtime_state->timezone();
+    ctx.format_scan_context.timezone = _runtime_state->timezone();
     ctx.format_scan_context.stats = &_app_stats;
 
     ScanConjunctsManagerOptions opts;
-    opts.conjunct_ctxs_ptr = &_scanner_ctx->conjuncts.all_ctxs;
+    opts.conjunct_ctxs_ptr = &_scanner_ctx->format_scan_context.conjuncts.all_ctxs;
     opts.tuple_desc = _scanner_ctx->tuple_desc;
     // Must use the fragment-scoped pool (runtime_state->obj_pool()), not
     // _scanner_ctx->obj_pool.  BoxedExpr::expr_context() deep-copies Expr
@@ -185,16 +203,19 @@ Status HdfsScanner::_build_scanner_context() {
                                                                           ctx.predicates.predicate_free_pool));
     ctx.predicates.runtime_filter_scan_range_pruner = std::make_unique<RuntimeScanRangePruner>(
             ctx.predicates.predicate_parser.get(), ctx.predicates.conjuncts_manager->unarrived_runtime_filters());
+    ctx.format_scan_context.predicate_tree = &ctx.predicates.predicate_tree;
+    ctx.format_scan_context.runtime_filter_scan_range_pruner = ctx.predicates.runtime_filter_scan_range_pruner.get();
 
-    ctx.update_return_count_columns();
+    ctx.format_scan_context.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {
-        ctx.can_use_file_record_count = true;
+        ctx.format_scan_context.has_file_record_count = true;
+        ctx.format_scan_context.file_record_count = ctx.scan_range->record_count;
     }
     if (ctx.scan_range->__isset.is_first_split) {
-        ctx.is_first_split = ctx.scan_range->is_first_split;
+        ctx.format_scan_context.is_first_split = ctx.scan_range->is_first_split;
     }
 
-    ctx.update_min_max_columns();
+    ctx.format_scan_context.update_min_max_columns();
     return Status::OK();
 }
 
@@ -207,27 +228,27 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
 
     // short circuit for ___count___ optimization.
-    if (_scanner_ctx->can_use_count_optimization()) {
+    if (_scanner_ctx->format_scan_context.can_use_count_optimization()) {
         int64_t file_record_count = 0;
-        if (_scanner_ctx->is_first_split) {
-            file_record_count = _scanner_ctx->scan_range->record_count;
+        if (_scanner_ctx->format_scan_context.is_first_split) {
+            file_record_count = _scanner_ctx->format_scan_context.file_record_count;
         }
         // append_side_columns_to_chunk fills per-row count (value=1),
         // partition, and extended columns first.  The next call overwrites the
         // count column with the aggregated file record count.
-        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, 1));
-        _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, file_record_count);
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, 1));
+        _scanner_ctx->format_scan_context.append_or_update_count_column_to_chunk(chunk, 1, file_record_count);
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
     }
 
     // short circuit for min/max optimization.
-    if (_scanner_ctx->can_use_min_max_optimization()) {
+    if (_scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         // 3 means we output 3 values: min, max, and null
         const size_t row_count = 3;
         (*chunk)->set_num_rows(row_count);
-        RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, row_count));
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, row_count));
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += row_count;
         return Status::OK();
@@ -254,7 +275,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_build_scanner_context());
     // short circuit for ___count___ optimization.
     // short circuit for min/max optimization.
-    if (_scanner_ctx->can_use_count_optimization() || _scanner_ctx->can_use_min_max_optimization()) {
+    if (_scanner_ctx->format_scan_context.can_use_count_optimization() ||
+        _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         return Status::OK();
     }
     RETURN_IF_ERROR(do_open(runtime_state));
@@ -271,7 +293,8 @@ void HdfsScanner::close() noexcept {
     }
     // short circuit for ___count___ optimization.
     // short circuit for min/max optimization.
-    if (_scanner_ctx->can_use_count_optimization() || _scanner_ctx->can_use_min_max_optimization()) {
+    if (_scanner_ctx->format_scan_context.can_use_count_optimization() ||
+        _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_ctx->file_path << ", scan range = ["
@@ -408,8 +431,8 @@ void HdfsScanner::do_update_deletion_vector_filter_counter(RuntimeProfile* paren
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_scanner_ctx != nullptr && _scanner_ctx->split.estimated_mem_usage_per_split_task != 0) {
-        return _scanner_ctx->split.estimated_mem_usage_per_split_task;
+    if (_scanner_ctx != nullptr && _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task != 0) {
+        return _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task;
     }
     if (_shared_buffered_input_stream != nullptr) {
         return _shared_buffered_input_stream->estimated_mem_usage();
@@ -551,13 +574,13 @@ void HdfsScanner::update_counter() {
 void HdfsScanner::move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
     if (_scanner_ctx == nullptr) return;
     size_t max_split_size = 0;
-    for (auto& t : _scanner_ctx->split.split_tasks) {
+    for (auto& t : _scanner_ctx->format_scan_context.split.split_tasks) {
         size_t size = (t->end_offset - t->start_offset);
         max_split_size = std::max(max_split_size, size);
         split_tasks->emplace_back(std::move(t));
     }
     if (split_tasks->size() > 0) {
-        _scanner_ctx->split.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
+        _scanner_ctx->format_scan_context.split.estimated_mem_usage_per_split_task = 3 * max_split_size / 2;
     }
 }
 

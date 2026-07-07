@@ -34,7 +34,7 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "connector/data_source_provider.h"
+#include "connector_primitive/data_source_provider.h"
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
@@ -44,7 +44,6 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_env.h"
 #include "exec/exec_factory.h"
-#include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
@@ -53,11 +52,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/pipeline_driver_instantiator.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/runtime/fragment_context_manager.h"
@@ -67,6 +63,10 @@
 #include "exec/runtime/schedule/common.h"
 #include "exec/runtime_compat/runtime_state_helper.h"
 #include "exec/scan_node.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
@@ -310,7 +310,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         runtime_state->debug_action_mgr().add_action(action);
     }
 
-    _fragment_ctx->init_jit_profile(RuntimeStateHelper::is_jit_enabled(runtime_state));
     return Status::OK();
 }
 

@@ -19,8 +19,7 @@ endif()
 
 set(STORAGE_BASE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
-    merge_iterator_test.cpp
-    row_source_mask_test.cpp
+    ${BE_TEST_JNI_ENV_STUB}
     short_key_index_test.cpp
 )
 

@@ -22,7 +22,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/primitive/range.h" // Range<rowid_t>, rowid_t
+#include "storage_primitive/range.h" // Range<rowid_t>, rowid_t
 
 namespace roaring {
 class Roaring;
@@ -92,6 +92,11 @@ void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_d
 // used by set_non_segment_files_shared (shared) and tablet split's per-segment
 // ownership propagation (private for an exclusive segment).
 void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
+
+// Peer of set_dcg_shared for Index Delta Groups: mark every .idx entry in an IDG version
+// list shared / private. Used by set_non_segment_files_shared (shared) and tablet split's
+// per-segment ownership propagation (private for an exclusive segment).
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);

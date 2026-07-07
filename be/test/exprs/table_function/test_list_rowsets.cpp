@@ -14,7 +14,7 @@
 
 #include "base/testutil/assert.h"
 #include "common/config_lake_fwd.h"
-#include "exprs/table_function/list_rowsets.h"
+#include "exprs_ext/table_function/list_rowsets.h"
 #include "gtest/gtest.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"

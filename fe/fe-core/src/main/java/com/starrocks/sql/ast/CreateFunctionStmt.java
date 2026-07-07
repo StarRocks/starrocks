@@ -51,6 +51,9 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String IS_ANALYTIC_NAME = "analytic";
     public static final String PROCESS_METHOD_NAME = "process";
     public static final String INPUT_TYPE = "input";
+    // Values for the INPUT_TYPE property.
+    public static final String INPUT_TYPE_SCALAR = "scalar";
+    public static final String INPUT_TYPE_ARROW = "arrow";
 
     private final FunctionRef functionRef;
     private final boolean isAggregate;

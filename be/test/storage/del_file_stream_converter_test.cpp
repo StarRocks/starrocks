@@ -25,8 +25,8 @@
 #include "column/serde/column_array_serde.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/datum.h"
 
 namespace starrocks {

@@ -47,7 +47,6 @@
 #include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
@@ -56,10 +55,6 @@
 #include "storage/persistent_index.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/tablet_basic_info.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -80,6 +75,11 @@
 #include "storage/types.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/tablet_basic_info.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 

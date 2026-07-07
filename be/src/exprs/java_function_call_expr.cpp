@@ -34,16 +34,16 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
+#include "exprs/udf/java/java_udf_reflection.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "platform/user_function_cache.h"
 #include "runtime/java/java_env.h"
 #include "runtime/java/java_runtime.h"
 #include "types/type_descriptor.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
-#include "udf/java/java_udf_context.h"
-#include "udf/java/java_udf_reflection.h"
 
 namespace starrocks {
 

@@ -50,12 +50,12 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
-#include "storage/primitive/tablet_info.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 

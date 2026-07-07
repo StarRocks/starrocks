@@ -20,8 +20,8 @@
 #include "base/testutil/parallel_test.h"
 #include "common/statusor.h"
 #include "compute_env/workgroup/work_group.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::workgroup {

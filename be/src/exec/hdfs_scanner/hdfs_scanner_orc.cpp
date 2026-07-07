@@ -88,7 +88,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
         : _scanner_ctx(scanner_ctx), _reader(reader), _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_ctx.min_max_tuple_desc != nullptr) {
         VLOG_FILE << "OrcRowReaderFilter: min_max_tuple_desc = " << _scanner_ctx.min_max_tuple_desc->debug_string();
-        for (ExprContext* ctx : _scanner_ctx.conjuncts.min_max_ctxs) {
+        for (ExprContext* ctx : _scanner_ctx.format_scan_context.conjuncts.min_max_ctxs) {
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
@@ -144,9 +144,9 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
         } else {
             // search partition columns.
             int part_idx = 0;
-            const int part_size = _scanner_ctx.partition_columns.size();
+            const int part_size = _scanner_ctx.format_scan_context.partition_columns.size();
             for (part_idx = 0; part_idx < part_size; part_idx++) {
-                if (_scanner_ctx.partition_columns[part_idx].name() == slot->col_name()) {
+                if (_scanner_ctx.format_scan_context.partition_columns[part_idx].name() == slot->col_name()) {
                     break;
                 }
             }
@@ -155,7 +155,8 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
                 max_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
             } else {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(
+                        _scanner_ctx.format_scan_context.partition_values[part_idx]);
                 ColumnPtr data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     min_chunk->get_column_raw_ptr_by_index(i)->append_nulls(1);
@@ -170,7 +171,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
 
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
-    for (auto& min_max_conjunct_ctx : _scanner_ctx.conjuncts.min_max_ctxs) {
+    for (auto& min_max_conjunct_ctx : _scanner_ctx.format_scan_context.conjuncts.min_max_ctxs) {
         // TODO: add a warning log here
         auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
         auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
@@ -205,9 +206,9 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
-        for (const auto& col : _scanner_ctx.materialized_columns) {
+        for (const auto& col : _scanner_ctx.format_scan_context.materialized_columns) {
             SlotDescriptor* slot = col.slot_desc;
-            if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
+            if (!_scanner_ctx.format_scan_context.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
             const orc::Type* orc_type = _reader->get_orc_type_by_slot_id(slot->id());
@@ -300,8 +301,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
 
         // do evaluation with dictionary.
-        Status status = ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx.conjunct_ctxs_by_slot.at(slot_id),
-                                                                dict_value_chunk.get(), filter_ptr);
+        Status status = ChunkPredicateEvaluator::eval_conjuncts(
+                _scanner_ctx.format_scan_context.conjunct_ctxs_by_slot.at(slot_id), dict_value_chunk.get(), filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
             _dict_filter_eval_cache.erase(slot_id);
@@ -404,8 +405,8 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     OrcChunkReader::build_column_name_set(&known_column_names, &_scanner_ctx->hive_column_names, reader->getType(),
                                           _scanner_ctx->format_scan_context.options.case_sensitive,
                                           _scanner_ctx->format_scan_context.options.orc_use_column_names);
-    RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(known_column_names));
-    ASSIGN_OR_RETURN(auto skip, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.update_materialized_columns(known_column_names));
+    ASSIGN_OR_RETURN(auto skip, _scanner_ctx->format_scan_context.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
         _should_skip_file = true;
@@ -413,10 +414,10 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     }
 
     int src_slot_index = 0;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         auto col_name = Utils::format_name(column.name(), _scanner_ctx->format_scan_context.options.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        bool is_lazy_slot = _scanner_ctx->is_lazy_materialization_slot(column.slot_id());
+        bool is_lazy_slot = _scanner_ctx->format_scan_context.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(column.slot_desc);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -432,8 +433,8 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
         // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
         {
-            auto it = _scanner_ctx->conjuncts.by_slot.find(column.slot_id());
-            if (it != _scanner_ctx->conjuncts.by_slot.end()) {
+            auto it = _scanner_ctx->format_scan_context.conjuncts.by_slot.find(column.slot_id());
+            if (it != _scanner_ctx->format_scan_context.conjuncts.by_slot.end()) {
                 _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
             }
         }
@@ -457,15 +458,15 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
         ctx->footer = footer;
         ctx->start_offset = info.offset();
         ctx->end_offset = info.offset() + info.length();
-        _scanner_ctx->split.split_tasks.emplace_back(std::move(ctx));
+        _scanner_ctx->format_scan_context.split.split_tasks.emplace_back(std::move(ctx));
     }
-    _scanner_ctx->merge_split_tasks();
+    _scanner_ctx->format_scan_context.merge_split_tasks();
     // if only one split task, clear it, no need to do split work.
-    if (_scanner_ctx->split.split_tasks.size() <= 1) {
-        _scanner_ctx->split.split_tasks.clear();
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() <= 1) {
+        _scanner_ctx->format_scan_context.split.split_tasks.clear();
     }
     VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename()
-                  << ", split_tasks.size = " << _scanner_ctx->split.split_tasks.size();
+                  << ", split_tasks.size = " << _scanner_ctx->format_scan_context.split.split_tasks.size();
 
     return Status::OK();
 }
@@ -476,7 +477,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     if (_input_stream == nullptr) {
         _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
-        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx->lazy_column_coalesce_counter);
+        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx->format_scan_context.lazy_column_coalesce_counter);
         _input_stream->set_app_stats(&_app_stats);
     }
     ORCHdfsFileStream* orc_hdfs_file_stream = _input_stream.get();
@@ -507,8 +508,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
     RETURN_IF_ERROR(build_split_tasks(reader.get(), stripes));
-    if (_scanner_ctx->split.split_tasks.size() > 0) {
-        _scanner_ctx->split.has_split_tasks = true;
+    if (_scanner_ctx->format_scan_context.split.split_tasks.size() > 0) {
+        _scanner_ctx->format_scan_context.split.has_split_tasks = true;
         _should_skip_file = true;
         return Status::OK();
     }
@@ -527,7 +528,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
     _orc_reader->set_current_file_name(_file->filename());
-    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->timezone));
+    RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx->format_scan_context.timezone));
     _orc_reader->set_hive_column_names(&_scanner_ctx->hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_ctx->format_scan_context.options.case_sensitive);
     _orc_reader->set_use_orc_column_names(_scanner_ctx->format_scan_context.options.orc_use_column_names);
@@ -540,7 +541,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     std::vector<Expr*> conjuncts{};
     if (_use_orc_sargs) {
-        for (const auto& it : _scanner_ctx->conjunct_ctxs_by_slot) {
+        for (const auto& it : _scanner_ctx->format_scan_context.conjunct_ctxs_by_slot) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
@@ -548,7 +549,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         // also fold multi-slot predicates into the search argument; ORC can use them
         // for stripe-level skipping even though the post-read pass in get_next() is
         // still needed for correctness.
-        for (const auto& it : _scanner_ctx->conjuncts.scanner_ctxs) {
+        for (const auto& it : _scanner_ctx->format_scan_context.conjuncts.scanner_ctxs) {
             conjuncts.push_back(it->root());
         }
     }
@@ -579,8 +580,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
     }
 
-    _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, rows_read);
-    _scanner_ctx->append_or_update_extended_column_to_chunk(chunk, rows_read);
+    _scanner_ctx->format_scan_context.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx->format_scan_context.append_or_update_extended_column_to_chunk(chunk, rows_read);
 
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
@@ -589,9 +590,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // ORC already folded these into search arguments during do_open() for
     // stripe-level skipping, but that is an approximate optimisation only; this
     // row-level pass is still required for correctness.
-    if (rows_read > 0 && !_scanner_ctx->conjuncts.scanner_ctxs.empty()) {
+    if (rows_read > 0 && !_scanner_ctx->format_scan_context.conjuncts.scanner_ctxs.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_scanner_ctx->conjuncts.scanner_ctxs, chunk->get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(
+                _scanner_ctx->format_scan_context.conjuncts.scanner_ctxs, chunk->get()));
         rows_read = (*chunk)->num_rows();
     }
 
@@ -618,7 +620,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
 
     if (!st.is_end_of_file()) return st;
     if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
-    _scanner_ctx->append_or_update_count_column_to_chunk(chunk, 1, read_num_values);
+    _scanner_ctx->format_scan_context.append_or_update_count_column_to_chunk(chunk, 1, read_num_values);
     return 1;
 }
 
@@ -666,7 +668,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            RETURN_IF_ERROR(_scanner_ctx->append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
+            RETURN_IF_ERROR(
+                    _scanner_ctx->format_scan_context.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
@@ -700,8 +703,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             if (rows_read != 0 && rows_read != ck->num_rows()) {
                 ck->filter(_chunk_filter);
             }
-            if (_scanner_ctx->has_count_column()) {
-                _scanner_ctx->append_or_update_count_column_to_chunk(chunk, rows_read, 1);
+            if (_scanner_ctx->format_scan_context.has_count_column()) {
+                _scanner_ctx->format_scan_context.append_or_update_count_column_to_chunk(chunk, rows_read, 1);
             }
         }
 
@@ -713,10 +716,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
         bool require_load_lazy_columns = rows_read > 0;
         if (require_load_lazy_columns) {
             // still need to load lazy column
-            _scanner_ctx->lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+            _scanner_ctx->format_scan_context.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
         } else {
             // dont need to load lazy column
-            _scanner_ctx->lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+            _scanner_ctx->format_scan_context.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
             _app_stats.late_materialize_skip_rows += origin_rows_read;
             continue;
         }

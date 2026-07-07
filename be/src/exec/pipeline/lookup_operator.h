@@ -20,8 +20,8 @@
 #include "compute_env/workgroup/scan_task.h"
 #include "compute_env/workgroup/work_group_fwd.h"
 #include "exec/lookup_stream_mgr.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/descriptors_fwd.h"
 
 namespace starrocks::pipeline {

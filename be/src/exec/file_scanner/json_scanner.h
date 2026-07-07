@@ -20,13 +20,12 @@
 #include "column/nullable_column.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "exec/file_scanner/file_scanner.h"
-#include "exprs/json_functions.h"
 #include "fs/fs.h"
 #include "simdjson.h"
+#include "types/simple_json_path.h"
 
 namespace starrocks {
 
-struct SimpleJsonPath;
 class JsonReader;
 class JsonParser;
 class JsonScanner : public FileScanner {

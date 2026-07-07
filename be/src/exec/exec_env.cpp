@@ -54,17 +54,17 @@
 #include "connector/connector_sink_executor.h"
 #include "exec/batch_write/batch_write_mgr.h"
 #include "exec/lookup_stream_mgr.h"
-#include "exec/pipeline/primitives/driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/runtime/query_context_manager.h"
 #include "exec/stream_load/stream_load_executor.h"
 #include "exec/stream_load/transaction_mgr.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exprs/udf/python/env.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "platform/platform_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
-#include "udf/python/env.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -145,6 +145,8 @@ void ExecEnv::_refresh_service_contexts() {
     _runtime_services.cache_mgr = cache_mgr();
     _runtime_services.spill_dir_mgr = _compute_env == nullptr ? nullptr : _compute_env->spill_dir_mgr();
     _runtime_services.global_spill_manager = _compute_env == nullptr ? nullptr : _compute_env->global_spill_manager();
+    _runtime_services.load_spill_block_merge_executor =
+            _compute_env == nullptr ? nullptr : _compute_env->load_spill_block_merge_executor();
     _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
     _runtime_services.diagnose_daemon = runtime_env->diagnose_daemon();
 

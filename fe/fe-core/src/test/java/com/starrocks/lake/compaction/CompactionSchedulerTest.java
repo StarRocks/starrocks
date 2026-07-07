@@ -145,6 +145,62 @@ public class CompactionSchedulerTest {
     }
 
     @Test
+    public void testStartCompactionSuppressesRangeRollup() {
+        final boolean[] rangeDistributed = {true};
+        final boolean[] partitionAccessed = {false};
+        OlapTable table = new LakeTable();
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = new PartitionStatistics(partition);
+        statistics.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isRangeDistribution() {
+                return rangeDistributed[0];
+            }
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                partitionAccessed[0] = true;
+                return null;
+            }
+        };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        table.setState(OlapTable.OlapTableState.ROLLUP);
+
+        // A range-distribution rollup takes the online-rewrite path, whose flip replays a contiguous shadow vlog
+        // sequence; compaction must be suppressed at the guard, before the partition lookup is ever reached.
+        partitionAccessed[0] = false;
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertFalse(partitionAccessed[0], "range-distribution rollup compaction must be suppressed");
+
+        // A hash-distribution rollup is a traditional (eager) rollup with no vlog dependency, so this guard must
+        // NOT suppress it: execution proceeds past the guard to the partition lookup.
+        rangeDistributed[0] = false;
+        partitionAccessed[0] = false;
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertTrue(partitionAccessed[0], "hash-distribution rollup must not be suppressed by this guard");
+    }
+
+    @Test
     public void testStartCompactionWithFileBundling() throws RpcException {
         LakeTable table = new LakeTable();
         table.setFileBundling(true);

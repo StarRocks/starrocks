@@ -38,8 +38,8 @@
 #include <vector>
 
 #include "common/status.h"
-#include "exec/data_sink.h"
 #include "exec/data_sinks/mysql_table_writer.h"
+#include "exec_primitive/data_sink.h"
 
 namespace starrocks {
 

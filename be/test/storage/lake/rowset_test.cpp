@@ -30,20 +30,23 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/primary_key_encoding_types.h"
 #include "test_util.h"
 #include "types/type_descriptor.h"
 
@@ -238,6 +241,167 @@ TEST_F(LakeRowsetTest, test_load_segments) {
         auto segment = cache->lookup_segment(seg->file_name());
         ASSERT_TRUE(segment != nullptr);
     }
+}
+
+// experimental_lake_ignore_lost_segment: when a segment file is physically missing, load_segments
+// must (a) fail hard when the flag is off, and (b) when the flag is on, skip the lost segment while
+// keeping the result positionally aligned -- a null placeholder in the lost slot, size unchanged --
+// so the PK-index callers' `size == num_segments` checks and rssid derivation keep working instead
+// of hitting the CHECK/RETURN_ERROR_IF_FALSE that used to crash/fail the rebuild.
+TEST_F(LakeRowsetTest, test_load_segments_ignore_lost_segment) {
+    create_rowsets_for_testing();
+
+    // Physically remove the middle segment file to simulate a lost segment.
+    auto lost_seg_name = _tablet_metadata->rowsets(0).segment_metas(1).filename();
+    auto lost_seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), lost_seg_name);
+    // Drop any cached copy so the loader actually re-reads from the (now missing) file.
+    _tablet_mgr->metacache()->prune();
+    ASSERT_OK(FileSystem::Default()->delete_file(lost_seg_path));
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSERT_EQ(rowset->num_segments(), 3);
+
+    // Flag off: a missing segment is a hard error.
+    {
+        config::experimental_lake_ignore_lost_segment = false;
+        std::vector<SegmentPtr> segments;
+        auto st = rowset->load_segments(&segments, false);
+        ASSERT_FALSE(st.ok());
+    }
+
+    // Flag on: the lost segment is skipped, but its slot is preserved as a null placeholder so the
+    // vector stays aligned with the segment metadata.
+    {
+        config::experimental_lake_ignore_lost_segment = true;
+        DeferOp reset([] { config::experimental_lake_ignore_lost_segment = false; });
+
+        std::vector<SegmentPtr> segments;
+        ASSERT_OK(rowset->load_segments(&segments, false));
+        ASSERT_EQ(segments.size(), static_cast<size_t>(rowset->num_segments()));
+        EXPECT_NE(segments[0], nullptr);
+        EXPECT_EQ(segments[1], nullptr);
+        EXPECT_NE(segments[2], nullptr);
+
+        // The delvec iterator builder (the PK rebuild path) must not crash on the null slot and must
+        // keep the same positional alignment: the lost segment yields a null iterator in its own slot.
+        OlapReaderStatistics stats;
+        auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+        ASSIGN_OR_ABORT(auto seg_iters,
+                        rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
+        ASSERT_EQ(seg_iters.size(), static_cast<size_t>(rowset->num_segments()));
+        EXPECT_NE(seg_iters[0], nullptr);
+        EXPECT_EQ(seg_iters[1], nullptr);
+        EXPECT_NE(seg_iters[2], nullptr);
+
+        // The non-delvec builder must keep the same alignment: the lost segment is a null placeholder.
+        ASSIGN_OR_ABORT(auto plain_iters, rowset->get_each_segment_iterator(input_schema, false, &stats));
+        ASSERT_EQ(plain_iters.size(), static_cast<size_t>(rowset->num_segments()));
+        EXPECT_NE(plain_iters[0], nullptr);
+        EXPECT_EQ(plain_iters[1], nullptr);
+        EXPECT_NE(plain_iters[2], nullptr);
+        for (auto& it : plain_iters) {
+            if (it != nullptr) {
+                it->close();
+            }
+        }
+
+        // get_read_iterator_num must skip the null slot (2 live segments; overlapped, so no union).
+        ASSIGN_OR_ABORT(auto iter_num, rowset->get_read_iterator_num());
+        EXPECT_EQ(iter_num, 2);
+
+        // get_non_null_segments() returns only the live segments (the lost slot is dropped), so
+        // position-agnostic consumers (logical-split scan, compaction sizing) never see a null.
+        auto non_null = rowset->get_non_null_segments();
+        EXPECT_EQ(non_null.size(), 2);
+        for (const auto& s : non_null) {
+            EXPECT_NE(s, nullptr);
+        }
+    }
+}
+
+// The PK publish / partial-update paths wrap every slot returned by get_each_segment_iterator in a
+// SegmentPKIterator, including the nullptr placeholder produced for a lost segment. SegmentPKIterator
+// must tolerate a null underlying iterator: yield no rows and, crucially, not crash in close() (which
+// used to call _iter->close() unconditionally).
+TEST_F(LakeRowsetTest, test_segment_pk_iterator_tolerates_null_slot) {
+    SegmentPKIterator it;
+    ASSERT_OK(it.init(nullptr, *_schema, /*lazy_load=*/true, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                      /*defer_data_load=*/true));
+    EXPECT_TRUE(it.done()); // an empty slot yields no rows
+    it.close();             // must not crash on the null underlying iterator
+}
+
+// Covers add_partial_compaction_segments_info's null guards: a lost segment in either the
+// already-compacted range or the uncompacted range must be skipped (file-size info dropped) rather
+// than crashing on the null placeholder. With next_compaction_offset=1 and compaction_segment_limit=1
+// over a 3-segment rowset, segment 0 is in the already-compacted range and segment 2 in the
+// uncompacted range, so losing both exercises both guards.
+TEST_F(LakeRowsetTest, test_ignore_lost_segment_partial_compaction) {
+    create_rowsets_for_testing();
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+
+    // A writer providing the "new compacted" segment for section 2 of add_partial_compaction.
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+    {
+        std::vector<int> k{100, 101, 102};
+        std::vector<int> v{1, 2, 3};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(k.data(), k.size() * sizeof(int));
+        c1->append_numbers(v.data(), v.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+    }
+
+    // Lose segment 0 (already-compacted range) and segment 2 (uncompacted range).
+    for (int idx : {0, 2}) {
+        auto name = _tablet_metadata->rowsets(0).segment_metas(idx).filename();
+        ASSERT_OK(FileSystem::Default()->delete_file(_tablet_mgr->segment_location(_tablet_metadata->id(), name)));
+    }
+    _tablet_mgr->metacache()->prune();
+
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp reset([] { config::experimental_lake_ignore_lost_segment = false; });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 1 /* compaction_segment_limit */);
+    ASSERT_TRUE(rs->partial_segments_compaction());
+
+    TxnLogPB txn_log;
+    auto op_compaction = txn_log.mutable_op_compaction();
+    CompactionTaskContext context(txn_id, _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    // Must not crash on the lost (null) segments in the already-compacted / uncompacted ranges.
+    ASSERT_OK(task.fill_compaction_segment_info(op_compaction, writer.get()));
+    writer->close();
+}
+
+// Covers the null-segment skip in VerticalCompactionTask::calculate_chunk_size_for_column_group: a
+// lost segment must be skipped instead of dereferencing null in column_with_uid. Uses
+// compaction_segment_limit=0 so the rowset is not in partial-compaction mode (which would early-return
+// before the segment loop).
+TEST_F(LakeRowsetTest, test_ignore_lost_segment_vertical_chunk_size) {
+    create_rowsets_for_testing();
+
+    auto name = _tablet_metadata->rowsets(0).segment_metas(1).filename();
+    ASSERT_OK(FileSystem::Default()->delete_file(_tablet_mgr->segment_location(_tablet_metadata->id(), name)));
+    _tablet_mgr->metacache()->prune();
+
+    config::experimental_lake_ignore_lost_segment = true;
+    DeferOp reset([] { config::experimental_lake_ignore_lost_segment = false; });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+    // Must skip the lost (null) segment instead of crashing on segment->column_with_uid.
+    ASSIGN_OR_ABORT(auto chunk_size, task.calculate_chunk_size_for_column_group({0}));
+    EXPECT_GT(chunk_size, 0);
 }
 
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
@@ -1422,9 +1586,11 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_write_vi_files) {
     meta_seg1->set_filename("seg1.dat");
     meta_seg1->add_vector_index_ids(100);
     meta_seg1->add_vector_index_ids(200);
+    meta_seg1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_seg2 = op_write->mutable_rowset()->add_segment_metas();
     meta_seg2->set_filename("seg2.dat");
     meta_seg2->add_vector_index_ids(100);
+    meta_seg2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1461,16 +1627,20 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_vi_files) {
     auto* meta_a = output_rowset->add_segment_metas();
     meta_a->set_filename("reused_a.dat");
     meta_a->add_vector_index_ids(100);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_x = output_rowset->add_segment_metas();
     meta_x->set_filename("new_x.dat");
     meta_x->add_vector_index_ids(100);
     meta_x->add_vector_index_ids(200);
+    meta_x->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_y = output_rowset->add_segment_metas();
     meta_y->set_filename("new_y.dat");
     meta_y->add_vector_index_ids(100);
+    meta_y->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_b = output_rowset->add_segment_metas();
     meta_b->set_filename("reused_b.dat");
     meta_b->add_vector_index_ids(100);
+    meta_b->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1510,10 +1680,12 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_schema_change_vi_files) {
     auto* meta_sc1 = rowset->add_segment_metas();
     meta_sc1->set_filename("sc_seg1.dat");
     meta_sc1->add_vector_index_ids(300);
+    meta_sc1->set_segment_vector_index_uid(_tablet_metadata->id());
     auto* meta_sc2 = rowset->add_segment_metas();
     meta_sc2->set_filename("sc_seg2.dat");
     meta_sc2->add_vector_index_ids(300);
     meta_sc2->add_vector_index_ids(400);
+    meta_sc2->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1545,6 +1717,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_replication_vi_files) {
     auto* meta_repl = op_write->mutable_rowset()->add_segment_metas();
     meta_repl->set_filename("repl_seg1.dat");
     meta_repl->add_vector_index_ids(500);
+    meta_repl->set_segment_vector_index_uid(_tablet_metadata->id());
 
     std::vector<std::string> files_to_delete;
     collect_files_in_log(_tablet_mgr.get(), txn_log, &files_to_delete);
@@ -1595,6 +1768,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_partial_segment_metas) {
     meta_a->set_filename("seg_a.dat");
     meta_a->add_vector_index_ids(100);
     meta_a->add_vector_index_ids(200);
+    meta_a->set_segment_vector_index_uid(_tablet_metadata->id());
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_b.dat");
     op_write->mutable_rowset()->add_segment_metas()->set_filename("seg_c.dat");
 
@@ -1639,6 +1813,7 @@ TEST_F(LakeRowsetTest, test_collect_files_in_log_op_compaction_partial_segment_m
     auto* meta_reused = output_rowset->add_segment_metas();
     meta_reused->set_filename("reused.dat");
     meta_reused->add_vector_index_ids(100);
+    meta_reused->set_segment_vector_index_uid(_tablet_metadata->id());
     output_rowset->add_segment_metas()->set_filename("new_a.dat");
     output_rowset->add_segment_metas()->set_filename("new_b.dat");
 

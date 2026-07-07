@@ -360,6 +360,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_vi_via_tablet_mgr) {
     EXPECT_EQ(seg.num_rows, 5);
     ASSERT_EQ(seg.vector_index_ids.size(), 1);
     EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
+    // The writing tablet is recorded as the .vi owner (split-stable naming).
+    EXPECT_EQ(seg.segment_vector_index_uid, kTabletId);
 
     std::string seg_path = _tablet_mgr->segment_location(kTabletId, seg.path);
     std::string vi_path =
@@ -475,6 +477,8 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_pk_writer_sync_records_inde
     EXPECT_EQ(5, seg.num_rows);
     ASSERT_EQ(1u, seg.vector_index_ids.size());
     EXPECT_EQ(kIndexId, seg.vector_index_ids[0]);
+    // record_segment_vector_index_ids (inherited) records the owner too.
+    EXPECT_EQ(kTabletId, seg.segment_vector_index_uid);
     std::string vi_path =
             _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
@@ -537,6 +541,8 @@ TEST_F(SharedDataTabletWriterVITest, test_vertical_writer_vi) {
     EXPECT_EQ(seg.num_rows, kRows);
     ASSERT_EQ(seg.vector_index_ids.size(), 1);
     EXPECT_EQ(seg.vector_index_ids[0], kIndexId);
+    // VerticalGeneralTabletWriter::finish records the owner too.
+    EXPECT_EQ(seg.segment_vector_index_uid, kTabletId);
 
     std::string vi_path =
             _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg.path, kTabletId, kIndexId));

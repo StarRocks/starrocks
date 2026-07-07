@@ -36,14 +36,14 @@
 #include "common/system/mem_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/compute_env.h"
-#include "connector/connector_bootstrap.h"
 #include "data_workflows/data_workflows_env.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "gtest/gtest.h"
+#include "module/connector_bootstrap.h"
 #include "module/fs_provider_bootstrap.h"
 #include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
@@ -199,6 +199,7 @@ int init_test_env(int argc, char** argv) {
     st = StorageEnv::GetInstance()->init(storage_env_options);
     CHECK(st.ok()) << st;
     StorageEnv::GetInstance()->set_spill_dir_mgr(compute_env->spill_dir_mgr());
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(compute_env->load_spill_block_merge_executor());
 
     auto data_workflows_env = std::make_unique<DataWorkflowsEnv>();
     DataWorkflowsEnvOptions data_workflows_env_options;
@@ -251,6 +252,7 @@ int init_test_env(int argc, char** argv) {
     data_workflows_env.reset();
     delete engine;
     StorageEnv::GetInstance()->set_spill_dir_mgr(nullptr);
+    StorageEnv::GetInstance()->set_load_spill_block_merge_executor(nullptr);
     StorageEnv::GetInstance()->destroy();
     exec_env->destroy();
     compute_env->destroy();

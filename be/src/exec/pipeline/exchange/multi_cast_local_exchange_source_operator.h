@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 

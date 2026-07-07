@@ -59,16 +59,6 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_or_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/roaring2range.h"
-#include "storage/primitive/rowid_types.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/column_decoder.h"
@@ -85,6 +75,16 @@
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_or_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/roaring2range.h"
+#include "storage_primitive/rowid_types.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/logical_type.h"
 #include "types/type_info.h"
 
@@ -1110,8 +1110,12 @@ Status SegmentIterator::_init_ann_reader() {
 #ifdef WITH_TENANN
         std::string index_path;
         if (_opts.belonged_to_cloud_native) {
-            index_path = lake::gen_vector_index_path_from_segment_path(_segment->file_name(), _opts.tablet_id,
-                                                                       tablet_index_meta->index_id());
+            // Owner tablet id for the .vi name, filled from SegmentMetadataPB by lake Rowset::read()
+            // (the only producer of belonged_to_cloud_native) for every vector-indexed segment.
+            DCHECK_GE(_opts.segment_vector_index_uid, 0)
+                    << "cloud-native ANN read without a resolved .vi owner tablet id";
+            index_path = lake::gen_vector_index_path_from_segment_path(
+                    _segment->file_name(), _opts.segment_vector_index_uid, tablet_index_meta->index_id());
         } else {
             index_path = IndexDescriptor::vector_index_file_path(_opts.rowset_path, _opts.rowsetid.to_string(),
                                                                  segment_id(), tablet_index_meta->index_id());

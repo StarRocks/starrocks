@@ -99,6 +99,12 @@ set(COMPUTE_ENV_LOAD_FILES
     load/time_bounded_stream_load_pipe.cpp
 )
 
+set(COMPUTE_ENV_LOAD_SPILL_FILES
+    load_spill/load_chunk_spiller.cpp
+    load_spill/load_spill_block_manager.cpp
+    load_spill/load_spill_block_merge_executor.cpp
+)
+
 set(COMPUTE_ENV_STAROS_FILES
     staros/staros_status.cpp
     staros/staros_starcache.cpp
@@ -133,6 +139,7 @@ ADD_BE_LIB(ComputeEnv
     ${COMPUTE_ENV_DICTIONARY_CACHE_FILES}
     ${COMPUTE_ENV_LOAD_PATH_FILES}
     ${COMPUTE_ENV_LOAD_FILES}
+    ${COMPUTE_ENV_LOAD_SPILL_FILES}
     ${COMPUTE_ENV_STAROS_FILES}
 )
 
@@ -140,7 +147,7 @@ target_link_libraries(ComputeEnv PUBLIC
     Cache
     StoragePrimitive
     ExecPrimitive
-    ExprCore
+    Expr
     Runtime
     Platform
     FileSystem

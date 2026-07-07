@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/morsel_queue.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
-#include "exec/pipeline/scan/ticketed_morsel_queue.h"
+#include "exec_primitive/pipeline/scan/morsel_queue.h"
+#include "exec_primitive/pipeline/scan/ticketed_morsel_queue.h"
 #include "storage/query/bucket_sequence_morsel_queue.h"
 #include "storage/query/olap_dynamic_morsel_queue.h"
 #include "storage/query/olap_fixed_morsel_queue.h"
