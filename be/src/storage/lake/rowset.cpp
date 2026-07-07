@@ -562,9 +562,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::_build_segment_iterators(
 
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
-<<<<<<< HEAD
-        // Per-segment stats when provided, so concurrent scans don't race on one shared stats object.
-=======
         if (seg_ptr == nullptr) {
             // This vector must stay positionally aligned (callers derive the rssid from a segment's
             // position), so a null segment can only be tolerated -- leaving seg_iterators[i] as the
@@ -576,9 +573,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::_build_segment_iterators(
                                               tablet_id(), metadata().id(), i));
             continue;
         }
-        // Give the i-th iterator its own stats when requested, so concurrent scans don't race on a
-        // shared stats object; otherwise all segments share `stats`.
->>>>>>> 9881c1e8a93... [BugFix] Make experimental_lake_ignore_lost_segment skip lost segments without crashing (#75699)
+        // Per-segment stats when provided, so concurrent scans don't race on one shared stats object.
         if (per_segment_stats != nullptr && i < static_cast<int>(per_segment_stats->size())) {
             seg_options.stats = (*per_segment_stats)[i];
         }

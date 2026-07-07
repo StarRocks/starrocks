@@ -50,11 +50,8 @@
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
-<<<<<<< HEAD
-#include "storage_primitive/range.h"
-=======
 #include "storage_primitive/primary_key_encoding_types.h"
->>>>>>> 9881c1e8a93... [BugFix] Make experimental_lake_ignore_lost_segment skip lost segments without crashing (#75699)
+#include "storage_primitive/range.h"
 #include "test_util.h"
 #include "types/type_descriptor.h"
 
