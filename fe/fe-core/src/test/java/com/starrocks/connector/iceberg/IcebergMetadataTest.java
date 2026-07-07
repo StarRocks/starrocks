@@ -4267,6 +4267,26 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCountIcebergManifestFallbackSumsAcrossManifests() throws IOException {
+        ManifestFile m1 = writeManifest(FILE_A);
+        ManifestFile m2 = writeManifest(FILE_A_1);
+
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(mockNativeTable.snapshot(42L)).thenReturn(mockSnapshot);
+        Mockito.when(mockNativeTable.io()).thenReturn(FILE_IO);
+        Mockito.when(mockSnapshot.summary()).thenReturn(null);
+        Mockito.when(mockSnapshot.dataManifests(Mockito.any())).thenReturn(List.of(m1, m2));
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "db_name", "table_name", "", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(2L,
+                IcebergMetadata.countIcebergFilesFromManifestList(icebergTable, 42L));
+        Assertions.assertEquals(4L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, 42L));
+    }
+
+    @Test
     public void testFileSampleRatioAndSeedPassedFromSessionVariables() throws Exception {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(),
                 DEFAULT_CONFIG);
