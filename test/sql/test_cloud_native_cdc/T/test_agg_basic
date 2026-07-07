@@ -1,19 +1,21 @@
 -- name: test_cdc_agg_basic @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE agg_t (k int, v bigint sum)
 AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "agg_t", "agg_base")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "agg_t", "agg_base", "1800000");
 
 -- Single LOAD with duplicate keys: AGG folds them within-rowset.
 INSERT INTO agg_t VALUES (1, 10), (1, 20), (1, 30);
 
-[UC]function: bk1=create_bookmark("${db[0]}", "agg_t", "agg_head")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "agg_t", "agg_head", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "agg_t", ${bk0}, "agg_base")
-    function: release_bookmark("${db[0]}", "agg_t", ${bk1}, "agg_head")
+    SELECT bookmark_release("${db[0]}", "agg_t", "${bk0}", "agg_base");
+    SELECT bookmark_release("${db[0]}", "agg_t", "${bk1}", "agg_head");
 } END CLEANUP
 
 -- Expectation: 1 row with k=1, v=60 (the AGG'd result), change_type=0.

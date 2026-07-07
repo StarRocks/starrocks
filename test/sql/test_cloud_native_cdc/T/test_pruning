@@ -1,5 +1,7 @@
 -- name: test_cdc_prune_range_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE r (k bigint NOT NULL, dt date NOT NULL, v bigint)
 DUPLICATE KEY(k, dt)
 PARTITION BY RANGE(dt) (
@@ -10,13 +12,13 @@ PARTITION BY RANGE(dt) (
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "r", "rp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "r", "rp", "1800000");
 INSERT INTO r VALUES (1, '2026-01-15', 10), (2, '2026-02-15', 20), (3, '2026-03-15', 30);
-[UC]function: bk1=create_bookmark("${db[0]}", "r", "rp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "r", "rp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "r", ${bk0}, "rp")
-    function: release_bookmark("${db[0]}", "r", ${bk1}, "rp")
+    SELECT bookmark_release("${db[0]}", "r", "${bk0}", "rp");
+    SELECT bookmark_release("${db[0]}", "r", "${bk1}", "rp");
 } END CLEANUP
 
 -- All three partitions changed in the window; the partition-column predicate prunes p1,
@@ -28,6 +30,8 @@ SELECT k, dt, v FROM r [_CHANGES_${bk0}_${bk1}_] WHERE dt >= '2026-02-01' ORDER 
 
 -- name: test_cdc_prune_list_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE l (k int NOT NULL, city varchar(16) NOT NULL, v int)
 DUPLICATE KEY(k, city)
 PARTITION BY LIST(city) (
@@ -38,13 +42,13 @@ PARTITION BY LIST(city) (
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "l", "lp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "l", "lp", "1800000");
 INSERT INTO l VALUES (1, 'bj', 10), (2, 'sh', 20), (3, 'gz', 30);
-[UC]function: bk1=create_bookmark("${db[0]}", "l", "lp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "l", "lp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "l", ${bk0}, "lp")
-    function: release_bookmark("${db[0]}", "l", ${bk1}, "lp")
+    SELECT bookmark_release("${db[0]}", "l", "${bk0}", "lp");
+    SELECT bookmark_release("${db[0]}", "l", "${bk1}", "lp");
 } END CLEANUP
 
 -- The list predicate keeps p_bj and p_sh, prunes p_gz: partitions=2/3.
@@ -54,19 +58,21 @@ SELECT k, city, v FROM l [_CHANGES_${bk0}_${bk1}_] WHERE city IN ('bj', 'sh') OR
 
 -- name: test_cdc_prune_expr_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE e (k bigint NOT NULL, dt datetime NOT NULL, v bigint)
 DUPLICATE KEY(k, dt)
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "e", "ep")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "e", "ep", "1800000");
 INSERT INTO e VALUES (1, '2026-01-01 08:00:00', 10), (2, '2026-01-02 08:00:00', 20), (3, '2026-01-03 08:00:00', 30);
-[UC]function: bk1=create_bookmark("${db[0]}", "e", "ep")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "e", "ep", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "e", ${bk0}, "ep")
-    function: release_bookmark("${db[0]}", "e", ${bk1}, "ep")
+    SELECT bookmark_release("${db[0]}", "e", "${bk0}", "ep");
+    SELECT bookmark_release("${db[0]}", "e", "${bk1}", "ep");
 } END CLEANUP
 
 -- Inserts auto-create one day partition each; the predicate prunes the 2026-01-01 day via the
@@ -77,18 +83,20 @@ SELECT k, dt, v FROM e [_CHANGES_${bk0}_${bk1}_] WHERE dt >= '2026-01-02 00:00:0
 
 -- name: test_cdc_prune_hash_tablet @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE h (k int, v int)
 DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 8
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "h", "hp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "h", "hp", "1800000");
 INSERT INTO h VALUES (1, 10), (2, 20), (3, 30), (7, 70), (15, 150), (23, 230);
-[UC]function: bk1=create_bookmark("${db[0]}", "h", "hp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "h", "hp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "h", ${bk0}, "hp")
-    function: release_bookmark("${db[0]}", "h", ${bk1}, "hp")
+    SELECT bookmark_release("${db[0]}", "h", "${bk0}", "hp");
+    SELECT bookmark_release("${db[0]}", "h", "${bk1}", "hp");
 } END CLEANUP
 
 -- Equality on the hash bucket key prunes to a single tablet: tabletRatio=1/8.
@@ -98,18 +106,20 @@ SELECT k, v FROM h [_CHANGES_${bk0}_${bk1}_] WHERE k = 7 ORDER BY k;
 
 -- name: test_cdc_prune_random_tablet @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE rnd (k int, v int)
 DUPLICATE KEY(k)
 DISTRIBUTED BY RANDOM BUCKETS 4
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "rnd", "np")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "rnd", "np", "1800000");
 INSERT INTO rnd VALUES (1, 10), (2, 20), (7, 70), (15, 150);
-[UC]function: bk1=create_bookmark("${db[0]}", "rnd", "np")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "rnd", "np", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "rnd", ${bk0}, "np")
-    function: release_bookmark("${db[0]}", "rnd", ${bk1}, "np")
+    SELECT bookmark_release("${db[0]}", "rnd", "${bk0}", "np");
+    SELECT bookmark_release("${db[0]}", "rnd", "${bk1}", "np");
 } END CLEANUP
 
 -- RANDOM distribution cannot map a value to a bucket, so no tablet is pruned: tabletRatio=4/4.
@@ -126,6 +136,8 @@ SELECT k, v FROM rnd [_CHANGES_${bk0}_${bk1}_] WHERE k = 7 ORDER BY k;
 
 -- name: test_cdc_hint_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE rp (k bigint NOT NULL, dt date NOT NULL, v bigint)
 DUPLICATE KEY(k, dt)
 PARTITION BY RANGE(dt) (
@@ -136,13 +148,13 @@ PARTITION BY RANGE(dt) (
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "rp", "hp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "rp", "hp", "1800000");
 INSERT INTO rp VALUES (1, '2026-01-15', 10), (2, '2026-02-15', 20), (3, '2026-03-15', 30);
-[UC]function: bk1=create_bookmark("${db[0]}", "rp", "hp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "rp", "hp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "rp", ${bk0}, "hp")
-    function: release_bookmark("${db[0]}", "rp", ${bk1}, "hp")
+    SELECT bookmark_release("${db[0]}", "rp", "${bk0}", "hp");
+    SELECT bookmark_release("${db[0]}", "rp", "${bk1}", "hp");
 } END CLEANUP
 
 -- PARTITION hint keeps 1 of the 3 changed partitions.
@@ -153,18 +165,20 @@ SELECT k, dt, v FROM rp PARTITION(p2) [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
 
 -- name: test_cdc_hint_tablet @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE ht (k int, v int)
 DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 8
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "ht", "hp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "ht", "hp", "1800000");
 INSERT INTO ht VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60), (7, 70), (8, 80), (9, 90), (10, 100), (11, 110), (12, 120), (13, 130), (14, 140), (15, 150), (16, 160);
-[UC]function: bk1=create_bookmark("${db[0]}", "ht", "hp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "ht", "hp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "ht", ${bk0}, "hp")
-    function: release_bookmark("${db[0]}", "ht", ${bk1}, "hp")
+    SELECT bookmark_release("${db[0]}", "ht", "${bk0}", "hp");
+    SELECT bookmark_release("${db[0]}", "ht", "${bk1}", "hp");
 } END CLEANUP
 
 -- Capture a real tablet id; tablet ids are assigned dynamically.
@@ -177,6 +191,8 @@ SELECT k, v FROM ht TABLET(${tablet_id}) [_CHANGES_${bk0}_${bk1}_] ORDER BY k;
 
 -- name: test_cdc_hint_partition_and_tablet @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE rpt (k int NOT NULL, city varchar(16) NOT NULL, v int)
 DUPLICATE KEY(k, city)
 PARTITION BY LIST(city) (
@@ -186,13 +202,13 @@ PARTITION BY LIST(city) (
 DISTRIBUTED BY HASH(k) BUCKETS 4
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "rpt", "hp")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "rpt", "hp", "1800000");
 INSERT INTO rpt VALUES (1, 'bj', 10), (2, 'bj', 20), (3, 'bj', 30), (4, 'bj', 40), (5, 'bj', 50), (6, 'bj', 60), (7, 'bj', 70), (8, 'bj', 80), (9, 'sh', 90), (10, 'sh', 100);
-[UC]function: bk1=create_bookmark("${db[0]}", "rpt", "hp")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "rpt", "hp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "rpt", ${bk0}, "hp")
-    function: release_bookmark("${db[0]}", "rpt", ${bk1}, "hp")
+    SELECT bookmark_release("${db[0]}", "rpt", "${bk0}", "hp");
+    SELECT bookmark_release("${db[0]}", "rpt", "${bk1}", "hp");
 } END CLEANUP
 
 -- Capture a tablet id from the named partition p_bj.

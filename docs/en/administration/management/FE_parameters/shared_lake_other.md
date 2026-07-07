@@ -1495,3 +1495,12 @@ This topic introduces the following types of FE configurations:
 - Description: Cluster-wide ceiling on how long a bookmark reference may live before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective TTL of a reference is the smaller of this ceiling and the reference's own TTL.
 - Introduced in:
 
+### `enable_bookmark_meta_functions`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the bookmark metadata functions (`bookmark_create` / `bookmark_release`) are enabled. These are debug/test-only, OPERATE-privileged, leader-only functions and are gated off by default.
+- Introduced in:
+

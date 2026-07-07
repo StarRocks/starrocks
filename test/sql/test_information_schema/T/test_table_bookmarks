@@ -3,6 +3,8 @@
 -- ==============================================================
 -- name: test_table_bookmarks_basic @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (
     k BIGINT NOT NULL,
     dt DATE NOT NULL,
@@ -18,7 +20,7 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20), (3, '2024-03-15', 30);
 
-[UC]function: bookmark_id=create_bookmark("${db[0]}", "t", "h1")
+[UC]bookmark_id=SELECT bookmark_create("${db[0]}", "t", "h1", "1800000");
 
 -- Summary: exactly 1 row; counts reflect 3 partitions x 1 physical sub-partition.
 SELECT logical_partition_count, physical_partition_count, reference_count
@@ -36,7 +38,7 @@ SELECT holder_id
   WHERE bookmark_id = ${bookmark_id};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${bookmark_id}, "h1")
+  SELECT bookmark_release("${db[0]}", "t", "${bookmark_id}", "h1");
 } END CLEANUP
 
 -- ==============================================================
@@ -45,6 +47,8 @@ CLEANUP {
 -- references row-per-(bm, holder), OLDEST/NEWEST_REFERENCE.
 -- ==============================================================
 -- name: test_table_bookmarks_multi @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 CREATE TABLE t (
     k BIGINT NOT NULL,
@@ -60,12 +64,12 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1, '2024-01-15');
 
 -- Bookmark b1 with two holders (same state -> same bookmark id, two references).
-[UC]function: b1=create_bookmark("${db[0]}", "t", "alpha")
-[UC]function: b1_dup=create_bookmark("${db[0]}", "t", "beta")
+[UC]b1=SELECT bookmark_create("${db[0]}", "t", "alpha", "1800000");
+[UC]b1_dup=SELECT bookmark_create("${db[0]}", "t", "beta", "1800000");
 
 -- Mutate state, then take bookmark b2 with one holder.
 INSERT INTO t VALUES (2, '2024-02-15');
-[UC]function: b2=create_bookmark("${db[0]}", "t", "gamma")
+[UC]b2=SELECT bookmark_create("${db[0]}", "t", "gamma", "1800000");
 
 -- Summary: 2 distinct bookmarks (b1 and b2); b1.reference_count = 2, b2.reference_count = 1.
 SELECT (bookmark_id = ${b1}) AS is_b1, reference_count
@@ -88,7 +92,7 @@ SELECT (bookmark_id = ${b1}) AS is_b1, holder_id
 
 -- OLDEST/NEWEST_REFERENCE on b1: alpha acquired first, beta after.
 -- Tie-break is lex-smallest holder id on equal time, so the smaller
--- holder_id may flip if create_bookmark returns the same millisecond.
+-- holder_id may flip if bookmark_create returns the same millisecond.
 SELECT
   oldest_reference.id AS oldest_holder,
   newest_reference.id AS newest_holder
@@ -96,9 +100,9 @@ SELECT
   WHERE bookmark_id = ${b1};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${b1}, "alpha")
-  function: release_bookmark("${db[0]}", "t", ${b1_dup}, "beta")
-  function: release_bookmark("${db[0]}", "t", ${b2}, "gamma")
+  SELECT bookmark_release("${db[0]}", "t", "${b1}", "alpha");
+  SELECT bookmark_release("${db[0]}", "t", "${b1_dup}", "beta");
+  SELECT bookmark_release("${db[0]}", "t", "${b2}", "gamma");
 } END CLEANUP
 
 -- ==============================================================
@@ -106,6 +110,8 @@ CLEANUP {
 -- Verifies top-3 cap, descending-time order, < 3 partitions case.
 -- ==============================================================
 -- name: test_table_bookmarks_latest_updated @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 CREATE TABLE t_big (
     k BIGINT NOT NULL,
@@ -128,7 +134,7 @@ INSERT INTO t_big VALUES (3, '2024-03-15');
 INSERT INTO t_big VALUES (4, '2024-04-15');
 INSERT INTO t_big VALUES (5, '2024-05-15');
 
-[UC]function: big_bm=create_bookmark("${db[0]}", "t_big", "h_big")
+[UC]big_bm=SELECT bookmark_create("${db[0]}", "t_big", "h_big", "1800000");
 
 -- Top-3 cap: array_length = 3 even though 5 partitions exist.
 SELECT array_length(latest_changed_physical_partitions) AS top_n
@@ -154,15 +160,15 @@ PARTITION BY RANGE(dt) (
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 INSERT INTO t_small VALUES (1, '2024-01-15');
-[UC]function: small_bm=create_bookmark("${db[0]}", "t_small", "h_small")
+[UC]small_bm=SELECT bookmark_create("${db[0]}", "t_small", "h_small", "1800000");
 
 SELECT array_length(latest_changed_physical_partitions) AS top_n
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${small_bm};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t_big", ${big_bm}, "h_big")
-  function: release_bookmark("${db[0]}", "t_small", ${small_bm}, "h_small")
+  SELECT bookmark_release("${db[0]}", "t_big", "${big_bm}", "h_big");
+  SELECT bookmark_release("${db[0]}", "t_small", "${small_bm}", "h_small");
 } END CLEANUP
 
 -- ==============================================================
@@ -170,11 +176,13 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_join @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1);
 
-[UC]function: jb=create_bookmark("${db[0]}", "t", "j1")
+[UC]jb=SELECT bookmark_create("${db[0]}", "t", "j1", "1800000");
 
 -- Full 3-way join -- every row should agree on bookmark_id.
 SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
@@ -186,7 +194,7 @@ SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
   WHERE s.bookmark_id = ${jb};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${jb}, "j1")
+  SELECT bookmark_release("${db[0]}", "t", "${jb}", "j1");
 } END CLEANUP
 
 -- ==============================================================
@@ -194,11 +202,13 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_predicate_pushdown @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1);
 
-[UC]function: pb=create_bookmark("${db[0]}", "t", "pp_holder")
+[UC]pb=SELECT bookmark_create("${db[0]}", "t", "pp_holder", "1800000");
 
 -- Filter by db_id (numeric EQ) -- resolve via the bookmark, then re-filter.
 SELECT COUNT(*) FROM information_schema.table_bookmark_summary s
@@ -222,7 +232,7 @@ SELECT COUNT(*) FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${pb} AND create_time > '2020-01-01';
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${pb}, "pp_holder")
+  SELECT bookmark_release("${db[0]}", "t", "${pb}", "pp_holder");
 } END CLEANUP
 
 -- ==============================================================
@@ -230,11 +240,13 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_projection @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1);
 
-[UC]function: prb=create_bookmark("${db[0]}", "t", "proj")
+[UC]prb=SELECT bookmark_create("${db[0]}", "t", "proj", "1800000");
 
 -- Project subset: cheap columns only -- should not even compute LATEST_CHANGED_PHYSICAL_PARTITIONS / OLDEST/NEWEST_REFERENCE.
 SELECT bookmark_id, reference_count
@@ -249,7 +261,7 @@ SELECT array_length(latest_changed_physical_partitions) > 0 AS has_partitions,
   WHERE bookmark_id = ${prb};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${prb}, "proj")
+  SELECT bookmark_release("${db[0]}", "t", "${prb}", "proj");
 } END CLEANUP
 
 -- ==============================================================
@@ -260,6 +272,8 @@ CLEANUP {
 -- isolate correctly, (d) JOIN works across (db, table) rows.
 -- ==============================================================
 -- name: test_table_bookmarks_multi_db_table @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 -- Explicitly create both databases. (Framework only auto-creates db[0]
 -- when the case has no CREATE DATABASE; here we drive db naming ourselves
@@ -281,9 +295,9 @@ CREATE TABLE t3 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t3 VALUES (3);
 
 -- Take one bookmark per (db, table). 3 bookmarks total across 2 dbs.
-[UC]function: bm_t1=create_bookmark("db_a_${uuid0}", "t1", "mh1")
-[UC]function: bm_t2=create_bookmark("db_a_${uuid0}", "t2", "mh2")
-[UC]function: bm_t3=create_bookmark("db_b_${uuid0}", "t3", "mh3")
+[UC]bm_t1=SELECT bookmark_create("db_a_${uuid0}", "t1", "mh1", "1800000");
+[UC]bm_t2=SELECT bookmark_create("db_a_${uuid0}", "t2", "mh2", "1800000");
+[UC]bm_t3=SELECT bookmark_create("db_b_${uuid0}", "t3", "mh3", "1800000");
 
 ----------------------------------------------------------------------
 -- (a) Two databases visible: 2 distinct DB_IDs for our bookmarks.
@@ -336,7 +350,7 @@ USE db_b_${uuid0};
 CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 INSERT INTO t1 VALUES (99);
-[UC]function: bm_b_t1=create_bookmark("db_b_${uuid0}", "t1", "mh4")
+[UC]bm_b_t1=SELECT bookmark_create("db_b_${uuid0}", "t1", "mh4", "1800000");
 
 -- Both 't1' rows visible, distinguished by DB_ID + TABLE_ID.
 SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
@@ -345,10 +359,10 @@ SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
   WHERE bookmark_id IN (${bm_t1}, ${bm_b_t1});
 
 CLEANUP {
-  function: release_bookmark("db_a_${uuid0}", "t1", ${bm_t1}, "mh1")
-  function: release_bookmark("db_a_${uuid0}", "t2", ${bm_t2}, "mh2")
-  function: release_bookmark("db_b_${uuid0}", "t3", ${bm_t3}, "mh3")
-  function: release_bookmark("db_b_${uuid0}", "t1", ${bm_b_t1}, "mh4")
+  SELECT bookmark_release("db_a_${uuid0}", "t1", "${bm_t1}", "mh1");
+  SELECT bookmark_release("db_a_${uuid0}", "t2", "${bm_t2}", "mh2");
+  SELECT bookmark_release("db_b_${uuid0}", "t3", "${bm_t3}", "mh3");
+  SELECT bookmark_release("db_b_${uuid0}", "t1", "${bm_b_t1}", "mh4");
   DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
   DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
 } END CLEANUP
@@ -360,17 +374,19 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_ttl @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1);
 
--- ttl_h acquired first (explicit TTL), nottl_h second (default -1, reuses bookmark).
+-- ttl_h acquired first (explicit TTL), nottl_h second (no TTL / -1, reuses bookmark).
 -- SLEEP gives nottl_h a strictly later acquire time: oldest/newest break equal-millisecond
 -- ties by smallest holder id, so without the gap a same-ms run would collapse both to
 -- nottl_h and drop ttl_h from the summary.
-[UC]function: ttlbm=create_bookmark("${db[0]}", "t", "ttl_h", 123456789)
+[UC]ttlbm=SELECT bookmark_create("${db[0]}", "t", "ttl_h", "123456789");
 SELECT SLEEP(1);
-[UC]function: ttlbm_dup=create_bookmark("${db[0]}", "t", "nottl_h")
+[UC]ttlbm_dup=SELECT bookmark_create("${db[0]}", "t", "nottl_h", "-1");
 
 -- References: each holder reports its own TTL (ttl_h = 123456789, nottl_h = -1).
 SELECT holder_id, ttl_ms
@@ -388,6 +404,6 @@ SELECT
   WHERE bookmark_id = ${ttlbm};
 
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${ttlbm}, "ttl_h")
-  function: release_bookmark("${db[0]}", "t", ${ttlbm_dup}, "nottl_h")
+  SELECT bookmark_release("${db[0]}", "t", "${ttlbm}", "ttl_h");
+  SELECT bookmark_release("${db[0]}", "t", "${ttlbm_dup}", "nottl_h");
 } END CLEANUP

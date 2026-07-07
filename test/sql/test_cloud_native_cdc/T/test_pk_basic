@@ -1,34 +1,36 @@
 -- name: test_cdc_pk_basic @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE pk_t (k int, v int, c varchar(10))
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "pk_t", "pk")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
 -- bk0->bk1: three inserts.
 INSERT INTO pk_t VALUES (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
-[UC]function: bk1=create_bookmark("${db[0]}", "pk_t", "pk")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
 -- bk1->bk2: a whole-row update. PK is the first table type to surface the old
 -- value, so this publish must emit DELETE(2,20) paired with INSERT(2,200).
 UPDATE pk_t SET v = 200 WHERE k = 2;
-[UC]function: bk2=create_bookmark("${db[0]}", "pk_t", "pk")
+[UC]bk2=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
 -- bk2->bk3: a pure delete emits only a DELETE, no paired INSERT.
 DELETE FROM pk_t WHERE k = 3;
-[UC]function: bk3=create_bookmark("${db[0]}", "pk_t", "pk")
+[UC]bk3=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
 -- bk3->bk4: an insert of a fresh key.
 INSERT INTO pk_t VALUES (4, 40, 'd');
-[UC]function: bk4=create_bookmark("${db[0]}", "pk_t", "pk")
+[UC]bk4=SELECT bookmark_create("${db[0]}", "pk_t", "pk", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "pk_t", ${bk0}, "pk")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk1}, "pk")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk2}, "pk")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk3}, "pk")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk4}, "pk")
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk0}", "pk");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk1}", "pk");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk2}", "pk");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk3}", "pk");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk4}", "pk");
 } END CLEANUP
 
 -- Empty window returns 0 rows.
@@ -74,13 +76,15 @@ SELECT k, v FROM pk_t [_CHANGES_${bk0}_${bk4}_] WHERE __CHANGE_TYPE__ = 1 ORDER 
 
 -- name: test_cdc_pk_update_compaction @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE pk_t (k int, v int)
 PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
 INSERT INTO pk_t VALUES (1, 10), (2, 20), (3, 30);
 
-[UC]function: bk_pre=create_bookmark("${db[0]}", "pk_t", "pkc")
+[UC]bk_pre=SELECT bookmark_create("${db[0]}", "pk_t", "pkc", "1800000");
 
 -- Update and delete before compaction, then compact: the compaction repackages
 -- the surviving rows and must not by itself surface any change. CDC reconstructs
@@ -90,18 +94,18 @@ DELETE FROM pk_t WHERE k = 3;
 [UC]ALTER TABLE pk_t COMPACT;
 SELECT sleep(15);
 
-[UC]function: bk_post=create_bookmark("${db[0]}", "pk_t", "pkc")
+[UC]bk_post=SELECT bookmark_create("${db[0]}", "pk_t", "pkc", "1800000");
 
 -- More DML after compaction.
 UPDATE pk_t SET v = 11 WHERE k = 1;
 INSERT INTO pk_t VALUES (5, 50);
 
-[UC]function: bk_after=create_bookmark("${db[0]}", "pk_t", "pkc")
+[UC]bk_after=SELECT bookmark_create("${db[0]}", "pk_t", "pkc", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "pk_t", ${bk_pre}, "pkc")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk_post}, "pkc")
-    function: release_bookmark("${db[0]}", "pk_t", ${bk_after}, "pkc")
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk_pre}", "pkc");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk_post}", "pkc");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk_after}", "pkc");
 } END CLEANUP
 
 -- Window spanning the compaction: the update and delete still surface their

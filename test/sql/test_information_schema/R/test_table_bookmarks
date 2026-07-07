@@ -1,4 +1,5 @@
 -- name: test_table_bookmarks_basic @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (
     k BIGINT NOT NULL,
     dt DATE NOT NULL,
@@ -16,7 +17,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20), (3, '2024-03-15', 30);
 -- result:
 -- !result
-[UC]function: bookmark_id=create_bookmark("${db[0]}", "t", "h1")
+[UC]bookmark_id=SELECT bookmark_create("${db[0]}", "t", "h1", "1800000");
 SELECT logical_partition_count, physical_partition_count, reference_count
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${bookmark_id};
@@ -36,10 +37,11 @@ SELECT holder_id
 h1
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${bookmark_id}, "h1")
+  SELECT bookmark_release("${db[0]}", "t", "${bookmark_id}", "h1");
 } END CLEANUP
 
 -- name: test_table_bookmarks_multi @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (
     k BIGINT NOT NULL,
     dt DATE NOT NULL
@@ -55,12 +57,12 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1, '2024-01-15');
 -- result:
 -- !result
-[UC]function: b1=create_bookmark("${db[0]}", "t", "alpha")
-[UC]function: b1_dup=create_bookmark("${db[0]}", "t", "beta")
+[UC]b1=SELECT bookmark_create("${db[0]}", "t", "alpha", "1800000");
+[UC]b1_dup=SELECT bookmark_create("${db[0]}", "t", "beta", "1800000");
 INSERT INTO t VALUES (2, '2024-02-15');
 -- result:
 -- !result
-[UC]function: b2=create_bookmark("${db[0]}", "t", "gamma")
+[UC]b2=SELECT bookmark_create("${db[0]}", "t", "gamma", "1800000");
 SELECT (bookmark_id = ${b1}) AS is_b1, reference_count
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id IN (${b1}, ${b2})
@@ -96,12 +98,13 @@ SELECT
 [REGEX]alpha	(alpha|beta)
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${b1}, "alpha")
-  function: release_bookmark("${db[0]}", "t", ${b1_dup}, "beta")
-  function: release_bookmark("${db[0]}", "t", ${b2}, "gamma")
+  SELECT bookmark_release("${db[0]}", "t", "${b1}", "alpha");
+  SELECT bookmark_release("${db[0]}", "t", "${b1_dup}", "beta");
+  SELECT bookmark_release("${db[0]}", "t", "${b2}", "gamma");
 } END CLEANUP
 
 -- name: test_table_bookmarks_latest_updated @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t_big (
     k BIGINT NOT NULL,
     dt DATE NOT NULL
@@ -132,7 +135,7 @@ INSERT INTO t_big VALUES (4, '2024-04-15');
 INSERT INTO t_big VALUES (5, '2024-05-15');
 -- result:
 -- !result
-[UC]function: big_bm=create_bookmark("${db[0]}", "t_big", "h_big")
+[UC]big_bm=SELECT bookmark_create("${db[0]}", "t_big", "h_big", "1800000");
 SELECT array_length(latest_changed_physical_partitions) AS top_n
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${big_bm};
@@ -162,7 +165,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO t_small VALUES (1, '2024-01-15');
 -- result:
 -- !result
-[UC]function: small_bm=create_bookmark("${db[0]}", "t_small", "h_small")
+[UC]small_bm=SELECT bookmark_create("${db[0]}", "t_small", "h_small", "1800000");
 SELECT array_length(latest_changed_physical_partitions) AS top_n
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${small_bm};
@@ -170,11 +173,12 @@ SELECT array_length(latest_changed_physical_partitions) AS top_n
 2
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t_big", ${big_bm}, "h_big")
-  function: release_bookmark("${db[0]}", "t_small", ${small_bm}, "h_small")
+  SELECT bookmark_release("${db[0]}", "t_big", "${big_bm}", "h_big");
+  SELECT bookmark_release("${db[0]}", "t_small", "${small_bm}", "h_small");
 } END CLEANUP
 
 -- name: test_table_bookmarks_join @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 -- result:
@@ -182,7 +186,7 @@ CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t VALUES (1);
 -- result:
 -- !result
-[UC]function: jb=create_bookmark("${db[0]}", "t", "j1")
+[UC]jb=SELECT bookmark_create("${db[0]}", "t", "j1", "1800000");
 SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
   FROM information_schema.table_bookmark_summary s
   JOIN information_schema.table_bookmark_partitions p
@@ -194,10 +198,11 @@ SELECT s.bookmark_id, p.physical_partition_id, r.holder_id
 [REGEX].*[0-9]+\s+[0-9]+\s+j1.*
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${jb}, "j1")
+  SELECT bookmark_release("${db[0]}", "t", "${jb}", "j1");
 } END CLEANUP
 
 -- name: test_table_bookmarks_predicate_pushdown @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 -- result:
@@ -205,7 +210,7 @@ CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t VALUES (1);
 -- result:
 -- !result
-[UC]function: pb=create_bookmark("${db[0]}", "t", "pp_holder")
+[UC]pb=SELECT bookmark_create("${db[0]}", "t", "pp_holder", "1800000");
 SELECT COUNT(*) FROM information_schema.table_bookmark_summary s
   WHERE s.db_id = (SELECT db_id FROM information_schema.table_bookmark_summary
                    WHERE bookmark_id = ${pb} LIMIT 1);
@@ -233,10 +238,11 @@ SELECT COUNT(*) FROM information_schema.table_bookmark_summary
 1
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${pb}, "pp_holder")
+  SELECT bookmark_release("${db[0]}", "t", "${pb}", "pp_holder");
 } END CLEANUP
 
 -- name: test_table_bookmarks_projection @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 -- result:
@@ -244,7 +250,7 @@ CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t VALUES (1);
 -- result:
 -- !result
-[UC]function: prb=create_bookmark("${db[0]}", "t", "proj")
+[UC]prb=SELECT bookmark_create("${db[0]}", "t", "proj", "1800000");
 SELECT bookmark_id, reference_count
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id = ${prb};
@@ -260,10 +266,11 @@ SELECT array_length(latest_changed_physical_partitions) > 0 AS has_partitions,
 1	proj	proj
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${prb}, "proj")
+  SELECT bookmark_release("${db[0]}", "t", "${prb}", "proj");
 } END CLEANUP
 
 -- name: test_table_bookmarks_multi_db_table @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE DATABASE db_a_${uuid0};
 -- result:
 -- !result
@@ -297,9 +304,9 @@ CREATE TABLE t3 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t3 VALUES (3);
 -- result:
 -- !result
-[UC]function: bm_t1=create_bookmark("db_a_${uuid0}", "t1", "mh1")
-[UC]function: bm_t2=create_bookmark("db_a_${uuid0}", "t2", "mh2")
-[UC]function: bm_t3=create_bookmark("db_b_${uuid0}", "t3", "mh3")
+[UC]bm_t1=SELECT bookmark_create("db_a_${uuid0}", "t1", "mh1", "1800000");
+[UC]bm_t2=SELECT bookmark_create("db_a_${uuid0}", "t2", "mh2", "1800000");
+[UC]bm_t3=SELECT bookmark_create("db_b_${uuid0}", "t3", "mh3", "1800000");
 SELECT COUNT(DISTINCT db_id) AS distinct_dbs
   FROM information_schema.table_bookmark_summary
   WHERE bookmark_id IN (${bm_t1}, ${bm_t2}, ${bm_t3});
@@ -347,7 +354,7 @@ CREATE TABLE t1 (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t1 VALUES (99);
 -- result:
 -- !result
-[UC]function: bm_b_t1=create_bookmark("db_b_${uuid0}", "t1", "mh4")
+[UC]bm_b_t1=SELECT bookmark_create("db_b_${uuid0}", "t1", "mh4", "1800000");
 SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
        COUNT(DISTINCT table_id) AS distinct_tables
   FROM information_schema.table_bookmark_summary
@@ -356,15 +363,16 @@ SELECT COUNT(DISTINCT db_id) AS distinct_dbs,
 2	2
 -- !result
 CLEANUP {
-  function: release_bookmark("db_a_${uuid0}", "t1", ${bm_t1}, "mh1")
-  function: release_bookmark("db_a_${uuid0}", "t2", ${bm_t2}, "mh2")
-  function: release_bookmark("db_b_${uuid0}", "t3", ${bm_t3}, "mh3")
-  function: release_bookmark("db_b_${uuid0}", "t1", ${bm_b_t1}, "mh4")
+  SELECT bookmark_release("db_a_${uuid0}", "t1", "${bm_t1}", "mh1");
+  SELECT bookmark_release("db_a_${uuid0}", "t2", "${bm_t2}", "mh2");
+  SELECT bookmark_release("db_b_${uuid0}", "t3", "${bm_t3}", "mh3");
+  SELECT bookmark_release("db_b_${uuid0}", "t1", "${bm_b_t1}", "mh4");
   DROP DATABASE IF EXISTS db_a_${uuid0} FORCE;
   DROP DATABASE IF EXISTS db_b_${uuid0} FORCE;
 } END CLEANUP
 
 -- name: test_table_bookmarks_ttl @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
 -- result:
@@ -372,12 +380,12 @@ CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
 INSERT INTO t VALUES (1);
 -- result:
 -- !result
-[UC]function: ttlbm=create_bookmark("${db[0]}", "t", "ttl_h", 123456789)
+[UC]ttlbm=SELECT bookmark_create("${db[0]}", "t", "ttl_h", "123456789");
 SELECT SLEEP(1);
 -- result:
 1
 -- !result
-[UC]function: ttlbm_dup=create_bookmark("${db[0]}", "t", "nottl_h")
+[UC]ttlbm_dup=SELECT bookmark_create("${db[0]}", "t", "nottl_h", "-1");
 SELECT holder_id, ttl_ms
   FROM information_schema.table_bookmark_references
   WHERE bookmark_id = ${ttlbm}
@@ -397,6 +405,6 @@ SELECT
 ttl_h	123456789	nottl_h	-1
 -- !result
 CLEANUP {
-  function: release_bookmark("${db[0]}", "t", ${ttlbm}, "ttl_h")
-  function: release_bookmark("${db[0]}", "t", ${ttlbm_dup}, "nottl_h")
+  SELECT bookmark_release("${db[0]}", "t", "${ttlbm}", "ttl_h");
+  SELECT bookmark_release("${db[0]}", "t", "${ttlbm_dup}", "nottl_h");
 } END CLEANUP

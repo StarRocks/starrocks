@@ -6,6 +6,8 @@
 
 -- name: test_cdc_not_trackable_drop_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -18,16 +20,16 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 ALTER TABLE part_t DROP PARTITION p1;
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -35,6 +37,8 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 
 -- name: test_cdc_not_trackable_truncate_partition @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -47,17 +51,17 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 -- TRUNCATE PARTITION replaces the partition data; the physical partition id changes.
 TRUNCATE TABLE part_t PARTITION (p1);
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -65,29 +69,33 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 
 -- name: test_cdc_not_trackable_truncate_table @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dup_t VALUES (1, 10);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 -- TRUNCATE TABLE wipes the default partition; its physical id changes.
 TRUNCATE TABLE dup_t;
 INSERT INTO dup_t VALUES (2, 20);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 
 
 -- name: test_cdc_not_trackable_recreate_partition @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
@@ -100,7 +108,7 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 -- DROP then re-ADD with the same name creates a fresh partition id; the
 -- bookmark's physical id is orphaned.
@@ -108,11 +116,11 @@ ALTER TABLE part_t DROP PARTITION p1;
 ALTER TABLE part_t ADD PARTITION p1 VALUES LESS THAN ("2026-06-01");
 INSERT INTO part_t VALUES ("2026-05-20", 2, 20);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -120,13 +128,15 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 
 -- name: test_cdc_not_trackable_schema_rewrite @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dup_t VALUES (1, 10);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 -- INT → VARCHAR can't reuse the zonemap, so the alter rewrites partition data
 -- and advances the base index meta id.
@@ -135,11 +145,11 @@ function: wait_alter_table_finish()
 
 INSERT INTO dup_t VALUES (2, 'hi');
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -147,13 +157,15 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 
 -- name: test_cdc_not_trackable_hash_rebucket @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dup_t VALUES (1, 10);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 -- Changing bucket count drops the source partition and creates a new one
 -- under a fresh physical id.
@@ -162,17 +174,19 @@ function: wait_optimize_table_finish()
 
 INSERT INTO dup_t VALUES (2, 20);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 
 
 -- name: test_cdc_not_trackable_range_split @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 SET enable_range_distribution = true;
 
@@ -182,7 +196,7 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dup_t VALUES (1, 10);
 
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 -- SPLIT TABLET advances baseMaterializedIndexId; the partition's physical id
 -- is preserved, so the resolver classifies the change as a reshard.
@@ -192,17 +206,19 @@ function: wait_optimize_table_finish()
 
 INSERT INTO dup_t VALUES (2, 20);
 
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 
 
 -- name: test_cdc_hint_partition_not_present @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
 CREATE TABLE rp2 (k bigint NOT NULL, dt date NOT NULL, v bigint)
 DUPLICATE KEY(k, dt)
@@ -213,13 +229,13 @@ PARTITION BY RANGE(dt) (
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "rp2", "nt")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "rp2", "nt", "1800000");
 INSERT INTO rp2 VALUES (2, '2026-02-15', 20);
-[UC]function: bk1=create_bookmark("${db[0]}", "rp2", "nt")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "rp2", "nt", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "rp2", ${bk0}, "nt")
-    function: release_bookmark("${db[0]}", "rp2", ${bk1}, "nt")
+    SELECT bookmark_release("${db[0]}", "rp2", "${bk0}", "nt");
+    SELECT bookmark_release("${db[0]}", "rp2", "${bk1}", "nt");
 } END CLEANUP
 
 -- p1 had no changes in the window → not present in the changeset → not trackable.

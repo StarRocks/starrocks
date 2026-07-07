@@ -1443,3 +1443,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：bookmark reference が存続できる時間のクラスター全体の上限。reference 自身の TTL に関わらず、クリーンアップ処理がこの上限を超えた reference を回収します。`<= 0` の場合は上限を無効にします。reference の実際の TTL は、この上限と reference 自身の TTL のうち小さい方になります。
 - 導入時期：
+
+### `enable_bookmark_meta_functions`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：bookmark メタデータ関数(`bookmark_create` / `bookmark_release`)を有効にするかどうか。これらはデバッグ/テスト専用の関数で、デフォルトでは無効になっています。有効にするには OPERATE 権限が必要で、leader ノードでのみ実行できます。
+- 導入時期：

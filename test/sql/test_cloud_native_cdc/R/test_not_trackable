@@ -1,4 +1,5 @@
 -- name: test_cdc_not_trackable_drop_partition @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -15,17 +16,17 @@ INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 ALTER TABLE part_t DROP PARTITION p1;
 -- result:
 -- !result
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -33,6 +34,7 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
 -- name: test_cdc_not_trackable_truncate_partition @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -49,17 +51,17 @@ INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 INSERT INTO part_t VALUES ("2026-06-15", 2, 20);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 TRUNCATE TABLE part_t PARTITION (p1);
 -- result:
 -- !result
 INSERT INTO part_t VALUES ("2026-06-20", 3, 30);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -67,6 +69,7 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
 -- name: test_cdc_not_trackable_truncate_table @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -75,17 +78,17 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO dup_t VALUES (1, 10);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 TRUNCATE TABLE dup_t;
 -- result:
 -- !result
 INSERT INTO dup_t VALUES (2, 20);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -93,6 +96,7 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
 -- name: test_cdc_not_trackable_recreate_partition @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE part_t (dt date, k int, v int)
 DUPLICATE KEY(dt, k)
 PARTITION BY RANGE(dt) (
@@ -106,7 +110,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO part_t VALUES ("2026-05-15", 1, 10);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 ALTER TABLE part_t DROP PARTITION p1;
 -- result:
 -- !result
@@ -116,10 +120,10 @@ ALTER TABLE part_t ADD PARTITION p1 VALUES LESS THAN ("2026-06-01");
 INSERT INTO part_t VALUES ("2026-05-20", 2, 20);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "part_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "part_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "part_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "part_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "part_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -127,6 +131,7 @@ SELECT * FROM part_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'part_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
 -- name: test_cdc_not_trackable_schema_rewrite @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -135,7 +140,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO dup_t VALUES (1, 10);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 ALTER TABLE dup_t MODIFY COLUMN v VARCHAR(50);
 -- result:
 -- !result
@@ -146,10 +151,10 @@ None
 INSERT INTO dup_t VALUES (2, 'hi');
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -157,6 +162,7 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ rewritten.*
 -- !result
 -- name: test_cdc_not_trackable_hash_rebucket @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -165,7 +171,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO dup_t VALUES (1, 10);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 ALTER TABLE dup_t DISTRIBUTED BY HASH(k) BUCKETS 4;
 -- result:
 -- !result
@@ -176,10 +182,10 @@ None
 INSERT INTO dup_t VALUES (2, 20);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -187,6 +193,7 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ dropped.*
 -- !result
 -- name: test_cdc_not_trackable_range_split @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 SET enable_range_distribution = true;
 -- result:
 -- !result
@@ -198,7 +205,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO dup_t VALUES (1, 10);
 -- result:
 -- !result
-[UC]function: bk_base=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 function: set_first_tablet_id("dup_t")
 -- result:
 None
@@ -213,10 +220,10 @@ function: wait_optimize_table_finish()
 INSERT INTO dup_t VALUES (2, 20);
 -- result:
 -- !result
-[UC]function: bk_head=create_bookmark("${db[0]}", "dup_t", "nt")
+[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_base}, "nt")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_head}, "nt")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
 } END CLEANUP
 
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
@@ -224,6 +231,7 @@ SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 [REGEX]E:.*on table 'dup_t' not trackable: physical partition [0-9]+ resharded.*
 -- !result
 -- name: test_cdc_hint_partition_not_present @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE rp2 (k bigint NOT NULL, dt date NOT NULL, v bigint)
 DUPLICATE KEY(k, dt)
 PARTITION BY RANGE(dt) (
@@ -234,14 +242,14 @@ DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 -- result:
 -- !result
-[UC]function: bk0=create_bookmark("${db[0]}", "rp2", "nt")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "rp2", "nt", "1800000");
 INSERT INTO rp2 VALUES (2, '2026-02-15', 20);
 -- result:
 -- !result
-[UC]function: bk1=create_bookmark("${db[0]}", "rp2", "nt")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "rp2", "nt", "1800000");
 CLEANUP {
-    function: release_bookmark("${db[0]}", "rp2", ${bk0}, "nt")
-    function: release_bookmark("${db[0]}", "rp2", ${bk1}, "nt")
+    SELECT bookmark_release("${db[0]}", "rp2", "${bk0}", "nt");
+    SELECT bookmark_release("${db[0]}", "rp2", "${bk1}", "nt");
 } END CLEANUP
 
 SELECT k, dt, v FROM rp2 PARTITION(p1) [_CHANGES_${bk0}_${bk1}_];

@@ -1,5 +1,7 @@
 -- name: test_query_types @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE t (
     k BIGINT NOT NULL,
     dt DATE NOT NULL,
@@ -14,7 +16,7 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO t VALUES (1, '2024-01-15', 10), (2, '2024-02-15', 20);
 
-[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+[UC]bookmark_id=SELECT bookmark_create("${db[0]}", "t", "sql_test", "1800000");
 
 INSERT INTO t VALUES (3, '2024-01-20', 30);
 
@@ -36,4 +38,4 @@ SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k LIMIT 1;
 -- live join scoped on k
 SELECT a.k AS live_k, b.k AS scoped_k FROM t a JOIN t b [_BOOKMARK_${bookmark_id}_] ON a.k = b.k ORDER BY a.k;
 
-function: release_bookmark("${db[0]}", "t", ${bookmark_id})
+[UC]SELECT bookmark_release("${db[0]}", "t", "${bookmark_id}", "sql_test");

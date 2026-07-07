@@ -1,4 +1,5 @@
 -- name: test_temp_partition_lifecycle @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (
     k BIGINT NOT NULL,
     dt DATE NOT NULL,
@@ -21,7 +22,7 @@ ALTER TABLE t ADD TEMPORARY PARTITION tp1 VALUES LESS THAN ('2024-04-01');
 INSERT INTO t TEMPORARY PARTITION (tp1) VALUES (99, '2024-03-15', 999);
 -- result:
 -- !result
-[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+[UC]bookmark_id=SELECT bookmark_create("${db[0]}", "t", "sql_test", "1800000");
 SELECT k, dt, v FROM t TEMPORARY PARTITION (tp1) ORDER BY k;
 -- result:
 99	2024-03-15	999
@@ -31,7 +32,4 @@ SELECT k, dt, v FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
 1	2024-01-15	10
 2	2024-02-15	20
 -- !result
-function: release_bookmark("${db[0]}", "t", ${bookmark_id})
--- result:
-None
--- !result
+[UC]SELECT bookmark_release("${db[0]}", "t", "${bookmark_id}", "sql_test");

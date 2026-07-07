@@ -42,12 +42,20 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.lake.bookmark.AlreadyAtLatestException;
+import com.starrocks.lake.bookmark.Bookmark;
+import com.starrocks.lake.bookmark.BookmarkHolder;
+import com.starrocks.lake.bookmark.BookmarkManager;
+import com.starrocks.lake.bookmark.BookmarkNotFoundException;
+import com.starrocks.lake.bookmark.HolderId;
+import com.starrocks.lake.bookmark.ReferenceNotFoundException;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
@@ -872,6 +880,97 @@ public class MetaFunctions {
                     "Failed to invalidate global dictionary: " + e.getMessage());
         }
         return ConstantOperator.createVarchar("invalidated column dict");
+    }
+
+    /**
+     * Create a bookmark on db.table pinned by holder, returning its id. ttl_ms is the per-reference
+     * expiry in milliseconds; a non-positive value creates a reference with no expiry. Debug/test-only:
+     * gated by Config.enable_bookmark_meta_functions, OPERATE-privileged, leader-only.
+     */
+    @ConstantFunction(name = "bookmark_create", argTypes = {VARCHAR, VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator bookmarkCreate(ConstantOperator dbName, ConstantOperator tableName,
+                                                  ConstantOperator holder, ConstantOperator ttlMs) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.getExplainLevel() != null) {
+            return ConstantOperator.createVarchar("0");
+        }
+        if (!Config.enable_bookmark_meta_functions) {
+            throw new SemanticException("bookmark meta functions are disabled; "
+                    + "set enable_bookmark_meta_functions=true to use bookmark_create");
+        }
+        authOperatorPrivilege();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            throw new SemanticException("bookmark_create must run on the FE leader");
+        }
+        long ttl;
+        try {
+            ttl = Long.parseLong(ttlMs.getVarchar().trim());
+        } catch (NumberFormatException e) {
+            throw new SemanticException("ttl_ms must be an integer number of milliseconds, got: " + ttlMs.getVarchar());
+        }
+        String db = dbName.getVarchar();
+        String tbl = tableName.getVarchar();
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(db)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db, tbl)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tbl));
+        BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder bookmarkHolder = BookmarkHolder.forEmptyInfo(holder.getVarchar());
+        try {
+            // A non-positive ttl_ms requests a reference with no expiry (BookmarkManager's no-TTL create).
+            Bookmark bookmark = ttl > 0
+                    ? bookmarkManager.create(database.getId(), table.getId(), bookmarkHolder, ttl)
+                    : bookmarkManager.create(database.getId(), table.getId(), bookmarkHolder);
+            return ConstantOperator.createVarchar(Long.toString(bookmark.getBookmarkId()));
+        } catch (AlreadyAtLatestException e) {
+            return ConstantOperator.createVarchar(Long.toString(e.getBookmarkId()));
+        } catch (LockTimeoutException e) {
+            throw new SemanticException("bookmark_create timed out acquiring the table lock: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Release the bookmark reference held by holder on db.table. Returns "true" on success; throws with
+     * a specific reason if the bookmark or reference is not found. Gated by
+     * Config.enable_bookmark_meta_functions, OPERATE-privileged, leader-only.
+     */
+    @ConstantFunction(name = "bookmark_release", argTypes = {VARCHAR, VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator bookmarkRelease(ConstantOperator dbName, ConstantOperator tableName,
+                                                   ConstantOperator bookmarkId, ConstantOperator holder) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.getExplainLevel() != null) {
+            return ConstantOperator.createVarchar("true");
+        }
+        if (!Config.enable_bookmark_meta_functions) {
+            throw new SemanticException("bookmark meta functions are disabled; "
+                    + "set enable_bookmark_meta_functions=true to use bookmark_release");
+        }
+        authOperatorPrivilege();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            throw new SemanticException("bookmark_release must run on the FE leader");
+        }
+        long id;
+        try {
+            id = Long.parseLong(bookmarkId.getVarchar().trim());
+        } catch (NumberFormatException e) {
+            throw new SemanticException("bookmark_id must be an integer, got: " + bookmarkId.getVarchar());
+        }
+        String db = dbName.getVarchar();
+        String tbl = tableName.getVarchar();
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(db)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db, tbl)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tbl));
+        try {
+            GlobalStateMgr.getCurrentState().getBookmarkManager().releaseReference(
+                    database.getId(), table.getId(), id,
+                    new HolderId(holder.getVarchar()));
+        } catch (BookmarkNotFoundException | ReferenceNotFoundException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        return ConstantOperator.createVarchar("true");
     }
 
     /**

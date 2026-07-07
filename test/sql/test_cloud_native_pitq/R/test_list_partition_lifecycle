@@ -1,4 +1,5 @@
 -- name: test_list_partition_lifecycle @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 CREATE TABLE t (
     k BIGINT NOT NULL,
     region VARCHAR(8) NOT NULL,
@@ -16,7 +17,7 @@ PROPERTIES ('replication_num' = '1');
 INSERT INTO t VALUES (1, 'us', 10), (2, 'eu', 20), (3, 'apac', 30);
 -- result:
 -- !result
-[UC]function: bookmark_id=create_bookmark("${db[0]}", "t")
+[UC]bookmark_id=SELECT bookmark_create("${db[0]}", "t", "sql_test", "1800000");
 ALTER TABLE t ADD PARTITION p_jp VALUES IN ('jp');
 -- result:
 -- !result
@@ -74,7 +75,4 @@ SELECT k FROM t bk [_BOOKMARK_${bookmark_id}_] ORDER BY k;
 -- result:
 [REGEX]E: \(1064, "Getting analyzing error\. Detail message: physical partition \d+ in bookmark \d+ no longer exists on table 't'\."\)
 -- !result
-function: release_bookmark("${db[0]}", "t", ${bookmark_id})
--- result:
-None
--- !result
+[UC]SELECT bookmark_release("${db[0]}", "t", "${bookmark_id}", "sql_test");

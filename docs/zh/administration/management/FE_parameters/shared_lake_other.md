@@ -1493,3 +1493,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 集群级别的 bookmark reference 最大存活时间上限。无论 reference 自身的 TTL 如何，清理任务都会在超过该上限后回收 reference。`<= 0` 表示不启用该上限。reference 的实际 TTL 取该上限与其自身 TTL 中较小的一个。
 - 引入版本:
+
+### `enable_bookmark_meta_functions`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用 bookmark 元数据函数(`bookmark_create` / `bookmark_release`)。这两个函数仅用于调试/测试，默认关闭，需要 OPERATE 权限且只能在 leader 节点上执行。
+- 引入版本:

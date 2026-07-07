@@ -1,5 +1,7 @@
 -- name: test_cdc_dup_basic @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE dup_t (k int, c varchar(10), v int, dim_id int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
@@ -10,21 +12,21 @@ PROPERTIES ('replication_num' = '1');
 
 INSERT INTO dim_t VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma');
 
-[UC]function: bk0=create_bookmark("${db[0]}", "dup_t", "basic")
+[UC]bk0=SELECT bookmark_create("${db[0]}", "dup_t", "basic", "1800000");
 
 -- Three INSERT rounds with bookmarks at every boundary.
 INSERT INTO dup_t VALUES (1, 'x', 100, 1);
-[UC]function: bk1=create_bookmark("${db[0]}", "dup_t", "basic")
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t", "basic", "1800000");
 INSERT INTO dup_t VALUES (2, 'y', 200, 2), (3, 'x', 300, 1);
-[UC]function: bk2=create_bookmark("${db[0]}", "dup_t", "basic")
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_t", "basic", "1800000");
 INSERT INTO dup_t VALUES (4, 'y', 400, 3), (5, 'x', 500, 99);
-[UC]function: bk3=create_bookmark("${db[0]}", "dup_t", "basic")
+[UC]bk3=SELECT bookmark_create("${db[0]}", "dup_t", "basic", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk0}, "basic")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk1}, "basic")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk2}, "basic")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk3}, "basic")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk0}", "basic");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk1}", "basic");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk2}", "basic");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk3}", "basic");
 } END CLEANUP
 
 -- Empty window returns 0 rows.
@@ -83,11 +85,13 @@ ORDER BY f.k;
 
 -- name: test_cdc_dup_compaction @cloud
 
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
 CREATE TABLE dup_t (k int, v int)
 DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1');
 
-[UC]function: bk_pre=create_bookmark("${db[0]}", "dup_t", "cp")
+[UC]bk_pre=SELECT bookmark_create("${db[0]}", "dup_t", "cp", "1800000");
 
 -- Three INSERTs create three rowsets, then COMPACT folds them.
 INSERT INTO dup_t VALUES (1, 10);
@@ -96,18 +100,18 @@ INSERT INTO dup_t VALUES (3, 30);
 [UC]ALTER TABLE dup_t COMPACT;
 SELECT sleep(15);
 
-[UC]function: bk_post=create_bookmark("${db[0]}", "dup_t", "cp")
+[UC]bk_post=SELECT bookmark_create("${db[0]}", "dup_t", "cp", "1800000");
 
 -- Two more INSERTs after compaction.
 INSERT INTO dup_t VALUES (4, 40);
 INSERT INTO dup_t VALUES (5, 50);
 
-[UC]function: bk_after=create_bookmark("${db[0]}", "dup_t", "cp")
+[UC]bk_after=SELECT bookmark_create("${db[0]}", "dup_t", "cp", "1800000");
 
 CLEANUP {
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_pre}, "cp")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_post}, "cp")
-    function: release_bookmark("${db[0]}", "dup_t", ${bk_after}, "cp")
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_pre}", "cp");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_post}", "cp");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_after}", "cp");
 } END CLEANUP
 
 -- A window spanning the compaction event still returns every row exactly once.

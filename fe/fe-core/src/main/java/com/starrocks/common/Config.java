@@ -4943,4 +4943,10 @@ public class Config extends ConfigBase {
                     + "<= 0 disables the ceiling. The effective TTL of a reference is the smaller "
                     + "of this ceiling and the reference's own TTL.")
     public static long bookmark_reference_max_ttl_ms = -1;
+
+    @ConfField(mutable = true, comment =
+            "Whether the bookmark metadata functions (bookmark_create / bookmark_release) are enabled. "
+                    + "These are debug/test-only functions gated off by default; enabling them exposes a "
+                    + "narrow, OPERATE-privileged, leader-only bookmark create/release surface over SQL.")
+    public static boolean enable_bookmark_meta_functions = false;
 }

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
@@ -24,7 +25,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -723,5 +726,340 @@ public class MetaFunctionsTest extends MVTestBase {
         connectContext.setCurrentUserIdentity(currentUserIdentity);
         connectContext.setCurrentRoleIds(currentRoleIds);
         connectContext.setThreadLocalInfo();
+    }
+
+    @Test
+    public void testBookmarkCreateDisabledByDefault() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = false;
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("enable_bookmark_meta_functions"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateRejectsNonLeader() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("leader"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateNonPositiveTtlProceedsToNoExpiry() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            // ttl_ms <= 0 no longer fails the ttl check; it routes to the no-expiry create,
+            // so a non-existent db surfaces the db error, not a ttl error.
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("0")));
+            Assertions.assertFalse(e.getMessage().contains("ttl_ms"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateRejectsNonNumericTtl() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("not_a_number")));
+            Assertions.assertTrue(e.getMessage().contains("ttl_ms"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateRejectsUnknownDb() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("1800000")));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateSkippedUnderExplain() {
+        connectContext.setThreadLocalInfo();
+        connectContext.setExplainLevel(StatementBase.ExplainLevel.VERBOSE);
+        try {
+            ConstantOperator r = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("0"));
+            Assertions.assertEquals("0", r.getVarchar());
+        } finally {
+            connectContext.setExplainLevel(null);
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseSkippedUnderExplain() {
+        connectContext.setThreadLocalInfo();
+        connectContext.setExplainLevel(StatementBase.ExplainLevel.VERBOSE);
+        try {
+            ConstantOperator r = MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test"));
+            Assertions.assertEquals("true", r.getVarchar());
+        } finally {
+            connectContext.setExplainLevel(null);
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseRejectsNonNumericId() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("not_a_number"), ConstantOperator.createVarchar("sql_test")));
+            Assertions.assertTrue(e.getMessage().contains("bookmark_id"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateAndReleaseRoundTrip() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            ConstantOperator created = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("roundtrip_holder"), ConstantOperator.createVarchar("1800000"));
+            long id = Long.parseLong(created.getVarchar());
+            Assertions.assertTrue(id >= 0);
+
+            ConstantOperator released = MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(Long.toString(id)),
+                    ConstantOperator.createVarchar("roundtrip_holder"));
+            Assertions.assertEquals("true", released.getVarchar());
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateNoExpiryRoundTrip() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            // ttl_ms <= 0 routes to the no-expiry create; the bookmark is still created and returns a real id.
+            ConstantOperator created = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("no_expiry_holder"), ConstantOperator.createVarchar("0"));
+            long id = Long.parseLong(created.getVarchar());
+            Assertions.assertTrue(id >= 0);
+
+            ConstantOperator released = MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(Long.toString(id)),
+                    ConstantOperator.createVarchar("no_expiry_holder"));
+            Assertions.assertEquals("true", released.getVarchar());
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateReturnsSameIdWhenAlreadyAtLatest() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            // Creating twice for the same holder on an unchanged table hits AlreadyAtLatestException,
+            // which the meta function absorbs by returning the existing bookmark id rather than failing.
+            ConstantOperator first = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("already_latest_holder"), ConstantOperator.createVarchar("1800000"));
+            ConstantOperator second = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("already_latest_holder"), ConstantOperator.createVarchar("1800000"));
+            Assertions.assertEquals(first.getVarchar(), second.getVarchar());
+
+            MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(first.getVarchar()),
+                    ConstantOperator.createVarchar("already_latest_holder"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkCreateRejectsUnknownTable() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("no_such_table"),
+                    ConstantOperator.createVarchar("sql_test"), ConstantOperator.createVarchar("1800000")));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseDisabledByDefault() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = false;
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test")));
+            Assertions.assertTrue(e.getMessage().contains("enable_bookmark_meta_functions"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseRejectsNonLeader() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test")));
+            Assertions.assertTrue(e.getMessage().contains("leader"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseRejectsUnknownDb() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test")));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkReleaseThrowsWhenBookmarkNotFound() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            // A bookmark id that was never created surfaces the not-found reason instead of failing silently.
+            assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(Long.toString(Long.MAX_VALUE)),
+                    ConstantOperator.createVarchar("no_such_holder")));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
     }
 }
