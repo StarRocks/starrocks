@@ -224,7 +224,12 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
-        index->minor_compact();
+        // On branch-4.0 minor_compact() flushes the memtable to an sstable synchronously and
+        // registers it before returning, so there is no pending async flush to wait for (unlike
+        // main, where flush_memtable(true)+sync_flush_all_memtables() are needed). Assert the
+        // status so a flush failure surfaces instead of leaving the compaction below with nothing
+        // to merge.
+        ASSERT_OK(index->minor_compact());
     }
     ASSERT_TRUE(index->memory_usage() > 0);
 
