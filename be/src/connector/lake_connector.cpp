@@ -18,6 +18,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/column_access_path.h"
@@ -491,6 +492,12 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
         glm_ctx->set_scan_node(thrift_lake_scan_node);
         int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        // [GLM-DIAG POS] this GLM-enabled scan emits row locators (tablet, rssid, rowid) for the
+        // fetch phase. Log the version this position scan reads at, keyed by query_id, so it can be
+        // correlated against the fetch's captured_version in the [GLM-DIAG notfound] line to
+        // discriminate durable index damage (versions equal) from scan-vs-fetch skew (versions differ).
+        LOG(WARNING) << "[GLM-DIAG POS] query_id=" << print_id(runtime_state->query_id())
+                     << " tablet=" << _scan_range.tablet_id << " scan_version=" << version;
         if (!_morsel->rowsets().empty()) {
             glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
         } else {

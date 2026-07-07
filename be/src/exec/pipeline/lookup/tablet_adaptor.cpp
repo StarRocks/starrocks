@@ -20,6 +20,7 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "base/uid_util.h"
 #include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/exec_env.h"
@@ -169,6 +170,8 @@ private:
     LakeScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::vector<lake::RowsetPtr> _rowsets;
     bool _use_page_cache = false;
+    // [GLM-DIAG] correlation key with the [GLM-DIAG POS] scan-side line.
+    std::string _query_id_str;
 };
 
 Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
@@ -272,6 +275,7 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
     _use_page_cache = state->use_page_cache();
+    _query_id_str = print_id(state->query_id());
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
@@ -341,7 +345,8 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (target == nullptr) {
         // [GLM-DIAG] dump captured vs live rowset ranges to expose the scan-vs-fetch snapshot
         // mismatch behind "not found lake rssid". All PB access lives in debug_dump_ranges.
-        LOG(WARNING) << "[GLM-DIAG notfound] tablet=" << _tablet_id << " rssid=" << rssid << " "
+        LOG(WARNING) << "[GLM-DIAG notfound] query_id=" << _query_id_str << " tablet=" << _tablet_id
+                     << " rssid=" << rssid << " "
                      << _glm_ctx->debug_dump_ranges(static_cast<int32_t>(_tablet_id))
                      << " live_" << _glm_ctx->debug_dump_ranges(_rowsets);
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
