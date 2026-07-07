@@ -350,6 +350,24 @@ message BloomFilterIndexPB {
     optional IndexedColumnMetaPB bloom_filter = 3;
 }
 
+// Block-posting index for BM25 scoring (present iff BuiltinInvertedIndexPB.index_options
+// == DOCS_AND_FREQS). Per-term (docid, tf) posting lists chunked into fixed-size blocks plus
+// per-block max statistics for WAND. Stored inline in the segment .dat via IndexedColumns.
+message PostingIndexPB {
+    enum PostingFormat {
+        // Architecture-neutral scalar PFOR; see be/src/storage/index/inverted/builtin/gin_pfor.h.
+        PFOR = 0;
+    }
+    // one entry per block: {doc_count, first_docid, PFOR(docid gaps), PFOR(tfs)}
+    optional IndexedColumnMetaPB posting_block_column = 1;
+    // one entry per term (dict-ordinal aligned): {num_blocks, first_block_id}
+    // + per-block {last_docid, max_tf, min_doclen}
+    optional IndexedColumnMetaPB posting_index_column = 2;
+    // document frequency per term (= presence bitmap cardinality), dict-ordinal aligned
+    optional IndexedColumnMetaPB doc_freq_column = 3;
+    optional PostingFormat posting_format = 4 [default = PFOR];
+}
+
 message BuiltinInvertedIndexPB {
     optional BitmapIndexPB bitmap_index = 1;
 }
