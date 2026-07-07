@@ -181,6 +181,162 @@ TEST_F(BrpcStubCacheTest, test_http_cleanup) {
     ASSERT_NE(*stub3, *stub1);
 }
 
+// Regression test: destroying BrpcStubCache while a cleanup task is scheduled
+// (and possibly firing) must join the task before the cache state is torn down.
+TEST_F(BrpcStubCacheTest, test_destructor_joins_inflight_cleanup_tasks) {
+    config::brpc_stub_expire_s = 1;
+    auto cache = std::make_unique<BrpcStubCache>(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache->get_stub(address);
+    ASSERT_NE(nullptr, stub);
+
+    // Trigger ~BrpcStubCache() while the cleanup task is (or will be) in flight.
+    // Drain the cache and assert the unique_ptr release returns cleanly.
+    cache.reset();
+
+    // Reacquire the endpoint through a fresh cache; the slot must have been
+    // cleanly torn down without leaking the previous task.
+    auto cache2 = std::make_unique<BrpcStubCache>(_timer.get());
+    auto fresh_stub = cache2->get_stub(address);
+    ASSERT_NE(nullptr, fresh_stub);
+    cache2.reset();
+}
+
+// Regression test for the lazy-reschedule fix: while an endpoint is being
+// accessed within the expire window, the timer fires, sees the stub is still
+// active (idle < brpc_stub_expire_s), and reschedules instead of evicting, so the
+// stub must survive across multiple timer periods.
+TEST_F(BrpcStubCacheTest, test_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+
+    // Repeatedly access within the window; each access refreshes the last-access
+    // time, and the single scheduled timer reschedules instead of evicting.
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(address);
+        ASSERT_EQ(stub1, stub) << "stub must not be evicted while being accessed";
+    }
+}
+
+TEST_F(BrpcStubCacheTest, test_http_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    HttpBrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_http_stub(address);
+    ASSERT_NE(nullptr, *stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_http_stub(address);
+        ASSERT_NE(nullptr, *stub);
+        ASSERT_EQ(*stub1, *stub) << "http stub must not be evicted while being accessed";
+    }
+}
+
+#ifndef __APPLE__
+TEST_F(BrpcStubCacheTest, test_lake_active_access_keeps_stub_alive_across_expire_window) {
+    config::brpc_stub_expire_s = 2;
+    LakeServiceBrpcStubCache cache(_timer.get());
+    std::string hostname = "127.0.0.1";
+    int32_t port = 123;
+    auto stub1 = cache.get_stub(hostname, port);
+    ASSERT_TRUE(stub1.ok());
+    ASSERT_NE(nullptr, *stub1);
+
+    for (int i = 0; i < 3; ++i) {
+        sleep(1);
+        auto stub = cache.get_stub(hostname, port);
+        ASSERT_TRUE(stub.ok());
+        ASSERT_NE(nullptr, *stub);
+        ASSERT_EQ(*stub1, *stub) << "lake stub must not be evicted while being accessed";
+    }
+}
+#endif
+
+// Reducing brpc_stub_expire_s between get_*_stub() calls must replace the cleanup task: a fresh
+// task is scheduled with the new earlier deadline, while the previous task is left in the timer
+// queue and will fire at its original (later) deadline. That late fire ends up calling
+// _cache->_stub_map.erase() on the new entry -- safe, because the next get_*_stub() recreates it.
+// The check below: the task pointer stored in the map must change after a TTL shrink.
+TEST_F(BrpcStubCacheTest, test_ttl_shrink_replaces_cleanup_task) {
+    config::brpc_stub_expire_s = 3600;
+    BrpcStubCache cache(_timer.get());
+    butil::EndPoint endpoint;
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1:123", &endpoint));
+    ASSERT_NE(nullptr, cache.get_stub(endpoint));
+
+    auto* pool_before = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, pool_before);
+    auto* task_before = (*pool_before)->_cleanup_task.get();
+
+    config::brpc_stub_expire_s = 1;
+    ASSERT_NE(nullptr, cache.get_stub(endpoint));
+
+    auto* pool_after = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, pool_after);
+    auto* task_after = (*pool_after)->_cleanup_task.get();
+    ASSERT_NE(task_before, task_after) << "shrinking TTL must install a new cleanup task";
+}
+
+TEST_F(BrpcStubCacheTest, test_http_ttl_shrink_replaces_cleanup_task) {
+    config::brpc_stub_expire_s = 3600;
+    HttpBrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub = cache.get_http_stub(address);
+    ASSERT_TRUE(stub.ok());
+
+    butil::EndPoint endpoint;
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1:123", &endpoint));
+    auto* entry_before = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, entry_before);
+    auto* task_before = entry_before->cleanup_task.get();
+
+    config::brpc_stub_expire_s = 1;
+    auto stub2 = cache.get_http_stub(address);
+    ASSERT_TRUE(stub2.ok());
+
+    auto* entry_after = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, entry_after);
+    auto* task_after = entry_after->cleanup_task.get();
+    ASSERT_NE(task_before, task_after) << "shrinking TTL must install a new cleanup task";
+}
+
+#ifndef __APPLE__
+TEST_F(BrpcStubCacheTest, test_lake_ttl_shrink_replaces_cleanup_task) {
+    config::brpc_stub_expire_s = 3600;
+    LakeServiceBrpcStubCache cache(_timer.get());
+    auto stub = cache.get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(stub.ok());
+
+    butil::EndPoint endpoint;
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1:123", &endpoint));
+    auto* entry_before = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, entry_before);
+    auto* task_before = entry_before->cleanup_task.get();
+
+    config::brpc_stub_expire_s = 1;
+    auto stub2 = cache.get_stub("127.0.0.1", 123);
+    ASSERT_TRUE(stub2.ok());
+
+    auto* entry_after = cache._stub_map.seek(endpoint);
+    ASSERT_NE(nullptr, entry_after);
+    auto* task_after = entry_after->cleanup_task.get();
+    ASSERT_NE(task_before, task_after) << "shrinking TTL must install a new cleanup task";
+}
+#endif
+
 TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
     auto timer2 = std::make_unique<BthreadTimer>();
     ASSERT_OK(timer2->start());
