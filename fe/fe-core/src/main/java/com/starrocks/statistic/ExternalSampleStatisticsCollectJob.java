@@ -186,6 +186,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
                                     "fileCount={} rowCount={}, retrying with full scan",
                             ratio, fileCount, rowCount);
                     cardinalityByColumn = runOneSampleRound(context, analyzeStatus, 1.0);
+                    ratio = 1.0; // full scan was done, don't waste later rounds
                 }
 
                 LOG.info("[ExternalStats][Sample] round done | jobId={} catalog={} db={} table={} round={} " +

@@ -18,18 +18,32 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants.AnalyzeType;
+import com.starrocks.statistic.StatsConstants.ScheduleType;
+import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.iceberg.Snapshot;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -75,6 +89,7 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testWithinThresholdConverges() {
+        // Within the default 5% threshold, NDV is considered stable.
         Map<String, Long> prev = Map.of("c1", 1000L);
         Map<String, Long> curr = Map.of("c1", 1020L);
         assertTrue(ExternalSampleStatisticsCollectJob.isNdvConverging(prev, curr, 0.05));
@@ -91,6 +106,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testMissingPreviousColumnTreatedAsNotConverged() {
+        // A column that only appears in the current round (e.g. new column added mid-job)
+        // must be treated as not-converged since we have no prior value to compare against.
         Map<String, Long> prev = Map.of();
         Map<String, Long> curr = Map.of("new_column", 10L);
         assertFalse(ExternalSampleStatisticsCollectJob.isNdvConverging(prev, curr, 0.05));
@@ -141,13 +158,13 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testBuildSinglePassSQLEmitsSixAggregatesPerStatisticableColumn() {
+        // One data_size + hll + null_count + max + min + cardinality aggregate per column, in order.
         ExternalSampleStatisticsCollectJob job = newJob(List.of(),
                 Lists.newArrayList("c1", "c2"),
                 Lists.newArrayList(IntegerType.INT, IntegerType.BIGINT), 1);
         String sql = job.buildSinglePassSQL(List.of(0, 1));
 
         assertTrue(sql.startsWith("SELECT CAST(COUNT(1) AS BIGINT)"), sql);
-        // One data_size + hll + null_count + max + min + cardinality aggregate per column, in order.
         assertTrue(sql.contains("hll_serialize(IFNULL(hll_raw(`c1`), hll_empty()))"), sql);
         assertTrue(sql.contains("COUNT(1) - COUNT(`c1`)"), sql);
         assertTrue(sql.contains("hll_cardinality(IFNULL(hll_raw(`c1`), hll_empty()))"), sql);
@@ -166,12 +183,14 @@ public class ExternalSampleStatisticsCollectJobTest {
 
         assertFalse(sql.contains("hll_raw(`j1`)"), sql);
         assertTrue(sql.contains("hex(hll_serialize(hll_empty()))"), sql);
-        // COUNT(1) + 6 placeholder aggregates => 7 SELECT items => 6 separating commas.
         assertEquals(6, sql.split(",").length - 1);
     }
 
+    // ---------- findPersistedRound tests ----------
+
     @Test
     public void testFindPersistedRoundNoPriorRuns() {
+        // Empty AnalyzeMgr: no prior finished SAMPLE runs exist, default to round 0.
         clearAnalyzeStatusMap();
         ExternalSampleStatisticsCollectJob job = newJob(List.of(),
                 Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
@@ -180,6 +199,9 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundSkipsNativeStatus() {
+        // ExternalAnalyzeStatus.isNative() returns false, so it wouldn't normally be skipped by
+        // the native check. The test verifies that a standard SAMPLE + FINISHED + matching-table
+        // status IS found (but since properties are null, round defaults to 0).
         clearAnalyzeStatusMap();
         ExternalAnalyzeStatus nativeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
                 "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
@@ -195,6 +217,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundSkipsNonSampleType() {
+        // A FULL-type completed status on the same table must be ignored;
+        // only SAMPLE-type runs contribute to warm start.
         clearAnalyzeStatusMap();
         ExternalAnalyzeStatus fullStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
                 "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL,
@@ -210,6 +234,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundSkipsNonFinishedStatus() {
+        // A RUNNING (or FAILED) status must not be used for warm start, even if it matches the
+        // same table — only FINISH runs are considered.
         clearAnalyzeStatusMap();
         ExternalAnalyzeStatus runningStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
                 "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
@@ -224,6 +250,7 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundReturnsMostRecentRound() {
+        // Two FINISHED SAMPLE runs exist for the same table; pick the one with the latest endTime.
         clearAnalyzeStatusMap();
         Map<String, String> olderProps = Maps.newHashMap();
         olderProps.put("external_sample_round", "2");
@@ -251,6 +278,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundMissingPropertyDefaultsZero() {
+        // A FINISHED SAMPLE run exists but has no "external_sample_round" property (or properties
+        // are null). Default to round 0.
         clearAnalyzeStatusMap();
         ExternalAnalyzeStatus noProp = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
                 "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
@@ -266,6 +295,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundBadFormatDefaultsZero() {
+        // The "external_sample_round" property is present but contains a non-numeric string.
+        // Integer.parseInt throws NumberFormatException → round defaults to 0.
         clearAnalyzeStatusMap();
         Map<String, String> props = Maps.newHashMap();
         props.put("external_sample_round", "not_a_number");
@@ -283,6 +314,8 @@ public class ExternalSampleStatisticsCollectJobTest {
 
     @Test
     public void testFindPersistedRoundSkipsDifferentTable() {
+        // A FINISHED SAMPLE run exists but for a different catalog; must not match the current
+        // table and must not influence warm start.
         clearAnalyzeStatusMap();
         Map<String, String> props = Maps.newHashMap();
         props.put("external_sample_round", "5");
@@ -296,5 +329,182 @@ public class ExternalSampleStatisticsCollectJobTest {
         ExternalSampleStatisticsCollectJob job = newJob(List.of(),
                 Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
         assertEquals(0, job.findPersistedRound());
+    }
+
+    // ---------- collectIcebergWithFileSampling tests ----------
+
+    private static IcebergTable createMockIcebergTable(boolean hasSnapshot) {
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        if (hasSnapshot) {
+            Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+            Mockito.when(mockNativeTable.currentSnapshot()).thenReturn(mockSnapshot);
+            Mockito.when(mockSnapshot.snapshotId()).thenReturn(42L);
+        } else {
+            Mockito.when(mockNativeTable.currentSnapshot()).thenReturn(null);
+        }
+        return new IcebergTable(1, "test_table", "test_catalog", "resource",
+                "test_db", "test_table", "uuid", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+    }
+
+    private static TResultBatch wideRowBatch() {
+        TResultBatch batch = new TResultBatch();
+        batch.setRows(Lists.newArrayList(
+                ByteBuffer.wrap(JSON_RESULT.getBytes(StandardCharsets.UTF_8))));
+        batch.setIs_compressed(false);
+        batch.setPacket_seq(0);
+        return batch;
+    }
+
+    private static final String JSON_RESULT =
+            "{\"data\": [100, 500, \"00\", 0, \"100\", \"1\", 50," +
+                    " 500, \"00\", 0, \"200\", \"10\", 80]}";
+
+    private static long capturedFileCount = 0;
+    private static long capturedRowCount = 0;
+
+    @Test
+    public void testCollectIcebergWithFileSamplingNullSnapshot() throws Exception {
+        // Empty table with no snapshot: the method must return early without error.
+        IcebergTable icebergTable = createMockIcebergTable(false);
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public String getUUID() {
+                return "test_catalog.test_db.test_table.uuid";
+            }
+        };
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            protected void flushInsertStatisticsData(ConnectContext ctx, boolean all) { }
+        };
+
+        ExternalSampleStatisticsCollectJob job = new ExternalSampleStatisticsCollectJob("test_catalog",
+                new Database(1, "test_db"), icebergTable, List.of(), Lists.newArrayList("c1"),
+                Lists.newArrayList(IntegerType.INT),
+                AnalyzeType.SAMPLE, ScheduleType.ONCE, Maps.newHashMap(), 1);
+
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), AnalyzeType.SAMPLE, ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.now());
+
+        job.collect(UtFrameUtils.createDefaultCtx(), analyzeStatus);
+    }
+
+    @Test
+    public void testCollectIcebergWithFileSamplingFullScanSingleRound() throws Exception {
+        // Table with 1M rows (<= capPerRound=2M): first round reaches full coverage (ratio=1.0),
+        // round loop breaks, cleanup runs, analyzeStatus properties are populated.
+        IcebergTable icebergTable = createMockIcebergTable(true);
+        capturedFileCount = 5L;
+        capturedRowCount = 1_000_000L;
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public String getUUID() {
+                return "test_catalog.test_db.test_table.uuid";
+            }
+        };
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            protected void flushInsertStatisticsData(ConnectContext ctx, boolean all) { }
+        };
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public static long countIcebergFilesFromManifestList(IcebergTable t, long sid) {
+                return capturedFileCount;
+            }
+
+            @Mock
+            public static long countIcebergRowsFromManifestList(IcebergTable t, long sid) {
+                return capturedRowCount;
+            }
+        };
+
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(ConnectContext ctx, String sql, TResultSinkType st) {
+                return Lists.newArrayList(wideRowBatch());
+            }
+        };
+
+        ExternalSampleStatisticsCollectJob job = new ExternalSampleStatisticsCollectJob("test_catalog",
+                new Database(1, "test_db"), icebergTable, List.of(), Lists.newArrayList("c1", "c2"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT),
+                AnalyzeType.SAMPLE, ScheduleType.ONCE, Maps.newHashMap(), 1);
+
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1", "c2"), AnalyzeType.SAMPLE, ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStartTime(LocalDateTime.now());
+
+        job.collect(UtFrameUtils.createDefaultCtx(), analyzeStatus);
+
+        Map<String, String> props = analyzeStatus.getProperties();
+        assertTrue(props.containsKey("file_count"));
+        assertTrue(props.containsKey("row_count"));
+    }
+
+    @Test
+    public void testCollectIcebergWithFileSamplingAllDroppedRetry() throws Exception {
+        // Simulate the edge case where Bernoulli sampling at a low ratio drops every split.
+        // The first executeDQL call returns an empty list (all splits dropped); the method
+        // must detect this, log a warning, and retry the round with ratio=1.0.
+        IcebergTable icebergTable = createMockIcebergTable(true);
+        capturedFileCount = 10L;
+        capturedRowCount = 10_000_000L;
+
+        new MockUp<IcebergTable>() {
+            @Mock
+            public String getUUID() {
+                return "test_catalog.test_db.test_table.uuid";
+            }
+        };
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            protected void flushInsertStatisticsData(ConnectContext ctx, boolean all) { }
+        };
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public static long countIcebergFilesFromManifestList(IcebergTable t, long sid) {
+                return capturedFileCount;
+            }
+
+            @Mock
+            public static long countIcebergRowsFromManifestList(IcebergTable t, long sid) {
+                return capturedRowCount;
+            }
+        };
+
+        AtomicInteger executeDqlCalls = new AtomicInteger(0);
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(ConnectContext ctx, String sql, TResultSinkType st) {
+                int call = executeDqlCalls.getAndIncrement();
+                if (call == 0) {
+                    return List.of();
+                }
+                return Lists.newArrayList(wideRowBatch());
+            }
+        };
+
+        ExternalSampleStatisticsCollectJob job = new ExternalSampleStatisticsCollectJob("test_catalog",
+                new Database(1, "test_db"), icebergTable, List.of(), Lists.newArrayList("c1", "c2"),
+                Lists.newArrayList(IntegerType.INT, IntegerType.INT),
+                AnalyzeType.SAMPLE, ScheduleType.ONCE, Maps.newHashMap(), 1);
+
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1", "c2"), AnalyzeType.SAMPLE, ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStartTime(LocalDateTime.now());
+
+        job.collect(UtFrameUtils.createDefaultCtx(), analyzeStatus);
+
+        // First call returned empty (simulated all-dropped), retry with ratio=1.0 succeeded.
+        assertEquals(2, executeDqlCalls.get());
     }
 }
