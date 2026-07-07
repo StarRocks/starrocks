@@ -17,7 +17,7 @@ set(FORMAT_CORE_TEST_FILES
     disk_range_test.cpp
     io/async_flush_output_stream_test.cpp
     io/formatted_output_stream_file_test.cpp
-    jni_env_stub.cpp
+    ${BE_TEST_JNI_ENV_STUB}
 )
 
 set(FORMAT_CSV_TEST_FILES
