@@ -25,6 +25,7 @@
 #include "common/compiler_util.h"
 #include "exprs/function_context.h"
 #include "exprs/table_function/table_function.h"
+#include "exprs/udf/java/arrow_udf_jni.h"
 #include "exprs/udf/java/java_data_converter.h"
 #include "exprs/udf/java/java_udf.h"
 #include "exprs/udf/java/java_udf_reflection.h"
@@ -171,16 +172,58 @@ Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* 
     return Status::OK();
 }
 
+// Drain the per-input-row output arrays (rets[i] = T[] for input row i) into the output column and
+// build the row-expansion offsets. Shared by the per-row (boxed) and vectorized (arrow) UDTF paths,
+// which differ only in how they produce `rets`.
+static std::pair<Columns, UInt32Column::Ptr> emit_udtf_rows(JNIEnv* env, RuntimeState* runtime_state,
+                                                            JavaUDTFState* stateUDTF, const std::vector<jobject>& rets,
+                                                            size_t num_rows) {
+    Columns res;
+    auto offsets_col = UInt32Column::create();
+    auto& offsets = offsets_col->get_data();
+    offsets.resize(num_rows + 1);
+
+    auto col = ColumnHelper::create_column(stateUDTF->type_desc(), true);
+    col->reserve(num_rows);
+
+    for (int i = 0; i < num_rows; ++i) {
+        int len = rets[i] != nullptr ? env->GetArrayLength((jarray)rets[i]) : 0;
+        offsets[i + 1] = offsets[i] + len;
+        for (int j = 0; j < len; ++j) {
+            jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
+            LOCAL_REF_GUARD_ENV(env, vi);
+            auto st = check_type_matched(stateUDTF->type_desc(), vi, stateUDTF->return_type_desc_handle());
+            if (UNLIKELY(!st.ok())) {
+                stateUDTF->set_status(st);
+                return {};
+            }
+            auto ares = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi},
+                                      runtime_state != nullptr && runtime_state->error_if_overflow(),
+                                      stateUDTF->return_type_desc_handle());
+            if (UNLIKELY(!ares.ok())) {
+                stateUDTF->set_status(Status::InternalError(ares.to_string()));
+                return {};
+            }
+        }
+    }
+
+    res.emplace_back(std::move(col));
+
+    if (auto jthr = env->ExceptionOccurred(); jthr != nullptr) {
+        std::string err = fmt::format("execute UDF Function meet Exception:{}",
+                                      JVMHelper::getInstance().dumpExceptionString(jthr));
+        LOG(WARNING) << err;
+        env->ExceptionClear();
+    }
+    return std::make_pair(std::move(res), std::move(offsets_col));
+}
+
 std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* runtime_state,
                                                                 TableFunctionState* state) const {
-    Columns res;
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);
 
     JNIEnv* env = JVMHelper::getInstance().getEnv();
-
-    jmethodID methodID = env->GetMethodID(stateUDTF->get_udtf_clazz(), stateUDTF->method_process()->name.c_str(),
-                                          stateUDTF->method_process()->signature.c_str());
 
     std::vector<jvalue> call_stack;
     std::vector<jobject> rets;
@@ -197,6 +240,9 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         env->PopLocalFrame(nullptr);
     });
     env->PushLocalFrame(num_cols * num_rows + 16);
+
+    jmethodID methodID = env->GetMethodID(stateUDTF->get_udtf_clazz(), stateUDTF->method_process()->name.c_str(),
+                                          stateUDTF->method_process()->signature.c_str());
 
     // Boundary check: method_desc must have at least num_cols + 1 elements
     // (index 0 is return type, indices 1..num_cols are parameter types)
@@ -238,46 +284,68 @@ std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* ru
         }
     }
 
-    // Build Return Type
-    auto offsets_col = UInt32Column::create();
-    auto& offsets = offsets_col->get_data();
-    offsets.resize(num_rows + 1);
+    return emit_udtf_rows(env, runtime_state, stateUDTF, rets, num_rows);
+}
 
-    auto col = ColumnHelper::create_column(stateUDTF->type_desc(), true);
-    col->reserve(num_rows);
+// Vectorized ("input"="arrow") Java UDTF. Isolates the arrow calling convention from the per-row
+// JavaUDTFFunction: it reuses init/open/close (class + process-method loading) and overrides only
+// process(), invoking process(FieldVector...) once per batch over the Arrow C Data Interface. The
+// output stays boxed (T[][]), so the row-expansion drain (emit_udtf_rows) is shared.
+class ArrowJavaUDTFFunction final : public JavaUDTFFunction {
+public:
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override {
+        const Columns& cols = state->get_columns();
+        auto* stateUDTF = down_cast<JavaUDTFState*>(state);
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
 
-    for (int i = 0; i < num_rows; ++i) {
-        int len = rets[i] != nullptr ? env->GetArrayLength((jarray)rets[i]) : 0;
-        offsets[i + 1] = offsets[i] + len;
-        // update for col
-        for (int j = 0; j < len; ++j) {
-            jobject vi = env->GetObjectArrayElement((jobjectArray)rets[i], j);
-            LOCAL_REF_GUARD_ENV(env, vi);
-            auto st = check_type_matched(stateUDTF->type_desc(), vi, stateUDTF->return_type_desc_handle());
-            if (UNLIKELY(!st.ok())) {
-                state->set_status(st);
-                return {};
-            }
-            auto res = append_jvalue(stateUDTF->type_desc(), true, col.get(), {.l = vi},
-                                     runtime_state != nullptr && runtime_state->error_if_overflow(),
-                                     stateUDTF->return_type_desc_handle());
-            if (UNLIKELY(!res.ok())) {
-                state->set_status(Status::InternalError(res.to_string()));
-                return {};
-            }
+        size_t num_rows = cols[0]->size();
+        std::vector<jobject> rets;
+        rets.resize(num_rows);
+        state->set_processed_rows(num_rows);
+
+        DeferOp defer = DeferOp([&]() { env->PopLocalFrame(nullptr); });
+        env->PushLocalFrame(static_cast<int>(num_rows) + 16);
+
+        ExportedArrowBatch input;
+        Status st = input.export_columns(num_rows, cols, stateUDTF->arg_type_descs().data());
+        if (!st.ok()) {
+            state->set_status(st);
+            return {};
         }
+        auto helper_cls = arrow_udf_helper_class();
+        if (!helper_cls.ok()) {
+            state->set_status(helper_cls.status());
+            return {};
+        }
+        jmethodID mid = env->GetStaticMethodID(helper_cls.value(), "evaluateUDTF",
+                                               "(Ljava/lang/Object;Ljava/lang/reflect/Method;JJ)[[Ljava/lang/Object;");
+        auto result = (jobjectArray)env->CallStaticObjectMethod(helper_cls.value(), mid, stateUDTF->handle(),
+                                                                stateUDTF->method_process()->method.handle(),
+                                                                input.schema_addr(), input.array_addr());
+        if (auto jthr = env->ExceptionOccurred(); jthr != nullptr) {
+            std::string err = fmt::format("execute arrow UDTF meet Exception:{}",
+                                          JVMHelper::getInstance().dumpExceptionString(jthr));
+            LOG(WARNING) << err;
+            env->ExceptionClear();
+            state->set_status(Status::InternalError(err));
+            return {};
+        }
+        int result_len = result != nullptr ? env->GetArrayLength(result) : 0;
+        if (result_len != static_cast<int>(num_rows)) {
+            state->set_status(Status::InternalError(
+                    fmt::format("arrow UDTF process() returned {} rows, expected {}", result_len, num_rows)));
+            return {};
+        }
+        for (int i = 0; i < num_rows; ++i) {
+            rets[i] = env->GetObjectArrayElement(result, i);
+        }
+        return emit_udtf_rows(env, runtime_state, stateUDTF, rets, num_rows);
     }
+};
 
-    res.emplace_back(std::move(col));
-
-    // TODO: add error msg to Function State
-    if (auto jthr = env->ExceptionOccurred(); jthr != nullptr) {
-        std::string err = fmt::format("execute UDF Function meet Exception:{}",
-                                      JVMHelper::getInstance().dumpExceptionString(jthr));
-        LOG(WARNING) << err;
-        env->ExceptionClear();
-    }
-
-    return std::make_pair(std::move(res), std::move(offsets_col));
+const TableFunction* getArrowJavaUDTFFunction() {
+    static ArrowJavaUDTFFunction arrow_java_table_function;
+    return &arrow_java_table_function;
 }
 } // namespace starrocks

@@ -106,6 +106,7 @@ set(EXPR_JAVA_TEST_FILES
     # Keep them out of expr_test so --without-java-ext remains a valid fast loop.
     udf/java/java_data_converter_test.cpp
     udf/java/java_udf_test.cpp
+    udf/java/arrow_udf_jni_test.cpp
 )
 
 set(EXPR_TEST_LINK_LIBS

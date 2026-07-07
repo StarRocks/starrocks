@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
+#include "exprs/udf/java/arrow_udf_jni.h"
 #include "exprs/udf/java/java_data_converter.h"
 #include "exprs/udf/java/java_udf.h"
 #include "exprs/udf/java/java_udf_context.h"
@@ -36,6 +37,7 @@
 #include "gutil/casts.h"
 #include "jni.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -118,7 +120,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
-                                     MutableColumnPtr& dst) const final {
+                                     MutableColumnPtr& dst) const override {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = JVMHelper::getInstance().getEnv();
         auto* udf_ctxs = get_java_udaf_context(ctx);
@@ -517,5 +519,66 @@ public:
     }
 
     std::string get_name() const override { return "java_udaf"; }
+};
+
+// Vectorized ("input"="arrow") Java UDAF. Isolates the arrow calling convention from the shared
+// JavaUDAFAggregateFunction: it reuses the base for create/merge/serialize/finalize (which don't
+// touch raw input columns) and overrides only the update paths. Arrow input fits only the
+// single-state path (whole batch -> one state), i.e. global / sorted aggregation; the interleaved
+// hash GROUP BY paths are rejected. Selected at the factory when input="arrow".
+class ArrowJavaUDAFAggregateFunction final : public JavaUDAFAggregateFunction {
+public:
+    static constexpr const char* kGroupByUnsupported =
+            "arrow-input UDAF is only supported for global / sorted aggregation, not GROUP BY";
+
+    // Single-state update: convert the whole batch to Arrow and invoke update(State, FieldVector...)
+    // via com.starrocks.udf.ArrowUDFHelper.batchUpdateSingle over the C Data Interface.
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* udf_ctxs = get_java_udaf_context(ctx);
+        DCHECK(udf_ctxs != nullptr);
+        auto* env = JVMHelper::getInstance().getEnv();
+        env->PushLocalFrame(16);
+        auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
+
+        int num_cols = ctx->get_num_args();
+        std::vector<TypeDescriptor> arg_types(num_cols);
+        for (int i = 0; i < num_cols; ++i) {
+            arg_types[i] = *ctx->get_arg_type(i);
+        }
+
+        ExportedArrowBatch input;
+        auto st = input.export_columns(batch_size, columns, num_cols, arg_types.data());
+        SET_FUNCTION_CONTEXT_ERR(st, ctx);
+        RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+
+        auto helper_cls = arrow_udf_helper_class();
+        SET_FUNCTION_CONTEXT_ERR(helper_cls.status(), ctx);
+        RETURN_IF_UNLIKELY(!helper_cls.ok(), (void)0);
+        jmethodID mid = env->GetStaticMethodID(helper_cls.value(), "batchUpdateSingle",
+                                               "(Ljava/lang/Object;Ljava/lang/reflect/Method;Ljava/lang/Object;JJ)V");
+        CHECK_UDF_CALL_EXCEPTION(env, ctx);
+
+        jobject state_obj = helper.convert_handle_to_jobject(ctx, this->data(state).handle);
+        env->CallStaticVoidMethod(helper_cls.value(), mid, udf_ctxs->handle.handle(),
+                                  udf_ctxs->ctx->update->method.handle(), state_obj, input.schema_addr(),
+                                  input.array_addr());
+        CHECK_UDF_CALL_EXCEPTION(env, ctx);
+    }
+
+    // Interleaved (per-row group routing) paths cannot hand a whole-batch FieldVector to one state.
+    void update_batch(FunctionContext* ctx, size_t, size_t, const Column**, AggDataPtr*) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+    void update_batch_selectively(FunctionContext* ctx, size_t, size_t, const Column**, AggDataPtr*,
+                                  const Filter&) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns&, size_t, MutableColumnPtr&) const override {
+        ctx->set_error(kGroupByUnsupported);
+    }
+
+    std::string get_name() const override { return "arrow_java_udaf"; }
 };
 } // namespace starrocks

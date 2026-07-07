@@ -412,6 +412,89 @@ PROPERTIES (
 |type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
 |file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
 |isolation|(可选）如需在 UDF 执行中共享函数实例并支持静态变量，请将其设置为 "shared"。|
+|input|（可选）输入格式。取值：`scalar`（默认，每行一个装箱的 Java 对象）和 `arrow`（向量化，每个参数一个覆盖整批数据的 Apache Arrow `FieldVector`）。参见[向量化（Arrow）输入](#向量化arrow输入)。|
+
+#### 向量化（Arrow）输入
+
+设置 `"input" = "arrow"` 可将 Java UDF 从逐行装箱的调用方式切换为**向量化**方式：您的方法为每个参数接收一个覆盖整批数据的 Apache Arrow `FieldVector`，并（对 scalar / UDTF）返回一个 `FieldVector`。列数据通过 [Arrow C Data Interface](https://arrow.apache.org/docs/format/CDataInterface.html) 与 BE 零拷贝交换，避免了默认路径逐行装箱/拆箱的开销。
+
+在 Maven 项目中添加 Arrow 依赖（版本需与 StarRocks 发行版内置版本一致）；因 BE 已内置该库，使用 `provided` 作用域：
+
+```xml
+<dependency>
+    <groupId>org.apache.arrow</groupId>
+    <artifactId>arrow-vector</artifactId>
+    <version>17.0.0</version>
+    <scope>provided</scope>
+</dependency>
+```
+
+请通过 `arg.getAllocator()` 从框架管理的分配器分配结果向量，以便引擎管理其生命周期。
+
+:::note
+BE 在内置 JVM 中执行 UDF，该 JVM 必须向 Arrow 的堆外内存层开放 `java.nio`。发行版自带的 `conf/be.conf` 已通过
+`JAVA_OPTS="... --add-opens=java.base/java.nio=ALL-UNNAMED ..."` 设置；若自定义 `JAVA_OPTS`，请保留该参数，否则 arrow 输入的 UDF 无法初始化。
+:::
+
+**Scalar** —— `evaluate(FieldVector...)` 返回 `FieldVector`：
+
+```java
+public class ArrowAdd {
+    public IntVector evaluate(IntVector a, IntVector b) {
+        IntVector out = new IntVector("result", a.getAllocator());
+        int n = a.getValueCount();
+        out.allocateNew(n);
+        for (int i = 0; i < n; i++) {
+            if (a.isNull(i) || b.isNull(i)) {
+                out.setNull(i);
+            } else {
+                out.set(i, a.get(i) + b.get(i));
+            }
+        }
+        out.setValueCount(n);
+        return out;
+    }
+}
+```
+
+```SQL
+CREATE FUNCTION arrow_add(INT, INT)
+RETURNS INT
+PROPERTIES (
+    "symbol" = "com.starrocks.udf.sample.ArrowAdd",
+    "type" = "StarrocksJar",
+    "input" = "arrow",
+    "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
+);
+```
+
+**UDTF** —— `process(FieldVector...)` 返回 `T[][]`（每个输入行对应一个输出行数组 `T[]`，仅输入向量化）。
+
+**UDAF** —— `update(State, FieldVector...)` 接收发往同一个 state 的整批数据；`create`/`merge`/`serialize`/`finalize` 保持常规（装箱）签名。
+
+> **限制**
+>
+> - Arrow 输入的 UDAF 仅支持**全局聚合**和**有序流式聚合**（整批数据属于同一个 state）。将 Arrow UDAF 用于哈希 `GROUP BY` 的查询会返回明确错误——`GROUP BY` 的 UDAF 请使用默认（装箱）输入。
+> - 暂不支持窗口函数（`analytic = "true"`）的 Arrow 输入。
+
+SQL 类型与方法接收到的 Arrow `FieldVector` 的映射：
+
+| SQL 类型   | Arrow FieldVector          |
+| ---------- | -------------------------- |
+| BOOLEAN    | `BitVector`                |
+| TINYINT    | `TinyIntVector`            |
+| SMALLINT   | `SmallIntVector`           |
+| INT        | `IntVector`                |
+| BIGINT     | `BigIntVector`             |
+| FLOAT      | `Float4Vector`             |
+| DOUBLE     | `Float8Vector`             |
+| VARCHAR    | `VarCharVector`            |
+| DECIMAL    | `DecimalVector`            |
+| DATE       | `DateDayVector`            |
+| DATETIME   | `TimeStampMicroVector`     |
+| ARRAY      | `ListVector`               |
+| MAP        | `MapVector`                |
+| STRUCT     | `StructVector`             |
 
 #### 创建 UDAF
 

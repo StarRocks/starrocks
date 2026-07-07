@@ -18,6 +18,8 @@ namespace starrocks {
 class AggregateFunction;
 class TableFunction;
 const AggregateFunction* getJavaUDAFFunction(bool input_nullable);
+const AggregateFunction* getArrowJavaUDAFFunction();
 const AggregateFunction* getJavaWindowFunction();
 const TableFunction* getJavaUDTFFunction();
+const TableFunction* getArrowJavaUDTFFunction();
 } // namespace starrocks
