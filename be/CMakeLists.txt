@@ -649,6 +649,7 @@ set(STARROCKS_DEPENDENCIES
     zstd
     streamvbyte
     arrow
+    arrow_testing
     arrow_flight
     arrow_flight_sql
     gRPC::grpc
