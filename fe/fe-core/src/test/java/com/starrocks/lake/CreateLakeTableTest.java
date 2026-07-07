@@ -271,8 +271,10 @@ public class CreateLakeTableTest {
         }
 
         UtFrameUtils.addMockComputeNode(50001);
+        // LOCAL persistent index is deprecated for shared-data primary key tables and is now
+        // rejected outright, regardless of whether a compute node has a storage path.
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Cannot create cloud native table with local persistent index",
+                "Only cloud native persistent index",
                 () -> createTable(
                 "create table lake_test.table_with_persistent_index2\n" +
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +

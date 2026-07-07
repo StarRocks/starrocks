@@ -2646,6 +2646,22 @@ public class SchemaChangeHandler extends AlterHandler {
                         PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index.
+                // The local-disk persistent index and the in-memory index are deprecated: disabling
+                // the persistent index or switching to LOCAL is no longer allowed (migrating an
+                // existing LOCAL table to CLOUD_NATIVE is still permitted). These restrictions only
+                // apply to primary key tables; enable_persistent_index is a no-op for other key types.
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    if (!enablePersistentIndex) {
+                        throw new DdlException("The persistent index can not be disabled for shared-data primary key " +
+                                "tables, the in-memory index is no longer supported");
+                    }
+                    if (!TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                        throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                                "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                                persistentIndexType);
+                    }
+                }
                 boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
                 String oldPersistentIndexType = olapTable.getPersistentIndexType() == TPersistentIndexType.LOCAL ?
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
@@ -2654,10 +2670,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     LOG.info(String.format("table: %s enable_persistent_index is %s persistent_index_type is %s, "
                             + "nothing need to do", olapTable.getName(), enablePersistentIndex, persistentIndexType));
                     return null;
-                }
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
-                        && !enablePersistentIndex) {
-                    throw new DdlException("enable_persistent_index is false, can not set persistent_index_type");
                 }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 // only support set persistent_index_type when enable_persistent_index is true
@@ -2669,6 +2681,14 @@ public class SchemaChangeHandler extends AlterHandler {
                         TableProperty.LOCAL_INDEX_TYPE : TableProperty.CLOUD_NATIVE_INDEX_TYPE;
                 persistentIndexType = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
                         TableProperty.CLOUD_NATIVE_INDEX_TYPE);
+                // Shared-data primary key tables only support the cloud-native persistent index; switching
+                // to LOCAL is deprecated (migrating an existing LOCAL table to CLOUD_NATIVE is still allowed).
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
+                        && !TableProperty.CLOUD_NATIVE_INDEX_TYPE.equalsIgnoreCase(persistentIndexType)) {
+                    throw new DdlException("Only cloud native persistent index (persistent_index_type = " +
+                            "CLOUD_NATIVE) is supported for shared-data primary key tables, but got: " +
+                            persistentIndexType);
+                }
                 if (oldPersistentIndexType.equals(persistentIndexType)) {
                     LOG.info(String.format("table: %s persistent_index_type is %s, nothing need to do",
                             olapTable.getName(), persistentIndexType));
