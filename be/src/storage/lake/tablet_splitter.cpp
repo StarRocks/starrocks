@@ -1258,6 +1258,21 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         }
     }
 
+    // [SPLIT-DIAG] Runtime proof of the protected_rssids gap: dump the protected set once
+    // per split so it can be correlated with per-rowset removal decisions and query-time
+    // [GLM-DIAG notfound] rssids. protected_rssids only holds each sstable's single
+    // shared_rssid, so a removed rowset whose rssid range is absent from this set but still
+    // referenced by a surviving sstable is the dangling seed we are hunting.
+    {
+        std::string prs;
+        for (uint32_t r : protected_rssids) {
+            prs += std::to_string(r);
+            prs += ",";
+        }
+        LOG(WARNING) << "[SPLIT-DIAG protected] old_tablet=" << old_tablet_metadata->id()
+                     << " n_protected=" << protected_rssids.size() << " protected_rssids=[" << prs << "]";
+    }
+
     for (int32_t i = 0; i < splitting_tablet.new_tablet_ids_size(); ++i) {
         auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_metadata);
         new_tablet_new_metadata->set_id(splitting_tablet.new_tablet_ids(i));
@@ -1288,6 +1303,12 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
             // are then pruned to those overlapping this new tablet (shared=false where provably
             // exclusive+contained), or for non-pruneable / degraded rowsets stay all-shared.
             if (rowset_prunable[rowset_index]) {
+                // Capture the ORIGINAL rssid range before apply_segment_ownership_to_new_tablet_rowset
+                // prunes segment_metas away: base = rowset id, count = original segment count
+                // (rssid = id + segment_idx, per meta_file.cpp:get_rssid).
+                const uint32_t split_diag_rssid_base = rowset_metadata.id();
+                const int split_diag_orig_seg_count = rowset_metadata.segment_metas_size();
+
                 const bool has_pruned_protected_rssid = propagate_pruned_ownership_to_non_segment_files(
                         rowset_metadata, rowset_ownership[rowset_index], i, protected_rssids,
                         new_tablet_new_metadata.get());
@@ -1305,6 +1326,30 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
                     rowset_metadata.del_files_size() == 0 && !has_pruned_protected_rssid) {
                     keep_rowset[rowset_index] = false;
                     removed_rowset_ids.push_back(rowset_metadata.id());
+                }
+
+                // [SPLIT-DIAG] Log EVERY fully-pruned rowset on this child, with whether any rssid
+                // in its original range is protected and whether it was actually removed. A
+                // removed=1 protected=0 line whose rssid_range=[a,b) later matches a query-time
+                // [GLM-DIAG notfound] tablet=child rssid=r with a<=r<b is the direct runtime proof:
+                // the split dropped an unprotected rowset and the index still hands out a position
+                // in its now-gone rssid range. referenced_by_surviving_sstable is omitted (scanning
+                // sstable entries at split time is too heavy) — the query-time correlation supplies it.
+                if (rowset_metadata.segment_metas_size() == 0) {
+                    bool any_protected = false;
+                    for (int off = 0; off < split_diag_orig_seg_count; ++off) {
+                        if (protected_rssids.contains(split_diag_rssid_base + off)) {
+                            any_protected = true;
+                            break;
+                        }
+                    }
+                    LOG(WARNING) << "[SPLIT-DIAG removed] child=" << new_tablet_new_metadata->id()
+                                 << " rowset_id=" << split_diag_rssid_base << " rssid_range=["
+                                 << split_diag_rssid_base << ","
+                                 << (split_diag_rssid_base + split_diag_orig_seg_count) << ")"
+                                 << " protected=" << (any_protected ? 1 : 0)
+                                 << " removed=" << (keep_rowset[rowset_index] ? 0 : 1)
+                                 << " has_pruned_protected=" << (has_pruned_protected_rssid ? 1 : 0);
                 }
             } else {
                 tablet_reshard_helper::set_all_data_files_shared(&rowset_metadata);
