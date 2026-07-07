@@ -233,7 +233,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return copied;
             } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
                 // Handle GCS access token
-                copied.set("fs.gs.auth.access.token.provider.impl", GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                        GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+                copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, "true");
                 copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,

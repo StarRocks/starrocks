@@ -88,8 +88,13 @@ public class GCPCloudCredential implements CloudCredential {
             hadoopConfiguration.put("fs.gs.auth.impersonation.service.account", impersonationServiceAccount);
         }
         if (hasAccessToken()) {
-            hadoopConfiguration.put("fs.gs.auth.access.token.provider.impl",
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                    GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
                     ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                    ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, "true");
             hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, accessToken);
             hadoopConfiguration.put(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY, accessTokenExpiresAt);
         }
