@@ -18,6 +18,7 @@
 
 #include <filesystem>
 
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -31,6 +32,8 @@
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
+#include "types/time_types.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::parquet {
 
@@ -789,5 +792,48 @@ TEST_F(ColumnConverterTest, Int64PreEpochTimestampSubSecond) {
         const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
         check(file_path, col_type, col_name, expected_value, expected_rows);
     }
+}
+
+// Paimon TIMESTAMP (NTZ) columns are written as INT96 for precision 7-9. Unlike Hive/Spark INT96
+// (which stores a UTC instant that must be shifted into the session/local timezone), a Paimon NTZ
+// value is a naive wall clock that must be kept as-is. The TypeDescriptor.datetime_is_ntz flag,
+// plumbed from FE via TScalarType, selects the behavior in Int96ToDateTimeConverter.
+TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
+    // Encode wall clock 2024-01-15 12:30:45 into an INT96 the way Int96ToDateTimeConverter decodes it:
+    //   timestamp = (hi << TIMESTAMP_BITS) | (lo / 1000)
+    const Timestamp packed = timestamp::from_datetime(2024, 1, 15, 12, 30, 45, 0);
+    int96_t raw;
+    raw.hi = static_cast<uint32_t>(packed >> TIMESTAMP_BITS);
+    raw.lo = (packed & ((static_cast<uint64_t>(1) << TIMESTAMP_BITS) - 1)) * 1000;
+
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT96;
+    const std::string timezone = "Asia/Shanghai";
+
+    auto read_back = [&](bool datetime_is_ntz) -> Timestamp {
+        auto src_data = FixedLengthColumn<int96_t>::create();
+        src_data->append(raw);
+        auto src_null = NullColumn::create();
+        src_null->append(0);
+        ColumnPtr src = NullableColumn::create(std::move(src_data), std::move(src_null));
+
+        TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        col_type.datetime_is_ntz = datetime_is_ntz;
+
+        std::unique_ptr<ColumnConverter> converter;
+        CHECK(ColumnConverterFactory::create_converter(field, col_type, timezone, &converter).ok());
+
+        auto dst = ColumnHelper::create_column(col_type, true);
+        CHECK(converter->convert(src.get(), dst.get()).ok());
+
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        const auto* ts_col = down_cast<const TimestampColumn*>(dst_nullable->data_column().get());
+        return ts_col->get_data()[0].timestamp();
+    };
+
+    // NTZ (Paimon TIMESTAMP): wall clock kept as-is, no session/local timezone shift.
+    EXPECT_EQ(packed, read_back(true));
+    // Default (Hive/Spark INT96): shifted into the local timezone (+8h for Asia/Shanghai).
+    EXPECT_EQ(timestamp::add<TimeUnit::SECOND>(packed, 8 * 3600), read_back(false));
 }
 } // namespace starrocks::parquet
