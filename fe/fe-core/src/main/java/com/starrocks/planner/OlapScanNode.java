@@ -358,6 +358,10 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             // still works); if the group then re-aligns before this guard runs, comparing the built
             // assignment against the aligned mapping catches the stale position pairing that would
             // otherwise reach the colocate join and silently return wrong results.
+            //
+            // Invariant: the bucketSeq fill (getScanRangeLocations, optimizer or legacy path) always runs
+            // before backend selection reaches this guard, so tabletId2BucketSeq holds the whole scan's
+            // built assignment here — an empty map would itself be a not-built/stale state and fails closed.
             dispatch.requireAligned(getSelectedPhysicalPartitions(), index.indexMetaId, tabletId2BucketSeq);
             return dispatch.bucketCount();
         }

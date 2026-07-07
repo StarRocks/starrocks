@@ -123,7 +123,7 @@ public final class RangeColocateScanDispatch {
      * the scan actually built — contains the current aligned mapping. Throws {@link IllegalStateException}
      * on the first index that is unaligned, or whose built assignment does not match.
      *
-     * <p>The equality check closes a fill→dispatch TOCTOU without any sticky per-scan state: the bucketSeq
+     * <p>The containment check closes a fill→dispatch TOCTOU without any sticky per-scan state: the bucketSeq
      * fill falls back to a position-based assignment when the group is momentarily unaligned (so a
      * non-colocate scan of the table still works); if the group then re-aligns before this guard runs, an
      * alignment check alone would pass while the built assignment is still the stale position mapping.
