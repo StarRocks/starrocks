@@ -983,9 +983,10 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 tablet->update_binlog_config(binlog_config);
                 break;
             case TTabletMetaType::FLAT_JSON_CONFIG: {
-                LOG(INFO) << "update tablet:" << tablet->tablet_id() << " flat_json_config";
                 FlatJsonConfig flat_json_config;
                 flat_json_config.update(tablet_meta_info.flat_json_config);
+                LOG(INFO) << "update tablet:" << tablet->tablet_id()
+                          << " flat_json_config, version: " << flat_json_config.get_flat_json_config_version();
                 tablet->update_flat_json_config(flat_json_config);
                 break;
             }

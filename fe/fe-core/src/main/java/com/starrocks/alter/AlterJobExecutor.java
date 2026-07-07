@@ -607,11 +607,11 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
-                    locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                     try {
                         schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
                     } finally {
-                        locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
                     }
                     isSynchronous = false;
                 } else {
