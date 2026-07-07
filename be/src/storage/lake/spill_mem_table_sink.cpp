@@ -14,24 +14,17 @@
 
 #include "storage/lake/spill_mem_table_sink.h"
 
+#include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/runtime_profile.h"
-#include "compute_env/spill/options.h"
-#include "compute_env/spill/serde.h"
 #include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
+#include "storage/lake/load_spill_pipeline_merge_iterator.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_pipeline_merge_context.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_engine.h"
-#include "storage_primitive/aggregate_iterator.h"
-#include "storage_primitive/merge_iterator.h"
 
 namespace starrocks::lake {
 

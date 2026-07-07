@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/load_spill_pipeline_merge_context.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
 
 #include "common/thread/threadpool.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"

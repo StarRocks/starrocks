@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
+
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
@@ -23,7 +26,7 @@ namespace starrocks {
 class ChunkIterator;
 class MemTracker;
 class Schema;
-class LoadSpillPipelineMergeTask;
+struct LoadSpillMergeInputBatch;
 
 namespace lake {
 
@@ -47,13 +50,13 @@ class TabletInternalParallelMergeTask : public Runnable {
 public:
     /**
      * @param writer - Cloned writer for this task (takes ownership)
-     * @param task - Merge task containing iterator and block groups (takes ownership)
+     * @param task - Merge input batch containing iterator and block groups (takes ownership)
      * @param schema - Table schema (borrowed, outlives task)
      * @param quit_flag - Shared cancellation flag (nullptr or points to context's atomic)
      * @param write_io_timer - Shared I/O metrics counter (borrowed)
      */
     TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
-                                    std::unique_ptr<LoadSpillPipelineMergeTask> task, const Schema* schema,
+                                    std::unique_ptr<LoadSpillMergeInputBatch> task, const Schema* schema,
                                     std::atomic<bool>* quit_flag, RuntimeProfile::Counter* write_io_timer);
 
     ~TabletInternalParallelMergeTask() override;
@@ -84,9 +87,9 @@ private:
     // Owned writer clone for independent parallel writes
     std::unique_ptr<TabletWriter> _writer;
 
-    // Owned merge task containing iterator and block groups.
+    // Owned merge input batch containing iterator and block groups.
     // Ownership ensures block groups aren't destroyed before iterator finishes reading.
-    std::unique_ptr<LoadSpillPipelineMergeTask> _task;
+    std::unique_ptr<LoadSpillMergeInputBatch> _task;
 
     // Memory tracker for this merge operation
     std::unique_ptr<MemTracker> _merge_mem_tracker;

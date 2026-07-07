@@ -36,11 +36,11 @@
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/general_tablet_writer.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
-#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 

@@ -18,27 +18,19 @@
 #include "column/chunk_schema_helper.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/load_spill/load_spill_merge_input_batch.h"
 #include "compute_env/spill/block_group.h"
-#include "compute_env/spill/options.h"
-#include "compute_env/spill/serde.h"
-#include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
-#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/vacuum.h"
-#include "storage/load_chunk_spiller.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_engine.h"
-#include "storage_primitive/aggregate_iterator.h"
-#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
-                                                                 std::unique_ptr<LoadSpillPipelineMergeTask> task,
+                                                                 std::unique_ptr<LoadSpillMergeInputBatch> task,
                                                                  const Schema* schema, std::atomic<bool>* quit_flag,
                                                                  RuntimeProfile::Counter* write_io_timer)
         : _writer(std::move(writer)),

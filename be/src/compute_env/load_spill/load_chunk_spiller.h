@@ -15,9 +15,16 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
+#include <memory>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
+#include "compute_env/load_spill/load_spill_merge_input_batch.h"
+#include "compute_env/load_spill/load_spill_slot_tracker.h"
+#include "compute_env/spill/block_group.h"
 #include "compute_env/spill/block_manager.h"
 #include "compute_env/spill/data_stream.h"
 #include "compute_env/spill/spiller_factory.h"
@@ -27,18 +34,7 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class Chunk;
-class ChunkIterator;
 class LoadChunkSpiller;
-class LoadSpillPipelineMergeTask;
-class LoadSpillPipelineMergeContext;
-
-using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
-using LoadSpillPipelineMergeTaskPtr = std::unique_ptr<LoadSpillPipelineMergeTask>;
-
-namespace lake {
-class TabletWriter;
-class TabletInternalParallelMergeTask;
-} // namespace lake
 
 namespace spill {
 class BlockGroup;
@@ -89,9 +85,8 @@ struct SpillBlockInputTasks {
 
 class LoadChunkSpiller {
 public:
-    friend class LoadSpillPipelineMergeIterator;
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
-                     LoadSpillPipelineMergeContext* pipeline_merge_context = nullptr);
+                     LoadSpillSlotTracker* slot_tracker = nullptr);
     ~LoadChunkSpiller() = default;
 
     StatusOr<size_t> spill(const Chunk& chunk, int64_t slot_idx = -1);
@@ -104,9 +99,8 @@ public:
     StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
                                                                     bool do_sort, bool do_agg);
 
-    StatusOr<LoadSpillPipelineMergeTaskPtr> generate_pipeline_merge_task(size_t target_size,
-                                                                         size_t memory_usage_per_merge, bool do_sort,
-                                                                         bool do_agg, bool final_round);
+    StatusOr<LoadSpillMergeInputBatch> generate_merge_input_batch(size_t target_size, size_t memory_usage_per_merge,
+                                                                  bool do_sort, bool do_agg, bool final_round);
 
     bool empty();
 
@@ -130,8 +124,8 @@ private:
     std::shared_ptr<RuntimeState> _runtime_state;
     // Load spilling uses a dummy RuntimeState without QueryContext.
     std::atomic_int64_t _total_spill_bytes = 0;
-    // pipeline merge context for managing merge tasks
-    LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
+    // Slot readiness tracker for parallel flush ordering. Not owned.
+    LoadSpillSlotTracker* _slot_tracker = nullptr;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     spill::SpillerFactoryPtr _spiller_factory;

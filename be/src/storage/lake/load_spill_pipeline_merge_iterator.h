@@ -14,51 +14,19 @@
 
 #pragma once
 
-#include "common/runtime_profile.h"
-#include "compute_env/spill/block_manager.h"
-#include "compute_env/spill/data_stream.h"
-#include "compute_env/spill/spiller_factory.h"
+#include <atomic>
+#include <memory>
+
+#include "common/status.h"
 
 namespace starrocks {
 
 class LoadChunkSpiller;
-class ChunkIterator;
-using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
-
-namespace spill {
-class BlockGroup;
-} // namespace spill
 
 namespace lake {
 class TabletInternalParallelMergeTask;
 class TabletWriter;
 } // namespace lake
-
-/**
- * Encapsulates a single merge task unit for pipeline execution.
- *
- * WHY THIS STRUCT: Groups all resources needed for one merge task to be executed
- * independently in a pipeline operator. The block_groups ownership is critical.
- */
-struct LoadSpillPipelineMergeTask {
-    // LIFETIME MANAGEMENT: Holds shared ownership of block groups to prevent premature
-    // destruction. The merge_itr reads from these block groups asynchronously during
-    // pipeline execution, so block groups must outlive the iterator. Without this,
-    // we'd have use-after-free bugs when blocks are reclaimed before iterator finishes.
-    std::vector<std::shared_ptr<spill::BlockGroup>> block_groups;
-
-    // Iterator that performs the actual merge of spilled data chunks. Supports both
-    // sorted merge (for aggregation/ordering) and union (for DUP_KEYS tables).
-    ChunkIteratorPtr merge_itr;
-
-    // Metrics for monitoring merge workload distribution across pipeline tasks.
-    // Used to ensure roughly equal work distribution and for performance analysis.
-    size_t total_block_groups = 0;
-    size_t total_block_bytes = 0;
-
-    // Release block group in advance to free load spill disk space
-    void release_block_groups() { block_groups.clear(); }
-};
 
 /**
  * Iterator that generates parallel merge tasks from spilled block groups.
