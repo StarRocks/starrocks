@@ -38,6 +38,6 @@ set(CONNECTOR_PRIMITIVE_TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
-add_executable(connector_primitive_test ${BE_TEST_MACOS_LINK_STUBS} connector_primitive_test.cpp)
+add_executable(connector_primitive_test ${BE_TEST_MACOS_LINK_STUBS} ${BE_TEST_JNI_ENV_STUB} connector_primitive_test.cpp)
 target_link_libraries(connector_primitive_test ${CONNECTOR_PRIMITIVE_TEST_LINK_LIBS} gtest_main)
 set_target_properties(connector_primitive_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

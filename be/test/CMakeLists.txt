@@ -215,6 +215,10 @@ function(target_link_be_test_cxa_throw_wrap TEST_TARGET)
     target_link_libraries(${TEST_TARGET} be_test_cxa_throw_wrap)
 endfunction()
 
+# Weak getJNIEnv fallback shared by the focused test binaries that link Runtime
+# but not libhdfs (which provides the real symbol). See base/jni_env_stub.cpp.
+set(BE_TEST_JNI_ENV_STUB ${CMAKE_CURRENT_SOURCE_DIR}/base/jni_env_stub.cpp)
+
 add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)

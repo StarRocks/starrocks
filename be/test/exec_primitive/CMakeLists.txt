@@ -21,7 +21,7 @@ set(EXEC_PRIMITIVE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     data_sink/data_sink_core_test.cpp
     exec_node_exec_primitive_test.cpp
-    jni_env_stub.cpp
+    ${BE_TEST_JNI_ENV_STUB}
     morsel_primitive_test.cpp
     pipeline_event_exec_primitive_test.cpp
     pipeline_metrics_exec_primitive_test.cpp
