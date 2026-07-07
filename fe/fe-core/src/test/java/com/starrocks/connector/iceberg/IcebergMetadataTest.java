@@ -4202,4 +4202,111 @@ public class IcebergMetadataTest extends TableTestBase {
         assertTrue(exception.getMessage().contains(String.valueOf(snap1.snapshotId())));
         assertTrue(exception.getMessage().contains(String.valueOf(snap3.snapshotId())));
     }
+
+    // ---------- parseSummaryLong / manifest-list fallback tests ----------
+
+    @Test
+    public void testCountIcebergRowsFromManifestListWithoutSummary() {
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(mockNativeTable.snapshot(42L)).thenReturn(mockSnapshot);
+        Mockito.when(mockSnapshot.summary()).thenReturn(null);
+        Mockito.when(mockSnapshot.dataManifests(Mockito.any())).thenReturn(
+                java.util.Collections.<ManifestFile>emptyList());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "db_name", "table_name", "", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(0L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, 42L));
+    }
+
+    @Test
+    public void testCountIcebergFilesFromManifestListWithoutSummary() {
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(mockNativeTable.snapshot(42L)).thenReturn(mockSnapshot);
+        Mockito.when(mockSnapshot.summary()).thenReturn(null);
+        Mockito.when(mockSnapshot.dataManifests(Mockito.any())).thenReturn(
+                java.util.Collections.<ManifestFile>emptyList());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "db_name", "table_name", "", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(0L,
+                IcebergMetadata.countIcebergFilesFromManifestList(icebergTable, 42L));
+    }
+
+    @Test
+    public void testParseSummaryLongMissingKey() {
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(mockNativeTable.snapshot(42L)).thenReturn(mockSnapshot);
+        Mockito.when(mockSnapshot.summary()).thenReturn(Map.of());
+        Mockito.when(mockSnapshot.dataManifests(Mockito.any())).thenReturn(
+                java.util.Collections.<ManifestFile>emptyList());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "db_name", "table_name", "", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(0L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, 42L));
+    }
+
+    @Test
+    public void testParseSummaryLongNumberFormatException() {
+        org.apache.iceberg.Table mockNativeTable = Mockito.mock(org.apache.iceberg.Table.class);
+        Snapshot mockSnapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(mockNativeTable.snapshot(42L)).thenReturn(mockSnapshot);
+        Mockito.when(mockSnapshot.summary()).thenReturn(
+                Map.of(org.apache.iceberg.SnapshotSummary.TOTAL_RECORDS_PROP, "not_a_number"));
+        Mockito.when(mockSnapshot.dataManifests(Mockito.any())).thenReturn(
+                java.util.Collections.<ManifestFile>emptyList());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "db_name", "table_name", "", Lists.newArrayList(), mockNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(0L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, 42L));
+    }
+
+    @Test
+    public void testFileSampleRatioAndSeedPassedFromSessionVariables() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(),
+                DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
+                DEFAULT_CATALOG_PROPERTIES);
+
+        mockedNativeTableH.newAppend().appendFile(
+                DataFiles.builder(PartitionSpec.unpartitioned())
+                        .withPath("/path/to/data-h.parquet")
+                        .withFileSizeInBytes(10)
+                        .withRecordCount(1)
+                        .build()).commit();
+        mockedNativeTableH.refresh();
+        long snapshotId = mockedNativeTableH.currentSnapshot().snapshotId();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name",
+                "iceberg_db", "iceberg_table", "", Lists.newArrayList(), mockedNativeTableH, Maps.newHashMap());
+
+        double ratioBefore = connectContext.getSessionVariable().getExternalStatsFileSampleRatio();
+        long seedBefore = connectContext.getSessionVariable().getExternalStatsSampleSeed();
+        try {
+            connectContext.getSessionVariable().setExternalStatsFileSampleRatio(0.5);
+            connectContext.getSessionVariable().setExternalStatsSampleSeed(42);
+
+            GetRemoteFilesParams params = IcebergGetRemoteFilesParams.newBuilder()
+                    .setAllParams(IcebergTableMORParams.EMPTY)
+                    .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                    .setPredicate(ConstantOperator.TRUE)
+                    .build();
+            Assertions.assertEquals(1.0, params.getFileSampleRatio());
+            Assertions.assertEquals(0L, params.getSampleSeed());
+
+            metadata.getRemoteFilesAsync(icebergTable, params);
+
+            Assertions.assertEquals(0.5, params.getFileSampleRatio());
+            Assertions.assertEquals(42L, params.getSampleSeed());
+        } finally {
+            connectContext.getSessionVariable().setExternalStatsFileSampleRatio(ratioBefore);
+            connectContext.getSessionVariable().setExternalStatsSampleSeed(seedBefore);
+        }
+    }
 }

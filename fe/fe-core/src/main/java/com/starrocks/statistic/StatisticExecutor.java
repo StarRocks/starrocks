@@ -823,7 +823,7 @@ public class StatisticExecutor {
                 tableId, sourcePartition, targetPartition);
     }
 
-    private List<TResultBatch> executeDQL(ConnectContext context, String sql, TResultSinkType resultSinkType) {
+    List<TResultBatch> executeDQL(ConnectContext context, String sql, TResultSinkType resultSinkType) {
         context.setQueryId(UUIDUtil.genUUID());
         if (Config.enable_print_sql) {
             LOG.info("Begin to execute sql, type: Statistics collect，query id:{}, sql:{}", context.getQueryId(), sql);

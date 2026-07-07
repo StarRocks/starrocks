@@ -19,10 +19,14 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,14 +37,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ExternalSampleStatisticsCollectJobTest {
 
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createDefaultCtx();
+    }
+
     private static ExternalSampleStatisticsCollectJob newJob(List<String> partitionNames, List<String> columnNames,
-                                                              List<com.starrocks.type.Type> columnTypes,
-                                                              int allPartitionSize) {
+                                                               List<com.starrocks.type.Type> columnTypes,
+                                                               int allPartitionSize) {
         Database database = new Database(1, "test_db");
         Table table = HiveTable.builder().setTableName("test_table").build();
         return new ExternalSampleStatisticsCollectJob("test_catalog", database, table, partitionNames, columnNames,
                 columnTypes, StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap(), allPartitionSize);
+    }
+
+    private void clearAnalyzeStatusMap() {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().clear();
     }
 
     @Test
@@ -155,5 +168,133 @@ public class ExternalSampleStatisticsCollectJobTest {
         assertTrue(sql.contains("hex(hll_serialize(hll_empty()))"), sql);
         // COUNT(1) + 6 placeholder aggregates => 7 SELECT items => 6 separating commas.
         assertEquals(6, sql.split(",").length - 1);
+    }
+
+    @Test
+    public void testFindPersistedRoundNoPriorRuns() {
+        clearAnalyzeStatusMap();
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundSkipsNativeStatus() {
+        clearAnalyzeStatusMap();
+        ExternalAnalyzeStatus nativeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        nativeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        nativeStatus.setEndTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(nativeStatus);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundSkipsNonSampleType() {
+        clearAnalyzeStatusMap();
+        ExternalAnalyzeStatus fullStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        fullStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        fullStatus.setEndTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(fullStatus);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundSkipsNonFinishedStatus() {
+        clearAnalyzeStatusMap();
+        ExternalAnalyzeStatus runningStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        runningStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(runningStatus);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundReturnsMostRecentRound() {
+        clearAnalyzeStatusMap();
+        Map<String, String> olderProps = Maps.newHashMap();
+        olderProps.put("external_sample_round", "2");
+        ExternalAnalyzeStatus older = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, olderProps, LocalDateTime.now().minusDays(1));
+        older.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        older.setEndTime(LocalDateTime.now().minusHours(1));
+
+        Map<String, String> newerProps = Maps.newHashMap();
+        newerProps.put("external_sample_round", "3");
+        ExternalAnalyzeStatus newer = new ExternalAnalyzeStatus(2, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, newerProps, LocalDateTime.now());
+        newer.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        newer.setEndTime(LocalDateTime.now());
+
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(older);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(newer);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(3, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundMissingPropertyDefaultsZero() {
+        clearAnalyzeStatusMap();
+        ExternalAnalyzeStatus noProp = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, null, LocalDateTime.now());
+        noProp.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        noProp.setEndTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(noProp);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundBadFormatDefaultsZero() {
+        clearAnalyzeStatusMap();
+        Map<String, String> props = Maps.newHashMap();
+        props.put("external_sample_round", "not_a_number");
+        ExternalAnalyzeStatus badRound = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, props, LocalDateTime.now());
+        badRound.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        badRound.setEndTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(badRound);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
+    }
+
+    @Test
+    public void testFindPersistedRoundSkipsDifferentTable() {
+        clearAnalyzeStatusMap();
+        Map<String, String> props = Maps.newHashMap();
+        props.put("external_sample_round", "5");
+        ExternalAnalyzeStatus otherTable = new ExternalAnalyzeStatus(1, "other_catalog", "test_db", "test_table",
+                "uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, props, LocalDateTime.now());
+        otherTable.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        otherTable.setEndTime(LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(otherTable);
+
+        ExternalSampleStatisticsCollectJob job = newJob(List.of(),
+                Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT), 1);
+        assertEquals(0, job.findPersistedRound());
     }
 }

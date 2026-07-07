@@ -27,10 +27,10 @@ import java.util.Random;
  * split/scan-range construction, so BE never opens them. Lazy evaluation, no materialization
  * of the full file list.
  *
- * <p>Must wrap the planned task iterator BEFORE file splitting (before
- * {@code buildSplitFileScanTaskIterator}), so the keep/drop decision is made once per physical
- * file, and a kept file's associated delete files (bundled on the same {@link FileScanTask})
- * are kept/dropped together, avoiding orphan deletes on V2 MOR tables.
+ * <p>Must wrap the planned task iterator AFTER file splitting (after
+ * {@code buildSplitFileScanTaskIterator}), so the keep/drop decision is made per split
+ * (uniform ~targetSplitSize rows), achieving approximate row-level uniform Bernoulli
+ * sampling independent of original file-size distribution.
  */
 public class BernoulliFileScanTaskIterator implements CloseableIterator<FileScanTask> {
 

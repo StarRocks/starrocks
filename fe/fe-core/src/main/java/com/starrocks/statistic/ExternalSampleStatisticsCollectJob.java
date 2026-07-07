@@ -300,7 +300,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
      * so this run's internal round loop can warm-start near there instead of always cold-starting
      * at round 0. Defaults to 0 if no prior finished run is found.
      */
-    private int findPersistedRound() {
+    int findPersistedRound() {
         Map<Long, AnalyzeStatus> statusMap = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap();
         int round = 0;
         LocalDateTime latestEnd = null;
