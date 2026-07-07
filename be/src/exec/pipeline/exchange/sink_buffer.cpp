@@ -235,9 +235,6 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-<<<<<<< HEAD
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
-=======
     // Cancel all in-flight RPCs. Without this, a cancelled fragment keeps waiting until these RPCs drain.
     // bthread_id_list_reset() may call on_error() callback of valid call ids, which may lead to deadlock if the thread
     // is still holding the lock. So the lock-and-swap idiom is used. See bRPC comments (id.h) for more details.
@@ -252,8 +249,7 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
         bthread_id_list_destroy(&tmplist);
     }
 
-    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
->>>>>>> cf631f0d09 ([Enhancement] Cancel in-flight exchange sink RPCs on fragment cancellation (#75613))
+    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
