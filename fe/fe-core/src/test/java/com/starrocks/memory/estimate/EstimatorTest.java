@@ -17,6 +17,7 @@ package com.starrocks.memory.estimate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.openjdk.jol.info.GraphLayout;
 
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
@@ -259,6 +260,159 @@ class EstimatorTest {
         }
         long size = Estimator.estimate(map);
         assertTrue(size > Estimator.estimate(new HashMap<>()));
+    }
+
+    // A small value type whose full size the estimator can see without --add-opens. String is
+    // unusable here: its internal byte[] is not reflectively accessible under the FE-UT surefire
+    // argLine, so the estimator would skip it while GraphLayout still counts it.
+    private static final class IntBox {
+        final int v;
+
+        IntBox(int v) {
+            this.v = v;
+        }
+
+        @Override
+        public int hashCode() {
+            return v;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof IntBox && ((IntBox) o).v == v;
+        }
+    }
+
+    // The estimate must include the internal node/entry wrappers and backing table; before counting
+    // them these under-estimated the retained size by ~50%, which let weigher-bounded caches hold
+    // far more than their configured budget. GraphLayout gives the true retained size as the oracle.
+    @Test
+    void testHashMapCountsNodeAndTableOverhead() {
+        Map<IntBox, IntBox> map = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            map.put(new IntBox(i), new IntBox(i + 1));
+        }
+        long real = GraphLayout.parseInstance(map).totalSize();
+        long est = Estimator.estimate(map);
+        assertTrue(est >= real * 0.9 && est <= real * 1.1,
+                "HashMap estimate " + est + " not within 10% of retained " + real);
+    }
+
+    @Test
+    void testHashSetCountsBackingOverhead() {
+        Set<IntBox> set = new HashSet<>();
+        for (int i = 0; i < 1000; i++) {
+            set.add(new IntBox(i));
+        }
+        long real = GraphLayout.parseInstance(set).totalSize();
+        long est = Estimator.estimate(set);
+        assertTrue(est >= real * 0.9 && est <= real * 1.1,
+                "HashSet estimate " + est + " not within 10% of retained " + real);
+    }
+
+    // Mirrors Iceberg's SerializableMap/SerializableByteBufferMap: a non-JDK Map that wraps its real
+    // storage in a field. The estimator must field-walk such wrappers so the inner HashMap's node and
+    // table overhead is counted — element sampling alone would skip it entirely.
+    private static final class WrapperMap implements Map<IntBox, IntBox> {
+        private final Map<IntBox, IntBox> wrapped;
+
+        WrapperMap(Map<IntBox, IntBox> wrapped) {
+            this.wrapped = wrapped;
+        }
+
+        @Override
+        public int size() {
+            return wrapped.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return wrapped.isEmpty();
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            return wrapped.containsKey(key);
+        }
+
+        @Override
+        public boolean containsValue(Object value) {
+            return wrapped.containsValue(value);
+        }
+
+        @Override
+        public IntBox get(Object key) {
+            return wrapped.get(key);
+        }
+
+        @Override
+        public IntBox put(IntBox key, IntBox value) {
+            return wrapped.put(key, value);
+        }
+
+        @Override
+        public IntBox remove(Object key) {
+            return wrapped.remove(key);
+        }
+
+        @Override
+        public void putAll(Map<? extends IntBox, ? extends IntBox> m) {
+            wrapped.putAll(m);
+        }
+
+        @Override
+        public void clear() {
+            wrapped.clear();
+        }
+
+        @Override
+        public Set<IntBox> keySet() {
+            return wrapped.keySet();
+        }
+
+        @Override
+        public java.util.Collection<IntBox> values() {
+            return wrapped.values();
+        }
+
+        @Override
+        public Set<Entry<IntBox, IntBox>> entrySet() {
+            return wrapped.entrySet();
+        }
+    }
+
+    @Test
+    void testWrapperMapCountsInnerMapStructure() {
+        Map<IntBox, IntBox> inner = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            inner.put(new IntBox(i), new IntBox(i + 1));
+        }
+        WrapperMap wrapper = new WrapperMap(inner);
+        long real = GraphLayout.parseInstance(wrapper).totalSize();
+        long est = Estimator.estimate(wrapper);
+        assertTrue(est >= real * 0.9 && est <= real * 1.1,
+                "wrapper-map estimate " + est + " not within 10% of retained " + real);
+    }
+
+    @Test
+    void testImmutableMapNotOvercharged() {
+        Map<String, Integer> immutable = Map.of("a", 1, "b", 2, "c", 3);
+        // java.util immutable maps store entries inline: no node/table overhead may be charged
+        long est = Estimator.estimate(immutable);
+        assertTrue(est < 512, "Map.of estimate " + est + " unexpectedly large");
+    }
+
+    @Test
+    void testArrayListCountsBackingArray() {
+        ArrayList<IntBox> list = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            list.add(new IntBox(i));
+        }
+        list.trimToSize();   // make backing-array capacity == size so the oracle comparison is exact
+        long real = GraphLayout.parseInstance(list).totalSize();
+        long est = Estimator.estimate(list);
+        assertTrue(est >= real * 0.9 && est <= real * 1.1,
+                "ArrayList estimate " + est + " not within 10% of retained " + real);
     }
 
     // ==================== Custom Object Tests ====================

@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,19 @@ public class Estimator {
 
     // Reference size on 64-bit JVM (with compressed oops, typically 4 bytes; without, 8 bytes)
     private static final int REFERENCE_SIZE = 4;
+
+    // Per-entry structural overhead of common container internals. The shallow-size + sampled-element
+    // estimate does not otherwise count the node/entry wrappers or the backing table, which on wide
+    // maps dominate the footprint. Sizes assume compressed oops (FE heap < 32G):
+    //   HashMap.Node / ConcurrentHashMap.Node : header(12)+hash(4)+key+value+next(3*4)  -> 32
+    //   LinkedHashMap.Entry                   : Node + before + after(2*4)               -> 40
+    //   TreeMap.Entry / TreeSet               : header+key+value+left+right+parent+color -> 40
+    //   LinkedList.Node                       : header(12)+item+prev+next(3*4)           -> 24
+    private static final int HASH_NODE_SIZE = 32;
+    private static final int LINKED_HASH_ENTRY_SIZE = 40;
+    private static final int TREE_ENTRY_SIZE = 40;
+    private static final int LINKED_LIST_NODE_SIZE = 24;
+    private static final double HASH_LOAD_FACTOR = 0.75;
 
     // Shallow sizes of classes (bound to Class lifecycle, avoids ClassLoader leaks)
     private static final ClassValue<Long> SHALLOW_SIZE = new ClassValue<>() {
@@ -319,14 +333,26 @@ public class Estimator {
             return estimateArray(obj, maxDepth, sampleSize);
         }
 
-        // Handle collections
+        // Handle collections. Non-JDK implementations (Iceberg SerializableMap, Guava Immutable*)
+        // typically wrap their real storage in a field; the element-sampling path would skip that
+        // storage's own structure entirely, so walk their fields instead — the wrapped JDK container
+        // is then estimated (and charged) when the recursion reaches it.
         if (obj instanceof Collection) {
-            return estimateCollection((Collection<?>) obj, maxDepth, sampleSize);
+            Collection<?> collection = (Collection<?>) obj;
+            if (!isJdkContainer(clazz)) {
+                return estimateObject(obj, maxDepth, sampleSize);
+            }
+            return estimateCollection(collection, maxDepth, sampleSize) + collectionBackingOverhead(collection);
         }
 
-        // Handle maps
+        // Handle maps. keySet()/values() are views, so their backing is added once here via
+        // mapStructureOverhead rather than inside estimateCollection.
         if (obj instanceof Map<?, ?> map) {
+            if (!isJdkContainer(clazz)) {
+                return estimateObject(obj, maxDepth, sampleSize);
+            }
             return shallow(obj) +
+                    mapStructureOverhead(map) +
                     estimateCollection(map.keySet(), maxDepth, sampleSize) +
                     estimateCollection(map.values(), maxDepth, sampleSize);
         }
@@ -419,6 +445,71 @@ public class Estimator {
 
         double avgSize = (double) sampleTotalSize / samples.size();
         return shallowSize + (long) (avgSize * collection.size());
+    }
+
+    // Structural overhead of a Map's internal entry objects plus the backing table, which shallow
+    // size + sampled key/value elements do not otherwise count. Only concrete JDK hash/tree maps are
+    // charged; immutable/view maps (Map.of, Guava ImmutableMap, singletonMap, ...) store entries
+    // inline or in arrays and would be over-counted, so they get no node overhead here.
+    private static long mapStructureOverhead(Map<?, ?> map) {
+        int size = map.size();
+        if (size == 0) {
+            return 0;
+        }
+        if (map instanceof java.util.LinkedHashMap) {   // subclass of HashMap, check first
+            return (long) size * LINKED_HASH_ENTRY_SIZE + hashTableBytes(size);
+        }
+        if (map instanceof HashMap || map instanceof java.util.concurrent.ConcurrentHashMap) {
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
+        if (map instanceof java.util.TreeMap) {
+            return (long) size * TREE_ENTRY_SIZE;       // red-black tree nodes, no backing table
+        }
+        return 0;
+    }
+
+    // Structural overhead of a stand-alone collection's internals. Only concrete JDK collections are
+    // charged; immutable/view collections (List.of, Guava Immutable*, Arrays.asList, ...) get none.
+    // Not applied to Map key/value views.
+    private static long collectionBackingOverhead(Collection<?> collection) {
+        int size = collection.size();
+        if (size == 0) {
+            return 0;
+        }
+        if (collection instanceof java.util.LinkedHashSet) {   // subclass of HashSet, check first
+            return (long) size * LINKED_HASH_ENTRY_SIZE + hashTableBytes(size);
+        }
+        if (collection instanceof HashSet) {
+            return (long) size * HASH_NODE_SIZE + hashTableBytes(size);
+        }
+        if (collection instanceof java.util.TreeSet) {
+            return (long) size * TREE_ENTRY_SIZE;
+        }
+        if (collection instanceof ArrayList) {
+            return ARRAY_HEADER_SIZE + (long) size * REFERENCE_SIZE;   // backing Object[]
+        }
+        if (collection instanceof java.util.LinkedList) {
+            return (long) size * LINKED_LIST_NODE_SIZE;
+        }
+        return 0;
+    }
+
+    // JDK containers get the sampling paths (their internals are modeled by the *Overhead helpers,
+    // and their fields are not reflectively accessible anyway); anything else is field-walked.
+    private static boolean isJdkContainer(Class<?> clazz) {
+        return clazz.getName().startsWith("java.util.");
+    }
+
+    // Bytes of a hash table's backing array: capacity (next power of two that keeps the load factor)
+    // times a reference, plus the array header. Sized from the entry count, matching maps built via
+    // the sizing/copy constructors (the dominant population); put-grown small maps retain a larger
+    // 16-slot minimum table that this under-counts by a few dozen bytes.
+    private static long hashTableBytes(int size) {
+        int capacity = 2;
+        while (capacity * HASH_LOAD_FACTOR < size) {
+            capacity <<= 1;
+        }
+        return ARRAY_HEADER_SIZE + (long) capacity * REFERENCE_SIZE;
     }
 
     /**
