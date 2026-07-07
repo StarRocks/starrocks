@@ -128,15 +128,20 @@ class TableAlignmentLatch {
         return lastAttemptByTable.containsKey(tableId);
     }
 
+    /** The tracked reshard job for {@code jobId}, or {@code null} if it is no longer tracked. */
+    private static TabletReshardJob trackedJob(long jobId) {
+        return GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJob(jobId);
+    }
+
     /** True iff the alignment job is still tracked and ended in {@code ABORTED}. */
-    static boolean isJobAborted(long jobId) {
-        TabletReshardJob job = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJob(jobId);
+    private static boolean isJobAborted(long jobId) {
+        TabletReshardJob job = trackedJob(jobId);
         return job != null && job.isAborted();
     }
 
     /** True iff the alignment job has reached a terminal state (or is no longer tracked). */
-    static boolean isJobSettled(long jobId) {
-        TabletReshardJob job = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().getTabletReshardJob(jobId);
+    private static boolean isJobSettled(long jobId) {
+        TabletReshardJob job = trackedJob(jobId);
         return job == null || job.isDone();
     }
 }

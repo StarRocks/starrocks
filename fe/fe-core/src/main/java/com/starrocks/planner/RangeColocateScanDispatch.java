@@ -120,7 +120,7 @@ public final class RangeColocateScanDispatch {
     /**
      * Fails closed unless every {@link MaterializedIndex} actually scanned in the supplied physical
      * partitions is aligned with the colocate group AND {@code builtBucketSeq} — the bucket assignment
-     * the scan actually built — equals the current aligned mapping. Throws {@link IllegalStateException}
+     * the scan actually built — contains the current aligned mapping. Throws {@link IllegalStateException}
      * on the first index that is unaligned, or whose built assignment does not match.
      *
      * <p>The equality check closes a fill→dispatch TOCTOU without any sticky per-scan state: the bucketSeq

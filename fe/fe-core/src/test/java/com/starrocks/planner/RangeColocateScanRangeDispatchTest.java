@@ -246,6 +246,14 @@ public class RangeColocateScanRangeDispatchTest {
         scanNode.setTabletId2BucketSeq(new HashMap<>(aligned));
         Assertions.assertEquals(1, scanNode.getBucketNums());
 
+        // Superset assignment: the whole-scan bucketSeq map legitimately holds more tablets than this
+        // partition's aligned mapping (e.g. other scanned sub-partitions). The guard checks containment,
+        // not equality, so this still passes -- this is what makes the whole-scan accumulation safe.
+        Map<Long, Integer> superset = new HashMap<>(aligned);
+        superset.put(-999L, 0);
+        scanNode.setTabletId2BucketSeq(superset);
+        Assertions.assertEquals(1, scanNode.getBucketNums());
+
         // Stale assignment (bucketSeq perturbed, e.g. a position fallback) -> fail closed.
         Map<Long, Integer> stale = new HashMap<>();
         aligned.forEach((tabletId, seq) -> stale.put(tabletId, seq + 1));
