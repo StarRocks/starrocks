@@ -67,6 +67,7 @@ ADD_BE_LIB(FormatCsv
 target_link_libraries(FormatCsv PUBLIC FormatCore)
 
 ADD_BE_LIB(FormatJson
+        json/json_parser.cpp
         json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp

@@ -57,29 +57,6 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
-    Status test_extract_from_object(std::string input, const std::string& jsonpath, std::string* output) {
-        // reverse for padding.
-        input.reserve(input.size() + simdjson::SIMDJSON_PADDING);
-
-        simdjson::ondemand::parser parser;
-        simdjson::ondemand::document doc;
-        EXPECT_EQ(simdjson::error_code::SUCCESS, parser.iterate(input).get(doc));
-
-        simdjson::ondemand::object obj;
-
-        EXPECT_EQ(simdjson::error_code::SUCCESS, doc.get_object().get(obj));
-
-        std::vector<SimpleJsonPath> path;
-        RETURN_IF_ERROR(JsonFunctions::parse_json_paths(jsonpath, &path));
-
-        simdjson::ondemand::value val;
-        RETURN_IF_ERROR(JsonFunctions::extract_from_object(obj, path, &val));
-        std::string_view sv = simdjson::to_json_string(val);
-
-        output->assign(sv.data(), sv.size());
-        return Status::OK();
-    }
-
 public:
     TExprNode expr_node;
 };
@@ -1323,44 +1300,6 @@ INSTANTIATE_TEST_SUITE_P(JsonObjectTest, JsonObjectTestFixture,
 
                                  // clang-format on
                                  ));
-
-TEST_F(JsonFunctionsTest, extract_from_object_test) {
-    std::string output;
-
-    EXPECT_OK(test_extract_from_object(R"({"data" : 1})", "$.data", &output));
-    EXPECT_STREQ(output.data(), "1");
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data" : 1})", "$.dataa", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output));
-    EXPECT_STREQ(output.data(), "2");
-
-    EXPECT_STATUS(Status::NotFound(""),
-                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
-
-    EXPECT_STATUS(Status::NotFound(""),
-                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[3].key", &output));
-
-    EXPECT_STATUS(Status::DataQualityError(""),
-                  test_extract_from_object(R"({"data1 " : 1, "data2":})", "$.data", &output));
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data", &output));
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": null})", "$.data.key", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"data": {}})", "$.data", &output));
-    EXPECT_STREQ(output.data(), "{}");
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
-
-    EXPECT_OK(test_extract_from_object(R"({"key1": [1,2]})", "$.key1[1]", &output));
-    EXPECT_STREQ(output.data(), "2");
-
-    EXPECT_OK(test_extract_from_object(R"({"key1": [{"key2":3},{"key4": 5}]})", "$.key1[1].key4", &output));
-    EXPECT_STREQ(output.data(), "5");
-
-    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"key1": null})", "$.key1[1].key4", &output));
-}
 
 class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
 

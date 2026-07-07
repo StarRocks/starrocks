@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exec/json_parser.h"
+#include "formats/json/json_parser.h"
 #include "runtime/byte_buffer.h"
 
 namespace starrocks {

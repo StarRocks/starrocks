@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/json_parser.h"
+#include "formats/json/json_parser.h"
 
 #include <fmt/format.h>
 
@@ -81,7 +81,7 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
         try {
             if (_doc_stream_itr != _doc_stream.end()) {
                 simdjson::ondemand::document_reference doc = *_doc_stream_itr;
-                // simdjson version 3.9.4 and JsonFunctions::to_json_string may crash when json is invalid.
+                // simdjson version 3.9.4 and to_json_string_limited may crash when json is invalid.
                 // TODO: add value in error message
                 if (doc.type() == simdjson::ondemand::json_type::array) {
                     return status_from_json_parse_error(
@@ -187,7 +187,7 @@ Status JsonArrayParser::parse(char* data, size_t len, size_t allocated) noexcept
 
         if (_doc.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format("the value should be array type with strip_outer_array=true, value: {}",
-                                       JsonFunctions::to_json_string(_doc, MAX_RAW_JSON_LEN));
+                                       to_json_string_limited(_doc, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -274,19 +274,19 @@ Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object*
 
     // json root filter.
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, &val));
+    RETURN_IF_ERROR(extract_from_object(*row, _root_paths, &val));
 
     try {
         if (val.type() == simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format(
                     "The value is array type in json document stream with json root, you can set strip_outer_array=true"
                     " to parse each element of the array as individual rows, value: {}",
-                    JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                    to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         } else if (val.type() != simdjson::ondemand::json_type::object) {
             auto err_msg =
                     fmt::format("The value should be object type in json document stream with json root, value: {}",
-                                JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                                to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -317,18 +317,18 @@ Status JsonArrayParserWithRoot::get_current(simdjson::ondemand::object* row) noe
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(row));
     simdjson::ondemand::value val;
     // json root filter.
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(*row, _root_paths, &val));
+    RETURN_IF_ERROR(extract_from_object(*row, _root_paths, &val));
 
     try {
         if (val.type() == simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format(
                     "The value is array type in json array with json root, you can set strip_outer_array=true to parse "
                     "each element of the array as individual rows, value: {}",
-                    JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                    to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         } else if (val.type() != simdjson::ondemand::json_type::object) {
             auto err_msg = fmt::format("The value should be object type in json array with json root, value: {}",
-                                       JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                                       to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -354,14 +354,14 @@ Status ExpandedJsonDocumentStreamParserWithRoot::parse(char* data, size_t len, s
     RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
+    RETURN_IF_ERROR(extract_from_object(_curr_row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::array) {
             auto err_msg = fmt::format(
                     "the value should be array type with strip_outer_array=true in json document stream with root, "
                     "value: {}",
-                    JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                    to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -395,7 +395,7 @@ Status ExpandedJsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand:
         if (val.type() != simdjson::ondemand::json_type::object) {
             auto err_msg = fmt::format(
                     "the value should be object type in expanded json document stream with json root, value: {}",
-                    JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                    to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -422,14 +422,14 @@ Status ExpandedJsonDocumentStreamParserWithRoot::advance() noexcept {
             RETURN_IF_ERROR(this->JsonDocumentStreamParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
+            RETURN_IF_ERROR(extract_from_object(_curr_row, _root_paths, &val));
 
             try {
                 if (val.type() != simdjson::ondemand::json_type::array) {
                     auto err_msg = fmt::format(
                             "the value under json root should be array type with strip_outer_array=true in json "
                             "document stream with root, value: {}",
-                            JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                            to_json_string_limited(val, MAX_RAW_JSON_LEN));
                     return status_from_json_parse_error(err_msg);
                 }
 
@@ -452,7 +452,7 @@ Status ExpandedJsonArrayParserWithRoot::parse(char* data, size_t len, size_t all
     RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
     simdjson::ondemand::value val;
-    RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
+    RETURN_IF_ERROR(extract_from_object(_curr_row, _root_paths, &val));
 
     try {
         if (val.type() != simdjson::ondemand::json_type::array) {
@@ -460,7 +460,7 @@ Status ExpandedJsonArrayParserWithRoot::parse(char* data, size_t len, size_t all
                     "the value under json root should be array type with strip_outer_array=true in json array, "
                     "value: "
                     "{}",
-                    JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                    to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -494,7 +494,7 @@ Status ExpandedJsonArrayParserWithRoot::get_current(simdjson::ondemand::object* 
         if (val.type() != simdjson::ondemand::json_type::object) {
             auto err_msg =
                     fmt::format("the value should be object type in expanded json array with json root, value: {}",
-                                JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                                to_json_string_limited(val, MAX_RAW_JSON_LEN));
             return status_from_json_parse_error(err_msg);
         }
 
@@ -520,7 +520,7 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
             RETURN_IF_ERROR(this->JsonArrayParser::get_current(&_curr_row));
 
             simdjson::ondemand::value val;
-            RETURN_IF_ERROR(JsonFunctions::extract_from_object(_curr_row, _root_paths, &val));
+            RETURN_IF_ERROR(extract_from_object(_curr_row, _root_paths, &val));
 
             try {
                 if (val.type() != simdjson::ondemand::json_type::array) {
@@ -528,7 +528,7 @@ Status ExpandedJsonArrayParserWithRoot::advance() noexcept {
                             "the value under json root should be array type with strip_outer_array=true in json "
                             "array, "
                             "value: {}",
-                            JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
+                            to_json_string_limited(val, MAX_RAW_JSON_LEN));
                     return status_from_json_parse_error(err_msg);
                 }
 
