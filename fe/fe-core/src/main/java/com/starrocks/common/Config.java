@@ -2734,6 +2734,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
 
+    @ConfField(mutable = true, comment =
+            "Skip histogram bucket computation for string/char-family columns as they are currently " +
+                    "not used by the optimizer, MCVs are still collected")
+    public static boolean enable_skip_histogram_buckets_for_string_columns = true;
+
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
