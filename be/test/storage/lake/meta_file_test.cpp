@@ -134,7 +134,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_tiny.dat");
         segment_meta->set_size(100);
     }
-    builder.add_rowset(rs_tiny, {}, {}, {});
+    builder.add_rowset(rs_tiny, {}, {}, {}, {});
 
     RowsetMetadataPB rs_large; // second op_write: 10000 rows, 1 segment
     rs_large.set_num_rows(10000);
@@ -146,7 +146,7 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
         segment_meta->set_filename("seg_large.dat");
         segment_meta->set_size(50000);
     }
-    builder.add_rowset(rs_large, {}, {}, {});
+    builder.add_rowset(rs_large, {}, {}, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
 

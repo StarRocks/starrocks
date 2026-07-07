@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,12 @@ namespace lake {
 class TabletManager;
 
 enum WriterType : int { kHorizontal = 0, kVertical = 1 };
+
+// Sentinel for a del file whose in-transaction op_offset (segment index it follows) is unknown,
+// e.g. when produced by the spill/concurrent flush path where flush order does not map to the
+// final merged segment indices. The persist path treats this as "after all segments" (max segment
+// index), preserving the legacy behavior.
+static constexpr uint32_t kUnknownDelOpOffset = std::numeric_limits<uint32_t>::max();
 
 // Basic interface for tablet writers.
 class TabletWriter {
@@ -68,6 +75,10 @@ public:
     const std::vector<SegmentFileInfo>& segments() const { return _segments; }
 
     const std::vector<FileInfo>& dels() const { return _dels; }
+
+    // Parallel to dels(): the in-transaction op_offset for each del file (segment index it
+    // logically follows), or kUnknownDelOpOffset when the writer cannot determine the order.
+    const std::vector<uint32_t>& del_op_offsets() const { return _del_op_offsets; }
 
     const std::vector<FileInfo>& ssts() const { return _ssts; }
 
@@ -111,8 +122,10 @@ public:
     virtual Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
                                  const std::vector<uint64_t>& rssid_rowids) = 0;
 
-    // Write del file to this rowset. PK table only
-    virtual Status flush_del_file(const Column& deletes) = 0;
+    // Write del file to this rowset. PK table only.
+    // |op_offset| is the in-transaction segment index this delete logically follows
+    // (delete rssid = rowset_id + op_offset); pass kUnknownDelOpOffset when the order is unknown.
+    virtual Status flush_del_file(const Column& deletes, uint32_t op_offset) = 0;
 
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`
@@ -193,6 +206,8 @@ protected:
     ThreadPool* _flush_pool;
     std::vector<SegmentFileInfo> _segments;
     std::vector<FileInfo> _dels;
+    // Parallel to _dels: op_offset (segment index the delete follows) for each del file.
+    std::vector<uint32_t> _del_op_offsets;
     std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;

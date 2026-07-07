@@ -47,7 +47,7 @@ public:
 
     Status write(const Chunk& data, SegmentPB* segment = nullptr, bool eos = false) override;
 
-    Status flush_del_file(const Column& deletes) override;
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override;
 
     Status flush_columns() override {
         return Status::NotSupported("HorizontalPkTabletWriter flush_columns not support");
@@ -83,7 +83,7 @@ public:
         return Status::NotSupported("VerticalPkTabletWriter write not support");
     }
 
-    Status flush_del_file(const Column& deletes) override {
+    Status flush_del_file(const Column& deletes, uint32_t op_offset) override {
         return Status::NotSupported("VerticalPkTabletWriter flush_del_file not support");
     }
 
