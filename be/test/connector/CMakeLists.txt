@@ -30,6 +30,7 @@ set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
 
 add_executable(connector_cache_stats_test
         ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
         cache_stats/cache_stats_connector_test.cpp
 )
 target_link_libraries(connector_cache_stats_test ${CONNECTOR_CACHE_STATS_TEST_LINK_LIBS} gtest_main)
@@ -49,6 +50,7 @@ if (WITH_CONNECTOR_MYSQL)
 
     add_executable(connector_mysql_test
             ${BE_TEST_MACOS_LINK_STUBS}
+            ${BE_TEST_JNI_ENV_STUB}
             mysql/mysql_connector_test.cpp
     )
     target_link_libraries(connector_mysql_test ${CONNECTOR_MYSQL_TEST_LINK_LIBS} gtest_main)
@@ -69,6 +71,7 @@ if (WITH_CONNECTOR_BENCHMARK)
 
     add_executable(connector_benchmark_test
             ${BE_TEST_MACOS_LINK_STUBS}
+            ${BE_TEST_JNI_ENV_STUB}
             benchmark/benchmark_connector_test.cpp
             benchmark/benchmark_scanner_test.cpp
     )
@@ -114,6 +117,7 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
 
     add_executable(connector_elasticsearch_test
             ${BE_TEST_MACOS_LINK_STUBS}
+            ${BE_TEST_JNI_ENV_STUB}
             ${SRC_DIR}/runtime/descriptors_ext.cpp
             elasticsearch/es_query_builder_test.cpp
             elasticsearch/es_scan_reader_test.cpp
