@@ -71,6 +71,13 @@ public class ExternalTableTest extends PlanTestBase {
                         "PROPERTIES (\n" +
                         "\"resource\"=\"jdbc_pg\",\n" +
                         "\"table\"=\"test_table\"\n" +
+                        ");")
+                .withTable("create external table test.jdbc_pg_bool_test\n" +
+                        "(id int, flag boolean)\n" +
+                        "ENGINE=jdbc\n" +
+                        "PROPERTIES (\n" +
+                        "\"resource\"=\"jdbc_pg\",\n" +
+                        "\"table\"=\"test_bool_table\"\n" +
                         ");");
         FeConstants.runningUnitTest = false;
     }
@@ -384,6 +391,22 @@ public class ExternalTableTest extends PlanTestBase {
                     "  0:SCAN JDBC\n" +
                             "     TABLE: (SELECT \"b\" AS \"b\", max(\"a\") AS \"jdbc_agg_"), plan);
             Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
+        }
+    }
+
+    @Test
+    public void testPostgreSQLBooleanJDBCAggregationNotPushedDown() throws Exception {
+        connectContext.getSessionVariable().setEnableJdbcAggPushDown(true);
+        try {
+            for (String function : List.of("min", "max", "sum", "avg")) {
+                String sql = "select " + function + "(flag) from test.jdbc_pg_bool_test";
+                String plan = getFragmentPlan(sql);
+                Assertions.assertTrue(plan.contains("AGGREGATE"), plan);
+                Assertions.assertTrue(plan.contains("TABLE: \"test_bool_table\""), plan);
+                Assertions.assertFalse(plan.contains(function + "(\"flag\") AS \"jdbc_agg_"), plan);
+            }
         } finally {
             connectContext.getSessionVariable().setEnableJdbcAggPushDown(false);
         }

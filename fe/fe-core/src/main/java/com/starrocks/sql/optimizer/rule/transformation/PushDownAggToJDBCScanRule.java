@@ -208,9 +208,23 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         if (aggregation.isCountStar()) {
             return true;
         }
-        return aggregation.getArguments().size() == 1 &&
-                (isSimpleJDBCColumnRef(aggregation.getChild(0), scanOperator) ||
-                        aggregation.getChild(0) instanceof ConstantOperator);
+        if (aggregation.getArguments().size() != 1 ||
+                (!isSimpleJDBCColumnRef(aggregation.getChild(0), scanOperator) &&
+                        !(aggregation.getChild(0) instanceof ConstantOperator))) {
+            return false;
+        }
+        JDBCTable.ProtocolType dialect = ((JDBCTable) scanOperator.getTable()).getProtocolType();
+        return isSupportedJDBCAggregateArgument(fnName, aggregation.getChild(0), dialect);
+    }
+
+    private boolean isSupportedJDBCAggregateArgument(String fnName, ScalarOperator argument,
+                                                     JDBCTable.ProtocolType dialect) {
+        if (dialect == JDBCTable.ProtocolType.POSTGRES && argument.getType().isBoolean() &&
+                (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName) ||
+                        FunctionSet.SUM.equals(fnName) || FunctionSet.AVG.equals(fnName))) {
+            return false;
+        }
+        return true;
     }
 
     private static class AggregatePushDown {
