@@ -244,6 +244,15 @@ AWS Glue 用の `MetastoreParams`:
   - 必須: いいえ
   - 説明: 使用する AWS Glue Data Catalog の ID。指定しない場合、現在の AWS アカウントのカタログが使用されます。別の AWS アカウントの Glue Data Catalog にアクセスする（クロスアカウントアクセス）必要がある場合は、このパラメータを指定する必要があります。
 
+- `aws.glue.resource_share_type`
+  - 必須: いいえ
+  - 説明: AWS Glue の GetDatabases API に送信される `ResourceShareType` を設定し、データベースの一覧表示時にどのデータベースが返されるかを制御します。この項目は大文字小文字を区別しません。有効な値：
+    - `ALL`: すべてのローカルデータベースに加え、すべての共有データベースおよびフェデレーテッドデータベースを返します。
+    - `FOREIGN`: 他のユーザーからアカウントと共有されているデータベースを返します。
+    - `FEDERATED`: AWS Lake Formation を通じて接続された外部データベースを返します。
+
+    この項目が設定されていないか空の場合、構成は空の Optional を返し、`GetDatabasesRequest` ではこのフィールドは単に設定されません。その場合、AWS Glue は独自のデフォルト設定にフォールバックし、ローカルデータベースのみが返されます。
+
 AWS Glue へのアクセス認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、 [AWS Glue へのアクセス認証パラメーター](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue) を参照してください。
 
 </TabItem>
