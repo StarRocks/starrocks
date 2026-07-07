@@ -82,8 +82,10 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     private final int allPartitionSize;
 
     // Set once collectIcebergWithFileSampling actually runs (i.e. this job is against an Iceberg
-    // table). See FILE_SAMPLE_NEUTRAL_PARTITION_HASH for why this matters downstream.
-    private volatile boolean usedFileSampling = false;
+    // table). See FILE_SAMPLE_NEUTRAL_PARTITION_HASH for why this matters downstream. Package-
+    // private (not private) so tests can drive the neutral-value branch without needing a live
+    // Iceberg snapshot.
+    volatile boolean usedFileSampling = false;
 
     public ExternalSampleStatisticsCollectJob(String catalogName, Database db, Table table, List<String> partitionNames,
                                               List<String> columnNames, List<Type> columnTypes,
@@ -346,7 +348,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
      * sketch) so the round loop can compare it across rounds in-memory without needing to
      * deserialize an HLL sketch on the FE side -- see isNdvConverging.
      */
-    private String buildSinglePassSQL(List<Integer> columnBatch) {
+    String buildSinglePassSQL(List<Integer> columnBatch) {
         StringBuilder sql = new StringBuilder("SELECT CAST(COUNT(1) AS BIGINT)");
         for (int idx : columnBatch) {
             String columnName = columnNames.get(idx);
@@ -386,9 +388,9 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
      * cardinality (unscaled, same sample-local estimate as everything else here) so the caller can
      * compare it against the previous round's value to detect convergence.
      */
-    private Map<String, Long> collectSinglePassStatisticSync(String sql, List<Integer> columnBatch,
-                                                               ConnectContext context, AnalyzeStatus analyzeStatus,
-                                                               double ratio) throws Exception {
+    Map<String, Long> collectSinglePassStatisticSync(String sql, List<Integer> columnBatch,
+                                                      ConnectContext context, AnalyzeStatus analyzeStatus,
+                                                      double ratio) throws Exception {
         calculateAndSetRemainingTimeout(context, analyzeStatus);
 
         LOG.debug("statistics collect sql : " + sql);

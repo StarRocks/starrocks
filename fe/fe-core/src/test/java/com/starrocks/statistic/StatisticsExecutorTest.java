@@ -17,6 +17,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
@@ -34,6 +35,8 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -52,6 +55,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
@@ -278,6 +282,52 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
         Assertions.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
         Assertions.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
+    }
+
+    @Test
+    public void testCollectSinglePassStatisticSyncScalesSampleLocalAggregatesToFullTableEstimate() throws Exception {
+        // Iceberg's single-pass wide-row sampling round: row_count is scaled by 1/ratio to a
+        // full-table estimate, and data_size/null_count must be scaled the exact same way -- readers
+        // compute averageRowSize = data_size / row_count and nullsFraction = null_count / row_count,
+        // so leaving those two sample-local while row_count is full-table would make both ~ratio
+        // times too small. NDV cardinality is returned unscaled (it's an in-memory convergence
+        // signal compared round-over-round, not a persisted column).
+        Database database = new Database(1, "test_db");
+        Table table = HiveTable.builder().setTableName("test_table").build();
+        ExternalSampleStatisticsCollectJob job = new ExternalSampleStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("c1"), Lists.newArrayList(IntegerType.INT),
+                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), 1);
+
+        JsonArray sampledRow = new JsonArray();
+        sampledRow.add(100); // sampled row_count
+        sampledRow.add(500); // sampled data_size
+        sampledRow.add("deadbeef"); // hll hex
+        sampledRow.add(3); // sampled null_count
+        sampledRow.add("zmax"); // max
+        sampledRow.add("amin"); // min
+        sampledRow.add(42); // ndv cardinality (never scaled)
+
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<JsonArray> executeWideRowDQL(ConnectContext context, String sql) {
+                return List.of(sampledRow);
+            }
+        };
+
+        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db", "test_table",
+                "test-uuid", Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+
+        Map<String, Long> cardinalityByColumn = job.collectSinglePassStatisticSync(
+                "SELECT ...", List.of(0), connectContext, analyzeStatus, 0.5);
+
+        Assertions.assertEquals(42L, cardinalityByColumn.get("c1"));
+
+        Assertions.assertEquals(1, job.rowsBuffer.size());
+        List<Expr> row = job.rowsBuffer.get(0);
+        Assertions.assertEquals(200L, ((IntLiteral) row.get(6)).getLongValue(), "row_count must be scaled by 1/ratio");
+        Assertions.assertEquals(1000L, ((IntLiteral) row.get(7)).getLongValue(), "data_size must scale the same way");
+        Assertions.assertEquals(6L, ((IntLiteral) row.get(9)).getLongValue(), "null_count must scale the same way");
     }
 
     @Test

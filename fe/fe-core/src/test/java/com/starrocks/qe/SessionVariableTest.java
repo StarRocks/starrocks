@@ -201,4 +201,19 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
+
+    @Test
+    public void testExternalStatsFileSampleRatioAndSeedDefaultAndRoundTrip() {
+        // Invisible, job-internal knobs the Iceberg external-table sample ANALYZE job sets on its
+        // own ConnectContext (see IcebergMetadata#getRemoteFilesAsync) -- default to 1.0/0
+        // (no sampling) so ordinary user queries are unaffected.
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(1.0, sessionVariable.getExternalStatsFileSampleRatio());
+        Assertions.assertEquals(0L, sessionVariable.getExternalStatsSampleSeed());
+
+        sessionVariable.setExternalStatsFileSampleRatio(0.3);
+        sessionVariable.setExternalStatsSampleSeed(7L);
+        Assertions.assertEquals(0.3, sessionVariable.getExternalStatsFileSampleRatio());
+        Assertions.assertEquals(7L, sessionVariable.getExternalStatsSampleSeed());
+    }
 }

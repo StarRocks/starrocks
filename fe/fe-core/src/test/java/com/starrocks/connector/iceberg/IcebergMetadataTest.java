@@ -48,6 +48,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -1486,6 +1487,88 @@ public class IcebergMetadataTest extends TableTestBase {
         splitTasksField.setAccessible(true);
         Map<?, ?> splitTasks = (Map<?, ?>) splitTasksField.get(metadata);
         Assertions.assertTrue(splitTasks.isEmpty());
+    }
+
+    @Test
+    // Uses IcebergTableMORParams.EMPTY, so this only exercises the splitTasks bypass
+    // (getRemoteFilesAsync's early branch) -- not the sibling remoteFileInfoSources bypass that
+    // applies when tableFullMORParams is non-empty (equality-delete tables), which would need a
+    // real MOR fixture this test class doesn't currently have.
+    public void testGetRemoteFilesAsyncSampledBypassesSplitTasksCache() throws Exception {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+        // ratio is deliberately very close to 1.0 (not exactly 1.0, which would skip the "sampled"
+        // branch entirely) so the Bernoulli filter dropping every single file by chance is
+        // astronomically unlikely -- this test cares about which branch runs, not the sampling math.
+        GetRemoteFilesParams sampledParams = IcebergGetRemoteFilesParams.newBuilder()
+                .setAllParams(IcebergTableMORParams.EMPTY)
+                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10)
+                .setFileSampleRatio(0.999).setSampleSeed(42).build();
+
+        PredicateSearchKey key = PredicateSearchKey.of(
+                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), sampledParams);
+
+        // Simulate query-planning-time cost estimation (IcebergMetadata#getRemoteFiles /
+        // collectTableStatisticsAndCacheIcebergSplit) having already cached a file list under this
+        // exact predicate key -- deliberately empty/wrong, so that if the sampled request below
+        // reused it (the bug this bypass prevents), draining the returned source would
+        // deterministically yield zero files instead of the real, freshly-scanned ones.
+        java.lang.reflect.Field splitTasksField = IcebergMetadata.class.getDeclaredField("splitTasks");
+        splitTasksField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<PredicateSearchKey, List<FileScanTask>> splitTasks =
+                (Map<PredicateSearchKey, List<FileScanTask>>) splitTasksField.get(metadata);
+        splitTasks.put(key, new ArrayList<>());
+
+        RemoteFileInfoSource source = metadata.getRemoteFilesAsync(icebergTable, sampledParams);
+        List<RemoteFileInfo> results = source.getAllOutputs();
+
+        Assertions.assertFalse(results.isEmpty(),
+                "sampled request must not reuse the stale cached (empty) file list for this predicate key");
+    }
+
+    @Test
+    public void testCountIcebergRowsAndFilesFromManifestList() {
+        // snap1: FILE_A only (2 rows, 1 file). snap2: FILE_A + FILE_A_1 (4 rows, 2 files). Both read
+        // via Snapshot#summary()'s O(1) total-records/total-data-files fields -- populated
+        // automatically by Iceberg's own commit machinery, no manifest opens, no DataFile
+        // enumeration.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        Snapshot snap1 = mockedNativeTableA.currentSnapshot();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_1).commit();
+        mockedNativeTableA.refresh();
+        Snapshot snap2 = mockedNativeTableA.currentSnapshot();
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        Assertions.assertEquals(2L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, snap1.snapshotId()));
+        Assertions.assertEquals(1L,
+                IcebergMetadata.countIcebergFilesFromManifestList(icebergTable, snap1.snapshotId()));
+        Assertions.assertEquals(4L,
+                IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, snap2.snapshotId()));
+        Assertions.assertEquals(2L,
+                IcebergMetadata.countIcebergFilesFromManifestList(icebergTable, snap2.snapshotId()));
+    }
+
+    @Test
+    public void testCountIcebergRowsAndFilesFromManifestListReturnsZeroForMissingSnapshot() {
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+                "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Assertions.assertEquals(0L, IcebergMetadata.countIcebergRowsFromManifestList(icebergTable, -1));
+        Assertions.assertEquals(0L, IcebergMetadata.countIcebergFilesFromManifestList(icebergTable, -1));
     }
 
     @Test
