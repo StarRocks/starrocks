@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -126,5 +127,88 @@ public class OptimizeClause extends AlterTableClause {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("OPTIMIZE");
+
+        // PARTITION p1, p2
+        if (partitionNames != null && !partitionNames.getPartitionNames().isEmpty()) {
+            sb.append(" ").append(partitionNames.toString());
+        }
+
+        // DUPLICATE KEY(`col1`, `col2`) etc.
+        if (keysDesc != null) {
+            sb.append(" ").append(keysDesc.getKeysType().toSql());
+            List<String> keyColumns = keysDesc.getKeysColumnNames();
+            if (keyColumns != null && !keyColumns.isEmpty()) {
+                sb.append("(");
+                for (int i = 0; i < keyColumns.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(keyColumns.get(i)));
+                }
+                sb.append(")");
+            }
+        }
+
+        // PARTITION BY RANGE(...)
+        if (partitionDesc != null) {
+            sb.append(" ").append(partitionDesc.toString());
+        }
+
+        // ORDER BY `col1`, `col2`
+        if (sortKeys != null && !sortKeys.isEmpty()) {
+            sb.append(" ORDER BY ");
+            for (int i = 0; i < sortKeys.size(); i++) {
+                if (i != 0) {
+                    sb.append(", ");
+                }
+                sb.append(SqlUtils.getIdentSql(sortKeys.get(i)));
+            }
+        }
+
+        // DISTRIBUTED BY HASH(`col1`) BUCKETS 10
+        if (distributionDesc != null) {
+            sb.append(" ");
+            if (distributionDesc instanceof HashDistributionDesc) {
+                HashDistributionDesc hashDesc = (HashDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY HASH(");
+                List<String> distCols = hashDesc.getDistributionColumnNames();
+                for (int i = 0; i < distCols.size(); i++) {
+                    if (i != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(SqlUtils.getIdentSql(distCols.get(i)));
+                }
+                sb.append(")");
+                if (hashDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(hashDesc.getBuckets());
+                }
+            } else if (distributionDesc instanceof RandomDistributionDesc) {
+                RandomDistributionDesc randomDesc = (RandomDistributionDesc) distributionDesc;
+                sb.append("DISTRIBUTED BY RANDOM");
+                if (randomDesc.getBuckets() > 0) {
+                    sb.append(" BUCKETS ").append(randomDesc.getBuckets());
+                }
+            } else {
+                sb.append(distributionDesc);
+            }
+        }
+
+        // BETWEEN start AND end
+        if (range != null) {
+            sb.append(range);
+        }
+
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 }
