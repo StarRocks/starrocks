@@ -39,6 +39,8 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, true) {}
 
+FileChunkSinkProvider::FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
+
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(result.file_result.rollback_action);
     if (result.file_result.io_status.ok()) {
@@ -49,9 +51,8 @@ void FileChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();

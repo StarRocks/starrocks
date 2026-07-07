@@ -136,7 +136,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     }
 
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::FILE);
-    auto sink_provider = connector->create_data_sink_provider();
+    ASSIGN_OR_RETURN(auto sink_provider,
+                     connector->create_sink_provider(starrocks::connector::ConnectorSinkProviderType::DATA, sink_ctx));
     auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
             context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
 
