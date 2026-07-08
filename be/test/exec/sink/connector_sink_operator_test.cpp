@@ -101,6 +101,18 @@ public:
 
     void callback_on_commit(const connector::CommitResult& result) override {}
 
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                connector::SinkMemoryManager* sink_mem_mgr) override {
+        if (_stream_to_enqueue != nullptr) {
+            poller->enqueue(_stream_to_enqueue);
+            _stream_to_enqueue.reset();
+        }
+        if (_op_mem_mgr != nullptr) {
+            return Status::OK();
+        }
+        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+    }
+
     Status finish() override {
         _finished = true;
         return Status::OK();
@@ -112,7 +124,10 @@ public:
 
     void set_operator_mem_mgr_for_test(connector::SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
+    void set_stream_to_enqueue_for_test(std::shared_ptr<Stream> stream) { _stream_to_enqueue = std::move(stream); }
+
 private:
+    std::shared_ptr<Stream> _stream_to_enqueue;
     bool _finished = true;
 };
 
@@ -221,6 +236,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
                                                       std::move(chunk_sink), sink_mem_mgr, _fragment_context);
+    ASSERT_OK(op->prepare(_runtime_state));
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -255,10 +271,11 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
     chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     chunk_sink->set_finished(true);
+    chunk_sink->set_stream_to_enqueue_for_test(stream);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
                                                       std::move(chunk_sink), sink_mem_mgr, _fragment_context);
-    op->_io_poller->enqueue(stream);
+    ASSERT_OK(op->prepare(_runtime_state));
     stream.reset();
     ASSERT_OK(op->set_finishing(_runtime_state));
 
