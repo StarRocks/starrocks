@@ -32,7 +32,16 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
   - Textfile files support the LZO compression format from v3.1.5 onwards.
 
-- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for Textfile-formatted Hive tables.
+- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the STRUCT data type for Textfile-formatted Hive tables. The MAP data type for Textfile-formatted Hive tables is supported from v4.2 onwards.
+
+- From v4.2 onwards, StarRocks parses Textfile-formatted Hive tables in the same way as Hive:
+
+  - For tables that use OpenCSVSerde, StarRocks honors the `quoteChar` and `escapeChar` properties (including their default values `"` and `\`), and follows the parsing rules of the opencsv 2.3 library bundled with Hive 0.14 through 4.0.
+  - For tables that use LazySimpleSerDe, StarRocks honors the escape character defined by `ESCAPED BY`.
+  - Rows are split at physical line boundaries, and the `\N` NULL marker is recognized before unescaping, both matching Hive.
+  - MAP columns are parsed in the Hive text format, that is, entries separated by the collection delimiter, and keys and values separated by the map key delimiter.
+
+  These rules apply only to queries against Hive tables. Broker Load, Stream Load, and the FILES() function are not affected. In earlier StarRocks versions, quote and escape characters were ignored, so rows and fields could be split differently from Hive.
 
 - StarRocks supports sinking data to Parquet-formatted (supported from v3.2 onwards) and ORC- or Textfile-formatted (supported from v3.3 onwards) Hive tables:
 

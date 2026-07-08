@@ -32,7 +32,16 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
   - Textfile 文件从 v3.1.5 起支持 LZO 压缩格式。
 
-- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
+- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 STRUCT 数据类型；自 v4.2 起支持 MAP 数据类型。
+
+- 自 v4.2 起，StarRocks 查询 Textfile 格式的 Hive 表时，解析行为与 Hive 保持一致：
+
+  - 对于使用 OpenCSVSerde 的表，遵循 `quoteChar` 和 `escapeChar` 属性（含默认值 `"` 和 `\`），解析规则与 Hive 0.14 至 4.0 内置的 opencsv 2.3 库一致。
+  - 对于使用 LazySimpleSerDe 的表，遵循 `ESCAPED BY` 定义的转义字符。
+  - 按物理行边界切分行，并在去转义之前识别 `\N` NULL 标记，两者均与 Hive 一致。
+  - 按 Hive 文本格式解析 MAP 列，即多个键值对之间使用集合分隔符分隔，键和值之间使用 Map Key 分隔符分隔。
+
+  以上规则仅影响对 Hive 表的查询，Broker Load、Stream Load 和 FILES() 函数不受影响。在更早的 StarRocks 版本中，引号和转义字符会被忽略，行列切分结果可能与 Hive 不同。
 
 - StarRocks 写入数据到 Hive 时，支持 Parquet（3.2 版本及以上）、以及 ORC 或 Textfile（3.3 版本及以上）文件格式，其中：
 
