@@ -2750,6 +2750,15 @@ public class SchemaChangeHandler extends AlterHandler {
                         ? new FlatJsonConfig(olapTable.getFlatJsonConfig())
                         : new FlatJsonConfig();
                 newConfig.buildFromProperties(properties);
+                // The analyzer's enabled-check ran without the table lock, so a concurrent ALTER
+                // may have disabled flat_json since; re-validate against the locked state so a
+                // factor change cannot land on a disabled config (mirrors updateFlatJsonConfigMeta).
+                if (!newConfig.getFlatJsonEnable()
+                        && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
+                }
                 newConfig.incVersion();
                 metaType = TTabletMetaType.FLAT_JSON_CONFIG;
                 flatJsonConfig = newConfig;

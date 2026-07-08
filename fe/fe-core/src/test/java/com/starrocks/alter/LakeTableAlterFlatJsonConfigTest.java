@@ -22,10 +22,15 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.type.IntegerType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -122,5 +127,61 @@ public class LakeTableAlterFlatJsonConfigTest {
         FlatJsonConfig recovered = reloadFromImage(table.getTableProperty());
         Assertions.assertNotNull(recovered);
         Assertions.assertEquals(3L, recovered.getVersion());
+    }
+
+    /**
+     * The analyzer's "factors require flat_json.enable=true" check runs without the table lock,
+     * so a concurrent ALTER can disable flat_json between analysis and execution. The lake
+     * branch of createAlterMetaJob must re-validate under the lock, or it would persist and
+     * propagate a disabled config carrying factor changes (which toProperties() then drops on
+     * image save, diverging in-memory state from replay/failover).
+     */
+    @Test
+    public void testCreateAlterMetaJobRejectsFactorOnDisabledConfig() {
+        Map<String, String> factorValues = new HashMap<>();
+        factorValues.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+        factorValues.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.5");
+        factorValues.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+
+        long tableId = 3001L;
+        for (Map.Entry<String, String> factor : factorValues.entrySet()) {
+            Database db = new Database(3L, "db_flat_json_revalidate");
+            LakeTable table = newLakeTable(tableId++);
+            // The table's config was disabled after the (unlocked) analyzer check passed.
+            table.getTableProperty().setFlatJsonConfig(newConfig(false, 2L));
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put(factor.getKey(), factor.getValue());
+            ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> new SchemaChangeHandler().createAlterMetaJob(clause, db, table),
+                    factor.getKey() + " must be rejected on a disabled config");
+            Assertions.assertTrue(e.getMessage().contains("must be set after enabling flat JSON"),
+                    "unexpected message: " + e.getMessage());
+            // The stale config must remain untouched: no factor applied, no version bump.
+            Assertions.assertEquals(2L, table.getFlatJsonConfig().getVersion());
+            Assertions.assertEquals(0.1, table.getFlatJsonConfig().getFlatJsonNullFactor(), 1e-9);
+        }
+    }
+
+    @Test
+    public void testCreateAlterMetaJobAcceptsFactorOnEnabledConfig() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return 12345L;
+            }
+        };
+        Database db = new Database(4L, "db_flat_json_enabled");
+        LakeTable table = newLakeTable(4001L);
+        table.getTableProperty().setFlatJsonConfig(newConfig(true, 2L));
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+        AlterJobV2 job = new SchemaChangeHandler().createAlterMetaJob(clause, db, table);
+        Assertions.assertNotNull(job);
     }
 }
