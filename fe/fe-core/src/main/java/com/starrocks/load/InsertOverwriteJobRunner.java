@@ -450,13 +450,14 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable targetTable = (OlapTable) table;
 
+        // Source tablets of the temp partitions being dropped. Declared outside the try
+        // so the force-delete marking can run after the table write lock is released.
+        Set<Tablet> sourceTablets = Sets.newHashSet();
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
-            Set<Tablet> sourceTablets = Sets.newHashSet();
-
             // Drop temp partitions by partition IDs (for non-dynamic overwrite)
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
@@ -477,9 +478,6 @@ public class InsertOverwriteJobRunner {
             }
 
             if (!isReplay) {
-                // Mark all source tablet ids force delete to drop it directly on BE
-                sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
-
                 // Abort the transaction if it was created in prepare()
                 if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
                     try {
@@ -501,6 +499,13 @@ public class InsertOverwriteJobRunner {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+
+        if (!isReplay) {
+            // Mark all source tablet ids force delete to drop it directly on BE. The marks
+            // are best-effort in-memory hints that need no table lock, so do it after the
+            // write unlock to shorten lock hold time.
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
         }
     }
 
@@ -602,6 +607,10 @@ public class InsertOverwriteJobRunner {
         
         // Collect partition tablet row counts for statistics sampling
         com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
+
+        // Source tablets of the swapped-out partitions. Declared outside the try so the
+        // force-delete marking can run after the table write lock is released.
+        Set<Tablet> sourceTablets = Sets.newHashSet();
         
         try {
             // try exception to release write lock finally
@@ -632,7 +641,6 @@ public class InsertOverwriteJobRunner {
                         return partition.getName();
                     })
                     .collect(Collectors.toList());
-            Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
@@ -763,10 +771,6 @@ public class InsertOverwriteJobRunner {
             stats.setTargetRows(sumTargetRows);
             stats.setPartitionTabletRowCounts(partitionTabletRowCounts);
             if (!isReplay) {
-                // mark all source tablet ids force delete to drop it directly on BE,
-                // not to move it to trash
-                sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
-
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
                         job.getTmpPartitionIds(), job.getTxnId());
@@ -791,6 +795,12 @@ public class InsertOverwriteJobRunner {
         }
 
         if (!isReplay) {
+            // mark all source tablet ids force delete to drop it directly on BE, not to
+            // move it to trash. The marks are best-effort in-memory hints that need no
+            // table lock, so do it after the write unlock to shorten lock hold time; the
+            // partition swap is already journaled at this point.
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
+
             // trigger listeners after insert overwrite committed, trigger listeners after
             // write unlock to avoid holding lock too long
             GlobalStateMgr.getCurrentState().getOperationListenerBus()
