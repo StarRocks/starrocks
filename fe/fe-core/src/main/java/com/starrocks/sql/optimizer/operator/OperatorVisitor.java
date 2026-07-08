@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMultiSinkOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -84,6 +85,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMultiSinkOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
@@ -270,6 +272,10 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitLogicalMultiSink(LogicalMultiSinkOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
     public R visitLogicalCTEConsume(LogicalCTEConsumeOperator node, C context) {
         return visitOperator(node, context);
     }
@@ -426,6 +432,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalMultiSink(PhysicalMultiSinkOperator node, C context) {
         return visitOperator(node, context);
     }
 

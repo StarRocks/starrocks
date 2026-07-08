@@ -213,6 +213,15 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalMultiSink(OptExpression optExpression, Integer step) {
+            int nextStep = step + 1;
+            List<OperatorStr> children =
+                    optExpression.getInputs().stream().map(input -> visit(input, nextStep))
+                            .collect(Collectors.toList());
+            return new OperatorStr("logical multi sink", step, children);
+        }
+
+        @Override
         public OperatorStr visitLogicalCTEProduce(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 

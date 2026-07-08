@@ -2188,8 +2188,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
+    public Void visitLogicalMultiSink(com.starrocks.sql.optimizer.operator.logical.LogicalMultiSinkOperator node,
+                                      ExpressionContext context) {
+        // Fake root produces nothing; adopt child 0's statistics so visitOperator has a non-null base.
+        context.setStatistics(context.getChildStatistics(0));
+        return visitOperator(node, context);
+    }
+
+    @Override
     public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
         context.setStatistics(context.getChildStatistics(1));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalMultiSink(com.starrocks.sql.optimizer.operator.physical.PhysicalMultiSinkOperator node,
+                                       ExpressionContext context) {
+        context.setStatistics(context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 

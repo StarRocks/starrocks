@@ -90,7 +90,8 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
+  MULTI_SINK_DISPATCH_NODE
 }
 
 // phases of an execution node
@@ -1509,6 +1510,10 @@ struct TLookUpNode {
 
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
+// Option X: collector plan-root; N-ary non-merging node whose children are the branch ExchangeNodes.
+struct TMultiSinkDispatchNode {
+}
+
 struct TPlanNode {
   // node id, needed to reassemble tree structure
   1: required Types.TPlanNodeId node_id
@@ -1596,6 +1601,7 @@ struct TPlanNode {
 
   // just a placeholder
   150: optional TChangesScanNode changes_scan_node;
+  151: optional TMultiSinkDispatchNode multi_sink_dispatch_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

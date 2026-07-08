@@ -2359,7 +2359,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new ParsingException(PARSER_ERROR_MSG.forbidClauseInMV("SYNC refresh type", "DISTRIBUTION BY"),
                         distributionDesc.getPos());
             }
-            return new CreateSyncMVStmt(tableRef, queryStatement, properties);
+            CreateSyncMVStmt syncMVStmt = new CreateSyncMVStmt(tableRef, queryStatement, properties);
+            if (context.toTableName != null) {
+                syncMVStmt.setToTableRef(new TableRef(
+                        normalizeName(getQualifiedName(context.toTableName)), null, createPos(context.toTableName)));
+            }
+            return syncMVStmt;
+        }
+        if (context.toTableName != null) {
+            throw new ParsingException("CREATE MATERIALIZED VIEW ... TO <table> is only supported for "
+                    + "synchronous materialized views (without REFRESH / DISTRIBUTION)",
+                    createPos(context.toTableName));
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;

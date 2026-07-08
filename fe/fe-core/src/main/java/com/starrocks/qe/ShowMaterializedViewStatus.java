@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -401,6 +402,25 @@ public class ShowMaterializedViewStatus {
         } else {
             status.setRows(0L);
         }
+        status.setWarehouse("");
+        status.setRefreshMode(null);
+        status.setRefreshTrigger("NONE");
+        status.setRefreshPolicy("NONE");
+        status.setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+        return status;
+    }
+
+    // CK-compatible logical-sink MV (`CREATE MATERIALIZED VIEW ... TO <target>`) row: no rollup index,
+    // so the status is built from the registered LogicalSinkMV metadata.
+    public static ShowMaterializedViewStatus ofLogicalSinkMV(String dbName, OlapTable baseTable, LogicalSinkMV mv) {
+        ShowMaterializedViewStatus status = new ShowMaterializedViewStatus(mv.getMvId(), dbName, mv.getMvName());
+        status.setRefreshType("SYNC");
+        status.setActive(true);
+        if (baseTable.getPartitionInfo() != null && baseTable.getPartitionInfo().getType() != null) {
+            status.setPartitionType(baseTable.getPartitionInfo().getType().toString());
+        }
+        status.setText(mv.getDefineSql() == null ? "" : mv.getDefineSql());
+        status.setRows(0L);
         status.setWarehouse("");
         status.setRefreshMode(null);
         status.setRefreshTrigger("NONE");

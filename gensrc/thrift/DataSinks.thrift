@@ -61,7 +61,8 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK,
     NOOP_SINK,
     ICEBERG_DELETE_SINK,
-    ICEBERG_ROW_DELTA_SINK
+    ICEBERG_ROW_DELTA_SINK,
+    MULTI_SINK
 }
 
 enum TResultSinkType {
@@ -310,6 +311,18 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+// Option X (logical-sink MV JOIN/agg): one collector fragment fans N branch exchange inputs, each keyed by
+// dest_node_id (a real ExchangeNode in the collector), out to its own OlapTableSink. The BE decomposes this
+// into N pipelines: ExchangeSource(dest_node_id_i) -> OlapTableSink(olap_table_sink_i).
+struct TMultiSinkBranch {
+  1: optional i32 dest_node_id
+  2: optional TOlapTableSink olap_table_sink
+}
+
+struct TMultiSink {
+  1: optional list<TMultiSinkBranch> branches
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -327,4 +340,5 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
+  18: optional TMultiSink multi_sink
 }

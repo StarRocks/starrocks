@@ -193,6 +193,8 @@ private:
     void add_olap_table_sink(std::unique_ptr<OlapTableSink> sink);
     std::unique_ptr<OlapTableSink>& get_olap_table_sink(int index);
 
+    Status _send_to_sink(RuntimeState* state, size_t index, Chunk* chunk, bool nonblocking);
+
     ObjectPool* _pool;
     const std::vector<TExpr>& _texprs;
     std::vector<std::unique_ptr<OlapTableSink>> _sinks;

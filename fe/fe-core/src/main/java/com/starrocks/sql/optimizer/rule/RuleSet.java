@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MultiSinkImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRule;
@@ -222,6 +223,7 @@ public class RuleSet {
             new TableFunctionImplementationRule(),
             new LimitImplementationRule(),
             new CTEAnchorImplementationRule(),
+            new MultiSinkImplementationRule(),
             new CTEAnchorToNoCTEImplementationRule(),
             new CTEConsumerReuseImplementationRule(),
             new CTEConsumeInlineImplementationRule(),

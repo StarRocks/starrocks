@@ -301,6 +301,7 @@ set(EXEC_NON_PIPELINE_FILES
     spillable_chunks_sorter.cpp
     cross_join_node.cpp
     union_node.cpp
+    multi_sink_dispatch_node.cpp
     raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp

@@ -24,6 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -45,6 +46,7 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
+import com.starrocks.planner.MultiSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -113,6 +115,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -162,6 +165,218 @@ public class InsertPlanner {
         NONE_DEPEND_ON_TARGET_COLUMNS,
         ALL_DEPEND_ON_TARGET_COLUMNS,
         PARTIALLY_DEPEND_ON_TARGET_COLUMNS
+    }
+
+    // CHMV-P3: build the Fake-Root (CTE + LogicalMultiSink) logical plan for base + MV branches (IDENTITY for
+    // now), optimize+translate it, and return the collector ExecPlan (fragments[0] = MultiSinkDispatchNode +
+    // MultiSink). Per-branch OlapTableSinks are filled by postProcessMultiSinkSinks. Fully via the optimizer:
+    // base load = force-materialized CTE (MultiCastPlanFragment), each branch = leaf CTEConsume.
+    private ExecPlan buildFakeRootExecPlan(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+            List<ColumnRefOperator> outputColumns, OlapTable baseTable, InsertStmt insertStmt, ConnectContext session) {
+        int cteId = 0;
+        TableName catalogDbTable = TableName.fromTableRef(insertStmt.getTableRef());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session,
+                catalogDbTable.getCatalog(), catalogDbTable.getDb());
+        OptExprBuilder baseSource = logicalPlan.getRootBuilder();
+        com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator produce =
+                new com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator(cteId);
+        OptExprBuilder produceBuilder = new OptExprBuilder(produce, Lists.newArrayList(baseSource), null);
+
+        List<OptExprBuilder> branches = Lists.newArrayList();
+        List<Long> targetTableIds = Lists.newArrayList();
+        List<ColumnRefOperator> allOut = Lists.newArrayList();
+        branches.add(buildIdentityConsumer(cteId, outputColumns, columnRefFactory, allOut));
+        targetTableIds.add(baseTable.getId());
+        for (LogicalSinkMV mv : baseTable.getLogicalSinkMVs().values()) {
+            branches.add(buildMvBranch(mv, cteId, outputColumns, baseTable, db, columnRefFactory, session, allOut));
+            targetTableIds.add(mv.getTargetTableId());
+        }
+        com.starrocks.sql.optimizer.operator.logical.LogicalMultiSinkOperator multiSink =
+                new com.starrocks.sql.optimizer.operator.logical.LogicalMultiSinkOperator(targetTableIds);
+        OptExprBuilder multiSinkBuilder = new OptExprBuilder(multiSink, branches, null);
+        com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator anchor =
+                new com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator(cteId);
+        OptExprBuilder anchorBuilder =
+                new OptExprBuilder(anchor, Lists.newArrayList(produceBuilder, multiSinkBuilder), null);
+        LogicalPlan fakeRoot = new LogicalPlan(anchorBuilder, allOut, logicalPlan.getCorrelation());
+
+        OptimizerContext oc = OptimizerFactory.initContext(session, columnRefFactory);
+        Optimizer opt = OptimizerFactory.create(oc);
+        OptExpression optimized = opt.optimize(fakeRoot.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(fakeRoot.getOutputColumn()));
+        List<String> colNames = allOut.stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+        return PlanFragmentBuilder.createPhysicalPlan(optimized, session, fakeRoot.getOutputColumn(),
+                columnRefFactory, colNames, TResultSinkType.MYSQL_PROTOCAL, false);
+    }
+
+    // CHMV-P3: after buildFakeRootExecPlan translates the Fake-Root, the collector fragment (fragments[0]) holds
+    // a MultiSink recording (destNodeId, targetTableId) per branch but no OlapTableSinks yet. Build one
+    // OlapTableSink per target (branch order: 0 = base table, rest = MV targets) against the collector's
+    // DescriptorTable and fill them in. Txn/session are available here (unlike during logical construction).
+    private void postProcessMultiSinkSinks(ExecPlan execPlan, InsertStmt insertStmt, ConnectContext session,
+            OlapTable baseTable) {
+        MultiSink multiSink = null;
+        for (PlanFragment f : execPlan.getFragments()) {
+            if (f.getSink() instanceof MultiSink) {
+                multiSink = (MultiSink) f.getSink();
+                // The collector root is non-merging: createOutputFragment gave it output_exprs = the
+                // UNION of all branch columns, which is meaningless (each branch writes its own table).
+                // The BE MultiSink decompose passes fragment.output_exprs to EVERY branch OlapTableSink
+                // (data_sink_pipeline.cpp), so a non-empty union mismatches each branch's narrower tuple
+                // ("number of exprs is not same with slots"). Clear it: each branch already projects
+                // exactly its target columns, so the sink writes the branch chunk as-is (empty exprs).
+                f.setOutputExprs(Lists.newArrayList());
+                break;
+            }
+        }
+        if (multiSink == null) {
+            throw new SemanticException("logical-sink MV collector: MultiSink fragment not found");
+        }
+        TableName catalogDbTable = TableName.fromTableRef(insertStmt.getTableRef());
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session,
+                catalogDbTable.getCatalog(), catalogDbTable.getDb());
+        List<Long> targetTableIds = multiSink.getTargetTableIds();
+        List<OlapTableSink> sinks = Lists.newArrayList();
+        TUniqueId baseId = session.getExecutionId();
+        for (int idx = 0; idx < targetTableIds.size(); idx++) {
+            long tid = targetTableIds.get(idx);
+            Table target = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tid);
+            if (!(target instanceof OlapTable)) {
+                throw new SemanticException("logical-sink MV collector: target table " + tid
+                        + " is missing or not an OLAP table");
+            }
+            OlapTable olapTarget = (OlapTable) target;
+            DescriptorTable descTbl = execPlan.getDescTbl();
+            TupleDescriptor tuple = descTbl.createTupleDescriptor();
+            for (Column column : olapTarget.getFullSchema()) {
+                SlotDescriptor slot = descTbl.addSlotDescriptor(tuple);
+                slot.setIsMaterialized(true);
+                slot.setType(column.getType());
+                slot.setColumn(column);
+                slot.setIsNullable(column.isAllowNull());
+            }
+            tuple.computeMemLayout();
+            OlapTableSink sink = new OlapTableSink(olapTarget, tuple, olapTarget.getAllPartitionIds(),
+                    olapTarget.writeQuorum(), olapTarget.enableReplicatedStorage(), false, false,
+                    session.getCurrentComputeResource());
+            try {
+                sink.init(new TUniqueId(baseId.hi + idx, baseId.lo), insertStmt.getTxnId(), db.getId(),
+                        session.getExecTimeout());
+                sink.complete(null);
+            } catch (StarRocksException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            sinks.add(sink);
+        }
+        multiSink.setOlapSinks(sinks);
+    }
+
+    private OptExprBuilder buildIdentityConsumer(int cteId, List<ColumnRefOperator> producerCols,
+            ColumnRefFactory crf, List<ColumnRefOperator> allOut) {
+        java.util.LinkedHashMap<ColumnRefOperator, ColumnRefOperator> colMap = new java.util.LinkedHashMap<>();
+        for (ColumnRefOperator pcol : producerCols) {
+            ColumnRefOperator newCol = crf.create(pcol.getName(), pcol.getType(), pcol.isNullable());
+            colMap.put(newCol, pcol);
+            allOut.add(newCol);
+        }
+        com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator consume =
+                new com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator(cteId, colMap);
+        return new OptExprBuilder(consume, Lists.newArrayList(), null);
+    }
+
+    // CHMV-P3 (join): build one MV branch by transforming the MV defineSql into a logical subtree (using the
+    // MAIN columnRefFactory so its colrefs share the memo with the producer), then replacing the base-table
+    // LogicalScan leaf with a leaf LogicalCTEConsume reading the shared force-materialized base payload. The
+    // join with dimension tables + the projection to the target columns are left as the transformer built them
+    // (base = leftmost table = CH load-trigger; dims = insert-time snapshot). Works for identity MVs too
+    // (SELECT cols FROM base -> Project(CTEConsume)).
+    private OptExprBuilder buildMvBranch(LogicalSinkMV mv, int cteId, List<ColumnRefOperator> producerCols,
+            OlapTable baseTable, Database db, ColumnRefFactory crf, ConnectContext session,
+            List<ColumnRefOperator> allOut) {
+        List<com.starrocks.sql.ast.StatementBase> stmts =
+                com.starrocks.sql.parser.SqlParser.parse(mv.getDefineSql(), session.getSessionVariable());
+        com.starrocks.sql.ast.QueryStatement qs = (com.starrocks.sql.ast.QueryStatement) stmts.get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(qs, session);
+        QueryRelation qr = qs.getQueryRelation();
+        LogicalPlan branchLp = new RelationTransformer(crf, session).transformWithSelectLimit(qr);
+        // producer payload cols align 1:1 with base full schema by position.
+        java.util.Map<String, ColumnRefOperator> nameToProducerCol = new java.util.HashMap<>();
+        List<Column> baseSchema = baseTable.getFullSchema();
+        for (int i = 0; i < baseSchema.size(); i++) {
+            nameToProducerCol.put(baseSchema.get(i).getName(), producerCols.get(i));
+        }
+        OptExpression replaced = replaceBaseScanWithCteConsume(branchLp.getRoot(), baseTable.getId(), cteId,
+                nameToProducerCol);
+        OptExprBuilder branchBuilder = wrapOptExpression(replaced);
+        // Cast the branch output columns to the MV target table's column types (mirrors
+        // castOutputColumnsTypeToTargetColumns for the main insert). Each branch OlapTableSink has empty
+        // output_exprs (writes the branch chunk as-is), so a transform that widens the type (e.g. v*2 -> BIGINT)
+        // would send a wider column than the narrower target slot (INT), corrupting the chunk on the
+        // branch->collector exchange ("deserialize chunk data failed, row count mismatch").
+        Table target = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(),
+                mv.getTargetTableId());
+        List<Column> targetSchema = ((OlapTable) target).getFullSchema();
+        List<ColumnRefOperator> outCols = Lists.newArrayList(branchLp.getOutputColumn());
+        java.util.Map<ColumnRefOperator, ScalarOperator> castMap = new java.util.HashMap<>();
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        List<ScalarOperatorRewriteRule> rules = Arrays.asList(new FoldConstantsRule());
+        for (int i = 0; i < targetSchema.size(); i++) {
+            Column c = targetSchema.get(i);
+            ColumnRefOperator outCol = outCols.get(i);
+            if (!c.getType().matchesType(outCol.getType())) {
+                ColumnRefOperator nk = crf.create(c.getName(), c.getType(), c.isAllowNull());
+                castMap.put(nk, rewriter.rewrite(new CastOperator(c.getType(), outCol, true), rules));
+                outCols.set(i, nk);
+            } else {
+                castMap.put(outCol, outCol);
+            }
+        }
+        branchBuilder = branchBuilder.withNewRoot(new LogicalProjectOperator(new java.util.HashMap<>(castMap)));
+        allOut.addAll(outCols);
+        return branchBuilder;
+    }
+
+    // Recursively rewrite: any LogicalScan over the base table becomes a leaf LogicalCTEConsume whose output
+    // colrefs ARE the scan's output colrefs (so the parent join/project is undisturbed), each mapped to the
+    // producer payload column of the same base column. Being a leaf (no inputs) triggers CTE force-materialize.
+    private OptExpression replaceBaseScanWithCteConsume(OptExpression node, long baseTableId, int cteId,
+            java.util.Map<String, ColumnRefOperator> nameToProducerCol) {
+        com.starrocks.sql.optimizer.operator.Operator op = node.getOp();
+        if (op instanceof com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator) {
+            com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator scan =
+                    (com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator) op;
+            if (scan.getTable().getId() == baseTableId) {
+                java.util.LinkedHashMap<ColumnRefOperator, ColumnRefOperator> colMap =
+                        new java.util.LinkedHashMap<>();
+                for (java.util.Map.Entry<ColumnRefOperator, Column> e :
+                        scan.getColRefToColumnMetaMap().entrySet()) {
+                    ColumnRefOperator pcol = nameToProducerCol.get(e.getValue().getName());
+                    // Skip synthetic scan columns (e.g. _tablet_id_) that are not part of the base payload;
+                    // the MV query only references real base columns, so the CTEConsume need not output them.
+                    if (pcol == null) {
+                        continue;
+                    }
+                    colMap.put(e.getKey(), pcol);
+                }
+                return OptExpression.create(
+                        new com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator(cteId, colMap));
+            }
+        }
+        List<OptExpression> newInputs = Lists.newArrayList();
+        for (OptExpression child : node.getInputs()) {
+            newInputs.add(replaceBaseScanWithCteConsume(child, baseTableId, cteId, nameToProducerCol));
+        }
+        return OptExpression.create(op, newInputs);
+    }
+
+    // Wrap a built OptExpression tree back into an OptExprBuilder tree (mapping=null; getRoot() only reads
+    // op+inputs) so it can be composed under the Fake-Root LogicalMultiSink.
+    private OptExprBuilder wrapOptExpression(OptExpression e) {
+        List<OptExprBuilder> inputs = Lists.newArrayList();
+        for (OptExpression child : e.getInputs()) {
+            inputs.add(wrapOptExpression(child));
+        }
+        return new OptExprBuilder(e.getOp(), inputs, null);
     }
 
     private static GenColumnDependency getDependencyType(Column column,
@@ -331,6 +546,7 @@ public class InsertPlanner {
         //8. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
+
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         SessionVariable currentVariable = (SessionVariable) session.getSessionVariable().clone();
         session.setSessionVariable(currentVariable);
@@ -347,6 +563,22 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
+            boolean fakeRootCollector = targetTable instanceof OlapTable
+                    && ((OlapTable) targetTable).hasLogicalSinkMV();
+            if (fakeRootCollector) {
+                // INSERT OVERWRITE relies on temp-partition swap on the base table, which the Fake-Root
+                // base branch sink does not honor (it would empty the base while appending to the MV
+                // targets -- base data loss). CK-compatible logical-sink MVs are insert-triggered only.
+                if (insertStmt.isOverwrite() || insertStmt.isFromOverwrite()) {
+                    throw new SemanticException("INSERT OVERWRITE is not supported on a base table with "
+                            + "CK-compatible logical-sink materialized views (insert-triggered only); "
+                            + "use INSERT INTO");
+                }
+                ExecPlan collectorPlan = buildFakeRootExecPlan(logicalPlan, columnRefFactory, outputColumns,
+                        (OlapTable) targetTable, insertStmt, session);
+                postProcessMultiSinkSinks(collectorPlan, insertStmt, session, (OlapTable) targetTable);
+                return collectorPlan;
+            }
             ExecPlan execPlan =
                     useOptimisticLock ?
                             buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
@@ -463,6 +695,8 @@ public class InsertPlanner {
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
                 }
+                // CK-compatible logical-sink MVs are routed unconditionally through the Fake-Root collector
+                // (buildFakeRootExecPlan), which returns earlier in this method before reaching here.
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {

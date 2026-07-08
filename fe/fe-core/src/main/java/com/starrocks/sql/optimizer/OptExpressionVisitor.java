@@ -115,6 +115,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalMultiSink(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalCTEProduce(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -283,6 +287,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalCTEAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalMultiSink(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

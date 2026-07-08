@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
@@ -643,9 +644,17 @@ public class StatementPlanner {
             // schema table and iceberg and hive table does not need txn
         } else {
             long dbId = db.getId();
+            List<Long> txnTableIds = Lists.newArrayList(targetTable.getId());
+            // CK-compatible logical-sink MVs: include their target tables so the base load and all MV
+            // target writes commit in ONE transaction.
+            if (targetTable instanceof OlapTable) {
+                for (LogicalSinkMV logicalSinkMV : ((OlapTable) targetTable).getLogicalSinkMVs().values()) {
+                    txnTableIds.add(logicalSinkMV.getTargetTableId());
+                }
+            }
             txnId = transactionMgr.beginTransaction(
                     dbId,
-                    Lists.newArrayList(targetTable.getId()),
+                    txnTableIds,
                     label,
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),

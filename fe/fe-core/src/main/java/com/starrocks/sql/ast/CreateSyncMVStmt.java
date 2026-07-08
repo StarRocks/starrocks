@@ -55,6 +55,14 @@ public class CreateSyncMVStmt extends DdlStmt {
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
 
+    // CK-compatible `CREATE MATERIALIZED VIEW ... TO <target>`: pre-existing target table this
+    // logical-sink MV writes into. Null for a normal (rollup) sync MV.
+    private TableRef toTableRef;
+
+    // CK-compatible logical-sink MV: the MV's SELECT serialized back to SQL, persisted so the load
+    // planner can re-analyze it against the base table to rebuild the per-MV transform + WHERE.
+    private String defineSql;
+
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
@@ -86,6 +94,22 @@ public class CreateSyncMVStmt extends DdlStmt {
 
     public void setMvTableRef(TableRef mvTableRef) {
         this.mvTableRef = mvTableRef;
+    }
+
+    public TableRef getToTableRef() {
+        return toTableRef;
+    }
+
+    public void setToTableRef(TableRef toTableRef) {
+        this.toTableRef = toTableRef;
+    }
+
+    public String getDefineSql() {
+        return defineSql;
+    }
+
+    public void setDefineSql(String defineSql) {
+        this.defineSql = defineSql;
     }
 
     public String getMVName() {

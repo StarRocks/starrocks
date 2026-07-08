@@ -37,7 +37,9 @@ package com.starrocks.planner;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
@@ -77,6 +79,7 @@ import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -88,9 +91,17 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -98,11 +109,14 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TOlapTableDistributionType;
@@ -121,6 +135,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -149,6 +164,7 @@ public class OlapTableSink extends DataSink {
 
     // set after init called
     private TDataSink tDataSink;
+
 
     private final TWriteQuorumType writeQuorum;
     private final boolean enableReplicatedStorage;
@@ -491,8 +507,137 @@ public class OlapTableSink extends DataSink {
         return DataPartition.RANDOM;
     }
 
+
+    // Aggregate functions supported for a logical-sink MV value column: each maps to the target column's
+    // storage aggregation, which converges the per-INSERT partial aggregates the Fake-Root branch computes
+    // (the same convergent-aggregate family a StarRocks sync MV / rollup supports). count is additive, so it
+    // targets a SUM column. Non-convergent aggregates (e.g. avg) would need an agg_state target column
+    // (AGG_STATE_UNION) -- a later step.
+    private static final ImmutableMap<String, AggregateType> LOGICAL_SINK_AGG_FN =
+            ImmutableMap.<String, AggregateType>builder()
+                    .put("sum", AggregateType.SUM)
+                    .put("count", AggregateType.SUM)
+                    .put("min", AggregateType.MIN)
+                    .put("max", AggregateType.MAX)
+                    .put("bitmap_union", AggregateType.BITMAP_UNION)
+                    .put("bitmap_agg", AggregateType.BITMAP_UNION)
+                    .put("hll_union", AggregateType.HLL_UNION)
+                    .put("percentile_union", AggregateType.PERCENTILE_UNION)
+                    .build();
+
+    // Shared per-column resolution for a logical-sink MV: the base-relative expr to write into target column
+    // `targetColumn` for SELECT item `item` (1-based `oneBasedIdx` for messages). For an AGG value column the
+    // item must be a supported aggregate whose PARSED name matches the column's storage aggregation; we return
+    // its single argument (the storage engine does the aggregation). Uses only parse-time state (the define SQL
+    // is not analyzed here) -- never isAggregateFunction()/getChild()/getType().
+    static Expr resolveLogicalSinkColumnExpr(SelectListItem item, Column targetColumn, int oneBasedIdx) {
+        if (item.isStar()) {
+            throw new SemanticException("logical-sink MV: SELECT * is not supported; list columns explicitly");
+        }
+        AggregateType aggType = targetColumn.getAggregationType();
+        if (!AggregateType.isNullOrNone(aggType)) {
+            if (aggType.isReplaceFamily()) {
+                // REPLACE / REPLACE_IF_NOT_NULL (ReplacingMergeTree-style): the storage engine keeps the latest
+                // value per key, so write the plain scalar value; the SELECT item is not an aggregate function.
+                return item.getExpr();
+            }
+            if (aggType == AggregateType.AGG_STATE_UNION) {
+                // agg_state target column (declared as an aggregate signature, e.g. `av avg(int)`): the SELECT
+                // item is the matching _state combinator (e.g. avg_state(v)). The Fake-Root branch computes the
+                // per-INSERT intermediate state and the AGG_STATE_UNION column merges states across inserts
+                // (read back with the _merge combinator). This lets ANY aggregate -- incl. avg/array_agg that
+                // have no plain-column storage aggregation -- be maintained incrementally. The BE validates the
+                // state/type against the column's agg-state descriptor on write.
+                return item.getExpr();
+            }
+            if (!LOGICAL_SINK_AGG_FN.containsValue(aggType)) {
+                throw new SemanticException("logical-sink MV: aggregate column type " + aggType
+                        + " (column '" + targetColumn.getName() + "') is not yet supported; supported: "
+                        + "SUM/MIN/MAX/COUNT/BITMAP_UNION/HLL_UNION/PERCENTILE_UNION/REPLACE");
+            }
+            if (!(item.getExpr() instanceof FunctionCallExpr)) {
+                throw new SemanticException("logical-sink MV: target column '" + targetColumn.getName()
+                        + "' is an aggregate column (" + aggType + ") but SELECT item " + oneBasedIdx
+                        + " is not an aggregate function call");
+            }
+            FunctionCallExpr fn = (FunctionCallExpr) item.getExpr();
+            String fnName = fn.getFunctionName().toLowerCase();
+            AggregateType fnAgg = LOGICAL_SINK_AGG_FN.get(fnName);
+            if (fnAgg == null || fnAgg != aggType) {
+                throw new SemanticException("logical-sink MV: SELECT item " + oneBasedIdx + " '" + fnName
+                        + "' does not match target column '" + targetColumn.getName() + "' aggregation " + aggType);
+            }
+            FunctionParams params = fn.getParams();
+            if (params == null || params.isDistinct() || params.exprs() == null || params.exprs().size() != 1) {
+                throw new SemanticException("logical-sink MV: only single-argument non-distinct "
+                        + fnName + "() is supported (column '" + targetColumn.getName() + "')");
+            }
+            return params.exprs().get(0);
+        }
+        return item.getExpr();
+    }
+
+    // Create-time (fail-fast) validation of a logical-sink MV against its target schema. A mismatch left for
+    // insert time would otherwise fail EVERY insert into the base table. Re-parses the define SQL and checks
+    // item count + per-column agg rules; builds no thrift.
+    public static void validateLogicalSinkTarget(String defineSql, OlapTable mvTarget, SessionVariable sessionVariable) {
+        List<StatementBase> stmts = SqlParser.parse(defineSql, sessionVariable);
+        if (stmts.isEmpty() || !(stmts.get(0) instanceof QueryStatement)
+                || !(((QueryStatement) stmts.get(0)).getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("logical-sink MV: cannot parse define SQL as a simple SELECT: " + defineSql);
+        }
+        SelectRelation select = (SelectRelation) ((QueryStatement) stmts.get(0)).getQueryRelation();
+        List<SelectListItem> items = select.getSelectList().getItems();
+        List<Column> targetColumns = mvTarget.getFullSchema();
+        if (items.size() != targetColumns.size()) {
+            throw new SemanticException("logical-sink MV: SELECT item count " + items.size()
+                    + " != target column count " + targetColumns.size() + " (target " + mvTarget.getName() + ")");
+        }
+        // #1/#5: for an aggregate MV (has GROUP BY), each SELECT item must match its target column's role:
+        // a GROUP BY key must map to a key column (no storage aggregation), and an aggregate result must
+        // map to a column WITH a storage aggregation. Otherwise per-INSERT partial aggregates accumulate as
+        // separate un-merged rows (or the wrong grouping converges) -- a silent wrong result. Classify by
+        // GROUP BY membership so it is robust across all aggregate/combinator forms.
+        com.starrocks.sql.ast.GroupByClause gb = select.getGroupByClause();
+        java.util.Set<String> groupKeys = null;
+        if (gb != null && gb.getGroupingExprs() != null) {
+            groupKeys = new java.util.HashSet<>();
+            for (Expr g : gb.getGroupingExprs()) {
+                groupKeys.add(normalizeSqlKey(g.toString()));
+            }
+        }
+        for (int i = 0; i < items.size(); i++) {
+            Column col = targetColumns.get(i);
+            SelectListItem item = items.get(i);
+            if (groupKeys != null && !item.isStar()) {
+                boolean itemIsKey = groupKeys.contains(normalizeSqlKey(item.getExpr().toString()));
+                boolean colIsAgg = !AggregateType.isNullOrNone(col.getAggregationType());
+                if (!itemIsKey && !colIsAgg) {
+                    throw new SemanticException("logical-sink MV: SELECT item " + (i + 1)
+                            + " is an aggregate but target column '" + col.getName() + "' has no storage "
+                            + "aggregation; per-INSERT partial aggregates would accumulate as separate rows. "
+                            + "Write it to an AGGREGATE table whose value column has a matching aggregation "
+                            + "(SUM/MIN/MAX/BITMAP_UNION/HLL_UNION/PERCENTILE_UNION) or an agg_state column.");
+                }
+                if (itemIsKey && colIsAgg) {
+                    throw new SemanticException("logical-sink MV: SELECT item " + (i + 1)
+                            + " is a GROUP BY key but target column '" + col.getName() + "' is an aggregation "
+                            + "column (" + col.getAggregationType() + "); GROUP BY keys must map to the "
+                            + "target's key columns.");
+                }
+            }
+            resolveLogicalSinkColumnExpr(item, col, i + 1);
+        }
+    }
+
+    private static String normalizeSqlKey(String s) {
+        return s == null ? "" : s.replace("`", "").replaceAll("\\s+", "").toLowerCase();
+    }
+
+
     @Override
     public TDataSink toThrift() {
+        // double-write (online OPTIMIZE) bakes its MULTI_OLAP_TABLE_SINK into tDataSink in complete().
         return tDataSink;
     }
 
