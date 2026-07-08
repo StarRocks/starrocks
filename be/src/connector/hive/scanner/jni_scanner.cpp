@@ -585,8 +585,7 @@ std::unique_ptr<JniScanner> create_fluss_jni_scanner(const JniScanner::CreateOpt
 
     std::map<std::string, std::string> jni_scanner_params;
     jni_scanner_params["split_info"] = scan_range.fluss_split_info;
-    jni_scanner_params["predicate_info"] =
-            scan_range.__isset.jni_predicate_info ? scan_range.jni_predicate_info : "";
+    jni_scanner_params["predicate_info"] = scan_range.__isset.jni_predicate_info ? scan_range.jni_predicate_info : "";
     jni_scanner_params["db_name"] = fluss_table->database();
     jni_scanner_params["table_name"] = fluss_table->name();
     jni_scanner_params["runtime_conf"] = fluss_table->get_runtime_conf();
