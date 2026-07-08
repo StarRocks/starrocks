@@ -513,6 +513,23 @@ public class Config extends ConfigBase {
     public static int label_keep_max_num = 1000;
 
     /**
+     * Max number of terminal (VISIBLE/ABORTED) transaction outcomes kept per database in a
+     * lightweight cache after the full transaction state has been evicted by
+     * *label_keep_max_num* count-based eviction.
+     * <p>
+     * Count-based eviction (*label_keep_max_num*) ignores age, so a transaction can be removed
+     * long before *label_keep_max_second*. When a connector (e.g. Flink) resumes from a savepoint
+     * and re-commits such a transaction, the FE would otherwise return "transaction not found",
+     * which the connector cannot distinguish from "never committed", causing an abort/failover loop.
+     * This cache lets the FE answer the re-commit with the real outcome (idempotent success for
+     * VISIBLE/COMMITTED, commit-failed for ABORTED). Each entry is tiny (id, label, status, reason,
+     * finish time); entries older than *label_keep_max_second* are treated as absent. Set to 0 to
+     * disable the cache.
+     */
+    @ConfField(mutable = true)
+    public static int transaction_terminal_state_cache_num = 50000;
+
+    /**
      * StreamLoadTasks hold by StreamLoadMgr will be cleaned
      */
     @ConfField(mutable = true)

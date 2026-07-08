@@ -70,10 +70,20 @@ description: "Alphabetical t - z"
 - 单位: 计数
 - 描述: 事务加载请求的总数量。
 
+## `txn_count_eviction`
+
+- 单位: -
+- 描述: 在达到 `label_keep_max_second` 之前，因数量限制（`label_keep_max_num`）而被淘汰的已完成事务数量。持续非零表示已完成事务历史正被忽略时间的数量淘汰清除，可能导致连接器在 savepoint/恢复后重新提交时找不到该事务。可通过调大 `label_keep_max_num` 或 `transaction_terminal_state_cache_num` 缓解。
+
 ## `txn_request`
 
 - 单位: -
 - 描述: BEGIN、COMMIT、ROLLBACK和EXEC的事务请求。
+
+## `txn_terminal_cache_hit`
+
+- 单位: -
+- 描述: 对已被淘汰的事务进行重新提交或状态查询时，由终态缓存（参见 `transaction_terminal_state_cache_num`）返回结果，而非返回 "transaction not found" 的次数。
 
 ## `uint8_column_pool_bytes`
 

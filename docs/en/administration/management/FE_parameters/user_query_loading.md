@@ -1133,7 +1133,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
+- Description: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted. Note: this count-based eviction **ignores age**. When a database accumulates more than `label_keep_max_num` finished transactions, the oldest are removed even if they are far younger than `label_keep_max_second`. A connector (for example, Flink) that resumes from a savepoint and re-commits such a transaction would then see it as missing. To keep the terminal outcome available for such re-commits, see `transaction_terminal_state_cache_num`.
 - Introduced in: -
 
 ### `label_keep_max_second`
@@ -1142,7 +1142,16 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
+- Description: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory. Note: this age-based eviction does not override `label_keep_max_num`; count-based eviction can still remove a transaction earlier than this duration.
+- Introduced in: -
+
+### `transaction_terminal_state_cache_num`
+
+- Default: 50000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of terminal (VISIBLE/ABORTED) transaction outcomes kept per database in a lightweight cache after the full transaction state has been evicted by `label_keep_max_num` count-based eviction. Because count-based eviction ignores age, a transaction can be removed long before `label_keep_max_second`. When a connector (for example, Flink) resumes from a savepoint and re-commits such a transaction, the FE would otherwise return "transaction not found", which the connector cannot distinguish from "never committed", causing an abort/failover loop. This cache lets the FE answer the re-commit with the real outcome: idempotent success for VISIBLE/COMMITTED, commit failure for ABORTED. Each entry keeps only the transaction id, label, status, reason, and finish time; entries older than `label_keep_max_second` are treated as absent. Set to `0` to disable the cache.
 - Introduced in: -
 
 ### `load_checker_interval_second`

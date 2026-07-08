@@ -70,10 +70,20 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Total number of transaction load requests.
 
+## `txn_count_eviction`
+
+- Unit: -
+- Description: Number of finished transactions evicted by count (`label_keep_max_num`) before reaching `label_keep_max_second`. A sustained non-zero rate means finished-transaction history is being purged by age-ignoring count pressure, which can cause a connector re-commit after a savepoint/resume to see the transaction as missing. Mitigate by raising `label_keep_max_num` or `transaction_terminal_state_cache_num`.
+
 ## `txn_request`
 
 - Unit: -
 - Description: Transaction requests of BEGIN, COMMIT, ROLLBACK, and EXEC.
+
+## `txn_terminal_cache_hit`
+
+- Unit: -
+- Description: Number of times a re-commit or status probe of an already-evicted transaction was answered from the terminal-state cache (see `transaction_terminal_state_cache_num`) instead of failing with "transaction not found".
 
 ## `uint8_column_pool_bytes`
 

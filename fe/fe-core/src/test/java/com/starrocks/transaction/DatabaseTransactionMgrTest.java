@@ -151,6 +151,10 @@ public class DatabaseTransactionMgrTest {
     @AfterEach
     public void tearDown() {
         Config.enable_metric_calculator = origin_enable_metric_calculator_value;
+        // Restore defaults for configs mutated by some tests, to keep tests order-independent.
+        Config.label_keep_max_second = 3 * 24 * 3600;
+        Config.label_keep_max_num = 1000;
+        Config.transaction_terminal_state_cache_num = 50000;
     }
 
     public void prepareCommittedTransaction() throws StarRocksException {
@@ -628,6 +632,90 @@ public class DatabaseTransactionMgrTest {
         assertEquals(0, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(7, masterDbTransMgr.getTransactionNum());
         assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
+    }
+
+    // Evict a finished (VISIBLE) transaction purely by count (label_keep_max_num), not by age, then
+    // re-commit/probe it: the terminal-state cache must answer definitively instead of "not found".
+    @Test
+    public void testRecommitVisibleTxnAfterCountEviction() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        // Sanity: it is VISIBLE and present before eviction.
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId1).getStatus());
+
+        // Force count-based eviction while keeping age well under the age threshold.
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 50000;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+
+        // Full state is gone from both maps and the label index.
+        assertNull(masterDbTransMgr.getTransactionState(txnId1));
+        assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
+        assertTrue(masterDbTransMgr.getTerminalStateCacheSize() > 0);
+
+        // Re-commit of the evicted VISIBLE txn is answered as idempotent success (no exception).
+        VisibleStateWaiter waiter = masterDbTransMgr.commitPreparedTransaction(txnId1);
+        Assertions.assertNotNull(waiter);
+        assertTrue(waiter.await(1, TimeUnit.SECONDS));
+
+        // Re-prepare of the evicted VISIBLE txn also succeeds idempotently.
+        masterDbTransMgr.prepareTransaction(txnId1, TransactionState.DEFAULT_PREPARED_TIMEOUT_MS,
+                Lists.newArrayList(), Lists.newArrayList(), null, false);
+
+        // Status probes by id and by label distinguish "committed then cleaned up" from "never existed".
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId1).getStatus());
+        assertEquals(TransactionStatus.VISIBLE,
+                masterDbTransMgr.getLabelState(GlobalStateMgrTestUtil.testTxnLable1).getStatus());
+
+        // A transaction that never existed still returns UNKNOWN / not-found.
+        assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(999999L).getStatus());
+        assertThrows(TransactionNotFoundException.class,
+                () -> masterDbTransMgr.commitPreparedTransaction(999999L));
+    }
+
+    // An ABORTED transaction evicted by count must NOT be reported as a successful commit - a false
+    // success after a truncate-then-resume would silently drop data.
+    @Test
+    public void testRecommitAbortedTxnAfterCountEvictionFails() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long abortedTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "terminal_cache_aborted_label", transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterDbTransMgr.abortTransaction(abortedTxnId, "aborted for terminal cache test", null);
+        assertEquals(TransactionStatus.ABORTED, masterDbTransMgr.getTxnState(abortedTxnId).getStatus());
+
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 50000;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertNull(masterDbTransMgr.getTransactionState(abortedTxnId));
+
+        // Re-commit of an evicted ABORTED txn fails the commit rather than faking success.
+        assertThrows(TransactionCommitFailedException.class,
+                () -> masterDbTransMgr.commitPreparedTransaction(abortedTxnId));
+        assertEquals(TransactionStatus.ABORTED, masterDbTransMgr.getTxnState(abortedTxnId).getStatus());
+    }
+
+    // With the cache disabled, behavior falls back to the legacy "transaction not found".
+    @Test
+    public void testTerminalCacheDisabledFallsBackToNotFound() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+
+        Config.label_keep_max_second = 3600;
+        Config.label_keep_max_num = 0;
+        Config.transaction_terminal_state_cache_num = 0;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+
+        assertEquals(0, masterDbTransMgr.getTerminalStateCacheSize());
+        assertThrows(TransactionNotFoundException.class,
+                () -> masterDbTransMgr.commitPreparedTransaction(txnId1));
+        assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(txnId1).getStatus());
     }
 
     @Test
