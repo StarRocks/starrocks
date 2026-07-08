@@ -405,6 +405,7 @@ public class RemoveOrphanFilesProcedureTest {
         when(dataFile.location()).thenReturn("s3://bucket/table/data/file.parquet");
 
         ManifestReader<DataFile> manifestReader = mock(ManifestReader.class);
+        when(manifestReader.select(any())).thenReturn(manifestReader);
         when(manifestReader.iterator()).thenReturn(
                 CloseableIterable.withNoopClose(Collections.singletonList(dataFile)).iterator());
 
@@ -465,6 +466,7 @@ public class RemoveOrphanFilesProcedureTest {
         when(manifest.content()).thenReturn(ManifestContent.DATA);
 
         ManifestReader<DataFile> manifestReader = mock(ManifestReader.class);
+        when(manifestReader.select(any())).thenReturn(manifestReader);
         when(manifestReader.iterator()).thenReturn(
                 CloseableIterable.withNoopClose(Collections.<DataFile>emptyList()).iterator());
         doThrow(new IOException("simulated read failure")).when(manifestReader).close();
