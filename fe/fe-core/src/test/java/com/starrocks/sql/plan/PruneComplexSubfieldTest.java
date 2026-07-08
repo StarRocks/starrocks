@@ -114,6 +114,35 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE complex_nested (\n" +
+                "    id int,\n" +
+                "    nested struct<n_id int,\n" +
+                "        xxx array<\n" +
+                "            struct<\n" +
+                "                sf1 varchar(100),\n" +
+                "                sf2 int,\n" +
+                "                sf3 varchar(100)\n" +
+                "            >\n" +
+                "        >\n" +
+                "    >\n" +
+                ") ENGINE=OLAP\n" +
+                "partition by id\n" +
+                "distributed by hash(id)\n" +
+                "buckets 10\n" +
+                "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        );
+        starRocksAssert.withTable("CREATE TABLE `arr2d_nested` (\n" +
+                "  `id` int NULL, \n" +
+                "  `col2d` array<array<struct<a int, b int>>> NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");"
+        );
         FeConstants.runningUnitTest = false;
     }
 
@@ -1297,5 +1326,70 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertNotContains(plan, "UNKNOWN_TYPE\n");
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+    }
+
+    @Test
+    public void testUnnestOutputMatchesInputWhenArrayAlsoAccessedDirectly() throws Exception {
+        // The UNNEST input array (ass) is a scan column that is ALSO read directly as ass[1].a, so it
+        // is pruned to the UNION of the touched subfields {a, b} (a from the direct access, b from
+        // outcome.b). The UNNEST output must equal the element type of that shared input -> struct<a, b>.
+        // Pruning the output to only the subfield this output "uses" (b) would make it narrower than
+        // what BE materializes from the shared array, triggering "encode size does not equal when
+        // decoding" on shuffle deserialization.
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select ass[1].a, outcome.b from tt, unnest(ass) as t(outcome) order by v1 limit 10";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "returnTypes: [struct<`a` int(11), `b` int(11)>]");
+            assertNotContains(plan, "returnTypes: [struct<`b` int(11)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
+    }
+
+    @Test
+    public void testUnnestOutputMatchesFullyMaterializedInput() throws Exception {
+        // Regression for "encode size does not equal when decoding": SELECT x.* forces the parent
+        // struct column (nested) to stay fully materialized, so the UNNEST input array (nested.xxx)
+        // keeps every subfield. The UNNEST output type must therefore stay full to match what BE
+        // materializes for that input; pruning it down to only the touched subfield made the
+        // FE-declared tuple narrower than the shuffled chunk and crashed deserialization at the
+        // exchange.
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select n.sf3, x.*" +
+                    " from complex_nested x, unnest(x.`nested`.xxx) as t(n)" +
+                    " where n.sf3 is not null";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "returnTypes: [struct<`sf1` varchar(100), `sf2` int(11), `sf3` varchar(100)>]");
+            assertNotContains(plan, "returnTypes: [struct<`sf3` varchar(100)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
+    }
+
+    @Test
+    public void testPruneStackedUnnestOnNestedArray() throws Exception {
+        // Stacked UNNEST of a 2D array: UNNEST(col2d) -> inner_arr (array<struct>), then
+        // UNNEST(inner_arr) -> e (struct). The outer UNNEST's input (inner_arr) is itself an UNNEST
+        // output that gets pruned here, so the outer output must be pruned in lockstep with it.
+        // canSafelyPruneUnnestOutput must recurse through the inner UNNEST down to the scan column;
+        // otherwise the outer output stays full while inner_arr is pruned, making the output WIDER
+        // than the element BE materializes -> shuffle type mismatch.
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select e.a from arr2d_nested, unnest(col2d) as t1(inner_arr), unnest(inner_arr) as t2(e)";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "returnTypes: [struct<`a` int(11)>]");
+            assertNotContains(plan, "returnTypes: [struct<`a` int(11), `b` int(11)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
     }
 }
