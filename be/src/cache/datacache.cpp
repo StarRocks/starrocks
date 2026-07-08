@@ -172,6 +172,12 @@ void DataCache::update_metrics() {
         snapshot.disk_quota_bytes = static_cast<int64_t>(disk_metrics.disk_quota_bytes);
         snapshot.disk_used_bytes = static_cast<int64_t>(disk_metrics.disk_used_bytes);
         snapshot.meta_used_bytes = static_cast<int64_t>(disk_metrics.meta_used_bytes);
+        // hit_count()/lookup_count() read the lightweight level-1 detail; miss = lookup - hit.
+        const size_t hit_count = _local_disk_cache->hit_count();
+        const size_t lookup_count = _local_disk_cache->lookup_count();
+        snapshot.block_cache_hit_count = static_cast<int64_t>(hit_count);
+        snapshot.block_cache_miss_count =
+                static_cast<int64_t>(lookup_count >= hit_count ? lookup_count - hit_count : 0);
     }
 #ifdef USE_STAROS
     if (!_use_same_starcache_instance) {
