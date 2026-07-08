@@ -257,6 +257,19 @@ public final class ChangesScanBuilder {
             return List.of();
         }
 
+        // Skip the fold when every changed partition spans a single version
+        // (headVersion - baseVersion <= 1): each key then appears at exactly one
+        // __ROW_VERSION__, so MIN == MAX and the Filter keeps every row -- the
+        // Window+Filter would be an identity transform at full analytic cost. A
+        // non-trackable change (empty range) is not provably single-version, so it
+        // keeps the fold; buildScanOperator already rejects such changes upstream.
+        boolean allSingleVersion = scan.getDelta().getChanges().values().stream()
+                .flatMap(List::stream)
+                .allMatch(c -> c.versionRange().map(p -> p.second - p.first <= 1).orElse(false));
+        if (allSingleVersion) {
+            return List.of();
+        }
+
         // Resolve the metadata column refs by descriptor kind (names may have
         // been disambiguated against the base schema, so match by name from descriptor).
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = scan.getColRefToColumnMetaMap();

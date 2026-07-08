@@ -730,6 +730,157 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
         }
     }
 
+    @Test
+    public void testNetChangeSkippedForSingleVersionRange() throws Exception {
+        String name = "pk_nc_sv_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_sv_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_sv_head");
+        // A single version between base and head: headVersion - baseVersion == 1.
+        bumpVisibleVersion(table, 4L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(analyticNodes.isEmpty(),
+                    "single-version PK range must skip the net-change window:\n" + plan);
+            assertTrue(plan.contains("ChangesScanNode"),
+                    "plan must still include ChangesScanNode:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testNetChangeSkippedForSingleVersionPartitionAdded() throws Exception {
+        // A partition that appears only at head (PartitionAdded) with a single load has
+        // versionRange (PARTITION_INIT_VERSION, +1) -- a single version -- so the gate must
+        // skip the window just as it does for a DataChanged single-version range.
+        String name = "pk_nc_pa_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int NOT NULL, dt date NOT NULL, v int) "
+                + "PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) ("
+                + "PARTITION p1 VALUES LESS THAN ('2024-02-01')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_pa_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_pa_head");
+        // base has only p1; p2 appears and gets a single load (v1 -> v2) before head.
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        addPartition(tableId, "p2", "2024-03-01");
+        setPartitionVersion(table, "p2", 2L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, dt, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(analyticNodes.isEmpty(),
+                    "single-version PartitionAdded range must skip the net-change window:\n" + plan);
+            assertTrue(plan.contains("ChangesScanNode"),
+                    "plan must still include ChangesScanNode:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testNetChangeKeptWhenAnyPartitionMultiVersion() throws Exception {
+        String name = "pk_nc_mixed_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPartitionedPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("nc_mx_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("nc_mx_head");
+        // base: both partitions at v3.
+        setPartitionVersion(table, "p1", 3L);
+        setPartitionVersion(table, "p2", 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        // head: p1 single version (3->4), p2 multiple versions (3->6) -> mixed range.
+        setPartitionVersion(table, "p1", 4L);
+        setPartitionVersion(table, "p2", 6L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        String sql = String.format("SELECT k, dt, v FROM %s [_CHANGES_%d_%d_]",
+                name, base.getBookmarkId(), head.getBookmarkId());
+        boolean old = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertFalse(analyticNodes.isEmpty(),
+                    "a multi-version partition anywhere in the range must keep the window:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(old);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    @Test
+    public void testApplyNetChangeSkipsWindowForSingleVersionPk() throws Exception {
+        // The IVM-rule overload must also skip the fold for a single-version PK range:
+        // applyNetChange returns the bare scan, no Window/Filter stacked.
+        assertFalse(connectContext.getSessionVariable().isEnableCdcNetChange());
+
+        String name = "pk_ovl_sv_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createPkTable(name);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("ovl_sv_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("ovl_sv_head");
+        bumpVisibleVersion(table, 4L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        bumpVisibleVersion(table, 5L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            ColumnRefFactory f = new ColumnRefFactory();
+            LogicalChangesScanOperator scan = transformBareChangesScan(name, base, head, f);
+            OptExpression folded = ChangesScanBuilder.applyNetChange(scan, f, 1);
+            assertEquals(OperatorType.LOGICAL_CHANGES_SCAN, folded.getOp().getOpType());
+            assertTrue(folded.getInputs().isEmpty(),
+                    "single-version PK range must not stack a window/filter");
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
     /**
      * Transform {@code SELECT k, v FROM table[_CHANGES_base_head_]} with net change off, returning
      * the bare LogicalChangesScanOperator (full column refs, no fold) for direct overload testing.
@@ -823,6 +974,24 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                 + "PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 "
                 + "PROPERTIES ('replication_num' = '1');";
         return createTable(ddl);
+    }
+
+    /** Create a two-range-partition PK cloud-native table (p1, p2) and return its id. */
+    private long createPartitionedPkTable(String name) throws Exception {
+        String ddl = "CREATE TABLE " + name + " (k int NOT NULL, dt date NOT NULL, v int) "
+                + "PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) ("
+                + "PARTITION p1 VALUES LESS THAN ('2024-02-01'), "
+                + "PARTITION p2 VALUES LESS THAN ('2024-03-01')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');";
+        return createTable(ddl);
+    }
+
+    /** Set one named partition's physical-partition visibleVersion. */
+    private static void setPartitionVersion(OlapTable t, String partitionName, long version) {
+        Partition p = t.getPartition(partitionName);
+        for (PhysicalPartition pp : p.getSubPartitions()) {
+            pp.setVisibleVersion(version, System.currentTimeMillis());
+        }
     }
 
     /**

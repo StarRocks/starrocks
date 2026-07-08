@@ -91,3 +91,126 @@ ORDER BY k, __CHANGE_TYPE__ DESC;
 3	30	c	1
 4	40	d	0
 -- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SET window_partition_mode = 1;
+-- result:
+-- !result
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk0}_${bk1}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk2}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+SET enable_cdc_net_change = false;
+-- result:
+-- !result
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+-- result:
+2	20	b	1
+2	200	b	0
+-- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+-- result:
+2	20	b	1
+2	200	b	0
+-- !result
+-- name: test_pk_net_change_partitioned @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE pk_mp (k int NOT NULL, dt date NOT NULL, v int)
+PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+[UC]bm0=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+INSERT INTO pk_mp VALUES (1, '2024-01-15', 10);
+-- result:
+-- !result
+INSERT INTO pk_mp VALUES (2, '2024-02-15', 20);
+-- result:
+-- !result
+UPDATE pk_mp SET v = 21 WHERE k = 2;
+-- result:
+-- !result
+[UC]bm1=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+INSERT INTO pk_mp VALUES (3, '2024-01-20', 30);
+-- result:
+-- !result
+INSERT INTO pk_mp VALUES (4, '2024-02-20', 40);
+-- result:
+-- !result
+[UC]bm2=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+ALTER TABLE pk_mp ADD PARTITION p3 VALUES LESS THAN ('2024-04-01');
+-- result:
+-- !result
+INSERT INTO pk_mp VALUES (5, '2024-03-15', 50);
+-- result:
+-- !result
+[UC]bm3=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm0}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm1}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm2}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm3}", "pkmp");
+} END CLEANUP
+
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SET window_partition_mode = 1;
+-- result:
+-- !result
+function: assert_explain_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm0}_${bm1}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm1}_${bm2}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+SET enable_cdc_net_change = false;
+-- result:
+-- !result
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm1}_${bm2}_] ORDER BY k;
+-- result:
+3	2024-01-20	30	0
+4	2024-02-20	40	0
+-- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm1}_${bm2}_] ORDER BY k;
+-- result:
+3	2024-01-20	30	0
+4	2024-02-20	40	0
+-- !result
+function: assert_explain_not_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm2}_${bm3}_]', 'ANALYTIC')
+-- result:
+None
+-- !result
+SET enable_cdc_net_change = false;
+-- result:
+-- !result
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm2}_${bm3}_] ORDER BY k;
+-- result:
+5	2024-03-15	50	0
+-- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm2}_${bm3}_] ORDER BY k;
+-- result:
+5	2024-03-15	50	0
+-- !result

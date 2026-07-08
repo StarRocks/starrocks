@@ -86,29 +86,6 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 ? null : new HashSet<>(selectedTabletId);
     }
 
-    /**
-     * Returns the (baseVersion, headVersion] visible-version pair for one
-     * physical-partition change. Throws on non-trackable change types — the
-     * analyzer rejects those upstream, so reaching the else is a planner bug.
-     */
-    private Pair<Long, Long> versionPair(BookmarkChange.PhysicalPartitionChange change) {
-        if (change instanceof BookmarkChange.DataChanged dc) {
-            return Pair.create(dc.getBasePartition().getVisibleVersion(),
-                    dc.getHeadPartition().getVisibleVersion());
-        } else if (change instanceof BookmarkChange.PartitionAdded pa) {
-            // Partition was absent at base; emit every rowset reachable at head as inserts. The base is
-            // the tablet's initial (empty) version, not 0: the BE walks the metadata-ancestor chain down
-            // to base, and a tablet's chain bottoms out at PARTITION_INIT_VERSION (its empty initial
-            // metadata), so any lower base is unreachable. Diffing head against that empty version
-            // surfaces every rowset as new.
-            return Pair.create(PhysicalPartition.PARTITION_INIT_VERSION, pa.getHeadPartition().getVisibleVersion());
-        } else {
-            throw new IllegalStateException(String.format(
-                    "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
-                    olapTable.getName(), change.getPhysicalPartitionId(), change.getChangeType()));
-        }
-    }
-
     public void computeScanRanges(ComputeResource computeResource) {
         long dbId = getSchemaKey().getDb_id();
         long tableId = olapTable.getId();
@@ -118,7 +95,10 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 continue;
             }
             for (BookmarkChange.PhysicalPartitionChange change : entry.getValue()) {
-                Pair<Long, Long> versions = versionPair(change);
+                Pair<Long, Long> versions = change.versionRange().orElseThrow(() ->
+                        new IllegalStateException(String.format(
+                                "non-trackable change in CDC plan for table '%s', physical partition %d: %s",
+                                olapTable.getName(), change.getPhysicalPartitionId(), change.getChangeType())));
                 long baseVersion = versions.first;
                 long headVersion = versions.second;
 

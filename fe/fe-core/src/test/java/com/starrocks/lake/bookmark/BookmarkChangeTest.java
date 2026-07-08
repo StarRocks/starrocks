@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.bookmark.BookmarkChange.ChangeType;
 import com.starrocks.lake.bookmark.BookmarkChange.DataChanged;
 import com.starrocks.lake.bookmark.BookmarkChange.IndexReplaced;
@@ -203,5 +204,32 @@ public class BookmarkChangeTest {
         Bookmark newer = new Bookmark(DB_ID, TABLE_ID, 30L, 1000L, empty);
         assertThrows(IllegalArgumentException.class,
                 () -> BookmarkChange.computeChanges(Optional.of(older), newer));
+    }
+
+    @Test
+    public void testVersionRange() {
+        Bookmark base = meta(1L, 10L, 100L, 1L, 1L, 5L);
+
+        // DataChanged: (baseVersion, headVersion].
+        Bookmark dcHead = meta(2L, 10L, 100L, 1L, 1L, 7L);
+        DataChanged dc = assertInstanceOf(DataChanged.class,
+                flatten(BookmarkChange.computeChanges(Optional.of(base), dcHead)).get(0));
+        assertTrue(dc.versionRange().isPresent());
+        assertEquals(5L, dc.versionRange().orElseThrow().first.longValue());
+        assertEquals(7L, dc.versionRange().orElseThrow().second.longValue());
+
+        // PartitionAdded: base is the tablet's initial empty version (PARTITION_INIT_VERSION).
+        PartitionAdded added = assertInstanceOf(PartitionAdded.class,
+                flatten(BookmarkChange.computeChanges(Optional.empty(), dcHead)).get(0));
+        assertTrue(added.versionRange().isPresent());
+        assertEquals(PhysicalPartition.PARTITION_INIT_VERSION,
+                added.versionRange().orElseThrow().first.longValue());
+        assertEquals(7L, added.versionRange().orElseThrow().second.longValue());
+
+        // Non-trackable (IndexReplaced): no readable version range.
+        Bookmark irHead = meta(2L, 10L, 100L, 1L, 5L, 5L);
+        IndexReplaced ir = assertInstanceOf(IndexReplaced.class,
+                flatten(BookmarkChange.computeChanges(Optional.of(base), irHead)).get(0));
+        assertTrue(ir.versionRange().isEmpty());
     }
 }

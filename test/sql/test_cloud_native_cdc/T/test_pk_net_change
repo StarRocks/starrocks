@@ -79,3 +79,82 @@ function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4
 function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'SORT')
 SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk4}_]
 ORDER BY k, __CHANGE_TYPE__ DESC;
+
+-- Single-version ranges skip the analytic window (net change == raw change).
+-- bk0->bk1 is one INSERT; bk1->bk2 is one UPDATE. Both span a single version.
+SET enable_cdc_net_change = true;
+SET window_partition_mode = 1;
+
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk0}_${bk1}_]', 'ANALYTIC')
+function: assert_explain_not_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk2}_]', 'ANALYTIC')
+
+-- A multi-version range still gets the window.
+function: assert_explain_contains('SELECT k, v FROM pk_nc [_CHANGES_${bk1}_${bk4}_]', 'ANALYTIC')
+
+-- Data self-check: on a single version the net change equals the raw change, so
+-- the net-change-on result must be byte-identical to the net-change-off result.
+-- bk1->bk2 is a single UPDATE of k=2, surfacing as DELETE(old)+INSERT(new).
+SET enable_cdc_net_change = false;
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+SET enable_cdc_net_change = true;
+SELECT k, v, c, __CHANGE_TYPE__ FROM pk_nc [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+
+-- name: test_pk_net_change_partitioned @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE pk_mp (k int NOT NULL, dt date NOT NULL, v int)
+PRIMARY KEY(k, dt) PARTITION BY RANGE(dt) (
+    PARTITION p1 VALUES LESS THAN ('2024-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2024-03-01')
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+
+[UC]bm0=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+
+-- bm0->bm1: p1 advances one version, p2 advances two (insert + update). Mixed range.
+INSERT INTO pk_mp VALUES (1, '2024-01-15', 10);
+INSERT INTO pk_mp VALUES (2, '2024-02-15', 20);
+UPDATE pk_mp SET v = 21 WHERE k = 2;
+[UC]bm1=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+
+-- bm1->bm2: each partition advances exactly one version. All single-version range.
+INSERT INTO pk_mp VALUES (3, '2024-01-20', 30);
+INSERT INTO pk_mp VALUES (4, '2024-02-20', 40);
+[UC]bm2=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+
+-- bm2->bm3: a brand-new partition p3 appears and gets a single load. From bm2 (which
+-- has only p1/p2) p3 is a PartitionAdded change spanning one version.
+ALTER TABLE pk_mp ADD PARTITION p3 VALUES LESS THAN ('2024-04-01');
+INSERT INTO pk_mp VALUES (5, '2024-03-15', 50);
+[UC]bm3=SELECT bookmark_create("${db[0]}", "pk_mp", "pkmp", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm0}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm1}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm2}", "pkmp");
+    SELECT bookmark_release("${db[0]}", "pk_mp", "${bm3}", "pkmp");
+} END CLEANUP
+
+SET enable_cdc_net_change = true;
+SET window_partition_mode = 1;
+
+-- Mixed range (p1 single version, p2 multiple versions): window kept.
+function: assert_explain_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm0}_${bm1}_]', 'ANALYTIC')
+
+-- All-single-version range across both partitions: window skipped.
+function: assert_explain_not_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm1}_${bm2}_]', 'ANALYTIC')
+
+-- Data self-check on the all-single-version range: net-on == net-off.
+SET enable_cdc_net_change = false;
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm1}_${bm2}_] ORDER BY k;
+SET enable_cdc_net_change = true;
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm1}_${bm2}_] ORDER BY k;
+
+-- Single-version PartitionAdded range (new partition p3, one load): window skipped.
+function: assert_explain_not_contains('SELECT k, dt, v FROM pk_mp [_CHANGES_${bm2}_${bm3}_]', 'ANALYTIC')
+
+-- Data self-check on the added partition: net-on == net-off.
+SET enable_cdc_net_change = false;
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm2}_${bm3}_] ORDER BY k;
+SET enable_cdc_net_change = true;
+SELECT k, dt, v, __CHANGE_TYPE__ FROM pk_mp [_CHANGES_${bm2}_${bm3}_] ORDER BY k;

@@ -15,6 +15,8 @@
 package com.starrocks.lake.bookmark;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.Pair;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -58,6 +60,15 @@ public final class BookmarkChange {
         }
 
         public abstract ChangeType getChangeType();
+
+        /**
+         * The (base, head] visible-version range this change spans: first is the base version
+         * (exclusive), second the head version (inclusive). Empty for a non-trackable change,
+         * which has no readable version range; only PartitionAdded and DataChanged carry one.
+         */
+        public Optional<Pair<Long, Long>> versionRange() {
+            return Optional.empty();
+        }
     }
 
     /** Physical partition present at head but not at base. */
@@ -77,6 +88,15 @@ public final class BookmarkChange {
         @Override
         public ChangeType getChangeType() {
             return ChangeType.ADDED;
+        }
+
+        @Override
+        public Optional<Pair<Long, Long>> versionRange() {
+            // Absent at base: the BE walks the metadata-ancestor chain down to the tablet's
+            // initial empty version (PARTITION_INIT_VERSION), the lowest reachable base, and
+            // diffs head against it — so every rowset at head surfaces as an insert.
+            return Optional.of(Pair.create(PhysicalPartition.PARTITION_INIT_VERSION,
+                    headPartition.getVisibleVersion()));
         }
     }
 
@@ -178,6 +198,12 @@ public final class BookmarkChange {
         @Override
         public ChangeType getChangeType() {
             return ChangeType.DATA_CHANGED;
+        }
+
+        @Override
+        public Optional<Pair<Long, Long>> versionRange() {
+            return Optional.of(Pair.create(basePartition.getVisibleVersion(),
+                    headPartition.getVisibleVersion()));
         }
     }
 
