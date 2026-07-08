@@ -630,9 +630,27 @@ public class ReportHandlerTest {
     }
 
     @Test
+    public void testHandleSetTabletFlatJsonConfigCreateTimeConfigOrphanBe() {
+        // A config that comes from CREATE TABLE keeps version 0 on the FE. A tablet that
+        // reports no flat_json_config_version (isSet=false) has no config at all, so it must
+        // still be reconciled: the unset report maps below any real version (-1 < 0).
+        List<AgentBatchTask> submitted = mockSubmitCapture();
+        List<Long> tabletIds = getTableTabletIds(getFlatJsonTable());
+        Assertions.assertFalse(tabletIds.isEmpty());
+        Assertions.assertEquals(0, getFlatJsonTable().getFlatJsonConfig().getVersion());
+
+        Map<Long, TTablet> backendTablets = buildBackendTablets(10001L, tabletIds, info -> {});
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleSetTabletFlatJsonConfig(10001L, backendTablets);
+
+        Assertions.assertFalse(submitted.isEmpty());
+    }
+
+    @Test
     public void testHandleSetTabletFlatJsonConfigOrphanBe() {
-        // flat_json_config_version not reported by BE (isSet=false) is treated as 0,
-        // so a BE that never received the config is reconciled on the next heartbeat.
+        // flat_json_config_version not reported by BE (isSet=false) maps below any real
+        // version, so a BE that never received the config is reconciled on the next heartbeat.
         FlatJsonConfig config = getFlatJsonTable().getFlatJsonConfig();
         config.incVersion();
         try {
