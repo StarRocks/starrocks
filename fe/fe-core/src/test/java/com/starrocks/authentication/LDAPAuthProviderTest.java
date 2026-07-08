@@ -150,7 +150,7 @@ class LDAPAuthProviderTest {
     @Test
     void testAuthenticateWithCaseInsensitiveUsername() throws Exception {
         // Create a test provider instance
-        LDAPAuthProvider provider = new LDAPAuthProvider(
+        new LDAPAuthProvider(
                 "localhost", 389, false,
                 null, null,
                 "cn=admin,dc=starrocks,dc=com", "secret",

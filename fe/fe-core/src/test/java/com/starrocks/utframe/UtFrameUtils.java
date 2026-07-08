@@ -460,7 +460,6 @@ public class UtFrameUtils {
         Collection<Pair<String, Integer>> addresses = new ArrayList<>();
         Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8080);
         addresses.add(pair);
-        String location = "bos://backup-cmy";
         GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers(brokerName, addresses);
     }
 

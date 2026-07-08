@@ -39,7 +39,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -702,7 +701,6 @@ public class Explain {
 
         @Override
         public OperatorStr visitPhysicalConcatenater(OptExpression optExpression, ExplainContext context) {
-            PhysicalConcatenateOperator op = (PhysicalConcatenateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder();
             sb.append("- CONCATENATE\n");
             return new OperatorStr(sb.toString(), context.step,

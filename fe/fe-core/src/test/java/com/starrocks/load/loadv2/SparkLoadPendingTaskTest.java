@@ -289,7 +289,7 @@ public class SparkLoadPendingTaskTest {
         PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc2, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),
                 partitionDesc2, partition2Id, false);
-        PartitionKeyDesc partitionKeyDesc3 = new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
+        new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("10")));
         SingleRangePartitionDesc partitionDesc3 = new SingleRangePartitionDesc(false, "tp3", partitionKeyDesc1, null);
         PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(partitionDesc3, 1, null);
         partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(columns),

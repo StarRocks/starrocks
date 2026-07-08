@@ -210,7 +210,7 @@ public class DeleteHandlerTest {
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
 
-        SystemInfoService systemInfoService = new SystemInfoService();
+        new SystemInfoService();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();

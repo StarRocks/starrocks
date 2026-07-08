@@ -44,7 +44,7 @@ public class BinderTest {
     }
 
     private Binder buildBinder(Pattern pattern, GroupExpression qe) {
-        Memo memo = new Memo();
+        new Memo();
         OptimizerContext optimizerContext = OptimizerFactory.mockContext(new ColumnRefFactory());
         Stopwatch stopwatch = Stopwatch.createStarted();
         return new Binder(optimizerContext, pattern, qe, stopwatch);
@@ -319,7 +319,7 @@ public class BinderTest {
                 OptExpression.create(new MockOperator(OperatorType.LOGICAL_PROJECT, 5)));
 
         Memo memo = new Memo();
-        GroupExpression ge = memo.init(expr1);
+        memo.init(expr1);
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF));
@@ -358,7 +358,7 @@ public class BinderTest {
                 OptExpression.create(new MockOperator(OperatorType.LOGICAL_PROJECT, 5)));
 
         Memo memo = new Memo();
-        GroupExpression ge = memo.init(expr1);
+        memo.init(expr1);
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT))
@@ -379,7 +379,7 @@ public class BinderTest {
                 OptExpression.create(new MockOperator(OperatorType.LOGICAL_PROJECT, 5)));
 
         Memo memo = new Memo();
-        GroupExpression ge = memo.init(expr1);
+        memo.init(expr1);
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT))

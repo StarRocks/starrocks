@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +24,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         String dbName = "prune_column_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 

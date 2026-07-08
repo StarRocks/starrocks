@@ -156,7 +156,6 @@ public class VacuumTest {
 
     @Test
     public void testLastSuccVacuumVersionUpdate() throws Exception {
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
@@ -299,7 +298,6 @@ public class VacuumTest {
 
     @Test
     public void testAggregateVacuum() throws Exception {
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
@@ -339,7 +337,6 @@ public class VacuumTest {
 
     @Test
     public void testMetadataSwitchVersionVacuum() throws Exception {
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable2.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(0L);
@@ -636,7 +633,6 @@ public class VacuumTest {
 
     @Test
     public void testLastSuccVacuumVersionUpdateFailed() throws Exception {
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);

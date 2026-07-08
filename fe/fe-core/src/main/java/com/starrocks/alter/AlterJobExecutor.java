@@ -104,7 +104,6 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -724,7 +723,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
     @Override
     public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
@@ -983,8 +981,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         PropertyAnalyzer.analyzeBooleanProp(properties,
                 PropertyAnalyzer.PROPERTIES_INMEMORY, false);
         // 4. tablet type
-        TTabletType tTabletType =
-                PropertyAnalyzer.analyzeTabletType(properties);
+        PropertyAnalyzer.analyzeTabletType(properties);
 
         // 5. enable data cache
         Boolean newEnableDataCache = null;

@@ -142,7 +142,6 @@ public class LakeTableSchemaChangeJobTest {
     @Test
     public void testCancelPendingJob() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
         // test cancel again
@@ -935,7 +934,7 @@ public class LakeTableSchemaChangeJobTest {
         List<MaterializedIndex> normalIndexes =
                     partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(1, normalIndexes.size());
-        MaterializedIndex normalIndex = normalIndexes.get(0);
+        normalIndexes.get(0);
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");

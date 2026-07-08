@@ -190,6 +190,6 @@ public class ComputeNodeProcDirTest {
         };
 
         ComputeNodeProcDir dir = new ComputeNodeProcDir(systemInfoService);
-        ProcResult result = dir.fetchResult();
+        dir.fetchResult();
     }
 }

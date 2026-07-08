@@ -289,6 +289,6 @@ public class BackendsProcDirTest {
         };
 
         BackendsProcDir dir = new BackendsProcDir(systemInfoService);
-        ProcResult result = dir.fetchResult();
+        dir.fetchResult();
     }
 }

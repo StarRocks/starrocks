@@ -1005,7 +1005,6 @@ public class Function implements Writable {
                 row.add("SQL");
                 row.add("NULL");
             } else {
-                TableFunction tableFunc = (TableFunction) this;
                 row.add("Table");
                 row.add("NULL");
             }

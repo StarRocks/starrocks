@@ -1152,9 +1152,7 @@ public class PaimonMetadataTest {
         HdfsEnvironment environment = new HdfsEnvironment();
         ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
-        long snapshotId;
         ConstantOperator constantOperator;
-        ConnectorTableVersion tableVersion;
 
         //2 check
         //2.1 check startVersion and endVersion are empty

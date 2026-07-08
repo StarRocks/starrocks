@@ -143,7 +143,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
-            String pr = Tracers.printLogs();
+            Tracers.printLogs();
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
@@ -152,7 +152,7 @@ public class MvRewritePartitionTest extends MVTestBase {
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
             String plan = getFragmentPlan(query);
-            String pr = Tracers.printLogs();
+            Tracers.printLogs();
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "partitions=4/5\n" +
@@ -183,7 +183,7 @@ public class MvRewritePartitionTest extends MVTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-06-01' group by k1;";
             String plan = getFragmentPlan(query);
 
-            String pr = Tracers.printLogs();
+            Tracers.printLogs();
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
         }

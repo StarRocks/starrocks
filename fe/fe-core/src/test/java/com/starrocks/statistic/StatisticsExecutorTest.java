@@ -87,7 +87,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
     public void testCollectStatisticSync(@Mocked StmtExecutor executor) throws Exception {
         Config.internal_log_json_format = true;
         // mock
-        MockUp<StmtExecutor> mock = new MockUp<StmtExecutor>() {
+        new MockUp<StmtExecutor>() {
             @Mock
             public void execute() {
             }
@@ -96,8 +96,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
-        List<Long> partitionIdList =
-                table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+        table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),

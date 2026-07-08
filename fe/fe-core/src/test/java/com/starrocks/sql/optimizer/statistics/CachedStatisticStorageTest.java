@@ -290,9 +290,6 @@ public class CachedStatisticStorageTest {
                     Optional<ConnectorTableColumnStats>> connectorTableTableSyncCachedStatistics) {
         Table table =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
-        List<ConnectorTableColumnKey> cacheKeys =
-                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
 
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
         columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),

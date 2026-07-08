@@ -80,7 +80,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TPrimaryKeyEncodingType;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TTabletType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -570,9 +569,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
-            TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
             try {
-                tabletType = PropertyAnalyzer.analyzeTabletType(properties);
+                PropertyAnalyzer.analyzeTabletType(properties);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }

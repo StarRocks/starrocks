@@ -453,7 +453,6 @@ public class OptExternalPartitionPruner {
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof PaimonTable) {
-            PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());

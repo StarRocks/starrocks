@@ -1355,7 +1355,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
                 + ")" +
                 "as select k2, sum(v1) as total from base_t1 group by k2;";
         starRocksAssert.withMaterializedView(sql, (obj) -> {
-            String mvName = (String) obj;
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
             MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "test_mv1"));

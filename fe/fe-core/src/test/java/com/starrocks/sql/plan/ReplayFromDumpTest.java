@@ -882,8 +882,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Tracers.init(connectContext, "TIMER", "optimizer");
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
 
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
+        getPlanFragment(getDumpInfoFromFile("query_dump/deep_join_cost"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("EnforceAndCostTask[") + "EnforceAndCostTask[".length();
@@ -1079,7 +1078,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Tracers.register(connectContext);
         Tracers.init(Tracers.Mode.TIMER, Tracers.Module.OPTIMIZER, false, false);
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+        getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
                 TExplainLevel.NORMAL);
         String ss = Tracers.printScopeTimer();
         int start = ss.indexOf("PhysicalRewrite[") + "PhysicalRewrite[".length();

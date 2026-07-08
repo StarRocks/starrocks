@@ -224,11 +224,8 @@ public class HiveMetadataTest {
     @Test
     public void testGetHiveRemoteFiles() throws AnalysisException {
         FeConstants.runningUnitTest = true;
-        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
-        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
-        Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
+        new HiveMetastore(client, "hive_catalog", null);
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
 
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(

@@ -388,7 +388,7 @@ public class CachingIcebergCatalogTest {
                                                          @Mocked IcebergCatalogProperties props,
                                                          @Mocked ConnectContext ctx) throws Exception {
         Table nativeTable1 = createBaseTableWithManifests(1, 1);
-        Table nativeTable2 = createBaseTableWithManifests(1, 1);
+        createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
                 props.isEnableIcebergMetadataCache(); 
@@ -410,11 +410,8 @@ public class CachingIcebergCatalogTest {
 
         ExecutorService es = Executors.newFixedThreadPool(5);
         try {
-            CachingIcebergCatalog catalog =
-                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            new CachingIcebergCatalog("iceberg0", delegate, props, es);
 
-            org.apache.iceberg.Table r1 = catalog.getTable(ctx, "db1", "t1");
-            org.apache.iceberg.Table r2 = catalog.getTable(ctx, "db1", "t1");
 
             new Verifications() {
                 {
@@ -661,7 +658,7 @@ public class CachingIcebergCatalogTest {
         config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, "1");
         IcebergCatalogProperties icebergProperties = new IcebergCatalogProperties(config);
         ExecutorService exectorCatalog = Executors.newSingleThreadExecutor();
-        ExecutorService exector = Executors.newSingleThreadExecutor();
+        Executors.newSingleThreadExecutor();
         
 
         CachingIcebergCatalog catalog = new CachingIcebergCatalog("test_catalog", delegate, icebergProperties, exectorCatalog);
@@ -797,7 +794,6 @@ public class CachingIcebergCatalogTest {
         LoadingCache<IcebergTableName, Table> tables = Deencapsulation.getField(catalog, "tables");
         Table tmp1 = delegate.getTable(ctx, dbName, tblName);
         Table tmp2 = delegate.getTable(ctx, dbName, tblName);
-        Table tmp3 = delegate.getTable(ctx, dbName, tblName);
         
         System.out.println("===== cache test =====");
         catalog.getTable(ctx, dbName, tblName);
