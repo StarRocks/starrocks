@@ -20,10 +20,9 @@
 namespace starrocks::connector {
 
 Status SinkOperatorMemoryManager::init(std::vector<PartitionChunkWriterPtr>* writers,
-                                       formats::AsyncFlushStreamPoller* io_poller, CommitFunc commit_func) {
+                                       formats::AsyncFlushStreamPoller* io_poller) {
     _candidate_lists.clear();
     _candidate_lists.push_back(writers);
-    _commit_func = std::move(commit_func);
     _io_poller = io_poller;
     return Status::OK();
 }

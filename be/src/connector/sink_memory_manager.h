@@ -14,7 +14,13 @@
 
 #pragma once
 
-#include "connector/connector_chunk_sink.h"
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+#include "common/status.h"
+#include "connector/partition_chunk_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "runtime/mem_tracker.h"
 
@@ -26,8 +32,7 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    Status init(std::vector<PartitionChunkWriterPtr>* writers, formats::AsyncFlushStreamPoller* io_poller,
-                CommitFunc commit_func);
+    Status init(std::vector<PartitionChunkWriterPtr>* writers, formats::AsyncFlushStreamPoller* io_poller);
 
     // Register an additional writer list. Used by composite sinks
     // (e.g. IcebergRowDeltaSink) so memory pressure logic can see writers
@@ -50,7 +55,6 @@ public:
 private:
     // One or more references to writer lists owned by sink operator(s).
     std::vector<std::vector<PartitionChunkWriterPtr>*> _candidate_lists;
-    CommitFunc _commit_func;
     formats::AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};
     std::atomic_int64_t _writer_occupied_memory{0};

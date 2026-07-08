@@ -132,8 +132,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim) {
         writers.push_back(writer);
     }
 
-    auto commit_callback = [](const CommitResult& r) {};
-    sink_mem_mgr->init(&writers, nullptr, commit_callback);
+    sink_mem_mgr->init(&writers, nullptr);
 
     EXPECT_TRUE(sink_mem_mgr->kill_victim());
     for (auto& writer : writers) {
@@ -169,8 +168,7 @@ TEST_F(SinkMemoryManagerTest, init_with_vector) {
         writers.push_back(writer);
     }
 
-    auto commit_callback = [](const CommitResult& r) {};
-    Status status = sink_mem_mgr->init(&writers, nullptr, commit_callback);
+    Status status = sink_mem_mgr->init(&writers, nullptr);
     EXPECT_OK(status);
     EXPECT_EQ(sink_mem_mgr->update_writer_occupied_memory(), 300);
 }
@@ -199,8 +197,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim_selects_max_flushable_bytes) {
         writers.push_back(writer);
     }
 
-    auto commit_callback = [](const CommitResult& r) {};
-    sink_mem_mgr->init(&writers, nullptr, commit_callback);
+    sink_mem_mgr->init(&writers, nullptr);
 
     EXPECT_TRUE(sink_mem_mgr->kill_victim());
     for (auto& writer : writers) {
@@ -237,8 +234,7 @@ TEST_F(SinkMemoryManagerTest, update_writer_occupied_memory) {
         writers.push_back(writer);
     }
 
-    auto commit_callback = [](const CommitResult& r) {};
-    sink_mem_mgr->init(&writers, nullptr, commit_callback);
+    sink_mem_mgr->init(&writers, nullptr);
 
     int64_t total_memory = sink_mem_mgr->update_writer_occupied_memory();
     EXPECT_EQ(total_memory, 1500);
@@ -268,8 +264,7 @@ TEST_F(SinkMemoryManagerTest, iceberg_delete_sink_scenario) {
         writers.push_back(writer);
     }
 
-    auto commit_callback = [](const CommitResult& r) {};
-    sink_mem_mgr->init(&writers, nullptr, commit_callback);
+    sink_mem_mgr->init(&writers, nullptr);
 
     int64_t total_memory = sink_mem_mgr->update_writer_occupied_memory();
     EXPECT_EQ(total_memory, 14500);
