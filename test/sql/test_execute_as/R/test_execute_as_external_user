@@ -1,8 +1,4 @@
 -- name: test_execute_as_external_user @sequential
-shell: mkdir -p $STARROCKS_HOME/conf && printf "ext_group1:ext_user\n" > $STARROCKS_HOME/conf/group_mapping_external
--- result:
-0
--- !result
 CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_ext_group_provider` PROPERTIES ("type" = "file", "group_file_url" = "group_mapping_external");
 -- result:
 -- !result
@@ -66,8 +62,4 @@ drop group provider IF EXISTS test_execute_as_ext_group_provider;
 -- !result
 admin set frontend config ("group_provider"="");
 -- result:
--- !result
-shell: rm -f $STARROCKS_HOME/conf/group_mapping_external
--- result:
-0
 -- !result
