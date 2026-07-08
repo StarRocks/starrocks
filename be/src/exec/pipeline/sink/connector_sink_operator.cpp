@@ -133,23 +133,19 @@ Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
+        FragmentContext* fragment_context)
         : OperatorFactory(id, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
-          _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
     MemTracker* query_pool_tracker = RuntimeEnv::GetInstance()->query_pool_mem_tracker();
     MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
-
-    // Pass SinkMemoryManager to RowDelta context so sub-sinks can get their own child managers
-    _sink_context->set_sink_mem_mgr(_sink_mem_mgr.get());
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence).value();
     auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
-    chunk_sink->set_io_poller(io_poller.get());
+    connector::ConnectorChunkSinkCreateContext create_context{io_poller.get(), _sink_mem_mgr.get()};
+    auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence, create_context).value();
     auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
     chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,

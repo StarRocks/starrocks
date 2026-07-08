@@ -37,12 +37,6 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
     // The default -1 means no extra op_code column (such as UPDATE operation),
     // every row goes to both delete and data sub-sinks.
     int32_t op_code_index = -1;
-
-    // Query-level memory manager for creating child managers for sub-sinks.
-    // Set by ConnectorSinkOperatorFactory via set_sink_mem_mgr() after construction.
-    SinkMemoryManager* sink_mem_mgr = nullptr;
-
-    void set_sink_mem_mgr(SinkMemoryManager* mgr) override { sink_mem_mgr = mgr; }
 };
 
 // IcebergRowDeltaSinkProvider creates IcebergRowDeltaSink for Iceberg row-delta operations.
@@ -52,7 +46,8 @@ public:
     explicit IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx);
     ~IcebergRowDeltaSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
+            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) override;
 
 private:
     std::shared_ptr<IcebergRowDeltaSinkContext> _ctx;
