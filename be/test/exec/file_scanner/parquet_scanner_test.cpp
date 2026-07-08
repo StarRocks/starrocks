@@ -133,7 +133,7 @@ private:
     std::unique_ptr<ParquetScanner> create_parquet_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges, int32_t chunk_size = 0) {
+            const std::vector<TBrokerRangeDesc>& ranges, int32_t chunk_size = 0, bool flexible_column_mapping = false) {
         /// Init RuntimeState
         TQueryOptions query_options;
         if (chunk_size > 0) {
@@ -152,6 +152,9 @@ private:
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
         params->strict_mode = true;
+        if (flexible_column_mapping) {
+            params->__set_flexible_column_mapping(true);
+        }
         std::vector<TupleDescriptor*> tuples;
         desc_tbl->get_tuple_descs(&tuples);
         const auto num_tuples = tuples.size();
@@ -1527,7 +1530,7 @@ TEST_F(ParquetScannerTest, test_missing_column_with_small_chunk_size) {
                                         {"missing_col", TypeDescriptor::from_logical_type(TYPE_INT), true}};
     auto ranges = generate_ranges({parquet_file_name}, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2);
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 2, /*flexible_column_mapping=*/true);
 
     std::vector<std::string> actual_zone_values;
     std::vector<size_t> chunk_rows;
