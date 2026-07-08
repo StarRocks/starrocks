@@ -288,6 +288,7 @@ public class BackendsProcDirTest {
             }
         };
 
-        new BackendsProcDir(systemInfoService);
+        BackendsProcDir dir = new BackendsProcDir(systemInfoService);
+        Assertions.assertDoesNotThrow(dir::fetchResult);
     }
 }
