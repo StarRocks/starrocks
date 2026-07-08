@@ -14,6 +14,7 @@
 package com.starrocks.epack.system;
 
 import com.starrocks.common.util.MachineInfo;
+import com.starrocks.epack.persist.LicenseUsageLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RegisterLicenseLog;
 import com.starrocks.epack.persist.ScaleOutLicenseFreeStartTimeLog;
@@ -1094,6 +1095,122 @@ public class LicenseMgrTest {
         Assertions.assertNotSame(original, licenseMgr.systemInfo);
         Assertions.assertNotEquals(SYSTEM_ID, licenseMgr.systemInfo.getSystemID());
         Assertions.assertEquals(newTime, licenseMgr.systemInfo.getBuildTime());
+    }
+
+    @Test
+    public void testLicenseUsageSaveLoad() throws Exception {
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        LicenseMgr licenseMgr = new LicenseMgr(null);
+        licenseMgr.applyInitSystemInfo(new SystemInfo(SYSTEM_ID, System.currentTimeMillis()));
+        licenseMgr.applyUpdateLicenseUsage(new LicenseUsageLog(123456L));
+        licenseMgr.save(pseudoImage.getImageWriter());
+
+        LicenseMgr loadedLicenseMgr = new LicenseMgr(null);
+        loadedLicenseMgr.load(pseudoImage.getMetaBlockReader());
+        Assertions.assertEquals(123456L, loadedLicenseMgr.getLicenseUsage());
+    }
+
+    @Test
+    public void testLicenseUsageDefaultsToZeroForOldImage() throws Exception {
+        // An image written without ever updating license usage should load as 0.
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        LicenseMgr licenseMgr = new LicenseMgr(null);
+        licenseMgr.applyInitSystemInfo(new SystemInfo(SYSTEM_ID, System.currentTimeMillis()));
+        licenseMgr.save(pseudoImage.getImageWriter());
+
+        LicenseMgr loadedLicenseMgr = new LicenseMgr(null);
+        loadedLicenseMgr.load(pseudoImage.getMetaBlockReader());
+        Assertions.assertEquals(0L, loadedLicenseMgr.getLicenseUsage());
+    }
+
+    @Test
+    public void testAccumulateLicenseUsageWriteAndReplay() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(10L);
+
+        LicenseMgr leaderLicenseMgr =
+                new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+
+        long t0 = 1_000_000_000_000L;
+        // First cycle only records a baseline; nothing is charged for a fresh leader.
+        leaderLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0), ZoneOffset.UTC));
+        leaderLicenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(0L, leaderLicenseMgr.getLicenseUsage());
+
+        // 60s elapsed: 10 cores * 60s = 600.
+        leaderLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0 + 60_000L), ZoneOffset.UTC));
+        leaderLicenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(600L, leaderLicenseMgr.getLicenseUsage());
+
+        // Another 60s: monotonically increasing to 1200.
+        leaderLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0 + 120_000L), ZoneOffset.UTC));
+        leaderLicenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(1200L, leaderLicenseMgr.getLicenseUsage());
+
+        LicenseUsageLog replayLog = (LicenseUsageLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
+                OperationTypeEPack.OP_UPDATE_LICENSE_USAGE);
+        Assertions.assertEquals(600L, replayLog.getLicenseUsage());
+
+        // A follower recovers the cumulative value by replaying the journal entry.
+        LicenseMgr followerLicenseMgr = new LicenseMgr(mockNodeMgr);
+        GlobalStateMgr followerGlobalStateMgr = Mockito.mock(GlobalStateMgr.class);
+        Mockito.when(followerGlobalStateMgr.getLicenseMgr()).thenReturn(followerLicenseMgr);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(
+                followerGlobalStateMgr,
+                new JournalEntity(OperationTypeEPack.OP_UPDATE_LICENSE_USAGE, replayLog));
+        Assertions.assertEquals(600L, followerLicenseMgr.getLicenseUsage());
+    }
+
+    @Test
+    public void testAccumulateLicenseUsage_ZeroCoresNoChange() {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(0L);
+
+        LicenseMgr licenseMgr =
+                new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        long t0 = 1_000_000_000_000L;
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0), ZoneOffset.UTC));
+        licenseMgr.accumulateLicenseUsage(); // baseline
+        // A full interval elapses but there are no cores, so nothing is charged.
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0 + 60_000L), ZoneOffset.UTC));
+        licenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(0L, licenseMgr.getLicenseUsage());
+    }
+
+    @Test
+    public void testAccumulateLicenseUsage_ChargesActualElapsed() {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(10L);
+
+        LicenseMgr licenseMgr =
+                new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        long t0 = 1_000_000_000_000L;
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0), ZoneOffset.UTC));
+        licenseMgr.accumulateLicenseUsage(); // baseline
+
+        // A delayed cycle: 90s actually elapsed -> charge 10 * 90 = 900 (not a fixed 60).
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0 + 90_000L), ZoneOffset.UTC));
+        licenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(900L, licenseMgr.getLicenseUsage());
+
+        // A short cycle: only 20s elapsed -> +200.
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(t0 + 110_000L), ZoneOffset.UTC));
+        licenseMgr.accumulateLicenseUsage();
+        Assertions.assertEquals(1100L, licenseMgr.getLicenseUsage());
+    }
+
+    @Test
+    public void testApplyUpdateLicenseUsage_IsMonotonic() {
+        LicenseMgr licenseMgr = new LicenseMgr(null);
+        licenseMgr.applyUpdateLicenseUsage(new LicenseUsageLog(100L));
+        Assertions.assertEquals(100L, licenseMgr.getLicenseUsage());
+        // A stale/out-of-order entry must not decrease the usage.
+        licenseMgr.applyUpdateLicenseUsage(new LicenseUsageLog(50L));
+        Assertions.assertEquals(100L, licenseMgr.getLicenseUsage());
+        licenseMgr.applyUpdateLicenseUsage(new LicenseUsageLog(150L));
+        Assertions.assertEquals(150L, licenseMgr.getLicenseUsage());
     }
 
 }

@@ -97,6 +97,24 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testClusterCoreSecondsMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("cluster_core_seconds");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        long expected = GlobalStateMgr.getCurrentState().getLicenseMgr().getLicenseUsage();
+        Assertions.assertEquals(expected, metric.getValue());
+
+        MetricVisitor prometheusVisitor = new PrometheusMetricVisitor("starrocks_fe");
+        prometheusVisitor.visit(metric);
+        Assertions.assertTrue(prometheusVisitor.build().contains("starrocks_fe_cluster_core_seconds"));
+
+        MetricVisitor coreVisitor = new SimpleCoreMetricVisitor("starrocks_fe");
+        coreVisitor.visit(metric);
+        Assertions.assertTrue(coreVisitor.build().contains("starrocks_fe_cluster_core_seconds"));
+    }
+
+    @Test
     public void testSPMMetricsExposure() {
         MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
         MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);

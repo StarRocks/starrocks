@@ -21,6 +21,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.MachineInfo;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.persist.EditLogEPack;
+import com.starrocks.epack.persist.LicenseUsageLog;
 import com.starrocks.epack.persist.RegisterLicenseLog;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.persist.ScaleOutLicenseFreeStartTimeLog;
@@ -67,7 +68,21 @@ public class LicenseMgr {
     private static final long LICENSE_TIP_INTERVAL_MS = 1000L * 3600 * 24 * 30; // 30 days
     private static final long SCALE_OUT_LICENSE_FREE_INTERVAL_MS = 1000L * 3600 * 24 * 7; // 7 days
 
+    // The leader samples license usage on this cadence, but each cycle charges based on the
+    // ACTUAL elapsed time since the previous accounting (see accumulateLicenseUsage), so
+    // scheduler jitter or high load does not distort the accumulated total.
+    private static final long LICENSE_USAGE_INTERVAL_SEC = 60L;
+    private static final long LICENSE_USAGE_INTERVAL_MS = LICENSE_USAGE_INTERVAL_SEC * 1000L;
+
     private FrontendDaemon licenseChecker;
+    private FrontendDaemon licenseUsageUpdater;
+    // Cumulative license usage in core-seconds. Only the leader mutates it (via edit log),
+    // followers and restarts recover it from the image/journal. Monotonically increasing.
+    private volatile long licenseUsage = 0L;
+    // Wall-clock (ms) of the last usage accounting on this leader. Reset to 0 on each leader
+    // transition, so the first cycle only records a baseline and a fresh leader is not charged
+    // for time that elapsed while it was a follower or was down.
+    private volatile long lastUsageAccountTimeMs = 0L;
     protected final List<String> licenseList = new ArrayList<>();
     protected SystemInfo systemInfo;
     private volatile Long scaleOutLicenseFreeStartTime;
@@ -105,11 +120,25 @@ public class LicenseMgr {
                 verifyAllLicenses();
             }
         };
+        licenseUsageUpdater = new FrontendDaemon("license-usage-updater", LICENSE_USAGE_INTERVAL_MS) {
+            @Override
+            protected void runAfterCatalogReady() {
+                // license usage is owned by the leader only; followers recover it via journal replay.
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
+                    return;
+                }
+                accumulateLicenseUsage();
+            }
+        };
     }
 
     public void start() {
         if (LicenseToggle.isEnabled) {
             licenseChecker.start();
+            // Re-baseline usage accounting on each leader transition so the first cycle does not
+            // charge time that elapsed while this node was a follower or was down.
+            lastUsageAccountTimeMs = 0L;
+            licenseUsageUpdater.start();
         }
     }
 
@@ -448,6 +477,49 @@ public class LicenseMgr {
         return Base64.getEncoder().encodeToString(encrypted);
     }
 
+    public long getLicenseUsage() {
+        return licenseUsage;
+    }
+
+    // Accumulate the elapsed interval's consumption: (total fe + be/cn cpu cores) * elapsed seconds.
+    // Charging on the ACTUAL elapsed time since the previous accounting (rather than a fixed
+    // interval) keeps the total accurate even when the daemon is delayed by scheduler jitter or
+    // high load. Runs only on the leader and persists the new cumulative value through the edit
+    // log so it survives restart, scale-out/in, and leader failover. The first cycle after a
+    // leader transition only records a baseline.
+    protected void accumulateLicenseUsage() {
+        long now = clock.millis();
+        if (lastUsageAccountTimeMs == 0L) {
+            lastUsageAccountTimeMs = now;
+            return;
+        }
+        long elapsedSec = (now - lastUsageAccountTimeMs) / 1000L;
+        if (elapsedSec <= 0) {
+            return;
+        }
+        // Advance by the whole seconds accounted, preserving the sub-second remainder so the
+        // accounting does not drift over many cycles.
+        lastUsageAccountTimeMs += elapsedSec * 1000L;
+
+        long totalCpuCores = nodeMgr == null ? 0L : nodeMgr.getTotalCpuCores();
+        if (totalCpuCores <= 0) {
+            return;
+        }
+        long delta = totalCpuCores * elapsedSec;
+        long newLicenseUsage = licenseUsage + delta;
+
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logUpdateLicenseUsage(new LicenseUsageLog(newLicenseUsage),
+                wal -> applyUpdateLicenseUsage((LicenseUsageLog) wal));
+    }
+
+    public void applyUpdateLicenseUsage(LicenseUsageLog log) {
+        // Guard against any out-of-order or stale replay; usage only grows.
+        if (log.getLicenseUsage() > licenseUsage) {
+            licenseUsage = log.getLicenseUsage();
+        }
+    }
+
     protected void verifyLicenseInfo(LicenseInfo licenseInfo) throws InvalidLicenseException {
         if (!systemInfo.getSystemID().equals(licenseInfo.getSystemID())) {
             throw new InvalidLicenseException("systemID not equal, current: %s, license: %s",
@@ -548,19 +620,22 @@ public class LicenseMgr {
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockIDEPack.LICENSE_MGR, 1);
 
         String systemInfoStr = GsonUtils.GSON.toJson(systemInfo);
+        String usageStr = String.valueOf(licenseUsage);
         byte[] encryptedSystemInfo = null;
+        byte[] encryptedUsage = null;
         try {
             encryptedSystemInfo = SecurityUtils.aes128Encrypt(str2Bytes(systemInfoStr), str2Bytes(getAesKey()));
+            encryptedUsage = SecurityUtils.aes128Encrypt(str2Bytes(usageStr), str2Bytes(getAesKey()));
         } catch (Exception e) {
-            LOG.warn("Failed to encrypt system info, use plain text to store", e);
+            LOG.warn("Failed to encrypt license metadata, use plain text to store", e);
         }
 
-        if (encryptedSystemInfo == null) {
+        if (encryptedSystemInfo == null || encryptedUsage == null) {
             writer.writeJson(new LicenseMgrPersist(licenseList, false, base64Encode(systemInfoStr),
-                    scaleOutLicenseFreeStartTime));
+                    scaleOutLicenseFreeStartTime, base64Encode(usageStr)));
         } else {
             writer.writeJson(new LicenseMgrPersist(licenseList, true, base64Encode(encryptedSystemInfo),
-                    scaleOutLicenseFreeStartTime));
+                    scaleOutLicenseFreeStartTime, base64Encode(encryptedUsage)));
         }
         writer.close();
     }
@@ -574,13 +649,29 @@ public class LicenseMgr {
                 byte[] systemInfoBytes = SecurityUtils.aes128Decrypt(base64Decode(licenseMgrPersist.systemInfoStr),
                         str2Bytes(getAesKey()));
                 systemInfo = GsonUtils.GSON.fromJson(bytes2Str(systemInfoBytes), SystemInfo.class);
+                licenseUsage = licenseMgrPersist.usageStr == null ? 0L : parseLicenseUsage(bytes2Str(
+                        SecurityUtils.aes128Decrypt(base64Decode(licenseMgrPersist.usageStr), str2Bytes(getAesKey()))));
             } catch (Exception e) {
-                LOG.warn("Failed to decrypt system info", e);
-                throw new IOException("Failed to decrypt system info", e);
+                LOG.warn("Failed to decrypt license metadata", e);
+                throw new IOException("Failed to decrypt license metadata", e);
             }
         } else {
             String systemInfoStr = bytes2Str(base64Decode(licenseMgrPersist.systemInfoStr));
             systemInfo = GsonUtils.GSON.fromJson(systemInfoStr, SystemInfo.class);
+            licenseUsage = licenseMgrPersist.usageStr == null ? 0L
+                    : parseLicenseUsage(bytes2Str(base64Decode(licenseMgrPersist.usageStr)));
+        }
+    }
+
+    private static long parseLicenseUsage(String usageStr) {
+        if (usageStr == null || usageStr.isEmpty()) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(usageStr.trim());
+        } catch (NumberFormatException e) {
+            LOG.warn("Failed to parse license usage '{}', reset to 0", usageStr, e);
+            return 0L;
         }
     }
 
