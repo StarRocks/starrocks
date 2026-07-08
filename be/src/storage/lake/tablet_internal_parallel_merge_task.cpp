@@ -131,6 +131,10 @@ void TabletInternalParallelMergeTask::cancel() {
     update_status(Status::Cancelled("TabletInternalParallelMergeTask cancelled"));
 }
 
+int64_t TabletInternalParallelMergeTask::slot_idx() const {
+    return _task->slot_idx;
+}
+
 void TabletInternalParallelMergeTask::update_status(const Status& st) {
     // Update task's status (Status::update is idempotent - first error wins)
     _status.update(st);
