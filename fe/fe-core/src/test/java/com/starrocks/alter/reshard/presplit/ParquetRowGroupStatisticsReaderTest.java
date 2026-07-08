@@ -108,18 +108,63 @@ class ParquetRowGroupStatisticsReaderTest {
     }
 
     @Test
-    void charSortKeyFallsBackToDataTier() throws Exception {
-        // A CHAR(N) sort key is padded/truncated to its fixed width by the BE before routing,
-        // so the raw UTF8 footer min/max cannot be trusted for a meta-tier split -- reject eagerly.
+    void readsCharStatistics() throws Exception {
+        // A CHAR(N) sort key is meta-tier-eligible: the BE right-pads a CHAR routing key with '\0'
+        // to its fixed width before routing, but '\0'-padding is order-preserving under the BE
+        // unsigned memcmp + shorter-prefix tiebreak and the boundary is stored stripped, so a
+        // NUL-free CHAR boundary separates rows exactly as VARCHAR does. Same footer min/max as
+        // readsVarcharStatistics, just with a CHAR(16) target column.
+        Path parquetPath = writeParquet(
+                "message schema { required binary tenant (UTF8); }",
+                /*rowCount=*/ 16,
+                (group, rowIndex) -> group.append("tenant", String.format("tenant-%02d", rowIndex)));
+
+        List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("tenant", TypeFactory.createCharType(16)));
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics rowGroup : rowGroupStatistics) {
+            Assertions.assertFalse(rowGroup.isTruncated());
+            String minValue = rowGroup.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = rowGroup.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("tenant-00", globalMin);
+        Assertions.assertEquals("tenant-15", globalMax);
+    }
+
+    @Test
+    void charSortKeyWithNulCanonicalizedToPrefix() throws Exception {
+        // A CHAR value is defined only up to its first '\0' (the BE strnlen-truncates it), so a CHAR
+        // StringVariant canonicalizes a boundary to the prefix; VARCHAR keeps the raw bytes.
         Path parquetPath = writeParquet(
                 "message schema { required binary tenant (UTF8); }",
                 /*rowCount=*/ 4,
-                (group, rowIndex) -> group.append("tenant", String.format("tenant-%02d", rowIndex)));
+                (group, rowIndex) -> group.append("tenant", "a\u0000z-" + rowIndex));
 
-        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
-                ParquetRowGroupStatisticsReader.read(
-                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("tenant", TypeFactory.createCharType(16))));
+        // CHAR target: min/max canonicalized to the prefix before the first NUL ("a"), no NUL kept.
+        List<RowGroupStatistics> charStats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("tenant", TypeFactory.createCharType(16)));
+        Assertions.assertFalse(charStats.isEmpty());
+        for (RowGroupStatistics rowGroup : charStats) {
+            Assertions.assertEquals("a", rowGroup.getMinTuple().getValues().get(0).getStringValue());
+            Assertions.assertEquals("a", rowGroup.getMaxTuple().getValues().get(0).getStringValue());
+        }
+
+        // VARCHAR target: same NUL data keeps the raw bytes (BE does not strnlen a VARCHAR boundary).
+        List<RowGroupStatistics> varcharStats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("tenant", VarcharType.VARCHAR));
+        Assertions.assertFalse(varcharStats.isEmpty());
+        for (RowGroupStatistics rowGroup : varcharStats) {
+            Assertions.assertTrue(rowGroup.getMinTuple().getValues().get(0).getStringValue().indexOf('\0') >= 0);
+        }
     }
 
     @Test
