@@ -43,9 +43,7 @@ public:
                        std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
                        bool support_null_partition);
 
-    void set_io_poller(formats::AsyncFlushStreamPoller* poller) { _io_poller = poller; }
-
-    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
+    SinkOperatorMemoryManager* op_mem_mgr() const { return _op_mem_mgr; }
 
     // Expose the writer list so composite sinks can register it with the
     // outer SinkOperatorMemoryManager for aggregated memory accounting.
@@ -53,7 +51,8 @@ public:
 
     virtual ~ConnectorChunkSink() = default;
 
-    virtual Status init();
+    virtual Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                        SinkMemoryManager* sink_mem_mgr);
 
     virtual Status add(const ChunkPtr& chunk);
 
@@ -71,8 +70,6 @@ public:
     Status status();
 
     void set_status(const Status& status);
-
-    void set_profile(RuntimeProfile* profile);
 
 protected:
     void push_rollback_action(const std::function<void()>& action);
@@ -103,17 +100,11 @@ struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
 };
 
-struct ConnectorChunkSinkCreateContext {
-    formats::AsyncFlushStreamPoller* io_poller = nullptr;
-    SinkMemoryManager* sink_mem_mgr = nullptr;
-};
-
 class ConnectorChunkSinkProvider {
 public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
-            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) = 0;
 };
 
 using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;

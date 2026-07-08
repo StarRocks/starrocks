@@ -17,6 +17,7 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/logging.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -51,8 +52,7 @@ void FileChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
@@ -113,7 +113,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
 
     auto sink = std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
                                                            std::move(partition_chunk_writer_factory), runtime_state);
-    sink->set_io_poller(create_context.io_poller);
     return sink;
 }
 
