@@ -293,9 +293,13 @@ public class RangeColocateScanDispatchTest {
 
         RangeColocateScanDispatch dispatch =
                 Objects.requireNonNull(RangeColocateScanDispatch.forTable(table));
+        PhysicalPartition physicalPartition =
+                table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        // The built assignment matches the aligned mapping -> no throw.
+        Map<Long, Integer> builtBucketSeq =
+                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
         Assertions.assertDoesNotThrow(() -> dispatch.requireAligned(
-                List.of(table.getPartitions().iterator().next().getDefaultPhysicalPartition()),
-                table.getBaseIndexMetaId()));
+                List.of(physicalPartition), table.getBaseIndexMetaId(), builtBucketSeq));
     }
 
     @Test
@@ -320,7 +324,7 @@ public class RangeColocateScanDispatchTest {
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
                 () -> dispatch.requireAligned(
                         List.of(table.getPartitions().iterator().next().getDefaultPhysicalPartition()),
-                        table.getBaseIndexMetaId()));
+                        table.getBaseIndexMetaId(), Map.of()));
         Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
                 "actual: " + exception.getMessage());
     }

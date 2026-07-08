@@ -14,6 +14,10 @@
 
 package com.starrocks.alter.reshard;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -93,6 +97,93 @@ public class ColocateChecker {
     // Throttles per-tick queryShardGroupStable load; all its semantics live in the cache class.
     private final ColocateConvergenceCache convergenceCache = new ColocateConvergenceCache();
 
+    // Per-table edge-triggered latch that suppresses re-issuing deterministic alignment work on an
+    // unchanged table layout — the fix for the self-sustaining alignment-job storm. All of its state and
+    // decision logic live in {@link TableAlignmentLatch}; this checker just consults it each cycle.
+    private final TableAlignmentLatch alignmentLatch = new TableAlignmentLatch();
+
+    /** Visible for testing: whether a table currently has a recorded alignment attempt (is latched). */
+    boolean hasRecordedAttempt(long tableId) {
+        return alignmentLatch.hasRecordedAttempt(tableId);
+    }
+
+    // murmur3-128 via Guava's Hashing (the idiom already used across FE, e.g. HDFSBackendSelector /
+    // the hash rings) — no hand-rolled mixing. Order-independent combination uses
+    // Hashing.combineUnordered so the signature does not depend on partition / index / tablet order.
+    private static final HashFunction SIGNATURE_HASH = Hashing.murmur3_128();
+
+    /**
+     * Order-independent signature of the group's expected ranges — the part of a table's convergence
+     * signature that is shared across all peer tables, so a change to the colocate ranges (e.g. a peer
+     * split adds a boundary) re-arms every table. Each range is hashed and the results are combined with
+     * {@link Hashing#combineUnordered} so list order does not matter.
+     */
+    static long expectedRangesSignature(List<ColocateRange> expectedRanges) {
+        List<HashCode> parts = new ArrayList<>(expectedRanges.size());
+        for (ColocateRange colocateRange : expectedRanges) {
+            parts.add(SIGNATURE_HASH.hashInt(colocateRange.getRange().hashCode()));
+        }
+        // A registered group always has at least the [MIN, MAX) range, so parts is never empty
+        // (combineUnordered requires a non-empty iterable).
+        return Hashing.combineUnordered(parts).asLong();
+    }
+
+    /**
+     * Canonical, order-independent 64-bit signature of everything one table's alignment decision and
+     * split feasibility depend on: {@code expectedRangesSig} plus the table's visible-index tablet
+     * ranges and each physical partition's {@code dataVersion}. It intentionally excludes tablet ids
+     * (they churn on every fallback split, which would defeat the latch). A murmur3 hash (rather than a
+     * concatenated string) is used so it cannot alias on a delimiter inside a VARCHAR range value, stays
+     * compact regardless of tablet count, and is trivial to extend by hashing in one more field. Per-tablet
+     * and per-index contributions are combined with {@link Hashing#combineUnordered}, so the result is
+     * order-independent and deterministic; a hash collision would only mask a real change, which is
+     * self-healing (the table stays unaligned → correct shuffle, and re-arms on the next change).
+     * Read-locks the table.
+     *
+     * <p>{@code dataVersion} — not {@code visibleVersion} — is included because BE's external-boundaries
+     * split can fall back to an identical tablet for data-distribution reasons: it rejects a split whose
+     * effective segment envelope — the tablet's global min/max data keys, intersected with its range — is
+     * empty or collapses to a single key (see {@code tablet_splitter.cpp} step 6; the other hard-fallback
+     * paths are corruption guards). That envelope is a function of which keys exist, so a tablet that
+     * cannot be split today becomes splittable only after a load widens its key span across the boundary —
+     * with no tablet-range change — and the latch must re-arm on that. A load advances {@code dataVersion};
+     * a reshard publish (including the identical-tablet fallback) advances only {@code visibleVersion}, so
+     * keying on {@code dataVersion} re-arms on genuine data changes but not on fallback churn — keying on
+     * {@code visibleVersion} would re-fire the identical split every tick, the alignment storm this latch
+     * exists to stop. Compaction rewrites rowsets but preserves the key set, so it cannot change the
+     * envelope or the split outcome (it advances only {@code visibleVersion}) and is deliberately not a
+     * re-arm trigger. Tablet ranges are still carried to detect reshard progress (a successful split
+     * changes ranges but not {@code dataVersion}).
+     */
+    static long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
+        List<HashCode> indexParts = new ArrayList<>();
+        indexParts.add(SIGNATURE_HASH.hashLong(expectedRangesSig));
+        try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
+            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                for (MaterializedIndex index :
+                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    List<HashCode> tabletParts = new ArrayList<>();
+                    for (Tablet tablet : index.getTablets()) {
+                        tabletParts.add(SIGNATURE_HASH.hashInt(
+                                tablet.getRange() == null ? 0 : tablet.getRange().getRange().hashCode()));
+                    }
+                    Hasher indexHasher = SIGNATURE_HASH.newHasher()
+                            .putLong(physicalPartition.getId())
+                            .putLong(index.getMetaId())
+                            .putLong(physicalPartition.getDataVersion());
+                    // Combine tablet ranges order-independently within the index (empty for a
+                    // range-less index — its topology still contributes via the fields above).
+                    if (!tabletParts.isEmpty()) {
+                        indexHasher.putBytes(Hashing.combineUnordered(tabletParts).asBytes());
+                    }
+                    indexParts.add(indexHasher.hash());
+                }
+            }
+        }
+        // Combine per-index contributions order-independently across partitions / indexes.
+        return Hashing.combineUnordered(indexParts).asLong();
+    }
+
     /**
      * Invoked from {@link TabletReshardJobMgr#runAfterCatalogReady} on every scheduler tick.
      * Fast-returns when there's no work to do; otherwise iterates unstable range-colocate
@@ -106,8 +197,10 @@ public class ColocateChecker {
         // Steady-state fast-path: no unstable groups → cheap read-lock empty-check, no allocation.
         if (!colocateTableIndex.hasUnstableGroups()) {
             // Nothing left to converge: drop any lingering negative-cache entries so the cache is
-            // bounded to the duration of active migrations (and reclaimed after a leader gap).
+            // bounded to the duration of active migrations (and reclaimed after a leader gap), and
+            // drop the per-table alignment-attempt memory for the same reason.
             convergenceCache.clear();
+            alignmentLatch.clear();
             return;
         }
         Set<Long> processedColocateGroupIds = new HashSet<>();
@@ -131,7 +224,8 @@ public class ColocateChecker {
     /**
      * Drive one {@code colocateGroupId} toward stability: iterate every peer GroupId × table ×
      * partition × visible index; fire an alignment {@link SplitTabletJob} for every table
-     * with at least one misaligned tablet; if and only if every peer is fully aligned, mark
+     * with at least one misaligned tablet (unless that table is latched — see
+     * {@link #alignTableIfApplicable}); if and only if every peer is fully aligned, mark
      * every peer GroupId stable in lock-step.
      */
     private void processGroup(ColocateTableIndex colocateTableIndex, long colocateGroupId) {
@@ -149,6 +243,7 @@ public class ColocateChecker {
             return;
         }
         int colocateColumnCount = schema.getColocateColumnCount();
+        long expectedRangesSig = expectedRangesSignature(expectedRanges);
 
         boolean allAligned = true;
         for (ColocateTableIndex.GroupId peerGroupId : peers) {
@@ -157,7 +252,8 @@ public class ColocateChecker {
                 continue;
             }
             for (long tableId : colocateTableIndex.getAllTableIds(peerGroupId)) {
-                if (!alignTableIfApplicable(db, tableId, expectedRanges, colocateColumnCount, colocateGroupId)) {
+                if (!alignTableIfApplicable(db, tableId, expectedRanges, expectedRangesSig,
+                        colocateColumnCount, colocateGroupId)) {
                     allAligned = false;
                 }
             }
@@ -175,6 +271,8 @@ public class ColocateChecker {
             if (reconcilePackPlacement(colocateTableIndex, peers, expectedRanges, colocateColumnCount)
                     && isPlacementConverged(colocateTableIndex, peers, expectedRanges, colocateGroupId)) {
                 colocateTableIndex.markAllGroupsWithSameColocateGroupIdStable(colocateGroupId, true);
+                // allAligned means every peer table returned aligned this pass, which already cleared
+                // its own latch entry (alignmentLatch.forgetTable), so no group-level cleanup is needed.
                 LOG.info("marked colocate group id {} stable across {} peer GroupIds",
                         colocateGroupId, peers.size());
             }
@@ -430,18 +528,24 @@ public class ColocateChecker {
     /**
      * Per-table dispatch for {@link #processGroup}: looks up the table, filters out non-OlapTable
      * entries (still considered "aligned" — alignment isn't applicable), defers tables not in
-     * {@code NORMAL} state, and otherwise hands off to {@link #processTable}.
+     * {@code NORMAL} state, and otherwise applies the per-table convergence latch. Split/merge is
+     * deterministic, so once a completed alignment attempt made no progress on this exact table layout,
+     * re-issuing it would just churn tablets (the self-sustaining storm); the latch suppresses that
+     * re-issue until the table's layout/data changes (or a bounded number of retries after a transient
+     * abort). A transient failure (lookup / job-admission throw) records nothing, so the table is simply
+     * retried next cycle — it can never suppress a peer, because the latch is per table.
      *
-     * @return {@code true} iff the table contributed no obstacle to marking the colocate group
-     *         stable this cycle (already aligned, or not an OlapTable). {@code false} when work
-     *         is still needed (misaligned tablets, in-flight alter, lookup failure).
+     * @return {@code true} iff the table is already aligned (or not an OlapTable) — no obstacle to
+     *         marking the colocate group stable. {@code false} when work is still needed (misaligned,
+     *         in-flight alter, latched, or a transient failure).
      */
     private boolean alignTableIfApplicable(Database db, long tableId, List<ColocateRange> expectedRanges,
-                                            int colocateColumnCount, long colocateGroupId) {
+                                            long expectedRangesSig, int colocateColumnCount, long colocateGroupId) {
         Table fetchedTable;
         try {
             fetchedTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         } catch (Exception e) {
+            // Transient lookup failure: no latch entry recorded, so this table is retried next cycle.
             LOG.debug("table {} lookup failed in db {}, skipping", tableId, db.getId(), e);
             return false;
         }
@@ -450,13 +554,29 @@ public class ColocateChecker {
         }
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             // In-flight alter / reshard job — skip this cycle, revisit next. Avoids the
-            // SplitTabletJob.setTableState(NORMAL -> TABLET_RESHARD) race when two jobs
-            // target the same table.
+            // SplitTabletJob.setTableState(NORMAL -> TABLET_RESHARD) race when two jobs target the
+            // same table. Leaves the table's latch entry untouched.
             return false;
         }
         try {
-            return processTable(db, olapTable, expectedRanges, colocateColumnCount);
+            long signature = tableConvergenceSignature(db, olapTable, expectedRangesSig);
+            TableAlignmentLatch.AlignmentDecision decision = alignmentLatch.evaluate(tableId, signature);
+            if (!decision.fire()) {
+                // A completed attempt on an unchanged layout made no progress: don't re-issue until the
+                // table's layout/data changes. The table stays misaligned, so the group stays unstable
+                // and colocate joins fall back to a correct shuffle plan. Log once per stuck state.
+                if (alignmentLatch.claimSuppressionLog(tableId)) {
+                    LOG.warn("colocate table {}.{} (group {}) alignment made no progress on an unchanged "
+                            + "layout; suppressing further alignment jobs until its layout or data changes. "
+                            + "The group stays unstable and colocate joins fall back to shuffle.",
+                            db.getFullName(), olapTable.getName(), colocateGroupId);
+                }
+                return false;
+            }
+            return fireAlignmentIfMisaligned(db, olapTable, expectedRanges, colocateColumnCount,
+                    signature, decision.nextAbortRetries());
         } catch (Exception e) {
+            // Transient failure (e.g. job-admission throw): no latch entry recorded, retried next cycle.
             LOG.warn("alignment failed for table {}.{} in colocate group id {}",
                     db.getFullName(), olapTable.getName(), colocateGroupId, e);
             return false;
@@ -464,15 +584,18 @@ public class ColocateChecker {
     }
 
     /**
-     * Inspects every visible materialized index in every physical partition of {@code table};
-     * if any tablet is not range-aligned with {@code expectedRanges}, builds the per-tablet
-     * forced-boundaries map and fires a single alignment {@link SplitTabletJob} for the table.
+     * Inspects every visible materialized index in every physical partition of {@code table}; if every
+     * tablet is already range-aligned, clears the table's latch entry and reports aligned. Otherwise
+     * builds the per-tablet forced-boundaries map, fires a single alignment {@link SplitTabletJob}, and
+     * records the {@code signature}/jobId so an unchanged next cycle latches.
      *
-     * @return {@code true} iff every tablet in every visible index was already aligned (no job
-     *         fired); {@code false} otherwise — the caller leaves the colocate group unstable.
+     * @return {@code true} iff every tablet in every visible index was already aligned (no job fired);
+     *         {@code false} otherwise (a job was fired, or an index is misaligned with no splittable
+     *         boundary this cycle).
      */
-    private boolean processTable(Database db, OlapTable table, List<ColocateRange> expectedRanges,
-                                  int colocateColumnCount) throws StarRocksException {
+    private boolean fireAlignmentIfMisaligned(Database db, OlapTable table, List<ColocateRange> expectedRanges,
+                                              int colocateColumnCount, long signature, int nextAbortRetries)
+            throws StarRocksException {
         // physicalPartitionId -> indexId -> oldTabletId -> per-new-tablet ranges that tile the
         // old tablet's range. Empty map means every tablet in every visible index is already
         // aligned against expectedRanges.
@@ -486,7 +609,7 @@ public class ColocateChecker {
                     // Each visible index (base + every rollup/MV) can have its own sort-key arity.
                     // Using the base index's sort key for an MV with a shorter prefix would compute
                     // boundaries the MV's tablets can never align with — alignment iteration would
-                    // livelock. Resolve per-index here (E1). Use getMetaId() (not getId()) — the
+                    // livelock. Resolve per-index here. Use getMetaId() (not getId()) — the
                     // physical id changes after reshard while metaId is stable.
                     List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
                     if (RangeColocateScanDispatch.isTabletRangesAligned(
@@ -513,6 +636,8 @@ public class ColocateChecker {
         }
 
         if (alignmentMap.isEmpty()) {
+            // Aligned (or nothing splittable): drop any latch entry so a future misalignment re-arms.
+            alignmentLatch.forgetTable(table.getId());
             return alignedSoFar;
         }
 
@@ -521,6 +646,7 @@ public class ColocateChecker {
         // leader demotion at this point cannot leak external shards.
         TabletReshardJob job = SplitTabletJobFactory.forColocateAlignment(db, table, alignmentMap);
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(job);
+        alignmentLatch.recordFired(table.getId(), signature, job.getJobId(), nextAbortRetries);
         LOG.info("submitted SplitTabletJob {} for table {}.{} covering {} partitions",
                 job.getJobId(), db.getFullName(), table.getName(), alignmentMap.size());
         return false;
