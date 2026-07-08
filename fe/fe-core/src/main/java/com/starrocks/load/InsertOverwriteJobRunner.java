@@ -251,6 +251,10 @@ public class InsertOverwriteJobRunner {
         try {
             OlapTable targetTable;
             targetTable = checkAndGetTable(db, tableId);
+            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new DmlException("table state is %s, please wait to insert overwrite until table state is normal",
+                        targetTable.getState());
+            }
             List<String> sourcePartitionNames = Lists.newArrayList();
             for (Long partitionId : job.getSourcePartitionIds()) {
                 Partition partition = targetTable.getPartition(partitionId);
@@ -610,6 +614,10 @@ public class InsertOverwriteJobRunner {
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
+            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new DmlException("table state is %s, please wait to insert overwrite until table state is normal",
+                        targetTable.getState());
+            }
             tmpTargetTable = targetTable;
             List<String> sourcePartitionNames = job.getSourcePartitionNames();
             if (sourcePartitionNames == null || sourcePartitionNames.isEmpty()) {

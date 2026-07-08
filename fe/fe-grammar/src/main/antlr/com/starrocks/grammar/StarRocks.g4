@@ -830,7 +830,8 @@ alterMaterializedViewStatement
         modifyPropertiesClause |
         swapTableClause |
         addMVColumnClause |
-        dropMVColumnClause )
+        dropMVColumnClause |
+        reorderColumnsClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     | ALTER MATERIALIZED VIEW qualifiedName applyMaskingPolicyClause
     | ALTER MATERIALIZED VIEW qualifiedName applyRowAccessPolicyClause
