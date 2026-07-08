@@ -787,6 +787,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：統計キャッシュを更新するために使用されるスレッドプールのサイズ。
 - 導入時期：-
 
+### `enable_statistic_cache_metrics`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：`CachedStatisticStorage` が保持する統計キャッシュ（列、テーブル、パーティション、ヒストグラム、コネクタ、およびマルチカラム統計）で統計記録を有効にするかどうか。
+- 導入時期：-
+
 ### `statistic_collect_interval_sec`
 
 - デフォルト：5 * 60

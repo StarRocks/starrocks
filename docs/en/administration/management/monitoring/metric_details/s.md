@@ -464,6 +464,48 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Description: The number of times blacklisted SQL has been intercepted.
 
+## `starrocks_fe_statistics_cache_estimated_size`
+
+- Unit: Count
+- Type: Gauge
+- Labels: `cache` — the statistics cache: `table_stats`, `column_stats`, `partition_stats`, `connector_table_stats`, `histogram_stats`, `connector_histogram_stats`, or `multi_column_stats`.
+- Description: Approximate number of entries currently held in the given statistics cache (backed by Caffeine). The maximum per cache is controlled by the FE config `statistic_cache_columns`.
+
+## `starrocks_fe_statistics_cache_eviction_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
+- Description: Cumulative number of entries evicted from the given statistics cache (due to size or expiration). A consistently rising value relative to the cache size suggests raising `statistic_cache_columns`.
+
+## `starrocks_fe_statistics_cache_hit_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were served from the cache. Together with `starrocks_fe_statistics_cache_miss_count` this yields the cache hit ratio.
+
+## `starrocks_fe_statistics_cache_load_failure_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
+- Description: Cumulative number of statistics cache loads that failed (the loader threw an exception or returned no value). A non-zero, growing value points to problems reading from the statistics tables.
+
+## `starrocks_fe_statistics_cache_load_success_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
+- Description: Cumulative number of statistics cache loads that completed successfully.
+
+## `starrocks_fe_statistics_cache_miss_count`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
+- Description: Cumulative number of statistics cache lookups that were not found in the cache and triggered a load.
+
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
 - Unit: Count

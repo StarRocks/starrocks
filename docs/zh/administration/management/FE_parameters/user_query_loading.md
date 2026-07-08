@@ -805,6 +805,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于刷新统计信息缓存的线程池大小。
 - 引入版本: -
 
+### `enable_statistic_cache_metrics`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否为 `CachedStatisticStorage` 持有的统计信息缓存（列、表、分区、直方图、外部表以及多列统计信息缓存）启用统计记录。
+- 引入版本: -
+
 ### `statistic_collect_interval_sec`
 
 - 默认值: 5 * 60

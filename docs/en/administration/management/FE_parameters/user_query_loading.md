@@ -806,6 +806,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The size of the thread-pool which will be used to refresh statistic caches.
 - Introduced in: -
 
+### `enable_statistic_cache_metrics`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable statistics recording on the statistics caches held by `CachedStatisticStorage` (column, table, partition, histogram, connector, and multi-column statistics). 
+- Introduced in: -
+
 ### `statistic_collect_interval_sec`
 
 - Default: 5 * 60

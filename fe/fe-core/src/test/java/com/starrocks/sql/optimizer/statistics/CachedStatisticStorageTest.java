@@ -663,4 +663,29 @@ public class CachedStatisticStorageTest {
             Config.sync_statistics_load_timeout_ms = originalTimeout;
         }
     }
+
+    @Test
+    public void testGetCachesExposesAllNamedCacheMapWithStatsRecording() {
+        final var originalEnabled = Config.enable_statistic_cache_metrics;
+
+        try {
+            Config.enable_statistic_cache_metrics = true;
+            CachedStatisticStorage storage = new CachedStatisticStorage();
+            Map<String, LoadingCache<?, ?>> caches = storage.getNamedCacheMap();
+
+            Assertions.assertEquals(
+                    ImmutableList.of("table_stats", "column_stats", "partition_stats", "connector_table_stats",
+                            "histogram_stats", "connector_histogram_stats", "multi_column_stats").stream().sorted().toList(),
+                    caches.keySet().stream().sorted().toList());
+
+            // recordStats() must be enabled so the metric layer can read hit/miss/eviction/load counts.
+            for (Map.Entry<String, LoadingCache<?, ?>> entry : caches.entrySet()) {
+                Assertions.assertTrue(entry.getValue().policy().isRecordingStats(),
+                        "stats recording should be enabled for cache " + entry.getKey());
+            }
+        } finally {
+            Config.enable_statistic_cache_metrics = originalEnabled;
+        }
+
+    }
 }
