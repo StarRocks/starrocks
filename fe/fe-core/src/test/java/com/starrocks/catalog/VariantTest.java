@@ -41,6 +41,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -340,6 +341,25 @@ public class VariantTest {
         Assertions.assertEquals(TypeSerializer.toThrift(VarcharType.VARCHAR), tStr.getType());
         Assertions.assertTrue(tStr.isSetValue());
         Assertions.assertEquals("hello", tStr.getValue());
+    }
+
+    @Test
+    public void testCharVariantTruncatesAtFirstNul() {
+        // A CHAR value is canonicalized to its prefix before the first '\0', matching the BE's
+        // strnlen view of a CHAR value everywhere (storage read + routing-boundary parse). VARCHAR
+        // keeps the raw bytes. The NUL byte is built numerically to keep the source ASCII-clean.
+        String nulValue = new String(new byte[] {'a', 0, 'z'}, StandardCharsets.UTF_8);
+
+        Variant charVariant = Variant.of(TypeFactory.createCharType(16), nulValue);
+        Assertions.assertEquals("a", charVariant.getStringValue());
+        // The truncation flows into serialization too (the BE receives "a", not "a\0z").
+        Assertions.assertEquals("a", charVariant.toThrift().getValue());
+
+        // VARCHAR keeps the raw NUL-bearing value (the BE does not strnlen a VARCHAR value).
+        Assertions.assertEquals(nulValue, Variant.of(VarcharType.VARCHAR, nulValue).getStringValue());
+
+        // A NUL-free CHAR value is unchanged.
+        Assertions.assertEquals("abc", Variant.of(TypeFactory.createCharType(16), "abc").getStringValue());
     }
 
     @Test

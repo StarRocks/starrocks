@@ -66,11 +66,15 @@ import java.util.Objects;
  *       a pre-1970 sub-second — and packs the calendar date through the same proleptic conversion as
  *       the boundary parse). TIMESTAMP_INSTANT is deferred (the load applies a session-tz offset this
  *       reader cannot reproduce).</li>
- *   <li>ORC STRING/VARCHAR -> StarRocks VARCHAR, using the stripe min/max when ORC
+ *   <li>ORC STRING/VARCHAR -> StarRocks VARCHAR or CHAR, using the stripe min/max when ORC
  *       kept them exact (getMinimum()/getMaximum() non-null); a truncated bound (value
  *       > 1024 bytes -> getMinimum()/getMaximum() null) marks the stripe truncated -> data
- *       tier. StarRocks CHAR (the BE pads/truncates it to a fixed width before routing) and the
- *       ORC CHAR source category (space-padded) are both deferred -> data tier.</li>
+ *       tier. CHAR is safe even though the BE right-pads a CHAR routing key with '\0' to its
+ *       fixed width before routing: '\0'-padding to fixed width is order-preserving under the BE
+ *       unsigned memcmp + shorter-prefix tiebreak, and the boundary is stored stripped, so a
+ *       NUL-free CHAR boundary separates rows exactly as VARCHAR does; a CHAR min/max containing
+ *       a '\0' is rejected -> data tier (the BE truncates a CHAR boundary at the first NUL). The
+ *       ORC CHAR source category (space-padded in its own stats) stays deferred -> data tier.</li>
  * </ul>
  * Everything else -- BOOLEAN, FLOAT/DOUBLE, TIMESTAMP_INSTANT (load applies a session-tz offset this
  * reader cannot reproduce), non-matching-precision/scale DECIMAL, ORC CHAR, and any complex type --
@@ -161,8 +165,9 @@ public final class OrcStripeStatisticsReader {
      * back to data tier", not "fail the load". The supported window is the unannotated
      * integer categories, ORC DATE -> StarRocks DATE, ORC DECIMAL -> a same-precision/scale
      * StarRocks DECIMAL, ORC TIMESTAMP -> StarRocks DATETIME, and ORC STRING/VARCHAR ->
-     * StarRocks VARCHAR. Boolean, floating-point, TIMESTAMP_INSTANT, non-matching DECIMAL,
-     * a CHAR target, and complex types are deferred (fall back to data tier).
+     * StarRocks VARCHAR or CHAR. Boolean, floating-point, TIMESTAMP_INSTANT, non-matching DECIMAL,
+     * the ORC CHAR source category (space-padded in its own stats), and complex types are
+     * deferred (fall back to data tier).
      */
     private static void rejectIncompatibleTypeMapping(
             TypeDescription fieldType, Column sortKeyColumn) throws MetaTierUnavailableException {
@@ -178,12 +183,15 @@ public final class OrcStripeStatisticsReader {
             // Plain ORC TIMESTAMP is local (no timezone); the BE load stores its UTC wall clock
             // verbatim (no session-tz offset, unlike TIMESTAMP_INSTANT) → StarRocks DATETIME.
             case TIMESTAMP -> starRocksPrimitive == PrimitiveType.DATETIME;
-            // ORC STRING/VARCHAR categories are unpadded; their stripe min/max are
-            // unsigned-byte-ordered (Text/WritableComparator), matching BE VARCHAR routing.
-            // Target CHAR is excluded (the BE pads/truncates CHAR to its fixed width before
-            // routing, so raw stripe stats would not match the routed key), as is the ORC CHAR
-            // source category (space-padded) -> data tier.
-            case STRING, VARCHAR -> starRocksPrimitive == PrimitiveType.VARCHAR;
+            // ORC STRING/VARCHAR source categories are unpadded; their stripe min/max are
+            // unsigned-byte-ordered (Text/WritableComparator), matching BE routing. A CHAR target
+            // is safe too: the BE right-pads a CHAR routing key with '\0' to its fixed width before
+            // routing, but '\0'-padding to fixed width is order-preserving under the BE unsigned
+            // memcmp + shorter-prefix tiebreak, and a CHAR StringVariant is canonicalized (truncated
+            // at the first '\0') to match the BE's strnlen view of a CHAR value -- so a CHAR boundary
+            // separates rows exactly as a VARCHAR one does. The ORC CHAR *source category* stays
+            // excluded (falls through to default -> false): ORC space-pads CHAR in its own stats.
+            case STRING, VARCHAR -> starRocksPrimitive.isCharFamily();
             default -> false;
         };
         if (!compatible) {
@@ -329,6 +337,7 @@ public final class OrcStripeStatisticsReader {
         if (min == null || max == null) {
             return new RowGroupStatistics(null, null, rowCount, /*truncated=*/ true);
         }
+        // A CHAR value is NUL-canonicalized in the StringVariant constructor; VARCHAR keeps raw bytes.
         Variant minVariant;
         Variant maxVariant;
         try {
