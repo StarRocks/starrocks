@@ -20,42 +20,45 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * The value window the meta tier accepts for DATE/DATETIME sort-key boundaries:
- * {@code [1970-01-01, 9999-12-31]}. A value outside it falls back to data tier
- * (it is not a load failure).
+ * The value window the meta tier accepts for DATE and DATETIME sort-key boundaries:
+ * {@code [0001-01-01, 9999-12-31]}. A value outside it falls back to data tier (it is not a load
+ * failure). The upper bound is the StarRocks DATE/DATETIME domain ceiling.
  *
- * <p>Why these bounds — render must be unambiguous and the FE-computed boundary must
- * equal the value the BE load stores:
+ * <p>Why the window reaches year 1 — the FE-computed boundary must equal the value the BE load
+ * stores, and that holds for every representable value down to the start of the unambiguous AD range:
  * <ul>
- *   <li>Below 1970-01-01 the BE timestamp conversion uses signed C++ division whose
- *       (seconds, nanos) split differs from {@code Math.floorDiv}/{@code floorMod},
- *       and pre-1582 dates raise proleptic-vs-hybrid calendar parity questions.</li>
- *   <li>Year 0 / BCE mis-renders through the {@code yyyy} (year-of-era) formatters.</li>
- *   <li>Above year 9999 leaves the StarRocks DATE/DATETIME domain.</li>
+ *   <li>DATE carries no sub-second part, and BE decodes a day-of-epoch by adding a fixed Julian
+ *       offset and converting with the same proleptic-Gregorian algorithm {@link LocalDate} uses
+ *       (no 1582 cutover), so a DATE boundary is FE/BE-identical.</li>
+ *   <li>DATETIME below 1970-01-01 is safe too: the BE timestamp load reconstructs the same wall
+ *       clock the FE computes with {@code Math.floorDiv}/{@code floorMod} — keeping the sub-second of
+ *       a pre-1970 value rather than dropping or corrupting it — and both the load and the
+ *       boundary-string parse pack the calendar date through the same proleptic conversion, so a
+ *       pre-1970 (and pre-1582) DATETIME boundary matches the loaded value down to year 1.</li>
  * </ul>
  *
- * <p>This lives in one place — rather than being duplicated per reader like the
- * integer-stat conversion — because both responsibilities are format-agnostic: the
- * window check operates on an already-decoded {@link LocalDate}, and the microsecond
- * datetime renderer on an already-decoded {@link LocalDateTime}, identical whether the
- * value came from a Parquet INT32/INT64 stat or an ORC day-of-epoch / timestamp stat.
+ * <p>This lives in one place — rather than being duplicated per reader like the integer-stat
+ * conversion — because both responsibilities are format-agnostic: the window check operates on an
+ * already-decoded {@link LocalDate}, and the microsecond datetime renderer on an already-decoded
+ * {@link LocalDateTime}, identical whether the value came from a Parquet INT32/INT64 stat or an ORC
+ * day-of-epoch / timestamp stat.
  */
 final class MetaTierTemporalWindow {
 
-    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1970, 1, 1);
+    private static final LocalDate MIN_SUPPORTED_DATE = LocalDate.of(1, 1, 1);
     private static final LocalDate MAX_SUPPORTED_DATE = LocalDate.of(9999, 12, 31);
 
     private MetaTierTemporalWindow() {
     }
 
     /**
-     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal)
-     * if {@code date} is outside {@code [1970-01-01, 9999-12-31]}.
+     * Throw {@link MetaTierUnavailableException} (the meta-tier-to-data-tier fallback signal) if the
+     * calendar date of a DATE or DATETIME sort-key boundary is outside {@code [0001-01-01, 9999-12-31]}.
      */
-    static void rejectDateOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
+    static void rejectOutsideWindow(LocalDate date) throws MetaTierUnavailableException {
         if (date.isBefore(MIN_SUPPORTED_DATE) || date.isAfter(MAX_SUPPORTED_DATE)) {
             throw new MetaTierUnavailableException(
-                    "DATE/DATETIME meta tier supports [1970-01-01, 9999-12-31] only; value "
+                    "DATE/DATETIME meta tier supports [0001-01-01, 9999-12-31] only; value "
                             + date + " is outside that window");
         }
     }

@@ -20,9 +20,9 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
+#include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks::connector {
@@ -98,11 +98,11 @@ protected:
 
 struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
+};
 
-    // Called by ConnectorSinkOperatorFactory after SinkMemoryManager is created.
-    // Composite sinks (e.g. IcebergRowDeltaSink) override this to receive the
-    // manager and create per-sub-sink child managers during initialization.
-    virtual void set_sink_mem_mgr(SinkMemoryManager* /*mgr*/) {}
+struct ConnectorChunkSinkCreateContext {
+    AsyncFlushStreamPoller* io_poller = nullptr;
+    SinkMemoryManager* sink_mem_mgr = nullptr;
 };
 
 class ConnectorChunkSinkProvider {
@@ -110,7 +110,7 @@ public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
     virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
-            std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
+            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) = 0;
 };
 
 using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;

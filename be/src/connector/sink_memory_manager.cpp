@@ -15,7 +15,7 @@
 #include "connector/sink_memory_manager.h"
 
 #include "common/config_connector_sink_fwd.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks::connector {
 
@@ -90,7 +90,7 @@ int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
 
 SinkMemoryManager::SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker)
         : _query_pool_tracker(query_pool_tracker), _query_tracker(query_tracker) {
-    _process_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+    _process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
     _high_watermark_ratio = config::connector_sink_mem_high_watermark_ratio;
     _low_watermark_ratio = config::connector_sink_mem_low_watermark_ratio;
     _urgent_space_ratio = config::connector_sink_mem_urgent_space_ratio;

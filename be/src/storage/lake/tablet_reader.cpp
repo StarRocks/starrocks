@@ -27,24 +27,17 @@
 #include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "gutil/stl_util.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
-#include "storage/base/row_source_mask.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/json_path_deriver.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/conjunctive_predicates.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -53,6 +46,13 @@
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/row_source_mask_buffer.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks::lake {
 
@@ -239,9 +239,10 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
 
     DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
            read_params.column_access_paths->empty());
+    // get_non_null_segments() drops lost-segment placeholders (experimental_lake_ignore_lost_segment).
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
-        auto segments = rowset->get_segments();
+        auto segments = rowset->get_non_null_segments();
         std::for_each(segments.begin(), segments.end(),
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
@@ -255,7 +256,7 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         }
         readers.clear();
         for (const auto& rowset : _rowsets) {
-            for (const auto& segment : rowset->get_segments()) {
+            for (const auto& segment : rowset->get_non_null_segments()) {
                 if (segment->num_rows() == 0) {
                     continue;
                 }
@@ -426,7 +427,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
             });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = GlobalEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
                 !st.ok()) {
                 // try load rowset serially if sumbit_func failed
                 LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()

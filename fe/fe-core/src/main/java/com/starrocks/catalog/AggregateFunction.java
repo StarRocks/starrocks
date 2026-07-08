@@ -257,6 +257,7 @@ public class AggregateFunction extends Function {
         String symbolName;
         CloudConfiguration cloudConfiguration;
         private boolean isolationType = true;
+        private String inputType;
 
         private AggregateFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -316,6 +317,11 @@ public class AggregateFunction extends Function {
             return this;
         }
 
+        public AggregateFunctionBuilder inputType(String inputType) {
+            this.inputType = inputType;
+            return this;
+        }
+
         public void setIntermediateType(Type intermediateType) {
             this.intermediateType = intermediateType;
         }
@@ -329,6 +335,7 @@ public class AggregateFunction extends Function {
             fn.setLocation(new HdfsURI(objectFile));
             fn.setCloudConfiguration(cloudConfiguration);
             fn.setIsolationType(isolationType);
+            fn.setInputType(inputType);
             return fn;
         }
     }
@@ -398,6 +405,9 @@ public class AggregateFunction extends Function {
         }
         if (isAnalyticFn) {
             props.put(CreateFunctionStmt.IS_ANALYTIC_NAME, "true");
+        }
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
         }
         return props;
     }

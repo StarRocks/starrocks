@@ -14,31 +14,10 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
-ADD_BE_LIB(ConnectorPrimitive
-        connector.cpp
-        data_source.cpp
-        data_source_provider.cpp
-)
-
-target_link_libraries(ConnectorPrimitive PUBLIC
-        ExecPrimitive
-        ExprCore
-        RuntimeCore
-        ChunkCore
-        ColumnCore
-        Types
-        Common
-        Base
-        Gutil
-        StarRocksGen
-)
-
 ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
-        jdbc_connector.cpp
         lake_connector.cpp
-        cache_stats_connector.cpp
         file_connector.cpp
         file_scan_metrics.cpp
         iceberg_connector.cpp
@@ -59,6 +38,25 @@ ADD_BE_LIB(Connector
 target_link_libraries(Connector PUBLIC ConnectorPrimitive ComputeEnv Cache)
 target_link_libraries(Connector PRIVATE Platform)
 
+ADD_BE_LIB(ConnectorCacheStats
+        cache_stats/cache_stats_connector.cpp
+        cache_stats/cache_stats_scanner.cpp
+)
+
+target_link_libraries(ConnectorCacheStats PUBLIC
+        ConnectorPrimitive
+        Storage
+        Expr
+        Runtime
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
 if (WITH_CONNECTOR_ELASTICSEARCH)
     ADD_BE_LIB(ConnectorElasticsearch
             elasticsearch/es_connector.cpp
@@ -71,9 +69,9 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
 
     target_link_libraries(ConnectorElasticsearch PUBLIC
             ConnectorPrimitive
-            HttpCore
-            ExprCore
-            RuntimeCore
+            Platform
+            Expr
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -92,8 +90,8 @@ if (WITH_CONNECTOR_MYSQL)
 
     target_link_libraries(ConnectorMySQL PUBLIC
             ConnectorPrimitive
-            ExprCore
-            RuntimeCore
+            Expr
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -116,8 +114,8 @@ if (WITH_CONNECTOR_BENCHMARK)
 
     target_link_libraries(ConnectorBenchmark PUBLIC
             ConnectorPrimitive
-            ExprCore
-            RuntimeCore
+            Expr
+            Runtime
             ChunkCore
             ColumnCore
             Types
@@ -133,39 +131,33 @@ if (WITH_CONNECTOR_BENCHMARK)
     )
 endif()
 
-ADD_BE_LIB(ConnectorBootstrap
-        connector_bootstrap.cpp
-)
-
-target_link_libraries(ConnectorBootstrap PUBLIC
-        Common
-)
-
-target_link_libraries(ConnectorBootstrap PRIVATE
-        Connector
-        Base
-        Gutil
-        StarRocksGen
-)
-
-if (WITH_CONNECTOR_BENCHMARK)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorBenchmark
+if (WITH_CONNECTOR_JDBC)
+    ADD_BE_LIB(ConnectorJDBC
+            jdbc/jdbc_connector.cpp
+            jdbc/jdbc_scanner.cpp
+            jdbc/jdbc_driver_manager.cpp
+            jdbc/type_checker.cpp
+            jdbc/type_checker_manager.cpp
+            jdbc/type_checker_xml_loader.cpp
     )
-endif()
 
-if (WITH_CONNECTOR_ELASTICSEARCH)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ELASTICSEARCH)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorElasticsearch
+    target_link_libraries(ConnectorJDBC PUBLIC
+            ConnectorPrimitive
+            Expr
+            Runtime
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
     )
-endif()
 
-if (WITH_CONNECTOR_MYSQL)
-    target_compile_definitions(ConnectorBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_MYSQL)
-    target_link_libraries(ConnectorBootstrap PRIVATE
-            ConnectorMySQL
+    target_link_libraries(ConnectorJDBC PRIVATE
+            Platform
+            FileSystem
+            libxml2
     )
 endif()
 

@@ -42,7 +42,7 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 
 namespace brpc {
@@ -54,10 +54,14 @@ namespace starrocks {
 class TExecPlanFragmentParams;
 class ExecEnv;
 
+namespace orchestration {
+class OrchestrationEnv;
+}
+
 template <typename T>
 class PInternalServiceImplBase : public T {
 public:
-    PInternalServiceImplBase(ExecEnv* exec_env);
+    PInternalServiceImplBase(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env);
     ~PInternalServiceImplBase() override;
 
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
@@ -252,6 +256,7 @@ private:
 
 protected:
     ExecEnv* _exec_env;
+    orchestration::OrchestrationEnv* _orchestration_env;
 };
 
 } // namespace starrocks

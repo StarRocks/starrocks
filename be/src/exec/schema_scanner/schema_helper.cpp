@@ -19,8 +19,8 @@
 #include "base/network/network_util.h"
 #include "common/runtime_profile.h"
 #include "common/util/thrift_client_cache.h"
+#include "exec/exec_env.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

@@ -24,13 +24,13 @@
 #include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/pipeline/pipeline_timer_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_state.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/pipeline/source_operator.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_state.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/pipeline/source_operator.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "fmt/printf.h"
 #include "gutil/logging.h"
 #include "runtime/mem_tracker.h"
@@ -382,8 +382,8 @@ public:
     }
 
     ScheduleToken acquire_schedule_token() {
-        bool val = false;
-        return {this, _schedule_token.compare_exchange_strong(val, true)};
+        bool val = true;
+        return {this, _schedule_token.compare_exchange_strong(val, false)};
     }
 
     DECLARE_RACE_DETECTOR(schedule)

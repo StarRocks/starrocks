@@ -28,7 +28,7 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/type_utils.h"
+#include "storage_primitive/type_utils.h"
 #include "types/datum.h"
 #include "types/type_descriptor.h"
 
@@ -57,6 +57,15 @@ protected:
     TVariant make_varchar_variant(const std::string& v) {
         TVariant tv;
         tv.__set_type(TYPE_VARCHAR_DESC.to_thrift());
+        tv.__set_value(v);
+        return tv;
+    }
+
+    // A CHAR-typed boundary, as the FE emits it for a CHAR sort key (the routing key is VARCHAR
+    // because SlotRef normalizes CHAR to VARCHAR, so init() must accept this CHAR/VARCHAR pairing).
+    TVariant make_char_variant(const std::string& v) {
+        TVariant tv;
+        tv.__set_type(TYPE_CHAR_DESC.to_thrift());
         tv.__set_value(v);
         return tv;
     }
@@ -531,6 +540,49 @@ TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
         ASSERT_EQ(expected[i], routed_ids[i]) << "row " << i << " value " << values[i] << " mismatch";
     }
+}
+
+// A CHAR sort-key emits CHAR-typed tablet-range boundaries, but its routing key is VARCHAR (SlotRef
+// normalizes CHAR -> VARCHAR). init() must accept that CHAR/VARCHAR pairing (before the fix it
+// failed with "routing key type mismatch"), and routing must place rows the same as VARCHAR.
+// NOLINTNEXTLINE
+TEST_F(RangeRouterTest, CharBoundaryVarcharKeyRoutingMatches) {
+    std::vector<TTabletRange> ranges;
+    {
+        TTabletRange r0; // (-inf, "m")
+        TTuple upper;
+        upper.__set_values(std::vector<TVariant>{make_char_variant("m")});
+        r0.__set_upper_bound(upper);
+        r0.__set_upper_bound_included(false);
+        ranges.emplace_back(r0);
+    }
+    {
+        TTabletRange r1; // ["m", +inf)
+        TTuple lower;
+        lower.__set_values(std::vector<TVariant>{make_char_variant("m")});
+        r1.__set_lower_bound(lower);
+        r1.__set_lower_bound_included(true);
+        ranges.emplace_back(r1);
+    }
+
+    std::vector<int64_t> tablet_ids{10, 20};
+
+    RangeRouter router;
+    // CHAR boundary vs VARCHAR routing key must be accepted.
+    ASSERT_TRUE(router.init(ranges, varchar_types(1)).ok());
+
+    std::vector<std::string> values = {"apple", "m", "zebra"};
+    Chunk chunk = make_varchar_chunk("s1", values);
+    SlotDescriptor slot_desc(0, "s1", TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    std::vector<SlotDescriptor*> slot_descs{&slot_desc};
+    chunk.set_slot_id_to_index(slot_desc.id(), 0);
+    std::vector<uint16_t> row_indices{0, 1, 2};
+    std::vector<int64_t> routed_ids;
+    ASSERT_TRUE(router.route_chunk_rows(&chunk, slot_descs, row_indices, tablet_ids, &routed_ids).ok());
+
+    // "apple" -> R0 (10); "m" (== inclusive lower bound) and "zebra" -> R1 (20).
+    std::vector<int64_t> expected = {10, 20, 20};
+    ASSERT_EQ(expected, routed_ids);
 }
 
 // NULL_TYPE boundary values should be treated as NULL and route with NULL as minimum.

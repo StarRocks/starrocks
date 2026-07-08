@@ -19,7 +19,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 
 namespace starrocks {
 

@@ -48,8 +48,8 @@
 #include "io/seekable_input_stream.h"
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
-#include "storage/primitive/lake_file_name.h"
-#include "storage/primitive/storage_stats.h"
+#include "storage_primitive/lake_file_name.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 

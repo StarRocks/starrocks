@@ -408,3 +408,37 @@ DISTRIBUTED BY HASH(`id1`);
 ```SQL
 CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
 ```
+
+### lower_case
+
+`lower_case` パラメーターは、英語トークン化（`"parser" = "english"`）を使用する 組み込み（builtin） 転置インデックス実装でのみ利用可能です。インデックス構築時およびクエリのマッチング時に、英語トークンを小文字に正規化するかどうかを制御します。
+
+#### パラメーターの詳細
+
+| パラメーター | デフォルト値 | 有効な値 | 説明 |
+|------|-------|-------|------|
+| `lower_case` | `true` | `true`、`false` | 英語トークンを小文字に正規化するかどうか。`"imp_lib" = "builtin"` かつ `"parser" = "english"` の場合にのみ有効です。 |
+
+- `true`（デフォルト）：インデックス構築時とクエリキーワードのマッチング時の両方で大文字の英字が小文字に変換されるため、マッチングは大文字と小文字を区別しません。これは既存の動作を維持します。
+- `false`：インデックス構築時とマッチング時の両方で大文字と小文字が保持されるため、マッチングは大文字と小文字を区別します。`Apple`、`apple`、`APPLE` のように大文字と小文字のみが異なる単語を区別する必要がある場合に使用します。
+
+#### 例
+
+大文字と小文字を区別する組み込み英語転置インデックスを作成します：
+
+```SQL
+CREATE TABLE `t_case` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_cs (`value`) USING GIN (
+        "parser" = "english",
+        "imp_lib" = "builtin",
+        "lower_case" = "false"
+    ) COMMENT 'case-sensitive builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```

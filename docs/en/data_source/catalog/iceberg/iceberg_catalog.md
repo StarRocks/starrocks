@@ -256,6 +256,15 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   - Required: No
   - Description: The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access).
 
+- `aws.glue.resource_share_type`
+  - Required: No
+  - Description: Configures the `ResourceShareType` sent to AWS Glue's GetDatabases API, controlling which databases are returned when listing them. This item is case-insensitive. Valid values:
+    - `ALL`: Returns all local databases plus all shared and federated ones.
+    - `FOREIGN`: Returns databases shared with your account by others.
+    - `FEDERATED`: Returns external databases connected through AWS Lake Formation.
+
+    When this item is unset or empty, the configuration returns an empty Optional, and the field is simply not set on the `GetDatabasesRequest` — in which case AWS Glue falls back to its own default, which only returns local databases.
+
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
@@ -807,7 +816,7 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | **Parameter**                                 | **Default**           | **Description**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | Whether to cache Iceberg-related metadata, including Table Cache, Partition Name Cache, and the Data File Cache and Delete Data File Cache in Manifest. |
-| iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | Whether to cache column statistics. When enabled, statistics are cached only for the columns where file-level min/max pruning is effective (partition source columns, sort key columns, and identifier columns), bounding the manifest cache footprint on wide tables. |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Supported from v3.5.6 onwards. |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Supported from v3.5.6 onwards. |

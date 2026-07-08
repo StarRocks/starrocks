@@ -17,11 +17,11 @@
 #include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
 #include "connector/file_chunk_sink.h"
-#include "exec/data_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
+#include "exec_primitive/data_sink.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
@@ -136,9 +136,10 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     }
 
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::FILE);
-    auto sink_provider = connector->create_data_sink_provider();
-    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
-            context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
+    ASSIGN_OR_RETURN(auto sink_provider,
+                     connector->create_sink_provider(starrocks::connector::ConnectorSinkProviderType::DATA, sink_ctx));
+    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(context->next_operator_id(),
+                                                                       std::move(sink_provider), fragment_ctx);
 
     size_t sink_dop = target_table.write_single_file ? 1 : context->data_sink_dop();
     if (sink_ctx->partition_column_indices.empty()) {

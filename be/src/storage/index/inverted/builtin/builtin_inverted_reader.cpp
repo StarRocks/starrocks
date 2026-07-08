@@ -16,8 +16,8 @@
 
 #include <fmt/format.h>
 
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "types/logical_type.h"
@@ -26,12 +26,12 @@ namespace starrocks {
 
 BuiltinInvertedReader::BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num)
         : InvertedReader("", index_id), _gram_num(gram_num), _bitmap_index(nullptr) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
                              sizeof(BuiltinInvertedReader));
 }
 
 BuiltinInvertedReader::~BuiltinInvertedReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(), mem_usage());
 }
 
 Status BuiltinInvertedReader::new_iterator(const std::shared_ptr<TabletIndex> index_meta,
@@ -77,7 +77,7 @@ Status BuiltinInvertedReader::load(const IndexReadOptions& opt, void* meta) {
         _bitmap_index.reset();
         return Status::InternalError("loading builtin inverted index more than once");
     }
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
                              mem_usage() - sizeof(BuiltinInvertedReader));
     return Status::OK();
 }

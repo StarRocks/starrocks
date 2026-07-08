@@ -20,8 +20,8 @@
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exprs/expr_context.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/descriptors.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

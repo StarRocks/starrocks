@@ -486,6 +486,16 @@ public class MergeTabletJobTest {
             }
         };
 
+        // Isolate the publish-resource assertion from StarOS shard creation (which would otherwise run
+        // against the mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, long groupId, Map<String, String> properties,
+                                             ComputeResource computeResource) {
+            }
+        };
+
         try {
             mergeJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());

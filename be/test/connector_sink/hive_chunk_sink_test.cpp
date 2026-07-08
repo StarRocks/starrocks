@@ -25,15 +25,14 @@
 #include "base/utility/defer_op.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using ::testing::Return;
 using ::testing::ByMove;
@@ -78,13 +77,16 @@ TEST_F(HiveChunkSinkTest, test_callback) {
                                                     std::move(partition_chunk_writer_factory), _runtime_state);
         sink->init_profile();
         sink->callback_on_commit(CommitResult{
-                .io_status = Status::OK(),
-                .format = formats::PARQUET,
-                .file_statistics =
+                .file_result =
                         {
-                                .record_count = 100,
+                                .io_status = Status::OK(),
+                                .format = formats::PARQUET,
+                                .file_statistics =
+                                        {
+                                                .record_count = 100,
+                                        },
+                                .location = "path/to/directory/data.parquet",
                         },
-                .location = "path/to/directory/data.parquet",
         });
 
         EXPECT_EQ(_runtime_state->num_rows_load_sink(), 100);
@@ -92,8 +94,6 @@ TEST_F(HiveChunkSinkTest, test_callback) {
 }
 
 TEST_F(HiveChunkSinkTest, test_factory) {
-    HiveChunkSinkProvider provider;
-
     {
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
@@ -109,7 +109,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -130,7 +131,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -151,7 +153,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init());

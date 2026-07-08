@@ -39,11 +39,13 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_lake_fwd.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "gutil/walltime.h"
-#include "runtime/exec_env.h"
-#include "runtime/load_channel_mgr.h"
+#include "platform/platform_env.h"
+#include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
@@ -83,7 +85,12 @@ public:
               _partition_id(next_id()),
               _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
               _tablet_mgr(StorageEnv::GetInstance()->lake_tablet_manager()),
-              _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager()) {
+              _load_channel_mgr(std::make_unique<LoadChannelMgr>(_tablet_mgr,
+                                                                 RuntimeEnv::GetInstance()->diagnose_daemon(),
+                                                                 PlatformEnv::GetInstance()->brpc_stub_cache())),
+              _lake_service(ExecEnv::GetInstance(), StorageEnv::GetInstance()->lake_tablet_manager(),
+                            _load_channel_mgr.get()) {
+        CHECK_OK(_load_channel_mgr->init(RuntimeEnv::GetInstance()->load_mem_tracker()));
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
@@ -91,6 +98,7 @@ public:
     }
 
     ~LakeServiceTest() override {
+        _load_channel_mgr->close();
         CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
     }
@@ -361,6 +369,7 @@ protected:
     std::shared_ptr<lake::LocationProvider> _location_provider;
     lake::TabletManager* _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _backup_location_provider;
+    std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     LakeServiceImpl _lake_service;
 };
 
@@ -632,6 +641,93 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
 
         ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(4));
         EXPECT_EQ(0, metadata->commit_time());
+    }
+}
+
+// Shadow-rewrite publish through the RPC path: shadow tablets now travel in the request's ordinary
+// tablet_ids, and the publish is keyed on a single TxnInfoPB whose txn_type == TXN_SHADOW_REWRITE and
+// whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
+// branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
+// flip publish, including the W == 1 skip-load (empty partition) path.
+TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
+    // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
+    // watershed, independent of the shadow tablet's base_version and always < new_version.
+    auto fresh_tablet = [&]() {
+        auto meta = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(meta));
+        return meta->id();
+    };
+    auto shadow_request = [&](int64_t tablet_id, int64_t new_version, int64_t alter_version) {
+        PublishVersionRequest req;
+        req.set_base_version(1);
+        req.set_new_version(new_version);
+        req.add_tablet_ids(tablet_id);
+        auto* txn = req.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE);
+        txn->set_shadow_rewrite_alter_version(alter_version);
+        return req;
+    };
+
+    // (a) W == 1: empty base at watershed -> BE skips the source load (no 404) and synthesizes an empty
+    //     op_schema_change@1; the tablet advances 1 -> 2 with no rowsets.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/2, /*alter_version=*/1);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(t, 2));
+        EXPECT_EQ(2, metadata->version());
+        EXPECT_EQ(0, metadata->rowsets_size());
+    }
+    // (b) W > 1, source load fails with a non-not-found error -> the tablet fails to publish.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        TEST_ENABLE_ERROR_POINT("TabletManager::load_txn_log", Status::IOError("injected shadow source load error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::load_txn_log");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "injected shadow source load error"))
+                << response.status().error_msgs(0);
+    }
+    // (c) W > 1, no source op_write present and the target version unpublished -> a non-empty partition's
+    //     shadow tablet always has an op_write, so a missing one means the source was lost. The load's
+    //     not-found propagates and the publish FAILS (so it retries) rather than synthesizing an empty
+    //     op_schema_change@W -- which would silently drop the partition's data by advancing the version.
+    {
+        int64_t t = fresh_tablet();
+        auto request = shadow_request(t, /*new=*/3, /*alter_version=*/2);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
+        EXPECT_NE(0, response.status().status_code()) << "lost source must fail the publish";
+        // Crucially, the version did NOT advance with an empty log (no silent data drop).
+        EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(t, 3).status().is_not_found());
+    }
+    // (d) Invalid request: missing alter_version (defaults to 0) -> InvalidArgument (failed tablet).
+    {
+        int64_t t = fresh_tablet();
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(t);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_SHADOW_REWRITE); // shadow_rewrite_alter_version intentionally unset (=> 0)
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(t, response.failed_tablets(0));
     }
 }
 
@@ -4411,7 +4507,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
 
-    auto load_mgr = ExecEnv::GetInstance()->load_channel_mgr();
+    auto load_mgr = _load_channel_mgr.get();
     auto db_id = next_id();
     auto table_id = next_id();
     auto partition_id = next_id();
@@ -6071,7 +6167,7 @@ protected:
         opts.is_compaction = false;
         opts.defer_vector_index_build = true;
 
-        auto vi_name = lake::gen_vector_index_filename(seg_name, kIndexId);
+        auto vi_name = lake::gen_vector_index_filename(seg_name, kTabletId, kIndexId);
         opts.vector_index_file_paths[kIndexId] = _tablet_mgr->segment_location(kTabletId, vi_name);
 
         ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(seg_path));
@@ -6114,6 +6210,8 @@ protected:
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(seg_name);
             segment_meta->add_vector_index_ids(kIndexId);
+            // Record the .vi owner as the write path does; it names the built .vi file.
+            segment_meta->set_segment_vector_index_uid(kTabletId);
         }
 
         CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
@@ -6131,7 +6229,7 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_full_path) {
     ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
-    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr);
 
     BuildVectorIndexRequest request;
     request.set_tablet_id(kTabletId);
@@ -6146,7 +6244,8 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_full_path) {
     ASSERT_TRUE(response.has_new_built_version());
     EXPECT_EQ(2, response.new_built_version());
 
-    auto vi_path = _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_name, kIndexId));
+    auto vi_path =
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_name, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path)) << "deferred .vi should have been built by the RPC";
 }
 
@@ -6162,7 +6261,7 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_partial_failure)
 
     create_metadata(schema_pb, 3, {{2, seg_ok}, {3, seg_bad}});
 
-    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get());
+    LakeServiceImpl service(ExecEnv::GetInstance(), _tablet_mgr.get(), nullptr);
     BuildVectorIndexRequest request;
     request.set_tablet_id(kTabletId);
     request.set_version(3);
@@ -6176,9 +6275,9 @@ TEST_F(LakeServiceVectorIndexBuildTest, test_build_vector_index_partial_failure)
     EXPECT_EQ(2, response.new_built_version());
 
     EXPECT_TRUE(fs::path_exist(
-            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_ok, kIndexId))));
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_ok, kTabletId, kIndexId))));
     EXPECT_FALSE(fs::path_exist(
-            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_bad, kIndexId))));
+            _tablet_mgr->segment_location(kTabletId, lake::gen_vector_index_filename(seg_bad, kTabletId, kIndexId))));
 }
 
 TEST_F(LakeServiceTest, test_build_vector_index_missing_tablet_id) {

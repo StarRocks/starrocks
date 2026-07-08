@@ -86,13 +86,22 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
-### lake_enable_protobuf_file_checksum
+### lake_enable_pk_preserve_txn_delete_order
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Enable it only after the whole cluster has been upgraded to a version that understands the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is disabled by default for downgrade safety: when enabled, a load can persist on-disk metadata that a BE rolled back to a version without this fix would misinterpret, potentially producing duplicate primary keys. Only enable it after the entire cluster has been upgraded to a version that supports this feature and you no longer intend to roll back. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Introduced in: -
+
+### lake_enable_protobuf_file_checksum
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
 ### lake_pk_compaction_max_input_rowsets

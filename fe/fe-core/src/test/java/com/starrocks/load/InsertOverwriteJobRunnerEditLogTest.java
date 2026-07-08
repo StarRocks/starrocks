@@ -24,8 +24,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.persist.EditLog;
@@ -33,10 +35,13 @@ import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -50,13 +55,19 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class InsertOverwriteJobRunnerEditLogTest {
     private static final String DB_NAME = "test_insert_overwrite_editlog";
     private static final String TABLE_NAME = "t1";
 
     private static final long INDEX_ID = 41007L;
+    // Backend id used by the single replica of every tablet built in this test. The
+    // replicas exist so that markTabletForceDelete has backend ids to record; they are
+    // deliberately NOT registered in the tablet inverted index.
+    private static final long BACKEND_ID = 20001L;
 
     private Database db;
     private OlapTable table;
@@ -156,6 +167,80 @@ public class InsertOverwriteJobRunnerEditLogTest {
     }
 
     @Test
+    public void testDoCommitMarksSourceTabletsForceDelete() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2007L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        runner.doCommit();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // the swapped-out source tablets must be marked so BE drops them directly
+        // instead of moving them to trash
+        Assertions.assertTrue(invertedIndex.tabletForceDelete(sourceTabletId, BACKEND_ID));
+        // the tablets of the new (previously temp) partition are live and must never
+        // be marked
+        Assertions.assertFalse(invertedIndex.tabletForceDelete(tempTabletId, BACKEND_ID));
+    }
+
+    @Test
+    public void testPostCommitFailureDoesNotFailCommittedJob() {
+        InsertStmt insertStmt = mock(InsertStmt.class);
+        when(insertStmt.getTargetPartitionIds()).thenReturn(Lists.newArrayList(sourcePartitionId));
+        // doCommit's critical section never touches insertStmt for a non-dynamic job,
+        // so this throws exactly inside postCommit's statistics collection
+        when(insertStmt.getTxnId()).thenThrow(new RuntimeException("injected post-commit failure"));
+
+        InsertOverwriteJob job = new InsertOverwriteJob(2008L, insertStmt, db.getId(), table.getId(),
+                0L, false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, null, null);
+        // the swap is journaled before post-commit work runs; a post-commit failure
+        // must not escape doCommit, otherwise the job would be routed to gc(), which
+        // would drop the partitions that just became live
+        Assertions.assertDoesNotThrow(runner::doCommit);
+
+        Partition replaced = table.getPartition(TABLE_NAME);
+        Assertions.assertNotNull(replaced);
+        Assertions.assertEquals(tempPartitionId, replaced.getId());
+        Assertions.assertFalse(table.existTempPartitions());
+        // marking precedes the failing statistics collection, so it must have happened
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                .tabletForceDelete(sourceTabletId, BACKEND_ID));
+    }
+
+    @Test
+    public void testGcAbortsDynamicTxnWhenTableDropped() throws Exception {
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                dbId, Lists.newArrayList(tableId), "test_dynamic_overwrite_gc_abort",
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.INSERT_STREAMING, 600);
+
+        InsertOverwriteJob job = new InsertOverwriteJob(2009L, db.getId(), table.getId(), null, true);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
+        job.setTxnId(txnId);
+
+        // drop the target table so gc() hits the early table-not-exist exit
+        db.dropTable(TABLE_NAME);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        Assertions.assertThrows(DmlException.class, runner::gc);
+
+        // the PREPARE transaction must not leak until the txn timeout checker reaps
+        // it: gc() aborts it even though the table is gone
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, txnId);
+        Assertions.assertNotNull(txnState);
+        Assertions.assertEquals(TransactionStatus.ABORTED, txnState.getTransactionStatus());
+    }
+
+    @Test
     public void testDoCommitEditLogException() {
         InsertOverwriteJob job = new InsertOverwriteJob(2005L, db.getId(), table.getId(),
                 Lists.newArrayList(sourcePartitionId), false);
@@ -178,6 +263,13 @@ public class InsertOverwriteJobRunnerEditLogTest {
             Assertions.assertNotNull(sourcePartition);
             Assertions.assertEquals(sourcePartitionId, sourcePartition.getId());
             Assertions.assertTrue(table.existTempPartitions());
+
+            // a failed commit must leave no force-delete marks: the source tablets are
+            // still live, and a stale mark would make BE skip trash on a later
+            // legitimate drop of these tablets
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+            Assertions.assertFalse(invertedIndex.tabletForceDelete(sourceTabletId, BACKEND_ID));
+            Assertions.assertFalse(invertedIndex.tabletForceDelete(tempTabletId, BACKEND_ID));
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
@@ -221,6 +313,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
 
         MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(new Replica(tabletId + 10000L, BACKEND_ID, Replica.ReplicaState.NORMAL, 1L, 0), false);
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, INDEX_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
@@ -240,6 +333,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
                                          long physicalPartitionId, long tabletId, String partitionName) {
         MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(new Replica(tabletId + 10000L, BACKEND_ID, Replica.ReplicaState.NORMAL, 1L, 0), false);
         TabletMeta tabletMeta = new TabletMeta(dbId, table.getId(), partitionId, INDEX_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
@@ -273,6 +367,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
                                             long tabletId, String partitionName) {
         MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(new Replica(tabletId + 10000L, BACKEND_ID, Replica.ReplicaState.NORMAL, 1L, 0), false);
         TabletMeta tabletMeta = new TabletMeta(dbId, table.getId(), partitionId, INDEX_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();

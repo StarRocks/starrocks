@@ -23,8 +23,8 @@
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exprs/expr_executor.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 

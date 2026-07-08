@@ -29,15 +29,15 @@
 #include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::connector {
 namespace {
 
-using CommitResult = formats::FileWriter::CommitResult;
+using FileCommitResult = formats::FileCommitResult;
 using WriterAndStream = formats::WriterAndStream;
 using Stream = formats::AsyncFlushOutputStream;
 using ::testing::Return;
@@ -75,7 +75,7 @@ public:
     MOCK_METHOD(int64_t, get_allocated_bytes, (), (override));
     MOCK_METHOD(int64_t, get_flush_batch_size, (), (override));
     MOCK_METHOD(Status, write, (Chunk * chunk), (override));
-    MOCK_METHOD(CommitResult, close, (), (override));
+    MOCK_METHOD(FileCommitResult, close, (), (override));
 };
 
 class MockFile final : public WritableFile {
@@ -138,15 +138,18 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         auto ret = sink->add(chunk);
         EXPECT_EQ(ret.ok(), true);
         sink->callback_on_commit(CommitResult{
-                .io_status = Status::OK(),
-                .format = formats::PARQUET,
-                .file_statistics =
+                .file_result =
                         {
-                                .record_count = 100,
+                                .io_status = Status::OK(),
+                                .format = formats::PARQUET,
+                                .file_statistics =
+                                        {
+                                                .record_count = 100,
+                                        },
+                                .location = "path/to/directory/data.parquet",
                         },
-                .location = "path/to/directory/data.parquet",
         }
-                                         .set_extra_data("0"));
+                                         .set_partition_null_fingerprint("0"));
         sink->set_status(Status::OK());
 
         EXPECT_EQ(sink->is_finished(), true);
@@ -157,7 +160,6 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
 
 TEST_F(IcebergChunkSinkTest, test_factory) {
     SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
-    IcebergChunkSinkProvider provider;
 
     {
         auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
@@ -172,7 +174,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        IcebergChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -191,7 +194,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        IcebergChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init()); // format is not supported

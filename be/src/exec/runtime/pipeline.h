@@ -17,11 +17,11 @@
 #include <ctime>
 #include <utility>
 
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/driver_observer.h"
-#include "exec/pipeline/primitives/pipeline_group.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/driver_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_group.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

@@ -148,8 +148,16 @@ public class MergeIntoPlanner {
                                      List<ColumnRefOperator> outputColumns, List<String> colNames,
                                      IcebergTable icebergTable, PhysicalPropertySet requiredProperty) {
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean prevSkewJoinOptimizeV1 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        boolean prevSkewJoinOptimizeV2 = session.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2();
         try {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            // Disable BOTH skew-join rewrites for the MERGE plan. The broadcast rewrite (V2) replicates
+            // the target side, and the query-rewrite rewrite (V1) salts skewed keys with a random value;
+            // either one scatters the source rows matching one target row across drivers and breaks the
+            // per-driver co-location EnforceUniqueRowLocatorNode relies on. The single-flag setters each
+            // flip the other on, so disable both explicitly here.
+            session.getSessionVariable().disableSkewJoinOptimize();
 
             // Optimize
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
@@ -163,16 +171,23 @@ public class MergeIntoPlanner {
 
             // Setup Iceberg sink and configure pipeline. plan() already rejected
             // non-pipeline sessions, so the sink always runs on the pipeline engine.
-            setupIcebergMergeSink(execPlan, colNames, icebergTable, session);
+            setupIcebergMergeSink(execPlan, mergeIntoStmt, colNames, icebergTable, session);
             IcebergPlannerUtils.configureIcebergSinkPipeline(execPlan, session, true);
 
             return execPlan;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);
+            // Restore the previous skew mode; the single-flag setters flip the other off, so picking
+            // by the previous mode is enough to recover the normal states (V2 default / V1 / both off).
+            if (prevSkewJoinOptimizeV2) {
+                session.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(true);
+            } else if (prevSkewJoinOptimizeV1) {
+                session.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+            }
         }
     }
 
-    private void setupIcebergMergeSink(ExecPlan execPlan, List<String> colNames,
+    private void setupIcebergMergeSink(ExecPlan execPlan, MergeIntoStmt mergeIntoStmt, List<String> colNames,
                                        IcebergTable icebergTable, ConnectContext session) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor rowDeltaTuple = descriptorTable.createTupleDescriptor();
@@ -201,6 +216,10 @@ public class MergeIntoPlanner {
         // Keep the target scan and merge join bound together so sink validation and
         // duplicate checking never fall back to scans/joins from the source subtree.
         MergeTargetContext mergeTargetContext = findMergeTargetContext(execPlan, icebergTable);
+        if (mergeTargetContext != null) {
+            // Reject join shapes the BE cannot execute (there is no MERGE_JOIN_NODE executor).
+            validateMergeJoinIsExecutableByBackend(mergeTargetContext.mergeJoin);
+        }
         Expression filterExpr = mergeTargetContext == null
                 ? null
                 : buildTargetIcebergFilterExpr(mergeTargetContext.targetScan);
@@ -235,6 +254,8 @@ public class MergeIntoPlanner {
      *   <li>within a BE: the hash join's probe side is locally shuffled by join key
      *       across drivers, so all matches of one target row land on one driver.</li>
      * </ul>
+     * The MERGE join disables post-join passthrough so this local key distribution is
+     * still intact when rows reach the check.
      * Everything above the check (e.g. the partition-column shuffle for partitioned
      * targets) is free to redistribute rows arbitrarily.
      */
@@ -247,8 +268,12 @@ public class MergeIntoPlanner {
             // the USING subquery.
             return;
         }
-        PlanNode joinNode = mergeTargetContext.mergeJoin;
+        JoinNode joinNode = mergeTargetContext.mergeJoin;
         validateMergeJoinKeepsTargetUnreplicated(joinNode);
+        // Keep the join's local key distribution intact for the duplicate check.
+        // This gate only suppresses the post-join passthrough exchange; the join
+        // input-side local shuffle is still controlled by the BE hash-join builder.
+        joinNode.setCanLocalShuffle(false);
 
         PlanFragment joinFragment = joinNode.getFragment();
         PlanNode currentRoot = joinFragment.getPlanRoot();
@@ -361,6 +386,9 @@ public class MergeIntoPlanner {
      * where it is exact; a scanned source is always rejected.
      */
     private static void validateMergeJoinKeepsTargetUnreplicated(PlanNode joinNode) {
+        // Reject join shapes the BE cannot execute (also enforced unconditionally in
+        // setupIcebergMergeSink; redundant here but keeps this method self-contained).
+        validateMergeJoinIsExecutableByBackend(joinNode);
         if (joinNode instanceof HashJoinNode) {
             JoinNode.DistributionMode mode = ((HashJoinNode) joinNode).getDistrMode();
             Preconditions.checkState(mode == JoinNode.DistributionMode.PARTITIONED
@@ -370,15 +398,33 @@ public class MergeIntoPlanner {
                             + "prevented this), got distribution mode %s", mode);
             return;
         }
-        if (joinNode instanceof NestLoopJoinNode) {
-            PlanNode source = joinNode.getChild(0);
-            long sourceCardinality = source.getCardinality();
-            if (!subtreeHasScanNode(source) && sourceCardinality >= 0 && sourceCardinality <= 1) {
-                return;
-            }
+        // NestLoopJoinNode: executability is already validated above. A constant single-row source
+        // (no scans, cardinality <= 1) cannot match any target row twice, so the per-driver dedup
+        // stays sound even though the broadcast target is replicated. A multi-row probe is rejected.
+        PlanNode source = joinNode.getChild(0);
+        long sourceCardinality = source.getCardinality();
+        if (!subtreeHasScanNode(source) && sourceCardinality >= 0 && sourceCardinality <= 1) {
+            return;
         }
-        throw new SemanticException("MERGE INTO requires at least one equality predicate between the "
-                + "target and the source in the ON clause");
+        throw new SemanticException(
+                "MERGE INTO requires the target-source join to run as a shuffle hash join (built from an "
+                        + "equality predicate in the ON clause); got an unsupported join shape: "
+                        + joinNode.getClass().getSimpleName());
+    }
+
+    /**
+     * Reject join shapes the BE cannot execute. {@code exec_factory.cpp} builds an operator only for
+     * HASH_JOIN_NODE and CROSS_JOIN_NODE/NESTLOOP_JOIN_NODE — there is no MERGE_JOIN_NODE executor, so a
+     * sort-merge join (e.g. {@code join_implementation_mode=merge}) must fail fast at the FE. This is a
+     * backend-capability invariant independent of the duplicate check, so it holds even when elided.
+     */
+    private static void validateMergeJoinIsExecutableByBackend(PlanNode joinNode) {
+        if (!(joinNode instanceof HashJoinNode) && !(joinNode instanceof NestLoopJoinNode)) {
+            throw new SemanticException(
+                    "MERGE INTO requires the target-source join to run as a shuffle hash join (built from an "
+                            + "equality predicate in the ON clause); got an unsupported join shape: "
+                            + joinNode.getClass().getSimpleName());
+        }
     }
 
     private static boolean subtreeHasScanNode(PlanNode root) {

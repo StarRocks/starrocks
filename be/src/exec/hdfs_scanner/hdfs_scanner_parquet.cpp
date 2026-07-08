@@ -263,7 +263,7 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
                                                     _scanner_ctx->datacache_options,
                                                     _shared_buffered_input_stream.get(), _skip_rows_ctx);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    RETURN_IF_ERROR(_reader->init(_scanner_ctx));
+    RETURN_IF_ERROR(_reader->init(&_scanner_ctx->format_scan_context));
     return Status::OK();
 }
 

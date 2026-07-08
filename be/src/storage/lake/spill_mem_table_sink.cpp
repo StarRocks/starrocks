@@ -14,25 +14,17 @@
 
 #include "storage/lake/spill_mem_table_sink.h"
 
+#include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/runtime_profile.h"
-#include "compute_env/spill/options.h"
-#include "compute_env/spill/serde.h"
 #include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller_factory.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
-#include "runtime/runtime_state.h"
-#include "storage/aggregate_iterator.h"
-#include "storage/base/merge_iterator.h"
-#include "storage/chunk_helper.h"
+#include "runtime/runtime_env.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
+#include "storage/lake/load_spill_pipeline_merge_iterator.h"
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/load_spill_block_manager.h"
-#include "storage/load_spill_pipeline_merge_context.h"
-#include "storage/load_spill_pipeline_merge_iterator.h"
-#include "storage/storage_engine.h"
 
 namespace starrocks::lake {
 
@@ -45,7 +37,7 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
-                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
+                                                      RuntimeEnv::GetInstance()->compaction_mem_tracker());
 }
 
 SpillMemTableSink::~SpillMemTableSink() {
@@ -120,14 +112,17 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
                                                    int64_t slot_idx) {
     if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
         // If there is only one flush, flush it to segment directly
-        RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+        RETURN_IF_ERROR(_writer->flush_del_file(deletes, kUnknownDelOpOffset));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
     // 1. flush upsert
     RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size, slot_idx));
     // 2. flush deletes
-    RETURN_IF_ERROR(_writer->flush_del_file(deletes));
+    // Concurrent/merge spill flush: the final merged segment indices do not map to flush order,
+    // so the in-transaction op_offset cannot be determined here. Fall back to "after all segments"
+    // (handled in PR2). See kUnknownDelOpOffset.
+    RETURN_IF_ERROR(_writer->flush_del_file(deletes, kUnknownDelOpOffset));
     return Status::OK();
 }
 

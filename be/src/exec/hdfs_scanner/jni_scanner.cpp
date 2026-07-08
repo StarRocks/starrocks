@@ -25,14 +25,16 @@
 #include "fmt/core.h"
 #include "fs/credential/cloud_configuration_factory.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/java/java_runtime.h"
+#include "runtime/java/jvm_helper.h"
+#include "runtime/java/native_method_helper.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
 
 Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message) {
     if (jthrowable thr = env->ExceptionOccurred(); thr) {
-        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
+        std::string jni_error_message = JVMHelper::getInstance().dumpExceptionString(thr);
         env->ExceptionDescribe();
         env->ExceptionClear();
         env->DeleteLocalRef(thr);
@@ -48,7 +50,8 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext
 
 Status JniScanner::do_open(RuntimeState* state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
+    RETURN_IF_ERROR(NativeMethodHelper::ensure_registered(env));
     RETURN_IF_ERROR(update_jni_scanner_params());
     if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
@@ -62,7 +65,7 @@ Status JniScanner::do_open(RuntimeState* state) {
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     if (_jni_scanner_obj != nullptr) {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
         }
@@ -70,7 +73,7 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
-        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         env->DeleteLocalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }
@@ -366,8 +369,8 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
     }
     _app_stats.raw_rows_read += num_rows;
 
-    for (size_t col_idx = 0; col_idx < _scanner_ctx->materialized_columns.size(); col_idx++) {
-        SlotDescriptor* slot_desc = _scanner_ctx->materialized_columns[col_idx].slot_desc;
+    for (size_t col_idx = 0; col_idx < _scanner_ctx->format_scan_context.materialized_columns.size(); col_idx++) {
+        SlotDescriptor* slot_desc = _scanner_ctx->format_scan_context.materialized_columns[col_idx].slot_desc;
         const auto slot_name = std::string(slot_desc->col_name());
         const TypeDescriptor& slot_type = slot_desc->type();
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
@@ -397,13 +400,13 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     // Partition and not-existed columns must be appended before predicate evaluation
     // because ctxs_by_slot may reference non-file or partition slots.
-    RETURN_IF_ERROR(_scanner_ctx->append_side_columns_to_chunk(chunk, chunk_size));
-    RETURN_IF_ERROR(_scanner_ctx->evaluate_all_predicates(chunk));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, chunk_size));
+    RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_all_predicates(chunk));
     return Status::OK();
 }
 
 StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMHelper::getInstance().getEnv();
     long chunk_meta;
     RETURN_IF_ERROR(_get_next_chunk(env, &chunk_meta));
     reset_chunk_meta(chunk_meta);
@@ -457,16 +460,16 @@ Status JniScanner::update_jni_scanner_params() {
     // update materialized columns.
     {
         std::unordered_set<std::string> names;
-        for (const auto& column : _scanner_ctx->materialized_columns) {
+        for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
             if (column.name() == "___count___") continue;
             auto col_name = column.formatted_name(_scanner_ctx->format_scan_context.options.case_sensitive);
             names.insert(col_name);
         }
-        RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(names));
+        RETURN_IF_ERROR(_scanner_ctx->format_scan_context.update_materialized_columns(names));
     }
 
     std::string required_fields;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         required_fields.append(column.name());
         required_fields.append(",");
     }
@@ -475,7 +478,7 @@ Status JniScanner::update_jni_scanner_params() {
     }
 
     std::string nested_fields;
-    for (const auto& column : _scanner_ctx->materialized_columns) {
+    for (const auto& column : _scanner_ctx->format_scan_context.materialized_columns) {
         const TypeDescriptor& type = column.slot_type();
         if (type.is_complex_type()) {
             build_nested_fields(type, column.name(), &nested_fields);

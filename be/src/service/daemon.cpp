@@ -36,6 +36,7 @@
 
 #include <gflags/gflags.h>
 
+#include "cache/datacache.h"
 #include "column/column_helper.h"
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_memory_allocator_fwd.h"
@@ -45,7 +46,6 @@
 #include "common/process_exit.h"
 #include "common/util/minidump.h"
 #include "compute_env/workgroup/work_group.h"
-#include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "fslib/star_cache_handler.h"
@@ -67,13 +67,16 @@
 #include "common/util/debug_util.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_util.h"
+#include "exec/exec_env.h"
 #include "exec/query_scan_metrics.h"
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
 #include "platform/platform_metrics.h"
 #include "platform/user_function_cache.h"
-#include "runtime/exec_env.h"
+#include "runtime/memory/memory_lock.h"
+#include "runtime/process_memory_metrics.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_metrics.h"
 #include "service/backend_metrics_initializer.h"
 #include "service/failure_handler.h"
@@ -81,7 +84,6 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "types/time_types.h"
-#include "util/memory_lock.h"
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
@@ -203,8 +205,8 @@ void jemalloc_tracker_daemon(void* arg_this) {
         retrieve_jemalloc_stats(&stats);
 
         // Jemalloc metadata
-        if (GlobalEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
-            auto tracker = GlobalEnv::GetInstance()->jemalloc_metadata_traker();
+        if (RuntimeEnv::GetInstance()->jemalloc_metadata_traker() && stats.metadata > 0) {
+            auto tracker = RuntimeEnv::GetInstance()->jemalloc_metadata_traker();
             int64_t delta = stats.metadata - tracker->consumption();
             tracker->consume(delta);
         }
@@ -216,7 +218,7 @@ void jemalloc_tracker_daemon(void* arg_this) {
 
 #define DUMP_METRIC(name, value_expr) fmt::format_to(std::back_inserter(buffer), " " #name "({})", value_expr);
 std::string dump_memory_tracker() {
-    auto* mem_metrics = SystemMetrics::instance()->memory_metrics();
+    auto* mem_metrics = RuntimeEnv::GetInstance()->process_memory_metrics();
 
     fmt::memory_buffer buffer;
     fmt::format_to(std::back_inserter(buffer), "Current memory statistics:");
@@ -295,7 +297,8 @@ void sigterm_handler(int signo, siginfo_t* info, void* context) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
                    << ", is going to exit";
 
-        SystemMetrics::instance()->update_memory_metrics();
+        DataCache::GetInstance()->update_mem_trackers();
+        RuntimeEnv::GetInstance()->process_memory_metrics()->update_memory_metrics();
         LOG(ERROR) << dump_memory_tracker();
     }
 #ifdef USE_STAROS

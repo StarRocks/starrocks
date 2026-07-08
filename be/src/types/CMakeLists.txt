@@ -22,6 +22,7 @@ ADD_BE_LIB(Types
     hll.cpp
     json_value.cpp
     json_value_converter.cpp
+    simple_json_path.cpp
     logical_type.cpp
     array_type_info.cpp
     decimal_type_info.cpp
@@ -40,6 +41,7 @@ ADD_BE_LIB(Types
 )
 
 target_link_libraries(Types PRIVATE
+    re2
     simdjson
     velocypack
 )

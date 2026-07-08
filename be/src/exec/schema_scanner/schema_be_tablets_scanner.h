@@ -19,7 +19,7 @@
 
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "storage/primitive/tablet_basic_info.h"
+#include "storage_primitive/tablet_basic_info.h"
 
 namespace starrocks {
 

@@ -24,12 +24,12 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
-// Mirror of HorizontalGeneralTabletWriter::record_segment_vector_index_ids for the rewrite path:
-// persist on the dest FileInfo the ids of vector indexes whose .vi the dest segment will have —
-// built inline by this writer (sync) or produced later by the FE-scheduled build task (async,
-// above the deferred-build threshold; a dest rewrite file is never a bundle). The ids come from
-// the caller-resolved path map, so shared-nothing callers (empty map) record nothing.
-static void record_rewrite_vector_index_ids(const SegmentWriter& writer, FileInfo* dest) {
+// Append to |out_ids| the ids of vector indexes whose .vi the dest segment will have. Shared-nothing
+// callers pass out_ids == nullptr (empty path map), so nothing is recorded.
+static void record_rewrite_vector_index_ids(const SegmentWriter& writer, std::vector<int64_t>* out_ids) {
+    if (out_ids == nullptr) {
+        return;
+    }
     if (writer.defer_vector_index_build()) {
         if (writer.num_rows() < writer.vector_index_build_threshold()) {
             return;
@@ -38,7 +38,7 @@ static void record_rewrite_vector_index_ids(const SegmentWriter& writer, FileInf
         return;
     }
     for (const auto& [index_id, _] : writer.vector_index_file_paths()) {
-        dest->vector_index_ids.push_back(index_id);
+        out_ids->push_back(index_id);
     }
 }
 
@@ -47,7 +47,8 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
                                                std::vector<uint32_t>& column_ids, MutableColumns& columns,
                                                uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
                                                SegmentFileMark segment_file_mark,
-                                               RewriteVectorIndexOptions vector_index_opts) {
+                                               RewriteVectorIndexOptions vector_index_opts,
+                                               std::vector<int64_t>* out_vector_index_ids) {
     constexpr size_t kBufferSize = 1024 * 1024; // 1 MB
     if (UNLIKELY(column_ids.empty())) {
         // In shared-nothing mode, this size can be null, and we don't need it so it's ok to return zero;
@@ -112,7 +113,7 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
     TEST_ERROR_POINT("SegmentRewriter::rewrite1");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    record_rewrite_vector_index_ids(writer, dest);
+    record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
     return Status::OK();
 }
@@ -217,7 +218,8 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
-        const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts) {
+        const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
+        std::vector<int64_t>* out_vector_index_ids) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -313,7 +315,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     TEST_ERROR_POINT("SegmentRewriter::rewrite3");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    record_rewrite_vector_index_ids(writer, dest);
+    record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
     return Status::OK();
 }

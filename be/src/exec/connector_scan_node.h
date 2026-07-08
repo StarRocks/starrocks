@@ -23,7 +23,7 @@
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/scan_node.h"
 #include "fs/fs.h"
 

@@ -589,7 +589,7 @@ MODIFY COLUMN <column_name>
 1. 集計モデルで値列を修正する場合、`agg_type` を指定する必要があります。
 2. 非集計モデルでキー列を修正する場合、`KEY` キーワードを指定する必要があります。
 3. データ型、デフォルト値、NULL 許容性、および位置を変更する場合は、ステートメント内でカラムの完全な定義を指定する必要があります。
-4. カラムのコメントを変更する場合は、完全な定義の代わりに `MODIFY COLUMN <column_name> COMMENT 「<new_column_comment>」` を指定するだけで済みます。この操作はメタデータのみを変更するものであり、スキーマ変更タスクは開始されません。主キー列、キー列、および通常の列に適用できます。ステートメントで完全な定義を指定すると、列定義の変更として解析され、その結果、スキーマ変更タスクが開始されます。
+4. カラムのコメントのみを変更する場合は——`MODIFY COLUMN <column_name> COMMENT 「<new_column_comment>」` の構文でも、コメントのみが異なる完全な列定義でも——メタデータのみが変更され、スキーマ変更タスクは開始されません。これは主キー列、キー列、および通常の列に適用されます。完全な定義がカラムの他の属性も変更する場合は、通常通りスキーマ変更タスクが開始されます。
 5. パーティション列は修正できません。
 6. 現在サポートされている変換の種類（精度の損失はユーザーが保証します）:
 
@@ -738,17 +738,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: タイムアウト時間を設定することをサポートしています。デフォルトのタイムアウト時間は1日です。
 
+`ORDER BY`: ベーステーブルのソートキーとは異なる、ロールアップ独自のソートキーを定義します。共有データクラスタの Range 分散テーブルでのみサポートされます（v4.2 以降）。ロールアップの先頭ソートキー列でフィルタまたは集計を行うクエリがロールアップで処理されるようになります。以下の制限があります。
+
+- テーブルは重複キー（Duplicate Key）テーブルまたは集計（Aggregate）テーブルである必要があります。主キー（Primary Key）テーブルはサポートされません。
+- テーブルは Colocate テーブルであってはならず、AUTO_INCREMENT 列を含めることはできません。
+- ロールアップは、テーブルに他のロールアップまたは同期マテリアライズドビューが存在しない場合にのみ追加できます。
+
 例:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+例: 共有データクラスタの Range 分散テーブルに、独立したソートキーを持つロールアップを作成します。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### バッチでロールアップを作成する

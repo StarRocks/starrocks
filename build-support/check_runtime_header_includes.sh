@@ -61,5 +61,5 @@ check_allowlist() {
 
 check_allowlist '#include[[:space:]]*("runtime/runtime_state.h"|<runtime/runtime_state.h>)' \
     "${RUNTIME_STATE_ALLOWLIST}" "runtime/runtime_state.h"
-check_allowlist '#include[[:space:]]*("runtime/exec_env.h"|<runtime/exec_env.h>)' \
-    "${EXEC_ENV_ALLOWLIST}" "runtime/exec_env.h"
+check_allowlist '#include[[:space:]]*("exec/exec_env.h"|<exec/exec_env.h>)' \
+    "${EXEC_ENV_ALLOWLIST}" "exec/exec_env.h"

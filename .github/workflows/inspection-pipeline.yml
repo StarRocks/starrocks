@@ -1,11 +1,13 @@
 name: INSPECTION PIPELINE
 
 on:
-  schedule:
-    - cron: "0 0 * * 1-5"
-    - cron: "30 4 * * 1-5"
-    - cron: "0 11 * * 1,3,5"
-    - cron: "0 11 * * 2,4"
+  # Scheduled inspection runs disabled 2026-07-08: the runs are not currently
+  # meaningful. Kept here (commented) for easy re-enable. Manual dispatch stays.
+  # schedule:
+  #   - cron: "0 0 * * 1-5"
+  #   - cron: "30 4 * * 1-5"
+  #   - cron: "0 11 * * 1,3,5"
+  #   - cron: "0 11 * * 2,4"
   workflow_dispatch:
     inputs:
       BRANCH:

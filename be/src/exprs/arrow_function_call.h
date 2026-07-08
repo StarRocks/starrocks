@@ -18,8 +18,8 @@
 
 #include "common/object_pool.h"
 #include "exprs/expr.h"
+#include "exprs/udf/udf_call_stub.h"
 #include "runtime/runtime_fwd.h"
-#include "udf/udf_call_stub.h"
 
 namespace starrocks {
 struct ArrowCallStubCtx;

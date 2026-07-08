@@ -27,10 +27,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
+#include "connector/iceberg_connector.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
@@ -214,14 +215,12 @@ TEST_F(IcebergRowDeltaSinkTest, create_row_delta_sink) {
     auto* row_delta_sink = dynamic_cast<IcebergRowDeltaSink*>(sink.get());
     ASSERT_NE(row_delta_sink, nullptr);
 
-    // Verify that a provider rejects a wrong context type
-    auto provider = std::make_unique<IcebergRowDeltaSinkProvider>();
+    // Verify that the connector rejects a wrong context type before constructing a provider.
+    IcebergConnector connector;
     auto bad_ctx = std::make_shared<IcebergDeleteSinkContext>();
-    bad_ctx->fragment_context = _fragment_context.get();
-    auto result = provider->create_chunk_sink(bad_ctx, 0);
+    auto result = connector.create_sink_provider(ConnectorSinkProviderType::ROW_DELTA, bad_ctx);
     ASSERT_FALSE(result.ok());
-    EXPECT_THAT(std::string(result.status().message()),
-                testing::HasSubstr("context is not IcebergRowDeltaSinkContext"));
+    EXPECT_THAT(std::string(result.status().message()), testing::HasSubstr("requires IcebergRowDeltaSinkContext"));
 }
 
 // Test 2: Verify op_code routing sends rows to correct sub-sinks

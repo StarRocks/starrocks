@@ -54,37 +54,40 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
           _transform_exprs(std::move(transform_exprs)),
           _column_slot_map(std::move(column_slot_map)) {}
 
+IcebergDeleteSinkProvider::IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
+
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(result.rollback_action);
-    if (result.io_status.ok()) {
-        _state->update_num_rows_load_sink(result.file_statistics.record_count);
+    push_rollback_action(result.file_result.rollback_action);
+    if (result.file_result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_result.file_statistics.record_count);
 
         TIcebergColumnStats iceberg_column_stats;
-        if (result.file_statistics.column_sizes.has_value()) {
-            iceberg_column_stats.__set_column_sizes(result.file_statistics.column_sizes.value());
+        if (result.file_result.file_statistics.column_sizes.has_value()) {
+            iceberg_column_stats.__set_column_sizes(result.file_result.file_statistics.column_sizes.value());
         }
-        if (result.file_statistics.value_counts.has_value()) {
-            iceberg_column_stats.__set_value_counts(result.file_statistics.value_counts.value());
+        if (result.file_result.file_statistics.value_counts.has_value()) {
+            iceberg_column_stats.__set_value_counts(result.file_result.file_statistics.value_counts.value());
         }
-        if (result.file_statistics.null_value_counts.has_value()) {
-            iceberg_column_stats.__set_null_value_counts(result.file_statistics.null_value_counts.value());
+        if (result.file_result.file_statistics.null_value_counts.has_value()) {
+            iceberg_column_stats.__set_null_value_counts(result.file_result.file_statistics.null_value_counts.value());
         }
-        if (result.file_statistics.lower_bounds.has_value()) {
-            iceberg_column_stats.__set_lower_bounds(result.file_statistics.lower_bounds.value());
+        if (result.file_result.file_statistics.lower_bounds.has_value()) {
+            iceberg_column_stats.__set_lower_bounds(result.file_result.file_statistics.lower_bounds.value());
         }
-        if (result.file_statistics.upper_bounds.has_value()) {
-            iceberg_column_stats.__set_upper_bounds(result.file_statistics.upper_bounds.value());
+        if (result.file_result.file_statistics.upper_bounds.has_value()) {
+            iceberg_column_stats.__set_upper_bounds(result.file_result.file_statistics.upper_bounds.value());
         }
 
         TIcebergDataFile iceberg_delete_file;
         iceberg_delete_file.__set_column_stats(iceberg_column_stats);
-        iceberg_delete_file.__set_partition_path(PathUtils::get_parent_path(result.location));
-        iceberg_delete_file.__set_path(result.location);
-        iceberg_delete_file.__set_format(result.format);
-        iceberg_delete_file.__set_record_count(result.file_statistics.record_count);
-        iceberg_delete_file.__set_file_size_in_bytes(result.file_statistics.file_size);
-        iceberg_delete_file.__set_partition_null_fingerprint(result.extra_data);
+        iceberg_delete_file.__set_partition_path(PathUtils::get_parent_path(result.file_result.location));
+        iceberg_delete_file.__set_path(result.file_result.location);
+        iceberg_delete_file.__set_format(result.file_result.format);
+        iceberg_delete_file.__set_record_count(result.file_result.file_statistics.record_count);
+        iceberg_delete_file.__set_file_size_in_bytes(result.file_result.file_statistics.file_size);
+        iceberg_delete_file.__set_partition_null_fingerprint(result.partition_null_fingerprint);
         iceberg_delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
         iceberg_delete_file.__set_referenced_data_file(result.referenced_data_file);
 
@@ -215,8 +218,8 @@ bool IcebergDeleteSink::is_finished() {
 //
 // Returns the created sink on success, or an error if creation fails.
 StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergDeleteSinkContext>(context);
+        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+    auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
     }
@@ -335,10 +338,11 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
             sort_ordering});
     partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(writer_ctx);
 
-    // Create the delete sink
-    return std::make_unique<IcebergDeleteSink>(
+    auto sink = std::make_unique<IcebergDeleteSink>(
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
+    sink->set_io_poller(create_context.io_poller);
+    return sink;
 }
 
 // Writes a chunk to the file-level delete file for a specific source data file.

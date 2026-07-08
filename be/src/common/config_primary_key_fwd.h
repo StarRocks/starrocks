@@ -149,6 +149,16 @@ CONF_mInt16(tablet_max_versions, "1000");
 
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enable only
+// after the cluster is fully upgraded and no rollback to a pre-fix BE is expected.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "false");
+
 CONF_mBool(enable_primary_key_recover, "false");
 
 // Used for control memory usage of update state cache and compaction state cache

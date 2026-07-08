@@ -484,6 +484,10 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
+struct TChangesScanNode {
+    // no implementation, only used for placeholder in TPlanNode
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -565,6 +569,7 @@ struct TFrontend {
   1: optional string id
   2: optional string ip
   3: optional i32 http_port
+  4: optional i32 rpc_port
 }
 
 struct TSchemaScanNode {
@@ -690,6 +695,10 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+  // Set by FE when a TopN RF reaches this scan only across a non-aggregation deterministic pipeline
+  // breaker (blocking sort, analytic/window); suppresses TopN back-pressure on this scan (incl. the
+  // BE lake/connector self-enable path), since the RF cannot arrive while the scan is still reading.
+  58: optional bool topn_filter_back_pressure_disabled
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
@@ -737,6 +746,8 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+  // See TOlapScanNode.topn_filter_back_pressure_disabled.
+  61: optional bool topn_filter_back_pressure_disabled
 
   43: optional Descriptors.TTableSchemaKey schema_key
 
@@ -1582,6 +1593,9 @@ struct TPlanNode {
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
+
+  // just a placeholder
+  150: optional TChangesScanNode changes_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

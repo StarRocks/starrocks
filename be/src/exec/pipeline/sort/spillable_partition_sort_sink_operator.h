@@ -18,10 +18,10 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/spill/spiller.h"
-#include "exec/pipeline/primitives/block_reason.h"
-#include "exec/pipeline/primitives/spillable_flat_sink_mixin.h"
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/primitives/spillable_flat_sink_mixin.h"
 
 namespace starrocks::pipeline {
 class SpillablePartitionSortSinkOperator final : public PartitionSortSinkOperator,
