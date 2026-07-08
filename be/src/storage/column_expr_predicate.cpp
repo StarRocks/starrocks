@@ -360,6 +360,9 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
     if (with_not) {
         *row_bitmap -= roaring;
+        roaring::Roaring null_roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &null_roaring));
+        *row_bitmap -= null_roaring;
     } else {
         *row_bitmap &= roaring;
     }
