@@ -1502,3 +1502,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否启用 bookmark 元数据函数(`bookmark_create` / `bookmark_release`)。这两个函数仅用于调试/测试，默认关闭，需要 OPERATE 权限且只能在 leader 节点上执行。
 - 引入版本:
+
+### `context_entity_history_max_rows`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当调用方未指定 LIMIT 时，semantic-context entity_history 读取路径（TVF / 读取 API）默认应用的 LIMIT。用于防止一个频繁产生版本的实体在 FE 上物化出成千上万行。若调用方指定了更小的 LIMIT，则以调用方为准。
+- 引入版本:

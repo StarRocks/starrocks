@@ -1452,3 +1452,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：bookmark メタデータ関数(`bookmark_create` / `bookmark_release`)を有効にするかどうか。これらはデバッグ/テスト専用の関数で、デフォルトでは無効になっています。有効にするには OPERATE 権限が必要で、leader ノードでのみ実行できます。
 - 導入時期：
+
+### `context_entity_history_max_rows`
+
+- デフォルト：1000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：呼び出し側が LIMIT を指定しない場合に、semantic-context の entity_history 読み取りパス(TVF / 読み取り API)に適用されるデフォルトの LIMIT。バージョンが頻繁に更新されるエンティティが FE 上で数千行を実体化するのを防ぎます。呼び出し側がより小さい LIMIT を指定した場合は、そちらが優先されます。
+- 導入時期：

@@ -1504,3 +1504,12 @@ This topic introduces the following types of FE configurations:
 - Description: Whether the bookmark metadata functions (`bookmark_create` / `bookmark_release`) are enabled. These are debug/test-only, OPERATE-privileged, leader-only functions and are gated off by default.
 - Introduced in:
 
+### `context_entity_history_max_rows`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Default LIMIT applied to the semantic-context entity_history read path (TVF / read API) when the caller does not supply one. Prevents a frequently-versioned entity from materializing thousands of rows on the FE. A smaller caller-supplied limit takes precedence.
+- Introduced in:
+

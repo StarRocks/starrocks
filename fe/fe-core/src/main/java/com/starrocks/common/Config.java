@@ -4949,4 +4949,10 @@ public class Config extends ConfigBase {
                     + "These are debug/test-only functions gated off by default; enabling them exposes a "
                     + "narrow, OPERATE-privileged, leader-only bookmark create/release surface over SQL.")
     public static boolean enable_bookmark_meta_functions = false;
+
+    @ConfField(mutable = true, comment = "Default LIMIT applied to the semantic-context "
+            + "entity_history TVF / read API when the caller does not supply one. Prevents a "
+            + "frequently-versioned entity from materializing thousands of rows as ValuesRelation "
+            + "Expr nodes on the FE. Caller-supplied limits, if smaller, take precedence.")
+    public static int context_entity_history_max_rows = 1000;
 }
