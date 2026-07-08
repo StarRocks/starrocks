@@ -217,7 +217,8 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(int32_t driver_id) {
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
+        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
     auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
@@ -337,10 +338,11 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
             sort_ordering});
     partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(writer_ctx);
 
-    // Create the delete sink
-    return std::make_unique<IcebergDeleteSink>(
+    auto sink = std::make_unique<IcebergDeleteSink>(
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
+    sink->set_io_poller(create_context.io_poller);
+    return sink;
 }
 
 // Writes a chunk to the file-level delete file for a specific source data file.

@@ -110,7 +110,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
         HiveChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -132,7 +132,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
         HiveChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -154,7 +154,7 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
         HiveChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init());

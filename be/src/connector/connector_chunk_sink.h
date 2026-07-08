@@ -98,18 +98,19 @@ protected:
 
 struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
+};
 
-    // Called by ConnectorSinkOperatorFactory after SinkMemoryManager is created.
-    // Composite sinks (e.g. IcebergRowDeltaSink) override this to receive the
-    // manager and create per-sub-sink child managers during initialization.
-    virtual void set_sink_mem_mgr(SinkMemoryManager* /*mgr*/) {}
+struct ConnectorChunkSinkCreateContext {
+    AsyncFlushStreamPoller* io_poller = nullptr;
+    SinkMemoryManager* sink_mem_mgr = nullptr;
 };
 
 class ConnectorChunkSinkProvider {
 public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
+            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) = 0;
 };
 
 using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;
