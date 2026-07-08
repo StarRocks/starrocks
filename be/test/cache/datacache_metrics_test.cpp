@@ -89,12 +89,14 @@ public:
     bool has_disk_cache() const override { return true; }
     bool available() const override { return initialized; }
     void disk_spaces(std::vector<DirSpace>* spaces) const override { spaces->clear(); }
-    size_t lookup_count() const override { return 0; }
-    size_t hit_count() const override { return 0; }
+    size_t lookup_count() const override { return lookup_count_val; }
+    size_t hit_count() const override { return hit_count_val; }
     Status prune() override { return Status::OK(); }
 
     bool initialized = true;
     DataCacheDiskMetrics metrics;
+    size_t lookup_count_val = 0;
+    size_t hit_count_val = 0;
 };
 
 ProcessMetricsRegistry* backend_process_metrics_registry_for_test() {
@@ -143,6 +145,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_registration) {
     ASSERT_NE(nullptr, metrics->get_metric("datacache_meta_used_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_bytes"));
     ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_bytes"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_hit_count"));
+    ASSERT_NE(nullptr, metrics->get_metric("block_cache_miss_count"));
 }
 
 TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
@@ -156,6 +160,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_metrics_initial_values) {
     ASSERT_GE(instance->datacache_meta_used_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_hit_bytes.value(), 0);
     ASSERT_GE(instance->block_cache_miss_bytes.value(), 0);
+    ASSERT_GE(instance->block_cache_hit_count.value(), 0);
+    ASSERT_GE(instance->block_cache_miss_count.value(), 0);
 }
 
 TEST_F(DataCacheMetricsTest, test_update_snapshot_sets_values) {
@@ -166,7 +172,9 @@ TEST_F(DataCacheMetricsTest, test_update_snapshot_sets_values) {
                                       .disk_used_bytes = 4,
                                       .meta_used_bytes = 5,
                                       .block_cache_hit_bytes = 6,
-                                      .block_cache_miss_bytes = 7};
+                                      .block_cache_miss_bytes = 7,
+                                      .block_cache_hit_count = 8,
+                                      .block_cache_miss_count = 9};
 
     instance->update(snapshot);
 
@@ -177,6 +185,8 @@ TEST_F(DataCacheMetricsTest, test_update_snapshot_sets_values) {
     ASSERT_EQ(5, instance->datacache_meta_used_bytes.value());
     ASSERT_EQ(6, instance->block_cache_hit_bytes.value());
     ASSERT_EQ(7, instance->block_cache_miss_bytes.value());
+    ASSERT_EQ(8, instance->block_cache_hit_count.value());
+    ASSERT_EQ(9, instance->block_cache_miss_count.value());
 }
 
 TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
@@ -190,6 +200,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
     auto disk_cache = std::make_shared<FakeDiskCacheEngine>();
     disk_cache->metrics = {
             .status = DataCacheStatus::NORMAL, .disk_quota_bytes = 1000, .disk_used_bytes = 200, .meta_used_bytes = 30};
+    disk_cache->hit_count_val = 11;
+    disk_cache->lookup_count_val = 15;
     MemTracker datacache_mem_tracker(MemTrackerType::DATACACHE, -1, "datacache");
     MemTracker pagecache_mem_tracker(MemTrackerType::PAGE_CACHE, -1, "page_cache");
     cache->_local_mem_cache = mem_cache;
@@ -211,6 +223,8 @@ TEST_F(DataCacheMetricsTest, test_datacache_owns_metrics_update_hook) {
     ASSERT_EQ(30, instance->datacache_meta_used_bytes.value());
     ASSERT_EQ(7, instance->block_cache_hit_bytes.value());
     ASSERT_EQ(9, instance->block_cache_miss_bytes.value());
+    ASSERT_EQ(11, instance->block_cache_hit_count.value());
+    ASSERT_EQ(4, instance->block_cache_miss_count.value());
     ASSERT_EQ(20, datacache_mem_tracker.consumption());
     ASSERT_EQ(40, pagecache_mem_tracker.consumption());
 }
@@ -276,6 +290,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     auto meta_used_metric = metrics->get_metric("datacache_meta_used_bytes");
     auto hit_bytes_metric = metrics->get_metric("block_cache_hit_bytes");
     auto miss_bytes_metric = metrics->get_metric("block_cache_miss_bytes");
+    auto hit_count_metric = metrics->get_metric("block_cache_hit_count");
+    auto miss_count_metric = metrics->get_metric("block_cache_miss_count");
 
     ASSERT_NE(nullptr, mem_quota_metric);
     ASSERT_NE(nullptr, mem_used_metric);
@@ -284,6 +300,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_NE(nullptr, meta_used_metric);
     ASSERT_NE(nullptr, hit_bytes_metric);
     ASSERT_NE(nullptr, miss_bytes_metric);
+    ASSERT_NE(nullptr, hit_count_metric);
+    ASSERT_NE(nullptr, miss_count_metric);
 
     // Quota/used metrics should be gauge type
     ASSERT_EQ(MetricType::GAUGE, mem_quota_metric->type());
@@ -296,6 +314,10 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_EQ(MetricType::COUNTER, hit_bytes_metric->type());
     ASSERT_EQ(MetricType::COUNTER, miss_bytes_metric->type());
 
+    // Hit/miss count totals should be counter type with NOUNIT
+    ASSERT_EQ(MetricType::COUNTER, hit_count_metric->type());
+    ASSERT_EQ(MetricType::COUNTER, miss_count_metric->type());
+
     // All should have BYTES unit
     ASSERT_EQ(MetricUnit::BYTES, mem_quota_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, mem_used_metric->unit());
@@ -304,6 +326,8 @@ TEST_F(DataCacheMetricsTest, test_metrics_types) {
     ASSERT_EQ(MetricUnit::BYTES, meta_used_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, hit_bytes_metric->unit());
     ASSERT_EQ(MetricUnit::BYTES, miss_bytes_metric->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, hit_count_metric->unit());
+    ASSERT_EQ(MetricUnit::NOUNIT, miss_count_metric->unit());
 }
 
 } // namespace starrocks
