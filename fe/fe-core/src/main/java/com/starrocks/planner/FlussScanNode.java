@@ -122,10 +122,6 @@ public class FlussScanNode extends ScanNode {
             }
             paramsBuilder.setPartitionKeys(partitionKeys);
         }
-        LOG.debug("Fluss scan remote file params table={}.{}, selectedPartitionIds={}, partitionKeys={}, " +
-                        "predicate={}, fieldNames={}, limit={}",
-                flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
-                scanNodePredicates.getSelectedPartitionIds(), partitionKeys, predicate, fieldNames, limit);
         GetRemoteFilesParams params = paramsBuilder.build();
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL,
@@ -136,8 +132,6 @@ public class FlussScanNode extends ScanNode {
         FlussRemoteFileDesc remoteFileDesc = (FlussRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         FlussSplitsInfo flussSplitsInfo = remoteFileDesc.getFlussSplitsInfo();
         List<SourceSplitBase> splits = flussSplitsInfo.getFlussSplits();
-        LOG.debug("Fluss scan remote file result table={}.{}, splitCount={}",
-                flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), splits.size());
 
         if (splits.isEmpty()) {
             LOG.warn("There is no fluss splits on {}.{} and predicate: [{}]",
