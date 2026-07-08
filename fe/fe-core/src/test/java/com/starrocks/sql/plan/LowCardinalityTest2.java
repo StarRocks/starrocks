@@ -1825,14 +1825,14 @@ public class LowCardinalityTest2 extends PlanTestBase {
     public void testMetaScanException() throws Exception {
         String sql = "select dict_merge(t1a, 10000000000) from test_all_type [_META_]";
         try {
-            String plan = getFragmentPlan(sql);
+            getFragmentPlan(sql);
             Assertions.fail();
         } catch (SemanticException e) {
             assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");
         }
         sql = "select dict_merge(t1a, -1) from test_all_type [_META_]";
         try {
-            String plan = getFragmentPlan(sql);
+            getFragmentPlan(sql);
             Assertions.fail();
         } catch (SemanticException e) {
             assertContains(e.getMessage(), "The second parameter of DICT_MERGE must be a constant positive integer");

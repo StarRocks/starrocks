@@ -1089,7 +1089,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testSaveLoadJsonFormatImage() throws Exception {
-        long transactionId = masterTransMgr
+        masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable1,
                         transactionSource,
@@ -1134,7 +1134,6 @@ public class GlobalTransactionMgrTest {
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
         TransactionState transactionState = spy(new TransactionState());
 
-        long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
         doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
         doReturn(new VisibleStateWaiter(new TransactionState()))

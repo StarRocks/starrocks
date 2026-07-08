@@ -154,7 +154,7 @@ public class SharedDataStorageVolumeMgrTest {
 
             @Mock
             public void updateFileStore(FileStoreInfo fsInfo) {
-                FileStoreInfo fileStoreInfo = fileStores.get(fsInfo.getFsKey());
+                fileStores.get(fsInfo.getFsKey());
                 fileStores.put(fsInfo.getFsKey(), fsInfo);
             }
         };
@@ -271,7 +271,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        String svKey = svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
         Assertions.assertTrue(svm.exists(svName));
 
         {
@@ -805,7 +805,7 @@ public class SharedDataStorageVolumeMgrTest {
         svm.save(imageWriter);
 
         InputStream in = new ByteArrayInputStream(out.toByteArray());
-        DataInputStream dis = new DataInputStream(in);
+        new DataInputStream(in);
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(new JsonReader(new InputStreamReader(in)));
         StorageVolumeMgr svm1 = new SharedDataStorageVolumeMgr();
         svm1.load(reader);
@@ -908,7 +908,7 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n2", "<hdfs_host>:<hdfs_port>");
-        String svKey = svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
+        svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
         Assertions.assertEquals(true, svm.exists(svName));
 
         storageParams.put("dfs.client.failover.proxy.provider",

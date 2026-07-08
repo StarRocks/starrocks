@@ -340,7 +340,6 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
         Assertions.assertEquals(json, GsonUtils.GSON.toJson(status));
     }
     @Test
@@ -349,7 +348,7 @@ public class TaskRunHistoryTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
-        String json = GsonUtils.GSON.toJson(status);
+        GsonUtils.GSON.toJson(status);
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
         Assertions.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
     }

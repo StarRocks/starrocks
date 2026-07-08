@@ -1119,7 +1119,7 @@ public class CTEPlanTest extends PlanTestBase {
                 + "cte1 as(select * from cte0),\n"
                 + "cte2 as(select * from cte0)\n"
                 + "select * from cte1 union all select * from cte2;";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertNotContains("MultiCast");
     }
 
@@ -1165,7 +1165,7 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with\n"
                 + "cte0 as(select * from t0 limit 10)\n"
                 + "select * from cte0;";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertContains("MultiCast");
     }
 

@@ -104,8 +104,6 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assertions.assertFalse(tabletIds.isEmpty());
@@ -129,8 +127,7 @@ public class ReportHandlerTest {
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        long dbId = db.getId();
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -155,7 +152,6 @@ public class ReportHandlerTest {
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        long dbId = db.getId();
         OlapTable olapTable =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
 

@@ -61,7 +61,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class InfoSchemaDbTest {
     ConnectContext ctx;
@@ -466,7 +465,7 @@ public class InfoSchemaDbTest {
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         Map<ObjectType, List<PrivilegeEntry>> privileges =
                 authorizationManager.getTypeToPrivilegeEntryListByRole("root");
-        Set<TGetGrantsToRolesOrUserItem> s = Deencapsulation.invoke(GrantsTo.class, "getGrantItems",
+        Deencapsulation.invoke(GrantsTo.class, "getGrantItems",
                 authorizationMgr, "root", privileges);
     }
 

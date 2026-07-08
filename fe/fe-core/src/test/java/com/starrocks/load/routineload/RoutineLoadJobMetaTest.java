@@ -66,7 +66,7 @@ public class RoutineLoadJobMetaTest {
         Database db = globalStateMgr.getLocalMetastore().getDb("test");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), 2L, "", "");
 
-        Exception e = Assertions.assertThrows(MetaNotFoundException.class,
+        Assertions.assertThrows(MetaNotFoundException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 
@@ -77,7 +77,7 @@ public class RoutineLoadJobMetaTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
-        Exception e = Assertions.assertThrows(StarRocksException.class,
+        Assertions.assertThrows(StarRocksException.class,
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }

@@ -352,7 +352,6 @@ public class TransactionLoadAction extends RestBaseAction {
         if (StringUtils.isBlank(label)) {
             throw new StarRocksException("Empty label.");
         }
-        String user = request.getRequest().headers().get(USER_KEY);
 
         TransactionOperation txnOperation = TransactionOperation.parse(request.getSingleParameter(TXN_OP_KEY))
                 .orElseThrow(() -> new StarRocksException(

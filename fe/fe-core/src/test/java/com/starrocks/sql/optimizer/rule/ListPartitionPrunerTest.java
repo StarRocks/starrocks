@@ -489,7 +489,6 @@ public class ListPartitionPrunerTest {
         intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
         ColumnRefOperator intCol1 = new ColumnRefOperator(3, IntegerType.INT, "int_col1", true);
         ColumnRefOperator intCol2 = new ColumnRefOperator(4, IntegerType.INT, "int_col2", true);
-        ColumnRefOperator intColNotPart = new ColumnRefOperator(5, IntegerType.INT, "int_col_not_part", true);
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();
@@ -543,7 +542,6 @@ public class ListPartitionPrunerTest {
         columnToNullPartitions.put(intCol1, Sets.newHashSet());
         columnToNullPartitions.put(intCol2, Sets.newHashSet());
 
-        Set<Long> allPartitions = Sets.newHashSet(0L, 1L, 2L);
         conjuncts = Lists.newArrayList();
         pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts, null);
 

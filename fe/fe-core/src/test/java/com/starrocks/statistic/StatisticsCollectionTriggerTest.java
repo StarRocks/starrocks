@@ -56,7 +56,6 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
     public void triggerOnLoad() throws Exception {
         final String dbName = "test_statistics";
         final String tableName = "t_load";
-        StatisticStorage storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
         starRocksAssert.withDatabase(dbName)
                 .useDatabase(dbName);
         starRocksAssert.withTable("create table t_load (" +

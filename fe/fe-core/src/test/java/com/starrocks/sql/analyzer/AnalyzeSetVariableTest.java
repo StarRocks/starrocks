@@ -19,7 +19,6 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -246,7 +245,6 @@ public class AnalyzeSetVariableTest {
         long rg1ID = 1;
         TWorkGroup rg1 = new TWorkGroup();
         rg1.setId(rg1ID);
-        ResourceGroupMgr mgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
 
         new MockUp<ResourceGroupMgr>() {
             @Mock

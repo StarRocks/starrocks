@@ -2892,7 +2892,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     taskRunContext.setProperties(props);
                     taskRunContext.setTaskType(Constants.TaskType.MANUAL);
 
-                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
                     MVTaskRunProcessor mvTaskRunProcessor = new MVTaskRunProcessor();
                     mvTaskRunProcessor.prepare(taskRunContext);
                     MVPCTRefreshProcessor processor =
@@ -2941,7 +2940,6 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     processor.prepare(taskRunContext);
                     MVPCTRefreshProcessor mvRefreshProcessor =
                             (MVPCTRefreshProcessor) processor.getMVRefreshProcessor();
-                    MvTaskRunContext mvTaskRunContext = new MvTaskRunContext(taskRunContext);
                     Set<String> result = new MVPCTRefreshSynchronizer(mvRefreshProcessor)
                             .getPCTMVToRefreshedPartitions(false, false).getPartitionNames();
                     Assertions.assertFalse(result.isEmpty());

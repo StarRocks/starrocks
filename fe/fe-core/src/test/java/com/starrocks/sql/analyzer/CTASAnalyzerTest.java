@@ -338,12 +338,10 @@ public class CTASAnalyzerTest {
 
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
-        CreateTableAsSelectStmt createTableStmt2 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
 
         String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
-        CreateTableAsSelectStmt createTableStmt3 =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
+        UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
     }
 
     @Test
@@ -397,8 +395,7 @@ public class CTASAnalyzerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "create table table_01 PARTITION BY date_trunc('day', k1) as " +
                 "select k1, k2, k3 from  duplicate_table_with_null;";
-        CreateTableAsSelectStmt createTableStmt =
-                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
 
     @Test

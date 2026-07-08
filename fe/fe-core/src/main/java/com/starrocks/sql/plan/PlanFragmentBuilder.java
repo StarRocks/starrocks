@@ -369,7 +369,6 @@ public class PlanFragmentBuilder {
             List<ExecGroup> colocateExecGroups =
                     execPlan.getExecGroups().stream().filter(ExecGroup::isColocateExecGroup).collect(
                             Collectors.toList());
-            final List<ExecGroup> execGroups = execPlan.getExecGroups();
             for (PlanFragment fragment : fragments) {
                 fragment.assignColocateExecGroups(fragment.getPlanRoot(), colocateExecGroups);
             }
@@ -3923,7 +3922,7 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
-            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            context.getDescTbl().createTupleDescriptor();
 
             Map<SlotId, Expr> commonSubOperatorMap = buildCommonSubExprMap(filter.getPredicateCommonOperators(), context);
 

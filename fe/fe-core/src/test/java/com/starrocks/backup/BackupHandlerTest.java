@@ -82,7 +82,6 @@ import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TFinishTaskRequest;
-import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.IntegerType;
@@ -512,7 +511,6 @@ public class BackupHandlerTest {
             Assertions.fail();
         }
 
-        TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
 
         // process FUNCTION restore
         List<TableRef> emptyTableRef = Lists.newArrayList();

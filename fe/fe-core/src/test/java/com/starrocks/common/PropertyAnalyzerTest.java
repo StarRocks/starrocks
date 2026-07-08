@@ -334,7 +334,7 @@ public class PropertyAnalyzerTest {
 
             Map<String, String> property4 = new HashMap<>();
             property4.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "BATCH");
-            TCompactionStrategy strategy = PropertyAnalyzer.analyzecompactionStrategy(property4);
+            PropertyAnalyzer.analyzecompactionStrategy(property4);
         } catch (AnalysisException e) {
             Assertions.assertTrue(e.getMessage().contains("Invalid compaction strategy: BATCH"));
         }

@@ -1705,7 +1705,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         // refresh with force
         Map<String, String> props = taskRun.getProperties();
         props.put(TaskRun.FORCE, "true");
-        String result = "";
         // explain with refresh
         {
             ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
@@ -1723,7 +1722,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");
@@ -1733,7 +1732,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");
@@ -1785,7 +1784,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
         }
 
-        String result = "";
         // explain with partial refresh
         {
             ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
@@ -1805,7 +1803,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/2");
@@ -1815,7 +1813,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/2");

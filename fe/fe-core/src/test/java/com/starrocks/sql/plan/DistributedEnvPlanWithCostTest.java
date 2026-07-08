@@ -299,7 +299,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "        and ps_suppkey = l_suppkey\n" +
                 "        and ps_partkey = l_partkey        \n" +
                 "        and p_name like '%peru%';";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -511,16 +511,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testSetVar() throws Exception {
         String sql = "explain select c2 from db1.tbl3;";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=false) */c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=true, enable_cbo=true) */ c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
     }
 
     @Test

@@ -266,7 +266,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
     @Test
     public void testModifyDynamicPartitionNormal() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
         properties.put(DynamicPartitionProperty.ENABLE, "true");
@@ -360,7 +359,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
     public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
             throws StarRocksException {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         Map<String, String> properties = new HashMap<>();
         properties.put(propertyKey, propertyValue);

@@ -647,7 +647,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
+<<<<<<< HEAD
 
+=======
+>>>>>>> 6d4b2f6613e... [Refactor] Enable UnusedLocalVariable checkstyle rule for FE (#76021)
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -686,7 +689,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // TODO: check privilege
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
         for (PipeFileRecord record : files) {

@@ -68,7 +68,7 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
             mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
             AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
             ModifyBackendClause clause = new ModifyBackendClause("test", "fqdn");
-            Void result = visitor.visitModifyBackendClause(clause, null);
+            visitor.visitModifyBackendClause(clause, null);
         }
     }
 
@@ -79,7 +79,7 @@ public class AlterSystemStmtAnalyzerTest extends StarRocksTestBase {
             mocked.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(mockAddr);
             AlterSystemStmtAnalyzer visitor = new AlterSystemStmtAnalyzer();
             ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "fqdn");
-            Void result = visitor.visitModifyFrontendHostClause(clause, null);
+            visitor.visitModifyFrontendHostClause(clause, null);
         }
     }
 

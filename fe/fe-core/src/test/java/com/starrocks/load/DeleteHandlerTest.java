@@ -54,7 +54,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -219,7 +218,6 @@ public class DeleteHandlerTest {
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
 
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();

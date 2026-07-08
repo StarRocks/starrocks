@@ -2068,7 +2068,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Scope scope) {
-            Scope ignored = visitJoin(node, scope);
+            visitJoin(node, scope);
             // Only the scope of the table function is visible outside.
             node.setScope(node.getRight().getScope());
             return node.getScope();

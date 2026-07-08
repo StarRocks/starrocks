@@ -40,7 +40,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -125,7 +124,6 @@ public class RoutineLoadManagerTest {
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
         String tableNameString = "table1";
-        TableName tableName = new TableName(dbName, tableNameString);
         List<ParseNode> loadPropertyList = new ArrayList<>();
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         loadPropertyList.add(columnSeparator);
@@ -183,7 +181,6 @@ public class RoutineLoadManagerTest {
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
         String tableNameString = "table1";
-        TableName tableName = new TableName(dbName, tableNameString);
         List<ParseNode> loadPropertyList = new ArrayList<>();
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         loadPropertyList.add(columnSeparator);
@@ -367,7 +364,7 @@ public class RoutineLoadManagerTest {
         Collections.shuffle(jobIDs);
         for (long jobID : jobIDs) {
             for (long taskId = 0; taskId < 3; taskId++) {
-                long beId = routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobID);
+                routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, jobID);
             }
         }
 

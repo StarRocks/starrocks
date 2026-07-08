@@ -202,7 +202,6 @@ public class JobSpecTest extends SchedulerTestBase {
     @Test
     public void testFromBrokerLoadJobSpec() throws Exception {
         // Prepare input arguments.
-        String sql = "insert into lineitem select * from lineitem";
 
         long loadJobId = 1L;
         TUniqueId queryId = new TUniqueId(2, 3);
@@ -270,7 +269,6 @@ public class JobSpecTest extends SchedulerTestBase {
     @Test
     public void testFromStreamLoadJobSpec() throws Exception {
         // Prepare input arguments.
-        String sql = "insert into lineitem select * from lineitem";
 
         long loadJobId = 1L;
         TUniqueId queryId = new TUniqueId(2, 3);

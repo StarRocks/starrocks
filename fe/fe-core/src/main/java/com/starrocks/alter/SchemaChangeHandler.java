@@ -622,7 +622,6 @@ public class SchemaChangeHandler extends AlterHandler {
         ColumnPosition fieldPos = alterClause.getFieldPos();
         ArrayList<StructField> oriFields = oriFieldType.getFields();
         int posIndex = -1;
-        boolean hasPos = (fieldPos != null);
         if (fieldPos != null) {
             if (fieldPos.isFirst()) {
                 posIndex = 0;
@@ -2390,7 +2389,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
                                     List<List<Comparable>> schemaChangeJobInfos) {
-        ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;

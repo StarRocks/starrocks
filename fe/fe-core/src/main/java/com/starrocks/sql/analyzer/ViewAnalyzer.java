@@ -58,7 +58,6 @@ public class ViewAnalyzer {
             stmt.setTableRef(tableRef);
 
             final String catalog = tableRef.getCatalogName();
-            final String db = tableRef.getDbName();
             final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
 

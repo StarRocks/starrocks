@@ -296,10 +296,6 @@ public class TabletStatMgrTest {
                                           @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getLatestBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getLatestBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -349,10 +345,6 @@ public class TabletStatMgrTest {
                                           @Mocked LakeService lakeService) {
         LakeTable table = createLakeTableForTest();
 
-        long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getLatestBaseIndex().getTablets().get(0).getId();
-        long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getLatestBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -381,10 +373,6 @@ public class TabletStatMgrTest {
             }
         };
 
-        long tablet1NumRows = 20L;
-        long tablet2NumRows = 21L;
-        long tablet1DataSize = 30L;
-        long tablet2DataSize = 31L;
 
         new Expectations() {
             {

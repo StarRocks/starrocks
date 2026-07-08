@@ -515,7 +515,7 @@ public class ShowExecutorSimpleTest {
 
         ctx.setGlobalStateMgr(AccessTestUtil.fetchBlockCatalog());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        ShowExecutor.execute(stmt, ctx);
     }
 
     @Test
@@ -584,7 +584,7 @@ public class ShowExecutorSimpleTest {
 
             ShowCreateDbStmt stmt = new ShowCreateDbStmt("emptyDb");
 
-            ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+            ShowExecutor.execute(stmt, ctx);
 
             Assertions.fail("No exception throws.");
         });
@@ -597,7 +597,7 @@ public class ShowExecutorSimpleTest {
                     null, NodePosition.ZERO);
             ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
-            ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+            ShowExecutor.execute(stmt, ctx);
 
             Assertions.fail("No Exception throws.");
         });
