@@ -198,7 +198,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     // every subfield, so the output must stay full too. Pruning it would make FE
                     // declare a narrower struct than BE materializes for that input, producing
                     // "encode size does not equal when decoding" on shuffle deserialization.
-                    if (!canSafelyPruneUnnestOutput(input, context)) {
+                    if (!canSafelyPruneUnnestOutput(input, context, optExpression)) {
                         continue;
                     }
                     // Prune the output to the INPUT array column's access group (not the output's own
@@ -213,16 +213,20 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
             return visit(optExpression, context);
         }
 
-        // The UNNEST output type may only be pruned when its input array column is itself pruned to a
-        // matching element type. That holds when the input is:
-        //   - a scan column (a real prune boundary) not also fully materialized elsewhere, or
-        //   - another UNNEST output whose own input is, recursively, safely prunable (stacked UNNEST
-        //     of a nested array: UNNEST(arr2d) then UNNEST(arr1d) - arr1d is itself pruned here).
-        // A derived input column (e.g. a struct subfield that may stay full), or any column with an
-        // empty / "select all" access path (fully materialized), is NOT pruned, so the output must
-        // stay full to match what BE materializes.
+        // The UNNEST output may be pruned only when its input array element is itself pruned to a
+        // narrower type. That holds when the input has a non-empty, non-"select all" access group AND
+        // is a real prune boundary:
+        //   - a scan column, or
+        //   - another UNNEST output whose input is (recursively) prunable (stacked UNNEST), or
+        //   - a derived struct-subfield column (unnest(c3.c3_sub1)) whose BASE scan column is
+        //     (recursively) prunable - following the parameter expression back to its source instead
+        //     of blanket-treating every non-scan input as unsafe.
+        // If the input (or a derived input's base column) is fully materialized (empty / "select all"
+        // access path, e.g. via SELECT t.*), the element stays full, so the output must stay full to
+        // match what BE materializes.
         private static boolean canSafelyPruneUnnestOutput(ColumnRefOperator input,
-                                                          PruneComplexTypeUtil.Context context) {
+                                                          PruneComplexTypeUtil.Context context,
+                                                          OptExpression optExpression) {
             ComplexTypeAccessGroup inputGroup = context.getVisitedAccessGroup(input);
             if (inputGroup == null) {
                 return false;
@@ -240,9 +244,35 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                 // Stacked UNNEST: the input is itself an UNNEST output, pruned here iff its own input
                 // is safely prunable. Recurse so we only prune when the whole chain ends at a pruned
                 // scan column, and keep the output full otherwise.
-                return canSafelyPruneUnnestOutput(innerInput, context);
+                return canSafelyPruneUnnestOutput(innerInput, context, optExpression);
+            }
+            // Derived input (e.g. unnest(c3.c3_sub1)): a synthesized column from a child Project, not a
+            // scan ref. Follow it to its base column and gate on THAT column, so a base kept full via
+            // SELECT t.* keeps the output full while a base pruned narrow prunes the output in lockstep.
+            ScalarOperator definition = findDefiningExpr(input, optExpression);
+            if (definition != null) {
+                List<ColumnRefOperator> baseColumns = definition.getColumnRefs();
+                if (baseColumns.size() == 1 && !baseColumns.get(0).equals(input)) {
+                    return canSafelyPruneUnnestOutput(baseColumns.get(0), context, optExpression);
+                }
             }
             return false;
+        }
+
+        // Find the scalar expression that defines a (derived) column by searching projections in the
+        // table function's input subtree; null if the column is not produced by a projection.
+        private static ScalarOperator findDefiningExpr(ColumnRefOperator col, OptExpression optExpression) {
+            for (OptExpression child : optExpression.getInputs()) {
+                Projection projection = child.getOp().getProjection();
+                if (projection != null && projection.getColumnRefMap().get(col) != null) {
+                    return projection.getColumnRefMap().get(col);
+                }
+                ScalarOperator definition = findDefiningExpr(col, child);
+                if (definition != null) {
+                    return definition;
+                }
+            }
+            return null;
         }
 
         private static void pruneUnnestOutputToInputGroup(ColumnRefOperator output, ColumnRefOperator input,
