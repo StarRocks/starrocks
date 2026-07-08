@@ -578,8 +578,8 @@ class ParquetRowGroupStatisticsReaderTest {
 
     @Test
     void utcAdjustedTimestampFallsBackToDataTier() throws Exception {
-        // isAdjustedToUTC=true: the load applies a session-tz offset the FE reader cannot
-        // reproduce here, so meta tier must defer to data tier rather than risk an offset boundary.
+        // No load timezone (null) -> no fixed offset resolvable -> the meta tier cannot match the BE's
+        // session-tz offset for a UTC-adjusted timestamp, so it defers to the data tier.
         Path parquetPath = writeParquet(
                 timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
                 /*rowCount=*/ 2,
@@ -589,6 +589,104 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                         new Column("event_ts", DateType.DATETIME), null));
+    }
+
+    @Test
+    void utcAdjustedTimestampWithFixedOffsetReachesMetaTier() throws Exception {
+        // isAdjustedToUTC=true stores the UTC instant; a +08:00 load adds a constant +8h offset (the BE
+        // does the same for a fixed-offset zone). epoch milli 0 -> 1970-01-01 08:00:00 local; +1000ms/row.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("event_ts", DateType.DATETIME), "+08:00");
+
+        Assertions.assertFalse(stats.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics rowGroup : stats) {
+            Assertions.assertFalse(rowGroup.isTruncated());
+            String minValue = rowGroup.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = rowGroup.getMaxTuple().getValues().get(0).getStringValue();
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("1970-01-01 08:00:00", globalMin);
+        Assertions.assertEquals("1970-01-01 08:00:02", globalMax);
+    }
+
+    @Test
+    void utcAdjustedTimestampWithFixedOffsetKeepsMicroseconds() throws Exception {
+        // MICROS sub-second must survive the offset add. tick 1_500_123 us = 1.500123 s UTC; +8h ->
+        // 1970-01-01 08:00:01.500123 local.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MICROS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 1_500_123L));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                new Column("event_ts", DateType.DATETIME), "+08:00");
+
+        Assertions.assertEquals("1970-01-01 08:00:01.500123",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void utcAdjustedTimestampWithDstZoneFallsBackToDataTier() throws Exception {
+        // A DST zone applies a per-instant offset the meta tier cannot reproduce with one scalar -> data tier.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "America/New_York"));
+    }
+
+    @Test
+    void utcAdjustedTimestampOffsetCrossesDate() throws Exception {
+        // The offset must roll the calendar date, not just the time. UTC 1969-12-31 20:00:00
+        // (tick -14400000 ms) + 08:00 -> 1970-01-01 04:00:00 local; and a negative offset rolls back:
+        // UTC 1970-01-01 02:00:00 (tick 7200000) + (-05:00) -> 1969-12-31 21:00:00 local.
+        Path plusPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", -14_400_000L));
+        Assertions.assertEquals("1970-01-01 04:00:00",
+                ParquetRowGroupStatisticsReader.read(PresplitTestSupport.statusOf(plusPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "+08:00")
+                        .get(0).getMinTuple().getValues().get(0).getStringValue());
+
+        Path minusPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 7_200_000L));
+        Assertions.assertEquals("1969-12-31 21:00:00",
+                ParquetRowGroupStatisticsReader.read(PresplitTestSupport.statusOf(minusPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "-05:00")
+                        .get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void utcAdjustedTimestampOutsideWindowAfterOffsetFallsBackToDataTier() throws Exception {
+        // The window gate runs on the OFFSET-ADJUSTED local date. A UTC value inside [0001,9999] can be
+        // pushed past 9999-12-31 by a positive offset -> data tier (the BE would store an out-of-domain
+        // DATETIME). MAX MILLIS tick 253402300799000 = 9999-12-31 23:59:59 UTC; +08:00 -> year 10000.
+        Path parquetPath = writeParquet(
+                timestampSchema(LogicalTypeAnnotation.TimeUnit.MILLIS, /*isAdjustedToUTC=*/ true),
+                /*rowCount=*/ 1,
+                (group, rowIndex) -> group.append("event_ts", 253_402_300_799_000L));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "+08:00"));
     }
 
     @Test
