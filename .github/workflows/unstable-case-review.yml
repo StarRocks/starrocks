@@ -1,12 +1,13 @@
-name: WEEKLY UNSTABLE CASE REVIEW
+name: UNSTABLE CASE REVIEW
 
-# Runs every Monday to re-execute blacklisted unstable cases.
+# Re-executes blacklisted unstable cases in isolation, on demand.
 # Cases that now pass are auto-removed from unstable_case.json.
 # Still-failing cases get AI analysis in an HTML report uploaded to OSS.
+# Runs on the native ubuntu server ([self-hosted, ubuntu, ai]).
+# Manual-only for now (schedule removed): once validated on CelerData and
+# runners are also registered on StarRocks, a schedule can be re-added.
 
 on:
-  schedule:
-    - cron: '0 2 * * 1'     # Every Monday 02:00 UTC
   workflow_dispatch:
     inputs:
       case_types:
@@ -36,7 +37,7 @@ jobs:
   # ─── Info / gate ─────────────────────────────────────────────────────────
   prepare:
     name: PREPARE
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     outputs:
       BRANCH:          ${{ steps.info.outputs.BRANCH }}
       COMMIT_SHA:      ${{ steps.info.outputs.COMMIT_SHA }}
@@ -73,7 +74,7 @@ jobs:
     name: FE-UT REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_FE_UT == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -109,7 +110,7 @@ jobs:
     name: BE-UT REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_BE_UT == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -144,7 +145,7 @@ jobs:
     name: SQL-TESTER REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_SQL_TESTER == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
       PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -231,7 +232,7 @@ jobs:
     name: REPORT
     needs: [prepare, fe-ut-review, be-ut-review, sql-tester-review]
     if: always() && needs.prepare.result == 'success'
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
