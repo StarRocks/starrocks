@@ -2223,9 +2223,12 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 long tabletId = tabletInfo.getTablet_id();
-                // Treat unset version as stale so orphan tablets get reconciled.
+                // A missing version means the tablet has no flat_json config at all (the BE only
+                // reports the field when a config exists). Map it below any real version — real
+                // versions start at 0 for CREATE-time configs — so such tablets get reconciled
+                // even when the FE-side config was never bumped by an ALTER.
                 long beFlatJsonConfigVersion =
-                        tabletInfo.isSetFlat_json_config_version() ? tabletInfo.flat_json_config_version : 0;
+                        tabletInfo.isSetFlat_json_config_version() ? tabletInfo.flat_json_config_version : -1;
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
                 long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
