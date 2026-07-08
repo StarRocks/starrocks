@@ -336,10 +336,11 @@ public class Estimator {
         // Handle collections. Non-JDK implementations (Iceberg SerializableMap, Guava Immutable*)
         // typically wrap their real storage in a field; the element-sampling path would skip that
         // storage's own structure entirely, so walk their fields instead — the wrapped JDK container
-        // is then estimated (and charged) when the recursion reaches it.
+        // is then estimated (and charged) when the recursion reaches it. Cache views are excluded
+        // (see isCacheView) and stay on the sampling path.
         if (obj instanceof Collection) {
             Collection<?> collection = (Collection<?>) obj;
-            if (!isJdkContainer(clazz)) {
+            if (!isJdkContainer(clazz) && !isCacheView(clazz)) {
                 return estimateObject(obj, maxDepth, sampleSize);
             }
             return estimateCollection(collection, maxDepth, sampleSize) + collectionBackingOverhead(collection);
@@ -348,7 +349,7 @@ public class Estimator {
         // Handle maps. keySet()/values() are views, so their backing is added once here via
         // mapStructureOverhead rather than inside estimateCollection.
         if (obj instanceof Map<?, ?> map) {
-            if (!isJdkContainer(clazz)) {
+            if (!isJdkContainer(clazz) && !isCacheView(clazz)) {
                 return estimateObject(obj, maxDepth, sampleSize);
             }
             return shallow(obj) +
@@ -500,6 +501,15 @@ public class Estimator {
         return clazz.getName().startsWith("java.util.");
     }
 
+    // A cache's keySet()/values()/asMap() view keeps a back-reference to the owning cache, so
+    // field-walking it would re-traverse and double-count the whole cache (and hand a size-0 count
+    // down to the array sampler for an empty cache). Sample these views instead of field-walking.
+    private static boolean isCacheView(Class<?> clazz) {
+        String name = clazz.getName();
+        return name.startsWith("com.github.benmanes.caffeine.")
+                || name.startsWith("com.google.common.cache.");
+    }
+
     // Bytes of a hash table's backing array: capacity (next power of two that keeps the load factor)
     // times a reference, plus the array header. Sized from the entry count, matching maps built via
     // the sizing/copy constructors (the dominant population); put-grown small maps retain a larger
@@ -609,6 +619,9 @@ public class Estimator {
      * @return a list of sample elements
      */
     private static List<Object> getSamples(Collection<?> collection, int sampleSize) {
+        if (sampleSize <= 0) {
+            return Collections.emptyList();
+        }
         int size = collection.size();
         List<Object> samples = new ArrayList<>(Math.min(sampleSize, size));
 
@@ -659,6 +672,9 @@ public class Estimator {
      * @return a list of sample elements
      */
     private static List<Object> getSamplesFromArray(Object array, int length, int sampleSize) {
+        if (sampleSize <= 0) {
+            return Collections.emptyList();
+        }
         List<Object> samples = new ArrayList<>(Math.min(sampleSize, length));
 
         if (length <= sampleSize) {

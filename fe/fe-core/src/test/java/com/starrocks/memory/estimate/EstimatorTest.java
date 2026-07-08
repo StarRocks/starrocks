@@ -14,6 +14,8 @@
 
 package com.starrocks.memory.estimate;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -415,6 +417,29 @@ class EstimatorTest {
                 "ArrayList estimate " + est + " not within 10% of retained " + real);
     }
 
+    @Test
+    void testCacheViewNotFieldWalked() {
+        // Mirrors CachingIcebergCatalog.estimateDataFileCacheSize: the connector hands the Estimator a
+        // cache keySet() view plus the entry count as sampleSize. Field-walking the view would re-enter
+        // the whole cache (double-counting every value); for an empty cache it also passes sampleSize=0
+        // to the array sampler, which used to divide by zero.
+        Cache<IntBox, byte[]> cache = Caffeine.newBuilder().build();
+
+        int emptyCnt = cache.asMap().size();
+        long emptyEst = Estimator.estimate(cache.asMap().keySet(), emptyCnt);   // must not throw
+        assertTrue(emptyEst >= 0);
+
+        int n = 200;
+        int valueBytes = 4096;
+        for (int i = 0; i < n; i++) {
+            cache.put(new IntBox(i), new byte[valueBytes]);
+        }
+        int cnt = cache.asMap().size();
+        long keyEst = Estimator.estimate(cache.asMap().keySet(), cnt);
+        assertTrue(keyEst < (long) n * valueBytes / 4,
+                "keySet-view estimate " + keyEst + " looks like it pulled in the cache values");
+    }
+
     // ==================== Custom Object Tests ====================
 
     @Test
@@ -582,10 +607,12 @@ class EstimatorTest {
         }
 
         long size = Estimator.estimate(list);
-        // Size should be list shallow size + element shallow size * count
+        // List shallow size + element shallow size * count + the ArrayList's backing Object[]
+        // (header + one reference slot per element).
         long listShallow = Estimator.shallow(list);
         long elementShallow = Estimator.shallow(SimpleObject.class);
-        long expected = listShallow + elementShallow * 100;
+        long backingArray = Estimator.ARRAY_HEADER_SIZE + 4L * 100;
+        long expected = listShallow + elementShallow * 100 + backingArray;
         assertEquals(expected, size);
     }
 
@@ -794,7 +821,10 @@ class EstimatorTest {
         list.add(null);
 
         long size = Estimator.estimate(list);
-        assertEquals(Estimator.shallow(list), size);
+        // Elements are null, but the ArrayList's backing Object[] (header + a reference slot per
+        // element) is still retained and charged.
+        long backingArray = Estimator.ARRAY_HEADER_SIZE + 4L * 3;
+        assertEquals(Estimator.shallow(list) + backingArray, size);
     }
 
     @Test
