@@ -54,11 +54,20 @@ public class ExecuteAsStmtTest {
         Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                // Break chain calls to avoid implicit minTimes=1 on intermediate getCurrentState()
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getAuthenticationMgr();
                 minTimes = 0;
                 result = auth;
 
-                GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
+                globalStateMgr.getAuthorizationMgr();
+                minTimes = 0;
+                result = authorizationMgr;
+
+                authorizationMgr.getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
             }

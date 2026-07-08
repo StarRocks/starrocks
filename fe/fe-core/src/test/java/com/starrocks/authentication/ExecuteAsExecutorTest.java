@@ -23,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
@@ -320,7 +321,8 @@ public class ExecuteAsExecutorTest {
 
         // Create a security integration that references the dedicated group provider
         Map<String, String> siProps = new HashMap<>();
-        siProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "ldap");
+        siProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
         siProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, siGroupProviderName);
         authenticationMgr.replayCreateSecurityIntegration("ldap_si", siProps);
 
