@@ -934,7 +934,6 @@ public class LakeTableSchemaChangeJobTest {
         List<MaterializedIndex> normalIndexes =
                     partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(1, normalIndexes.size());
-        normalIndexes.get(0);
 
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");

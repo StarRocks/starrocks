@@ -489,7 +489,6 @@ public class ListPartitionPrunerTest {
         intColumn = new ColumnRefOperator(2, IntegerType.INT, "int_col", true);
         ColumnRefOperator intCol1 = new ColumnRefOperator(3, IntegerType.INT, "int_col1", true);
         ColumnRefOperator intCol2 = new ColumnRefOperator(4, IntegerType.INT, "int_col2", true);
-        new ColumnRefOperator(5, IntegerType.INT, "int_col_not_part", true);
 
         // column -> partition values
         columnToPartitionValuesMap = Maps.newHashMap();

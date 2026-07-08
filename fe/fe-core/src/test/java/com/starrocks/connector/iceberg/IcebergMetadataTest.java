@@ -2348,7 +2348,6 @@ public class IcebergMetadataTest extends TableTestBase {
 
         TableName tableName = new TableName("db", "tbl");
         SlotRef partitionSlot = new SlotRef(tableName, "dt");
-        new FunctionCallExpr("day", Lists.newArrayList(partitionSlot));
         FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
 
         // First add month(dt) so table has both day(dt) and month(dt)

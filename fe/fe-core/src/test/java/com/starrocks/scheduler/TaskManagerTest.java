@@ -1055,7 +1055,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldCancelLongRunningTasks() {
-        new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1093,7 +1092,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelTasksWithoutTimeout() {
-        new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1129,7 +1127,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelNonExpiredTasks() {
-        new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 1000);
@@ -1270,7 +1267,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1310,7 +1306,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1348,7 +1343,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1386,7 +1380,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        new TaskManager();
         Task task = new Task("test_ctas");
         task.setSource(Constants.TaskSource.CTAS);
         TaskSchedule schedule = new TaskSchedule();
@@ -1523,7 +1516,6 @@ public class TaskManagerTest {
             }
         };
 
-        new TaskManager();
 
         // Simulate the dispatch scheduler callback logic from TaskManager.start()
         // This is the same guard that was added in the fix

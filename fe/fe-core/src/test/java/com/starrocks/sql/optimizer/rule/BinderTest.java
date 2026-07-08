@@ -44,7 +44,6 @@ public class BinderTest {
     }
 
     private Binder buildBinder(Pattern pattern, GroupExpression qe) {
-        new Memo();
         OptimizerContext optimizerContext = OptimizerFactory.mockContext(new ColumnRefFactory());
         Stopwatch stopwatch = Stopwatch.createStarted();
         return new Binder(optimizerContext, pattern, qe, stopwatch);

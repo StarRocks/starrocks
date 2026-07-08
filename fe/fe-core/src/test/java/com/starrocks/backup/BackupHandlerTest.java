@@ -499,7 +499,6 @@ public class BackupHandlerTest {
             Assertions.fail();
         }
 
-        snapshotTask1.toThrift();
 
         // process FUNCTION restore
         List<TableRef> emptyTableRef = Lists.newArrayList();

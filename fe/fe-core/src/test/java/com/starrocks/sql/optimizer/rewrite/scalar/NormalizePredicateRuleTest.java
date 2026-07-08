@@ -121,8 +121,6 @@ public class NormalizePredicateRuleTest {
 
     @Test
     public void testCompound1() {
-        new NormalizePredicateRule();
-        new ScalarOperatorRewriteContext();
 
         InPredicateOperator inOp = new InPredicateOperator(
                 true,

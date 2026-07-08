@@ -37,7 +37,6 @@ package com.starrocks.common.util;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
-import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -190,7 +189,6 @@ public class BrokerUtilTest {
         readResponse.opStatus = status;
         readResponse.setData(dppResultStr.getBytes(StandardCharsets.UTF_8));
 
-        new FsBroker("127.0.0.1", 99999);
 
         new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
@@ -237,7 +235,6 @@ public class BrokerUtilTest {
         status.statusCode = TBrokerOperationStatusCode.OK;
         openWriterResponse.opStatus = status;
         openWriterResponse.fd = new TBrokerFD(1, 2);
-        new FsBroker("127.0.0.1", 99999);
 
         new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock
@@ -279,7 +276,6 @@ public class BrokerUtilTest {
         // delete response
         TBrokerOperationStatus status = new TBrokerOperationStatus();
         status.statusCode = TBrokerOperationStatusCode.OK;
-        new FsBroker("127.0.0.1", 99999);
 
         new MockUp<ThriftConnectionPool<TFileBrokerService.Client>>() {
             @Mock

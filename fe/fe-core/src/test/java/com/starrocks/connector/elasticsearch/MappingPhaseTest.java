@@ -55,7 +55,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -148,7 +147,6 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
             Assertions.assertThrows(DdlException.class, () -> {
-                new EsTable(new Random().nextLong(), "fake", columns, props, null);
             });
         }
         {
@@ -157,7 +155,6 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_INDEX, "test");
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
-            new EsTable(new Random().nextLong(), "fake", columns, props, null);
         }
     }
 

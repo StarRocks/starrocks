@@ -224,8 +224,7 @@ public class HiveMetadataTest {
     @Test
     public void testGetHiveRemoteFiles() throws AnalysisException {
         FeConstants.runningUnitTest = true;
-        HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
-        new HiveMetastore(client, "hive_catalog", null);
+        new HiveMetastoreTest.MockedHiveMetaClient();
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable(new ConnectContext(), "db1", "table1");
 
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(

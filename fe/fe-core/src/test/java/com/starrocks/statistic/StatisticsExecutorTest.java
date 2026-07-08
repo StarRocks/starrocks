@@ -52,7 +52,6 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class StatisticsExecutorTest extends PlanTestBase {
     @BeforeAll
@@ -96,7 +95,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
         Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
-        table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),

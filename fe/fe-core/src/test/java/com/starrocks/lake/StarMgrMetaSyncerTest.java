@@ -1835,7 +1835,6 @@ public class StarMgrMetaSyncerTest {
         long groupIdToClear = shardGroupId + 1;
         // build shardGroupInfos
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        allShardIds.size();
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
@@ -1897,7 +1896,6 @@ public class StarMgrMetaSyncerTest {
         long groupIdToClear = shardGroupId + 1;
         // build shardGroupInfos
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        allShardIds.size();
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
