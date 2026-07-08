@@ -1344,9 +1344,8 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
                         }
                     }
                     LOG(WARNING) << "[SPLIT-DIAG removed] child=" << new_tablet_new_metadata->id()
-                                 << " rowset_id=" << split_diag_rssid_base << " rssid_range=["
-                                 << split_diag_rssid_base << ","
-                                 << (split_diag_rssid_base + split_diag_orig_seg_count) << ")"
+                                 << " rowset_id=" << split_diag_rssid_base << " rssid_range=[" << split_diag_rssid_base
+                                 << "," << (split_diag_rssid_base + split_diag_orig_seg_count) << ")"
                                  << " protected=" << (any_protected ? 1 : 0)
                                  << " removed=" << (keep_rowset[rowset_index] ? 0 : 1)
                                  << " has_pruned_protected=" << (has_pruned_protected_rssid ? 1 : 0);

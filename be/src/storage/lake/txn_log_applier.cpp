@@ -563,8 +563,8 @@ private:
             std::string ins;
             for (auto rid : op_compaction.input_rowsets()) ins += std::to_string(rid) + ",";
             LOG(WARNING) << "[COMPACT-DIAG] tablet=" << _tablet.id() << " txn=" << txn_id
-                         << " output_next_rowset_id=" << _metadata->next_rowset_id()
-                         << " input_rowsets=[" << ins << "]";
+                         << " output_next_rowset_id=" << _metadata->next_rowset_id() << " input_rowsets=[" << ins
+                         << "]";
         }
 
         if (op_compaction.input_rowsets().empty()) {
@@ -617,9 +617,9 @@ private:
             {
                 std::string ins;
                 for (auto rid : subtask_op.input_rowsets()) ins += std::to_string(rid) + ",";
-                LOG(WARNING) << "[COMPACT-DIAG] tablet=" << _tablet.id() << " txn=" << txn_id
-                             << " (parallel subtask " << i << ") output_next_rowset_id="
-                             << _metadata->next_rowset_id() << " input_rowsets=[" << ins << "]";
+                LOG(WARNING) << "[COMPACT-DIAG] tablet=" << _tablet.id() << " txn=" << txn_id << " (parallel subtask "
+                             << i << ") output_next_rowset_id=" << _metadata->next_rowset_id() << " input_rowsets=["
+                             << ins << "]";
             }
 
             // Reuse publish_primary_compaction for each subtask
