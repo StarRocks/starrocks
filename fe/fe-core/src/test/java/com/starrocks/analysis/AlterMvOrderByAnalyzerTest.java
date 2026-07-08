@@ -23,7 +23,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit coverage for {@code AlterMVClauseAnalyzerVisitor#visitReorderColumnsClause}, the validation gate
+ * Unit coverage for {@code AlterMVClauseAnalyzer#visitReorderColumnsClause}, the validation gate
  * for {@code ALTER MATERIALIZED VIEW <mv> ORDER BY (cols)}. Mirrors the lightweight, no-cluster fixture
  * style of {@link AddRollupOrderByAnalyzerTest} (the sibling gate for {@code ADD ROLLUP ... ORDER BY}):
  * a real {@link MaterializedView} / {@link LakeMaterializedView} is constructed directly with just
@@ -99,7 +99,7 @@ public class AlterMvOrderByAnalyzerTest {
         MaterializedView mv = dupRangeMv();
         // Reorder to (k2, k1): a real reorder of the default (k1, k2) leading-key sort key, not a no-op.
         assertDoesNotThrow(() ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
     }
 
     @Test
@@ -115,7 +115,7 @@ public class AlterMvOrderByAnalyzerTest {
         mv.setIndexMeta(BASE_META_ID, "mv", columns, 0, 0, (short) columns.size(), TStorageType.COLUMN, KeysType.DUP_KEYS);
         mv.setBaseIndexMetaId(BASE_META_ID);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("only supported on asynchronous materialized views"),
                 "expected asynchronous-only message, got: " + ex.getMessage());
     }
@@ -127,7 +127,7 @@ public class AlterMvOrderByAnalyzerTest {
         List<Column> columns = List.of(keyColumn("k1"), keyColumn("k2"), valueColumn("v1", AggregateType.NONE));
         MaterializedView mv = buildMv(false, new RangeDistributionInfo(), KeysType.DUP_KEYS, columns);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("only supported on shared-data"),
                 "expected shared-data-only message, got: " + ex.getMessage());
     }
@@ -138,7 +138,7 @@ public class AlterMvOrderByAnalyzerTest {
         DistributionInfo hash = new HashDistributionInfo(1, List.of(columns.get(0)));
         MaterializedView mv = buildMv(true, hash, KeysType.DUP_KEYS, columns);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("only supported on range-distributed materialized views"),
                 "expected range-distributed-only message, got: " + ex.getMessage());
     }
@@ -147,7 +147,7 @@ public class AlterMvOrderByAnalyzerTest {
     public void testAlterMvOrderByUnknownColumnRejected() {
         MaterializedView mv = dupRangeMv();
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("no_such_col"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("no_such_col"))));
         assertTrue(ex.getMessage().contains("does not exist"),
                 "expected column-not-found message, got: " + ex.getMessage());
     }
@@ -156,7 +156,7 @@ public class AlterMvOrderByAnalyzerTest {
     public void testAlterMvOrderByDuplicateColumnRejected() {
         MaterializedView mv = dupRangeMv();
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k1", "k1"))));
         assertTrue(ex.getMessage().contains("Duplicate ORDER BY column"),
                 "expected duplicate-column message, got: " + ex.getMessage());
     }
@@ -167,7 +167,7 @@ public class AlterMvOrderByAnalyzerTest {
         // columns (k1, k2). ORDER BY (K1, K2) is the same sort key case-insensitively -> reject.
         MaterializedView mv = dupRangeMv();
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("K1", "k2"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("K1", "k2"))));
         assertTrue(ex.getMessage().contains("already the sort key"),
                 "expected no-op-reorder message, got: " + ex.getMessage());
     }
@@ -178,7 +178,7 @@ public class AlterMvOrderByAnalyzerTest {
         MaterializedView mv = buildMv(true, new RangeDistributionInfo(), KeysType.AGG_KEYS, columns);
         // (k2, k1) is a permutation of the full key-column set {k1, k2} -> accepted.
         assertDoesNotThrow(() ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
     }
 
     @Test
@@ -187,7 +187,7 @@ public class AlterMvOrderByAnalyzerTest {
         MaterializedView mv = buildMv(true, new RangeDistributionInfo(), KeysType.AGG_KEYS, columns);
         // (k1) alone is a strict subset of the key-column set {k1, k2} -> rejected.
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k1"))));
         assertTrue(ex.getMessage().contains("must be exactly the key columns"),
                 "expected key-set-mismatch message, got: " + ex.getMessage());
     }
@@ -197,7 +197,7 @@ public class AlterMvOrderByAnalyzerTest {
         List<Column> columns = List.of(keyColumn("k1"), keyColumn("k2"), valueColumn("v1", AggregateType.NONE));
         MaterializedView mv = buildMv(true, new RangeDistributionInfo(), KeysType.PRIMARY_KEYS, columns);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("not supported for"),
                 "expected unsupported-keysType message, got: " + ex.getMessage());
     }
@@ -209,7 +209,7 @@ public class AlterMvOrderByAnalyzerTest {
         ReorderColumnsClause clause = new ReorderColumnsClause(List.of("k2", "k1"), "some_rollup", null,
                 com.starrocks.sql.parser.NodePosition.ZERO);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, clause));
+                new AlterMVClauseAnalyzer(mv).analyze(null, clause));
         assertTrue(ex.getMessage().contains("does not support 'FROM <rollup>'"),
                 "expected FROM-rollup rejection message, got: " + ex.getMessage());
     }
@@ -220,7 +220,7 @@ public class AlterMvOrderByAnalyzerTest {
         ReorderColumnsClause clause = new ReorderColumnsClause(List.of("k2", "k1"), null,
                 Map.of("some_property", "some_value"), com.starrocks.sql.parser.NodePosition.ZERO);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, clause));
+                new AlterMVClauseAnalyzer(mv).analyze(null, clause));
         assertTrue(ex.getMessage().contains("does not support PROPERTIES"),
                 "expected PROPERTIES rejection message, got: " + ex.getMessage());
     }
@@ -233,7 +233,7 @@ public class AlterMvOrderByAnalyzerTest {
         mv.setIndexMeta(BASE_META_ID + 1, "extra_idx", extraSchema, 0, 0, (short) 1,
                 TStorageType.COLUMN, KeysType.DUP_KEYS);
         SemanticException ex = assertThrows(SemanticException.class, () ->
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
         assertTrue(ex.getMessage().contains("carries additional"),
                 "expected multi-index rejection message, got: " + ex.getMessage());
     }
