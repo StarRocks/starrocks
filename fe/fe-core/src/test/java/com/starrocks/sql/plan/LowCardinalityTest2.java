@@ -2410,16 +2410,17 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     ") y WHERE rn = 1";
             String plan = getVerboseExplain(sql);
             Assertions.assertEquals(2, plan.split("PARTITION-TOP-N", -1).length - 1, plan);
-            // `s` keeps its dict form through the join up to the outer window, so both
-            // PARTITION-TOP-N and both ANALYTIC nodes must agree on the same dict ref;
-            // a partition-by referencing a dict ref already decoded below would fail on
-            // BE with "slot_id not found"
-            assertContains(plan, "  10:PARTITION-TOP-N\n" +
-                    "  |  partition by: [10: s, INT, true]");
-            assertContains(plan, "  13:ANALYTIC\n" +
+            // on branch-3.5 the inner window's Decode sits below the join, so `s` arrives
+            // at the outer window already decoded; the outer PARTITION-TOP-N and ANALYTIC
+            // must keep the string ref — a partition-by referencing the dict ref already
+            // decoded below would fail on BE with "slot_id not found"
+            assertContains(plan, "  11:PARTITION-TOP-N\n" +
+                    "  |  partition by: [3: s, VARCHAR(128), true]");
+            assertContains(plan, "  14:ANALYTIC\n" +
                     "  |  functions: [, row_number[(); args: ; result: BIGINT; " +
                     "args nullable: false; result nullable: true], ]\n" +
-                    "  |  partition by: [10: s, INT, true]");
+                    "  |  partition by: [3: s, VARCHAR(128), true]");
+            // the inner PARTITION-TOP-N still consumes `s` in dict form and keeps the dict ref
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: [10: s, INT, true]");
 
