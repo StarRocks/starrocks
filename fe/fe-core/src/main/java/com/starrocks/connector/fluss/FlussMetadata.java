@@ -276,17 +276,15 @@ public class FlussMetadata implements ConnectorMetadata {
         List<Predicate> lakePredicates = Lists.newArrayList();
         LakeSource<LakeSplit> lakeSource =
                 createLakeSource(flussTable.getTableInfo().getTablePath(), flussTable.buildRuntimeConf().toMap());
-        if (lakeSource != null) {
-            try {
-                lakePredicates = convertLakePredicates(flussTable, params.getPredicate());
-                if (!lakePredicates.isEmpty()) {
-                    lakeSource.withFilters(lakePredicates);
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to push down predicates to lake source for table {}, " +
-                        "falling back to scan without filter pushdown", identifier, e);
-                lakePredicates = Lists.newArrayList();
+        try {
+            lakePredicates = convertLakePredicates(flussTable, params.getPredicate());
+            if (!lakePredicates.isEmpty()) {
+                lakeSource.withFilters(lakePredicates);
             }
+        } catch (Exception e) {
+            LOG.warn("Failed to push down predicates to lake source for table {}, " +
+                    "falling back to scan without filter pushdown", identifier, e);
+            lakePredicates = Lists.newArrayList();
         }
 
         Supplier<Set<org.apache.fluss.metadata.PartitionInfo>> listPartitionSupplier;
@@ -326,7 +324,6 @@ public class FlussMetadata implements ConnectorMetadata {
                     catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
         }
         if (flussTable.getTableNamePrefix().equals(LAKE_TABLE_SPLITTER)) {
-            // Flink supports $lake reads on primary-key tables via LakeSnapshotAndFlussLogSplit.
             splits = splits.stream().filter(SourceSplitBase::isLakeSplit)
                     .collect(Collectors.toList());
         }
@@ -378,7 +375,6 @@ public class FlussMetadata implements ConnectorMetadata {
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
-        // TODO(Fluss): read row counts from Fluss/lake metadata when connector statistics are available.
         builder.setOutputRowCount(1);
         return builder.build();
     }

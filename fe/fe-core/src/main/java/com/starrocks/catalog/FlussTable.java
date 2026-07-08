@@ -42,8 +42,7 @@ public class FlussTable extends Table {
     private String uuid;
     private List<String> partColumnNames;
     private List<String> flussFieldNames;
-    // Catalog-level Fluss/lake options copied from CREATE EXTERNAL CATALOG. Table properties are
-    // merged into a fresh runtime config only when FE plans lake splits or serializes this table to BE.
+    // Catalog-level Fluss/lake options copied from CREATE EXTERNAL CATALOG
     private Configuration catalogConf;
     private String tableNamePrefix = "";
 
