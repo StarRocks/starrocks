@@ -491,42 +491,42 @@ description: "Alphabetical s"
 - 单位：计数
 - 类型：瞬时值
 - 标签：`cache` — 统计信息缓存名称：`table_stats`、`column_stats`、`partition_stats`、`connector_table_stats`、`histogram_stats`、`connector_histogram_stats` 或 `multi_column_stats`。
-- 描述：对应统计信息缓存（基于 Caffeine）中当前大致的条目数。每个缓存的最大条目数由 FE 配置项 `statistic_cache_columns` 控制。
+- 描述：对应统计信息缓存（基于 Caffeine）中当前大致的条目数。每个缓存的最大条目数由 FE 配置项 `statistic_cache_columns` 控制。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_eviction_count`
 
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存中被淘汰（因容量或过期）的条目累计数量。若该值相对缓存大小持续增长，说明可以适当调大 `statistic_cache_columns`。
+- 描述：对应统计信息缓存中被淘汰（因容量或过期）的条目累计数量。若该值相对缓存大小持续增长，说明可以适当调大 `statistic_cache_columns`。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_hit_count`
 
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存命中的累计次数。结合 `starrocks_fe_statistics_cache_miss_count` 可计算缓存命中率。
+- 描述：对应统计信息缓存命中的累计次数。结合 `starrocks_fe_statistics_cache_miss_count` 可计算缓存命中率。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_load_failure_count`
 
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存加载失败（加载器抛出异常或未返回值）的累计次数。该值非零且持续增长通常意味着读取统计信息表出现问题。
+- 描述：对应统计信息缓存加载失败（加载器抛出异常或未返回值）的累计次数。该值非零且持续增长通常意味着读取统计信息表出现问题。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_load_success_count`
 
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存加载成功的累计次数。
+- 描述：对应统计信息缓存加载成功的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_statistics_cache_miss_count`
 
 - 单位：计数
 - 类型：累计
 - 标签：`cache` — 取值见 `starrocks_fe_statistics_cache_estimated_size`。
-- 描述：对应统计信息缓存未命中并触发加载的累计次数。
+- 描述：对应统计信息缓存未命中并触发加载的累计次数。仅当 FE 配置项 `enable_statistic_cache_metrics` 设置为 `true` 时才会注册并暴露该指标。
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
