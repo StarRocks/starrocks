@@ -249,7 +249,9 @@ Status IcebergTableSink::create_delete_sink_context(
 
     sink_ctx = delete_sink_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_delete_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::DELETE, delete_sink_ctx));
+    sink_provider = std::move(provider);
 
     return Status::OK();
 }
@@ -327,7 +329,9 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
 
     sink_ctx = data_sink_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_data_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::DATA, data_sink_ctx));
+    sink_provider = std::move(provider);
 
     if (iceberg_table_desc->is_unpartitioned_table()) {
         //do nothing
@@ -592,7 +596,9 @@ Status IcebergTableSink::create_row_delta_sink_context(
 
     sink_ctx = row_delta_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_row_delta_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::ROW_DELTA, row_delta_ctx));
+    sink_provider = std::move(provider);
 
     return Status::OK();
 }

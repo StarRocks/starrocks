@@ -49,10 +49,13 @@ struct IcebergRowDeltaSinkContext : public ConnectorChunkSinkContext {
 // It composes an IcebergDeleteSinkProvider and an IcebergChunkSinkProvider.
 class IcebergRowDeltaSinkProvider final : public ConnectorChunkSinkProvider {
 public:
+    explicit IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx);
     ~IcebergRowDeltaSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergRowDeltaSinkContext> _ctx;
 };
 
 // IcebergRowDeltaSink routes rows from an input chunk to a delete sink and a data sink.

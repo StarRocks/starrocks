@@ -28,7 +28,8 @@ public:
     DataSourceProviderPtr create_data_source_provider(starrocks::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+    StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> create_sink_provider(
+            ConnectorSinkProviderType type, std::shared_ptr<ConnectorChunkSinkContext> context) const override;
 
     ConnectorType connector_type() const override { return ConnectorType::FILE; }
 };

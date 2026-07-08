@@ -79,10 +79,13 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
 
 class IcebergChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
+    explicit IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx);
     ~IcebergChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergChunkSinkContext> _ctx;
 };
 
 } // namespace starrocks::connector

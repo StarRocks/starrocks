@@ -113,7 +113,8 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     sink_ctx->fragment_context = fragment_ctx;
 
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::HIVE);
-    auto sink_provider = connector->create_data_sink_provider();
+    ASSIGN_OR_RETURN(auto sink_provider,
+                     connector->create_sink_provider(starrocks::connector::ConnectorSinkProviderType::DATA, sink_ctx));
     auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
             context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
     size_t sink_dop = context->data_sink_dop();

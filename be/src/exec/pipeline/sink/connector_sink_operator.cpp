@@ -147,7 +147,7 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence).value();
+    auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence).value();
     auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
     chunk_sink->set_io_poller(io_poller.get());
     auto op_mem_mgr = _sink_mem_mgr->create_child_manager();

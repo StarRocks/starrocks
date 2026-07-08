@@ -138,10 +138,10 @@ protected:
 // Test that IcebergDeleteSinkProvider can create a valid IcebergDeleteSink
 TEST_F(IcebergDeleteSinkTest, create_delete_sink) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
 
     // Should create sink successfully
-    auto result = provider->create_chunk_sink(context, 0);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -155,8 +155,8 @@ TEST_F(IcebergDeleteSinkTest, create_delete_sink) {
 // Test that IcebergDeleteSink::add handles empty chunk correctly
 TEST_F(IcebergDeleteSinkTest, add_empty_chunk) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -171,8 +171,8 @@ TEST_F(IcebergDeleteSinkTest, add_empty_chunk) {
 // Test that IcebergDeleteSink::is_finished returns true when no data was written
 TEST_F(IcebergDeleteSinkTest, is_finished_no_data) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -234,8 +234,8 @@ TEST_F(IcebergDeleteSinkTest, context_required_fields) {
 // Test callback_on_commit function with empty result
 TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -268,8 +268,8 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_empty) {
 // Test callback_on_commit function with complete delete file information
 TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -320,8 +320,8 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
 // Test callback_on_commit function with IO failure
 TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -348,8 +348,8 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_io_failure) {
 // Test callback_on_commit function with partial statistics
 TEST_F(IcebergDeleteSinkTest, callback_on_commit_partial_stats) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -409,8 +409,8 @@ TEST_F(IcebergDeleteSinkTest, commit_result_set_referenced_data_file) {
 // Test IcebergDeleteSink::finish function
 TEST_F(IcebergDeleteSinkTest, finish_function) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();
@@ -438,8 +438,8 @@ TEST_F(IcebergDeleteSinkTest, missing_file_column) {
     pos_node.slot_ref.slot_id = 1;
     context->column_slot_map["_pos"] = pos_node;
 
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
 
     // Should fail because _file column is missing
     ASSERT_FALSE(result.ok());
@@ -463,8 +463,8 @@ TEST_F(IcebergDeleteSinkTest, missing_pos_column) {
     file_node.slot_ref.slot_id = 0;
     context->column_slot_map["_file"] = file_node;
 
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
 
     // Should fail because _pos column is missing
     ASSERT_FALSE(result.ok());
@@ -497,8 +497,8 @@ TEST_F(IcebergDeleteSinkTest, not_enough_evaluators) {
     // Add only 1 evaluator instead of required 2
     context->column_evaluators.push_back(create_mock_column_evaluator());
 
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
 
     // Should fail because not enough evaluators
     ASSERT_FALSE(result.ok());
@@ -532,8 +532,8 @@ TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
     context->column_evaluators.push_back(create_mock_column_evaluator());
     context->column_evaluators.push_back(create_mock_column_evaluator());
 
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
 
     // Should fail because tuple descriptor ID is invalid
     ASSERT_FALSE(result.ok());
@@ -543,8 +543,8 @@ TEST_F(IcebergDeleteSinkTest, invalid_tuple_descriptor_id) {
 // Test that Iceberg delete file has REQUIRED columns for file_path and pos
 TEST_F(IcebergDeleteSinkTest, verify_required_columns_in_parquet) {
     auto context = create_delete_sink_context();
-    auto provider = std::make_unique<IcebergDeleteSinkProvider>();
-    auto result = provider->create_chunk_sink(context, 0);
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_chunk_sink(0);
     ASSERT_TRUE(result.ok());
 
     auto sink = std::move(result).value();

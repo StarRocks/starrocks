@@ -54,6 +54,9 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
           _transform_exprs(std::move(transform_exprs)),
           _column_slot_map(std::move(column_slot_map)) {}
 
+IcebergDeleteSinkProvider::IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
+
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
     push_rollback_action(result.file_result.rollback_action);
@@ -214,9 +217,8 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergDeleteSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
     }

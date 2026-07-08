@@ -40,6 +40,9 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
                              std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)) {}
 
+IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
+
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     push_rollback_action(result.file_result.rollback_action);
     if (result.file_result.io_status.ok()) {
@@ -85,9 +88,8 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();

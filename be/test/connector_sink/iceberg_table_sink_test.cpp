@@ -95,8 +95,6 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
 
     std::vector<starrocks::TExpr> exprs = {};
     IcebergTableSink sink(&_pool, exprs);
-    auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    auto sink_provider = connector->create_data_sink_provider();
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(1, 1)};
 
     EXPECT_OK(sink.decompose_to_pipeline(prev_operators, data_sink, context.get()));
@@ -782,7 +780,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
 // then exercises IcebergRowDeltaSinkProvider::create_chunk_sink() on the
 // resulting context. Covers:
 //   - the row-delta dispatch branch in decompose_to_pipeline
-//   - IcebergConnector::create_row_delta_sink_provider()
+//   - IcebergConnector::create_sink_provider()
 //   - the bulk of create_row_delta_sink_context() (delete sub-context, data
 //     sub-context, override_tuple_desc, op_code_index, and the unpartitioned
 //     branch)
@@ -888,8 +886,11 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 
     // Now drive IcebergRowDeltaSinkProvider::create_chunk_sink() success path.
-    connector::IcebergRowDeltaSinkProvider provider;
-    auto sink_or = provider.create_chunk_sink(connector_sink_factory->_sink_context, /*driver_id=*/0);
+    auto row_delta_shared_ctx =
+            std::dynamic_pointer_cast<connector::IcebergRowDeltaSinkContext>(connector_sink_factory->_sink_context);
+    ASSERT_NE(row_delta_shared_ctx, nullptr);
+    connector::IcebergRowDeltaSinkProvider provider(row_delta_shared_ctx);
+    auto sink_or = provider.create_chunk_sink(/*driver_id=*/0);
     ASSERT_OK(sink_or.status());
     auto created_sink = std::move(sink_or).value();
     ASSERT_NE(created_sink, nullptr);
