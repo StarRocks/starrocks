@@ -28,6 +28,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 
 namespace starrocks::connector {
@@ -134,8 +135,6 @@ TEST_F(FileChunkSinkTest, test_callback) {
 }
 
 TEST_F(FileChunkSinkTest, test_factory) {
-    FileChunkSinkProvider provider;
-
     {
         auto sink_ctx = std::make_shared<connector::FileChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
@@ -149,10 +148,13 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        FileChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -168,10 +170,13 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        FileChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -187,10 +192,12 @@ TEST_F(FileChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_ERROR(sink->init());
+        FileChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_ERROR(sink->init(&poller, nullptr, &mgr));
     }
 }
 

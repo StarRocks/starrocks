@@ -94,7 +94,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -642,7 +641,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // initially, rollup index id and rollup index meta id are the same
         long rollupIndexId = rollupIndexMetaId;
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        Optional<TDescriptorTable> tDescTable = Optional.empty();
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);

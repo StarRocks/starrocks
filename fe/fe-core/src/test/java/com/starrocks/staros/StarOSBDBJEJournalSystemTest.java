@@ -43,7 +43,7 @@ public class StarOSBDBJEJournalSystemTest {
         // test construction
         StarOSBDBJEJournalSystem journalSystem = new StarOSBDBJEJournalSystem(environment);
 
-        StarOSBDBJEJournalSystem journalSystem2 = new StarOSBDBJEJournalSystem(journal);
+        new StarOSBDBJEJournalSystem(journal);
 
         // test get and set
         long id = journalSystem.getReplayId();

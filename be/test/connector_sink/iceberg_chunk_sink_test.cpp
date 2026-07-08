@@ -90,7 +90,7 @@ public:
     MOCK_METHOD(const std::string&, filename, (), (const, override));
 };
 
-class MockPoller : public AsyncFlushStreamPoller {
+class MockPoller : public formats::AsyncFlushStreamPoller {
 public:
     MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
 };
@@ -106,6 +106,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
         WriterAndStream ws;
         ws.writer = std::make_unique<MockWriter>();
         ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        EXPECT_CALL(*mock_writer_factory, init()).WillOnce(Return(Status::OK()));
         EXPECT_CALL(*mock_writer_factory, create(::testing::_))
                 .WillRepeatedly(::testing::Return(ByMove(StatusOr<WriterAndStream>(std::move(ws)))));
 
@@ -117,8 +118,8 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 partition_column_names, transform, std::move(partition_column_evaluators),
                 std::move(partition_chunk_writer_factory), _runtime_state);
         auto poller = MockPoller();
-        sink->set_io_poller(&poller);
-        sink->init_profile();
+        SinkMemoryManager mgr(nullptr, nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
 
         Columns partition_key_columns;
         ChunkPtr chunk = std::make_shared<Chunk>();
@@ -160,7 +161,6 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
 
 TEST_F(IcebergChunkSinkTest, test_factory) {
     SCOPED_UPDATE(bool, config::enable_connector_sink_spill, false);
-    IcebergChunkSinkProvider provider;
 
     {
         auto sink_ctx = std::make_shared<connector::IcebergChunkSinkContext>();
@@ -175,10 +175,13 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        IcebergChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -194,10 +197,12 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_ERROR(sink->init()); // format is not supported
+        IcebergChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_ERROR(sink->init(&poller, nullptr, &mgr)); // format is not supported
     }
 }
 

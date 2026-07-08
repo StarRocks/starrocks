@@ -590,12 +590,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 sortKeyIdxes.add(idx);
             }
         }
-        boolean hasReplace = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
-            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
-                hasReplace = true;
-            }
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }

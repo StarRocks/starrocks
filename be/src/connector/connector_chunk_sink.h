@@ -25,9 +25,12 @@
 #include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
+namespace starrocks::formats {
+class AsyncFlushStreamPoller;
+} // namespace starrocks::formats
+
 namespace starrocks::connector {
 
-class AsyncFlushStreamPoller;
 class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
@@ -40,9 +43,7 @@ public:
                        std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
                        bool support_null_partition);
 
-    void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
-
-    void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
+    SinkOperatorMemoryManager* op_mem_mgr() const { return _op_mem_mgr; }
 
     // Expose the writer list so composite sinks can register it with the
     // outer SinkOperatorMemoryManager for aggregated memory accounting.
@@ -50,7 +51,8 @@ public:
 
     virtual ~ConnectorChunkSink() = default;
 
-    virtual Status init();
+    virtual Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                        SinkMemoryManager* sink_mem_mgr);
 
     virtual Status add(const ChunkPtr& chunk);
 
@@ -69,13 +71,11 @@ public:
 
     void set_status(const Status& status);
 
-    void set_profile(RuntimeProfile* profile);
-
 protected:
     void push_rollback_action(const std::function<void()>& action);
     void init_profile();
 
-    AsyncFlushStreamPoller* _io_poller = nullptr;
+    formats::AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 
     std::vector<std::string> _partition_column_names;
@@ -98,19 +98,13 @@ protected:
 
 struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
-
-    // Called by ConnectorSinkOperatorFactory after SinkMemoryManager is created.
-    // Composite sinks (e.g. IcebergRowDeltaSink) override this to receive the
-    // manager and create per-sub-sink child managers during initialization.
-    virtual void set_sink_mem_mgr(SinkMemoryManager* /*mgr*/) {}
 };
 
 class ConnectorChunkSinkProvider {
 public:
     virtual ~ConnectorChunkSinkProvider() = default;
 
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
-            std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
+    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) = 0;
 };
 
 using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;

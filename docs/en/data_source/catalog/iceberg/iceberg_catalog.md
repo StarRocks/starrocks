@@ -256,15 +256,6 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   - Required: No
   - Description: The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access).
 
-- `aws.glue.resource_share_type`
-  - Required: No
-  - Description: Configures the `ResourceShareType` sent to AWS Glue's GetDatabases API, controlling which databases are returned when listing them. This item is case-insensitive. Valid values:
-    - `ALL`: Returns all local databases plus all shared and federated ones.
-    - `FOREIGN`: Returns databases shared with your account by others.
-    - `FEDERATED`: Returns external databases connected through AWS Lake Formation.
-
-    When this item is unset or empty, the configuration returns an empty Optional, and the field is simply not set on the `GetDatabasesRequest` — in which case AWS Glue falls back to its own default, which only returns local databases.
-
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>

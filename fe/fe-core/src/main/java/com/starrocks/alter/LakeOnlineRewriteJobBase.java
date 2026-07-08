@@ -289,6 +289,33 @@ public abstract class LakeOnlineRewriteJobBase
         return Collections.emptyList();
     }
 
+    /**
+     * Seam over the rewrite INSERT statement, invoked in {@link #runPartitionRewrite} after the
+     * shadow-rewrite flags are set and before execution. Default no-op. A subclass whose rewrite
+     * target is a materialized view overrides this to call {@code insertStmt.setSystem(true)} so
+     * InsertAnalyzer does not reject the MV target.
+     */
+    protected void configureRewriteInsert(InsertStmt insertStmt) {
+    }
+
+    /**
+     * Seam invoked at the very start of {@link #runPendingJob}, lock-free, before the shadow index is
+     * built and before the table enters {@link #jobTableState()}. Default no-op. A subclass that must
+     * quiesce a concurrent writer (e.g. an MV's async refresh) overrides this to suspend/drain it.
+     * Must be idempotent: runPendingJob may re-run on retry/replay.
+     */
+    protected void beforeShadowBuild() throws AlterCancelException {
+    }
+
+    /**
+     * Seam invoked once the job has reached a terminal state, after the FINISHED flip applier
+     * ({@code cancelled=false}) and after the CANCELLED applier in {@link #cancelImpl}
+     * ({@code cancelled=true}). Default no-op. A subclass that quiesced a writer in
+     * {@link #beforeShadowBuild} overrides this to release it. Must be idempotent.
+     */
+    protected void afterJobSettled(boolean cancelled) {
+    }
+
     // ---- PENDING ---------------------------------------------------------------------------------
 
     @Override
@@ -296,6 +323,7 @@ public abstract class LakeOnlineRewriteJobBase
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         Preconditions.checkState(shadowIndexMetaId != -1, "shadow index meta id is not set");
         validateRewriteConfig();
+        beforeShadowBuild();
 
         // Stage 1 (READ-lock snapshot): validate table state and capture the immutable per-partition
         // inputs needed for sampling and shard building. A DB WRITE lock must NOT be held across the
@@ -824,6 +852,7 @@ public abstract class LakeOnlineRewriteJobBase
             insertStmt.setTargetWriteIndexId(shadowIndexMetaId);
             insertStmt.setShadowRewriteWatershedTxnId(watershedTxnId);
             insertStmt.setShadowRewriteAlterVersion(plan.watershedVersion);
+            configureRewriteInsert(insertStmt);
 
             SessionVariable sessionVariable = context.getSessionVariable();
             sessionVariable.setUsePageCache(false);
@@ -985,6 +1014,7 @@ public abstract class LakeOnlineRewriteJobBase
                 table.onReload();
             });
         }
+        afterJobSettled(false);
 
         if (span != null) {
             span.end();
@@ -1360,6 +1390,7 @@ public abstract class LakeOnlineRewriteJobBase
                 }
             }
         });
+        afterJobSettled(true);
 
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);

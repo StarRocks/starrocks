@@ -17,10 +17,10 @@
 #include <tuple>
 #include <utility>
 
-#include "connector/async_flush_stream_poller.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
@@ -30,23 +30,19 @@ namespace starrocks::pipeline {
 ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                              int32_t driver_sequence,
                                              std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
-                                             std::unique_ptr<connector::AsyncFlushStreamPoller> io_poller,
                                              std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
-                                             connector::SinkOperatorMemoryManager* op_mem_mgr,
                                              FragmentContext* fragment_context)
         : Operator(factory, id, "connector_sink", plan_node_id, false, driver_sequence),
           _connector_chunk_sink(std::move(connector_chunk_sink)),
-          _io_poller(std::move(io_poller)),
+          _io_poller(std::make_unique<formats::AsyncFlushStreamPoller>()),
           _sink_mem_mgr(std::move(sink_mem_mgr)),
-          _op_mem_mgr(op_mem_mgr),
           _fragment_context(fragment_context) {}
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
 #endif
-    _connector_chunk_sink->set_profile(_unique_metrics.get());
-    RETURN_IF_ERROR(_connector_chunk_sink->init());
+    RETURN_IF_ERROR(_connector_chunk_sink->init(_io_poller.get(), _unique_metrics.get(), _sink_mem_mgr.get()));
     return Status::OK();
 }
 
@@ -73,7 +69,7 @@ bool ConnectorSinkOperator::need_input() const {
         if (status.ok()) {
             status = _connector_chunk_sink->status();
         }
-        can_accept_more_input = _sink_mem_mgr->can_accept_more_input(_op_mem_mgr);
+        can_accept_more_input = _sink_mem_mgr->can_accept_more_input(_connector_chunk_sink->op_mem_mgr());
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
@@ -133,28 +129,20 @@ Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
+        FragmentContext* fragment_context)
         : OperatorFactory(id, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
-          _sink_context(std::move(sink_context)),
           _fragment_context(fragment_context) {
     MemTracker* query_pool_tracker = RuntimeEnv::GetInstance()->query_pool_mem_tracker();
     MemTracker* query_tracker = _fragment_context->runtime_state()->query_mem_tracker_ptr().get();
     _sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(query_pool_tracker, query_tracker);
-
-    // Pass SinkMemoryManager to RowDelta context so sub-sinks can get their own child managers
-    _sink_context->set_sink_mem_mgr(_sink_mem_mgr.get());
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence).value();
-    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
-    chunk_sink->set_io_poller(io_poller.get());
-    auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
-    chunk_sink->set_operator_mem_mgr(op_mem_mgr);
+    auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence).value();
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                   driver_sequence, std::move(chunk_sink), std::move(io_poller),
-                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context);
+                                                   driver_sequence, std::move(chunk_sink), _sink_mem_mgr,
+                                                   _fragment_context);
 }
 
 } // namespace starrocks::pipeline

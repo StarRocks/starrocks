@@ -21,12 +21,12 @@
 
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "connector/async_flush_stream_poller.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "connector/utils.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 
 namespace starrocks::connector {
 
@@ -60,10 +60,13 @@ struct HiveChunkSinkContext : public ConnectorChunkSinkContext {
 
 class HiveChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
+    explicit HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx);
     ~HiveChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<HiveChunkSinkContext> _ctx;
 };
 
 } // namespace starrocks::connector

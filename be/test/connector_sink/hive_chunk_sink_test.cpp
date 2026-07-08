@@ -28,6 +28,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 
 namespace starrocks::connector {
@@ -94,8 +95,6 @@ TEST_F(HiveChunkSinkTest, test_callback) {
 }
 
 TEST_F(HiveChunkSinkTest, test_factory) {
-    HiveChunkSinkProvider provider;
-
     {
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
@@ -111,10 +110,13 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        HiveChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -132,10 +134,13 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_OK(sink->init());
+        HiveChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
     }
 
     {
@@ -153,10 +158,12 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
-        EXPECT_ERROR(sink->init());
+        HiveChunkSinkProvider provider(sink_ctx);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_ERROR(sink->init(&poller, nullptr, &mgr));
     }
 }
 

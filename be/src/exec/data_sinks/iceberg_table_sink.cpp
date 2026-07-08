@@ -126,23 +126,22 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     std::unique_ptr<connector::ConnectorChunkSinkProvider> sink_provider;
-    std::shared_ptr<connector::ConnectorChunkSinkContext> sink_ctx;
     std::vector<TExpr> partition_expr;
     std::vector<std::string> transform_exprs = iceberg_table_desc->get_transform_exprs();
 
     if (thrift_sink.type == TDataSinkType::ICEBERG_ROW_DELTA_SINK) {
         RETURN_IF_ERROR(create_row_delta_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
-                                                      sink_provider, sink_ctx, partition_expr));
+                                                      sink_provider, partition_expr));
     } else if (thrift_sink.type == TDataSinkType::ICEBERG_DELETE_SINK) {
         RETURN_IF_ERROR(create_delete_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc,
-                                                   sink_provider, sink_ctx, partition_expr));
+                                                   sink_provider, partition_expr));
     } else {
         RETURN_IF_ERROR(create_data_sink_context(thrift_sink, runtime_state, context, iceberg_table_desc, sink_provider,
-                                                 sink_ctx, partition_expr));
+                                                 partition_expr));
     }
 
-    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
-            context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
+    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(context->next_operator_id(),
+                                                                       std::move(sink_provider), fragment_ctx);
     size_t sink_dop = context->data_sink_dop();
 
     if (iceberg_table_desc->is_unpartitioned_table() || t_iceberg_sink.is_static_partition_sink) {
@@ -181,7 +180,7 @@ Status IcebergTableSink::create_delete_sink_context(
         const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
         IcebergTableDescriptor* iceberg_table_desc,
         std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx, std::vector<TExpr>& partition_expr) const {
+        std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
@@ -247,9 +246,10 @@ Status IcebergTableSink::create_delete_sink_context(
         delete_sink_ctx->partition_evaluators = ColumnExprEvaluator::from_exprs(partition_expr, runtime_state);
     }
 
-    sink_ctx = delete_sink_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_delete_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::DELETE, delete_sink_ctx));
+    sink_provider = std::move(provider);
 
     return Status::OK();
 }
@@ -258,7 +258,6 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
                                                   pipeline::PipelineBuilderContext* context,
                                                   IcebergTableDescriptor* iceberg_table_desc,
                                                   std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-                                                  std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx,
                                                   std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
@@ -325,9 +324,10 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
         }
     }
 
-    sink_ctx = data_sink_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_data_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::DATA, data_sink_ctx));
+    sink_provider = std::move(provider);
 
     if (iceberg_table_desc->is_unpartitioned_table()) {
         //do nothing
@@ -380,7 +380,7 @@ Status IcebergTableSink::create_row_delta_sink_context(
         const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
         IcebergTableDescriptor* iceberg_table_desc,
         std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext>& sink_ctx, std::vector<TExpr>& partition_expr) const {
+        std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
@@ -590,9 +590,10 @@ Status IcebergTableSink::create_row_delta_sink_context(
     row_delta_ctx->data_sink_ctx = data_sink_ctx;
     row_delta_ctx->op_code_index = op_code_index;
 
-    sink_ctx = row_delta_ctx;
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::ICEBERG);
-    sink_provider = connector->create_row_delta_sink_provider();
+    ASSIGN_OR_RETURN(auto provider, connector->create_sink_provider(
+                                            starrocks::connector::ConnectorSinkProviderType::ROW_DELTA, row_delta_ctx));
+    sink_provider = std::move(provider);
 
     return Status::OK();
 }

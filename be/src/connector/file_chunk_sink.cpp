@@ -17,11 +17,12 @@
 #include <future>
 
 #include "base/url_coding.h"
-#include "connector/async_flush_stream_poller.h"
+#include "common/logging.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
@@ -39,6 +40,8 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, true) {}
 
+FileChunkSinkProvider::FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
+
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(result.file_result.rollback_action);
     if (result.file_result.io_status.ok()) {
@@ -49,9 +52,8 @@ void FileChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
@@ -109,8 +111,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     }
 
-    return std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
-                                                      std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
+                                                           std::move(partition_chunk_writer_factory), runtime_state);
+    return sink;
 }
 
 } // namespace starrocks::connector

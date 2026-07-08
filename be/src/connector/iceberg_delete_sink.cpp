@@ -24,12 +24,12 @@
 #include "column/column_helper.h"
 #include "column/sorting/sorting.h"
 #include "common/config_exec_fwd.h"
-#include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/column_evaluator.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
@@ -53,6 +53,9 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)),
           _column_slot_map(std::move(column_slot_map)) {}
+
+IcebergDeleteSinkProvider::IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
 
 // Callback for handling commit results
 void IcebergDeleteSink::callback_on_commit(const CommitResult& result) {
@@ -214,9 +217,8 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergDeleteSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
     }
@@ -335,10 +337,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
             sort_ordering});
     partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(writer_ctx);
 
-    // Create the delete sink
-    return std::make_unique<IcebergDeleteSink>(
+    auto sink = std::make_unique<IcebergDeleteSink>(
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
+    return sink;
 }
 
 // Writes a chunk to the file-level delete file for a specific source data file.

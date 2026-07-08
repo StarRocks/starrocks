@@ -378,7 +378,7 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(20, estimated.getOutputRowCount(), 0.001);
 
         // in second bucket
-        BinaryPredicateOperator eq15 = new BinaryPredicateOperator(
+        new BinaryPredicateOperator(
                 BinaryType.EQ,
                 columnRefOperator,
                 ConstantOperator.createBigint(15));

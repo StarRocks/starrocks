@@ -621,8 +621,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
-
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
@@ -659,10 +657,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentityUtils.fromThrift(params.getUser_ident());
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         RepoAccessor repo = RepoAccessor.getInstance();
         List<PipeFileRecord> files = repo.listAllFiles();
         for (PipeFileRecord record : files) {

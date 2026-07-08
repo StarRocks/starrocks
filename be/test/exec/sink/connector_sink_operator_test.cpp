@@ -23,12 +23,12 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "connector/async_flush_stream_poller.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "formats/io/async_flush_output_stream.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
 
@@ -101,6 +101,18 @@ public:
 
     void callback_on_commit(const connector::CommitResult& result) override {}
 
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                connector::SinkMemoryManager* sink_mem_mgr) override {
+        if (_stream_to_enqueue != nullptr) {
+            poller->enqueue(_stream_to_enqueue);
+            _stream_to_enqueue.reset();
+        }
+        if (_op_mem_mgr != nullptr) {
+            return Status::OK();
+        }
+        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+    }
+
     Status finish() override {
         _finished = true;
         return Status::OK();
@@ -110,7 +122,12 @@ public:
 
     void set_finished(bool finished) { _finished = finished; }
 
+    void set_operator_mem_mgr_for_test(connector::SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
+
+    void set_stream_to_enqueue_for_test(std::shared_ptr<Stream> stream) { _stream_to_enqueue = std::move(stream); }
+
 private:
+    std::shared_ptr<Stream> _stream_to_enqueue;
     bool _finished = true;
 };
 
@@ -174,7 +191,6 @@ protected:
 
 TEST_F(ConnectorSinkOperatorTest, test_factory) {
     {
-        auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
@@ -189,8 +205,8 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context;
-        auto op_factory =
-                std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
+        auto provider = std::make_unique<connector::HiveChunkSinkProvider>(sink_ctx);
+        auto op_factory = std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), _fragment_context);
         auto op = op_factory->create(1, 0);
         EXPECT_OK(op->prepare(_runtime_state));
     }
@@ -201,7 +217,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 100;
-    connector::AsyncFlushStreamPoller poller;
+    formats::AsyncFlushStreamPoller poller;
     std::vector<connector::PartitionChunkWriterPtr> writers;
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -212,14 +228,15 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
-    ASSERT_OK(op_mem_mgr->init(&writers, &poller, [](const connector::CommitResult&) {}));
+    auto* op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
+    ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     NoopConnectorSinkOperatorFactory factory;
-    auto op = std::make_shared<ConnectorSinkOperator>(
-            &factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
-            std::make_unique<connector::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
+    auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
+                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context);
+    ASSERT_OK(op->prepare(_runtime_state));
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -245,22 +262,21 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
     ASSERT_OK(stream->close());
 
-    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
-    io_poller->enqueue(stream);
-    stream.reset();
-
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
+    auto* op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
     std::vector<connector::PartitionChunkWriterPtr> writers;
-    connector::AsyncFlushStreamPoller empty_poller;
-    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const connector::CommitResult&) {}));
+    formats::AsyncFlushStreamPoller empty_poller;
+    ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr_for_test(op_mem_mgr);
     chunk_sink->set_finished(true);
+    chunk_sink->set_stream_to_enqueue_for_test(stream);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
-                                                      std::move(chunk_sink), std::move(io_poller), sink_mem_mgr,
-                                                      op_mem_mgr, _fragment_context);
+                                                      std::move(chunk_sink), sink_mem_mgr, _fragment_context);
+    ASSERT_OK(op->prepare(_runtime_state));
+    stream.reset();
     ASSERT_OK(op->set_finishing(_runtime_state));
 
     {

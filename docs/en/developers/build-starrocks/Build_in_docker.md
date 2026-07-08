@@ -9,13 +9,22 @@ This topic describes how to compile StarRocks using Docker.
 
 ## Overview
 
-StarRocks provides development environment images for both Ubuntu 22.04 and CentOS 7.9. With the image, you can launch a Docker container and compile StarRocks in the container.
+StarRocks provides development environment images for Ubuntu (22.04 and 24.04), CentOS 7.9, and Rocky Linux 9. With the image, you can launch a Docker container and compile StarRocks in the container.
+
+:::note
+
+Starting from v4.2, the development environment changes as follows:
+
+- CentOS 7 reached its End-of-Life on June 30, 2024, so its build distribution is discontinued and replaced by Rocky Linux 9. CentOS 7 images remain available only for v4.1 and earlier.
+- The Ubuntu development environment is upgraded from Ubuntu 22.04 (v4.1 and earlier) to Ubuntu 24.04 (v4.2 and later). The image name `starrocks/dev-env-ubuntu` is unchanged.
+
+:::
 
 ### StarRocks version and DEV ENV image
 
 Different branches of StarRocks correspond to different development environment images provided on [StarRocks Docker Hub](https://hub.docker.com/u/starrocks).
 
-- For Ubuntu 22.04:
+- For Ubuntu (22.04 for v4.1 and earlier, 24.04 for v4.2 and later):
 
   | **Branch name** | **Image name**              |
   | --------------- | ----------------------------------- |
@@ -24,14 +33,19 @@ Different branches of StarRocks correspond to different development environment 
   | branch-4.0      | starrocks/dev-env-ubuntu:4.0-latest |
   | branch-3.5      | starrocks/dev-env-ubuntu:3.5-latest |
 
-- For CentOS 7.9:
+- For CentOS 7.9 (v4.1 and earlier; discontinued from v4.2):
 
   | **Branch name** | **Image name**                       |
   | --------------- | ------------------------------------ |
-  | main            | starrocks/dev-env-centos7:latest     |
   | branch-4.1      | starrocks/dev-env-centos7:4.1-latest |
   | branch-4.0      | starrocks/dev-env-centos7:4.0-latest |
   | branch-3.5      | starrocks/dev-env-centos7:3.5-latest |
+
+- For Rocky Linux 9 (v4.2 and later):
+
+  | **Branch name** | **Image name**                  |
+  | --------------- | ------------------------------- |
+  | main            | starrocks/dev-env-rocky9:latest |
 
 ## Prerequisites
 
@@ -43,7 +57,7 @@ Before compiling StarRocks, make sure the following requirements are satisfied:
 
 - **Software**
 
-  - Your machine must be running on Ubuntu 22.04 or CentOS 7.9.
+  - Your machine must be running on Ubuntu 22.04 or 24.04, CentOS 7.9, or Rocky Linux 9.
   - You must have Docker installed on your machine and version v20.10.10 at least.
 
 ## Step 1: Download the image

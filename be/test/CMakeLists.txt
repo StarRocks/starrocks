@@ -14,7 +14,6 @@ set(EXEC_FILES
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/partition_chunk_writer_test.cpp
-        ./connector_sink/async_flush_stream_poller_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/iceberg_row_delta_sink_test.cpp

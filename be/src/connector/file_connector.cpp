@@ -34,8 +34,17 @@ DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
 }
 
-std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
-    return std::make_unique<FileChunkSinkProvider>();
+StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> FileConnector::create_sink_provider(
+        ConnectorSinkProviderType type, std::shared_ptr<ConnectorChunkSinkContext> context) const {
+    if (type != ConnectorSinkProviderType::DATA) {
+        return Status::NotSupported("File connector only supports data sink provider");
+    }
+    auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+    if (ctx == nullptr) {
+        return Status::InternalError("File connector requires FileChunkSinkContext");
+    }
+    std::unique_ptr<ConnectorChunkSinkProvider> provider = std::make_unique<FileChunkSinkProvider>(std::move(ctx));
+    return provider;
 }
 
 // ================================

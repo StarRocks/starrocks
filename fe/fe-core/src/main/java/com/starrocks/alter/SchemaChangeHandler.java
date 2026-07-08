@@ -56,6 +56,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -93,6 +94,8 @@ import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -619,7 +622,6 @@ public class SchemaChangeHandler extends AlterHandler {
         ColumnPosition fieldPos = alterClause.getFieldPos();
         ArrayList<StructField> oriFields = oriFieldType.getFields();
         int posIndex = -1;
-        boolean hasPos = (fieldPos != null);
         if (fieldPos != null) {
             if (fieldPos.isFirst()) {
                 posIndex = 0;
@@ -2235,13 +2237,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
-        final ConnectContext connectContext = ConnectContext.get();
-        final ComputeResource computeResource = connectContext != null
-                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        if (!warehouseManager.isResourceAvailable(computeResource)) {
-            throw new DdlException("no available compute nodes:" + computeResource);
-        }
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
 
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2249,6 +2245,24 @@ public class SchemaChangeHandler extends AlterHandler {
 
         LakeRangeRewriteSchemaChangeJob job = new LakeRangeRewriteSchemaChangeJob(
                 jobId, db.getId(), olapTable.getId(), olapTable.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, keysType, sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+        return job;
+    }
+
+    /**
+     * Populate the new-schema / new-sort-key / shadow-identity fields shared by every
+     * {@link LakeRangeRewriteSchemaChangeJob} (including its MV subclass {@link LakeMvSortKeyRewriteJob}):
+     * the new full schema, the new sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds} and the
+     * projected sort-key {@link Column}s used to sample the K-tablet boundaries), the (possibly
+     * unchanged) keysType, and the shadow/origin index identity. Package-visible so
+     * {@link AlterMVJobExecutor} can populate a {@link LakeMvSortKeyRewriteJob} identically to
+     * {@link #buildRangeRewriteJob}.
+     */
+    static void populateRangeRewriteJob(LakeRangeRewriteSchemaChangeJob job, List<Column> newSchema,
+                                        KeysType keysType, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds,
+                                        long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
+                                        short shortKeyColumnCount, ComputeResource computeResource) {
         job.setNewSchema(newSchema);
         job.setNewKeysType(keysType);
         job.setNewSortKeyIdxes(sortKeyIdxes);
@@ -2256,7 +2270,64 @@ public class SchemaChangeHandler extends AlterHandler {
         job.setNewSortKeyColumns(resolveSortKeyColumns(newSchema, sortKeyIdxes));
         job.setShadowIndex(shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount);
         job.setComputeResource(computeResource);
-        return job;
+    }
+
+    /**
+     * Resolve the current session's compute resource and verify it is available, for use by the
+     * range-rewrite job builders ({@link #buildRangeRewriteJob} and {@link #submitMvSortKeyRewriteJob}).
+     */
+    private static ComputeResource resolveAndValidateComputeResource() throws DdlException {
+        final ConnectContext connectContext = ConnectContext.get();
+        final ComputeResource computeResource = connectContext != null
+                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            throw new DdlException("no available compute nodes:" + computeResource);
+        }
+        return computeResource;
+    }
+
+    /**
+     * Submit a {@link LakeMvSortKeyRewriteJob} for {@code ALTER MATERIALIZED VIEW ... ORDER BY} on a
+     * shared-data range-distribution materialized view. Model B: the MV's base schema (column set and
+     * order) is UNCHANGED -- only the sort key ({@code sortKeyIdxes}/{@code sortKeyUniqueIds}) changes,
+     * exactly the shipped {@code ALTER TABLE ... ORDER BY} reorder shape (see {@link #createRangeRewriteJob}).
+     * Runs under the MV table WRITE lock already held by
+     * {@code AlterJobExecutor.visitAlterMaterializedViewStatement} -- does NOT acquire a lock of its own.
+     *
+     * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the colocate / AUTO_INCREMENT gates
+     * from {@link #needsRangeRewriteSchemaChange}: both are structurally unreachable for an MV here.
+     * Colocation requires hash distribution, but {@code AlterMVClauseAnalyzerVisitor} already requires
+     * range distribution before routing to this method. An AUTO_INCREMENT row-id column implies a
+     * PRIMARY_KEYS MV, which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects.
+     */
+    void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,
+                                   List<Integer> sortKeyUniqueIds) throws StarRocksException {
+        long baseIndexMetaId = mv.getBaseIndexMetaId();
+        List<Column> newSchema = mv.getSchemaByIndexMetaId(baseIndexMetaId);
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes);
+
+        final ComputeResource computeResource = resolveAndValidateComputeResource();
+
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        String shadowIndexName = SHADOW_NAME_PREFIX + mv.getIndexNameByMetaId(baseIndexMetaId);
+
+        LakeMvSortKeyRewriteJob job = new LakeMvSortKeyRewriteJob(
+                jobId, db.getId(), mv.getId(), mv.getName(), Config.alter_table_timeout_second * 1000L);
+        populateRangeRewriteJob(job, newSchema, mv.getKeysType(), sortKeyIdxes, sortKeyUniqueIds,
+                shadowIndexMetaId, baseIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+
+        // Capture BEFORE any suspend: a user-paused refresh task (or an INACTIVE MV, whose task is
+        // paused) must not be silently resumed on settle/replay.
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        job.setRefreshWasActiveAtSubmit(task != null && task.getState() != Constants.TaskState.PAUSE);
+
+        // Register the job and flip the MV to SCHEMA_CHANGE atomically, mirroring #process(...) below.
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job, wal -> {
+            mv.setState(OlapTableState.SCHEMA_CHANGE);
+            addAlterJobV2(job);
+        });
     }
 
     /**
@@ -2318,7 +2389,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
                                     List<List<Comparable>> schemaChangeJobInfos) {
-        ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
                 continue;

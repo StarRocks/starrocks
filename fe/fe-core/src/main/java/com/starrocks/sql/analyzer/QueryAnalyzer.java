@@ -1627,7 +1627,7 @@ public class QueryAnalyzer {
                 // view created in previous use originField.getOriginExpression().type as column
                 // types in its schema, it is incorrect, so use originField.type instead.
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
-                        originField.getOriginExpression());
+                        originField.getOriginExpression(), true, originField.isNullable());
                 fields.add(field);
             }
 
@@ -1986,7 +1986,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Scope scope) {
-            Scope ignored = visitJoin(node, scope);
+            visitJoin(node, scope);
             // Only the scope of the table function is visible outside.
             node.setScope(node.getRight().getScope());
             return node.getScope();

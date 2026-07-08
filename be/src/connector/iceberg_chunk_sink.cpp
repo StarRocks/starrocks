@@ -18,9 +18,11 @@
 
 #include "base/url_coding.h"
 #include "common/config_connector_sink_fwd.h"
-#include "connector/async_flush_stream_poller.h"
+#include "common/logging.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
@@ -39,6 +41,9 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)) {}
+
+IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx)
+        : _ctx(std::move(ctx)) {}
 
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     push_rollback_action(result.file_result.rollback_action);
@@ -85,9 +90,8 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
@@ -132,9 +136,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     }
 
-    return std::make_unique<connector::IcebergChunkSink>(partition_columns, transform_exprs,
-                                                         std::move(partition_evaluators),
-                                                         std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::IcebergChunkSink>(partition_columns, transform_exprs,
+                                                              std::move(partition_evaluators),
+                                                              std::move(partition_chunk_writer_factory), runtime_state);
+    return sink;
 }
 
 Status IcebergChunkSink::add(const ChunkPtr& chunk) {

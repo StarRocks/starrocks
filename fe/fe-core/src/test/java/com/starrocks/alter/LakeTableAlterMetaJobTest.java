@@ -745,7 +745,7 @@ public class LakeTableAlterMetaJobTest {
     @Test
     public void testModifyPropertyCompactionStrategy() throws Exception {
         try {
-            LakeTable nonPKTable = createTable(connectContext,
+            createTable(connectContext,
                         "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                         "PROPERTIES('compaction_strategy'='real_time')");
         } catch (Exception e) {
@@ -753,7 +753,7 @@ public class LakeTableAlterMetaJobTest {
         }
 
         try {
-            LakeTable nonPKTable = createTable(connectContext,
+            createTable(connectContext,
                         "CREATE TABLE non_pk(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1");
             String alterStmtStr = "alter table test.non_pk set ('compaction_strategy'='real_time')";
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);

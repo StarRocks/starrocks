@@ -2464,6 +2464,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             alterTableClause = (DropMVColumnClause) visit(context.dropMVColumnClause());
         }
 
+        // reorder columns (sort key) of materialized view
+        if (context.reorderColumnsClause() != null) {
+            alterTableClause = (ReorderColumnsClause) visit(context.reorderColumnsClause());
+        }
+
         return new AlterMaterializedViewStmt(mvTableRef, alterTableClause, createPos(context));
     }
 
@@ -2878,8 +2883,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitShowRoutineLoadStatement(
             com.starrocks.sql.parser.StarRocksParser.ShowRoutineLoadStatementContext context) {
         boolean isVerbose = context.ALL() != null;
-        String database = null;
-        StarRocksParser.ShowPredicateClausesContext showPredicateClauses = context.showPredicateClauses();
         Expr where = getWhereFrom(context.showPredicateClauses());
         List<OrderByElement> orderByElements = getOrderByFrom(context.showPredicateClauses());
         LimitElement limitElement = getLimitFrom(context.showPredicateClauses());

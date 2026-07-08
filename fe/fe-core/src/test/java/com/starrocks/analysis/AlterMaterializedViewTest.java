@@ -39,12 +39,15 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -197,6 +200,19 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertTrue(defaultValueDef.expr.isConstant());
         IntLiteral intLiteral = (IntLiteral) defaultValueDef.expr;
         Assertions.assertEquals(10, intLiteral.getValue());
+    }
+
+    @Test
+    public void testAlterMvOrderByParses() throws Exception {
+        String alterMvSql = "alter materialized view mv1 order by (k2, k1)";
+        // Parse-only (no analysis): this asserts the grammar/AST wiring produces a ReorderColumnsClause.
+        // The analyze path (which requires a shared-data range-distributed MV) is covered end-to-end by
+        // AlterMvOrderByAnalyzerTest; analyzing mv1 here would be correctly rejected by that gate.
+        AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt)
+                SqlParser.parse(alterMvSql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableClause clause = stmt.getAlterTableClause();
+        Assertions.assertTrue(clause instanceof ReorderColumnsClause);
+        Assertions.assertEquals(List.of("k2", "k1"), ((ReorderColumnsClause) clause).getColumnsByPos());
     }
 
     // TODO: consider to support alterjob for mv

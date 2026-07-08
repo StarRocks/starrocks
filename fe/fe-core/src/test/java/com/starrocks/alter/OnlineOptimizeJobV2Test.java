@@ -81,7 +81,6 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-        Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();

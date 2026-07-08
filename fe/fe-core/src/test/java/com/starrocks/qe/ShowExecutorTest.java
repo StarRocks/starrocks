@@ -58,7 +58,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -609,7 +608,6 @@ public class ShowExecutorTest {
                 ")\n" +
                 "AS select col1, col2 from table1;";
         Assertions.assertTrue(resultSet.next());
-        List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
         Assertions.assertEquals("1000", resultSet.getString(0));
         Assertions.assertEquals("testDb", resultSet.getString(1));
         Assertions.assertEquals("testMv", resultSet.getString(2));

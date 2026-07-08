@@ -104,7 +104,6 @@ public class LakeTableAlterJobV2BuilderTest {
             }
         };
 
-        long dbId = GlobalStateMgr.getCurrentState().getNextId();
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         partitionId = GlobalStateMgr.getCurrentState().getNextId();
         physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();

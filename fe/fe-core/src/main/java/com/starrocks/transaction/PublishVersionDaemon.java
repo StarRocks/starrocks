@@ -1053,7 +1053,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
         long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
-        long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
         ComputeResource computeResource = txnState.getComputeResource();
         List<Tablet> normalTablets = null;

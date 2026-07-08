@@ -17,6 +17,8 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/logging.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -37,6 +39,8 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
                              std::move(partition_chunk_writer_factory), state, false) {}
 
+HiveChunkSinkProvider::HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
+
 void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(result.file_result.rollback_action);
     if (result.file_result.io_status.ok()) {
@@ -55,9 +59,8 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
-        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
-    auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
+StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+    auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
@@ -109,9 +112,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
     }
 
     auto partition_column_evaluators = ColumnEvaluator::clone(ctx->partition_column_evaluators);
-    return std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
-                                                      std::move(partition_column_evaluators),
-                                                      std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
+                                                           std::move(partition_column_evaluators),
+                                                           std::move(partition_chunk_writer_factory), runtime_state);
+    return sink;
 }
 
 } // namespace starrocks::connector
