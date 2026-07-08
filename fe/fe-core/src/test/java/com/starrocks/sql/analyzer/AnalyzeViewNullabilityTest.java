@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
