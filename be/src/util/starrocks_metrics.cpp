@@ -282,6 +282,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(datacache_meta_used_bytes);
     REGISTER_STARROCKS_METRIC(block_cache_hit_bytes);
     REGISTER_STARROCKS_METRIC(block_cache_miss_bytes);
+    REGISTER_STARROCKS_METRIC(block_cache_hit_count);
+    REGISTER_STARROCKS_METRIC(block_cache_miss_count);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
