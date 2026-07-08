@@ -174,7 +174,7 @@ public:
     MOCK_METHOD(const std::string&, filename, (), (const, override));
 };
 
-class MockPoller : public AsyncFlushStreamPoller {
+class MockPoller : public formats::AsyncFlushStreamPoller {
 public:
     MOCK_METHOD(void, enqueue, (std::shared_ptr<Stream> stream), (override));
 };

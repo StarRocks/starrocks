@@ -21,14 +21,14 @@
 #include "formats/io/async_flush_output_stream.h"
 #include "formats/utils.h"
 
-namespace starrocks::connector {
+namespace starrocks::formats {
 
-/// own a FIFO queue of `formats::AsyncFlushOutputStream`
+/// own a FIFO queue of `AsyncFlushOutputStream`
 /// client periodically poll the state of async io operations via `poll()`
-/// each `formats::AsyncFlushOutputStream` will be destroyed once its async status is ready and fetched
+/// each `AsyncFlushOutputStream` will be destroyed once its async status is ready and fetched
 class AsyncFlushStreamPoller {
 public:
-    using Stream = formats::AsyncFlushOutputStream;
+    using Stream = AsyncFlushOutputStream;
 
     AsyncFlushStreamPoller() = default;
 
@@ -52,4 +52,4 @@ private:
     std::deque<StreamWithStatus> _queue;
 };
 
-} // namespace starrocks::connector
+} // namespace starrocks::formats

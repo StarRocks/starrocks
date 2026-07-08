@@ -36,8 +36,7 @@ Status ConnectorChunkSink::init() {
     init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
-    RETURN_IF_ERROR(
-            _op_mem_mgr->init(&_writers, _io_poller, [this](const CommitResult& r) { this->callback_on_commit(r); }));
+    RETURN_IF_ERROR(_op_mem_mgr->init(&_writers, _io_poller));
     return Status::OK();
 }
 
