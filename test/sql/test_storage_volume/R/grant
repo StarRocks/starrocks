@@ -1,4 +1,7 @@
 -- name: testGrant
+ADMIN SET FRONTEND CONFIG ("enable_storage_volume_access_check" = "false");
+-- result:
+-- !result
 CREATE USER rose IDENTIFIED BY '123456';
 -- result:
 -- !result
@@ -16,5 +19,8 @@ drop storage volume storage_volume_grant;
 -- result:
 -- !result
 drop user rose;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_storage_volume_access_check" = "true");
 -- result:
 -- !result
