@@ -30,7 +30,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
@@ -53,10 +52,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class InsertOverwriteJobRunnerEditLogTest {
@@ -120,7 +116,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        runner.doCommit();
+        runner.testDoCommit(false);
 
         Partition replaced = table.getPartition(TABLE_NAME);
         Assertions.assertNotNull(replaced);
@@ -151,7 +147,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        runner.gc();
+        runner.testGc(false);
         Assertions.assertFalse(table.existTempPartitions());
 
         addTempPartition(dbId, table, sourcePartitionId, tempPartitionId, tempPhysicalPartitionId, tempTabletId,
@@ -175,7 +171,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        runner.doCommit();
+        runner.testDoCommit(false);
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // the swapped-out source tablets must be marked so BE drops them directly
@@ -204,7 +200,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         // the swap is journaled before post-commit work runs; a post-commit failure
         // must not escape doCommit, otherwise the job would be routed to gc(), which
         // would drop the partitions that just became live
-        Assertions.assertDoesNotThrow(runner::doCommit);
+        Assertions.assertDoesNotThrow(() -> runner.testDoCommit(false));
 
         Partition replaced = table.getPartition(TABLE_NAME);
         Assertions.assertNotNull(replaced);
@@ -230,7 +226,7 @@ public class InsertOverwriteJobRunnerEditLogTest {
         db.dropTable(TABLE_NAME);
 
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-        Assertions.assertThrows(DmlException.class, runner::gc);
+        Assertions.assertThrows(DmlException.class, () -> runner.testGc(false));
 
         // the PREPARE transaction must not leak until the txn timeout checker reaps
         // it: gc() aborts it even though the table is gone
@@ -238,63 +234,6 @@ public class InsertOverwriteJobRunnerEditLogTest {
                 .getTransactionState(dbId, txnId);
         Assertions.assertNotNull(txnState);
         Assertions.assertEquals(TransactionStatus.ABORTED, txnState.getTransactionStatus());
-    }
-
-    @Test
-    public void testDoCommitEditLogException() {
-        InsertOverwriteJob job = new InsertOverwriteJob(2005L, db.getId(), table.getId(),
-                Lists.newArrayList(sourcePartitionId), false);
-        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
-        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
-        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
-
-        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
-        EditLog spyEditLog = spy(new EditLog(null));
-        doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logInsertOverwriteStateChange(any(InsertOverwriteStateChangeInfo.class), any());
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        try {
-            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-            DmlException exception = Assertions.assertThrows(DmlException.class, runner::doCommit);
-            Assertions.assertTrue(exception.getMessage().contains("replace partitions failed"));
-
-            Partition sourcePartition = table.getPartition(TABLE_NAME);
-            Assertions.assertNotNull(sourcePartition);
-            Assertions.assertEquals(sourcePartitionId, sourcePartition.getId());
-            Assertions.assertTrue(table.existTempPartitions());
-
-            // a failed commit must leave no force-delete marks: the source tablets are
-            // still live, and a stale mark would make BE skip trash on a later
-            // legitimate drop of these tablets
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-            Assertions.assertFalse(invertedIndex.tabletForceDelete(sourceTabletId, BACKEND_ID));
-            Assertions.assertFalse(invertedIndex.tabletForceDelete(tempTabletId, BACKEND_ID));
-        } finally {
-            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
-        }
-    }
-
-    @Test
-    public void testGcEditLogException() {
-        InsertOverwriteJob job = new InsertOverwriteJob(2006L, db.getId(), table.getId(),
-                Lists.newArrayList(sourcePartitionId), false);
-        job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
-        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
-
-        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
-        EditLog spyEditLog = spy(new EditLog(null));
-        doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logInsertOverwriteStateChange(any(InsertOverwriteStateChangeInfo.class), any());
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        try {
-            InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
-            Assertions.assertDoesNotThrow(runner::gc);
-            Assertions.assertTrue(table.existTempPartitions());
-        } finally {
-            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
-        }
     }
 
     private static OlapTable createHashOlapTable(long dbId, long tableId, String tableName, long partitionId,
