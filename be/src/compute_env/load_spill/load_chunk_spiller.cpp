@@ -402,6 +402,10 @@ StatusOr<LoadSpillMergeInputBatch> LoadChunkSpiller::generate_merge_input_batch(
     std::sort(groups.begin(), groups.end(),
               [](const BlockGroupPtrWithSlot& a, const BlockGroupPtrWithSlot& b) { return a.slot_idx < b.slot_idx; });
 
+    // This batch consumes a prefix of the (now slot-sorted) groups, so groups[0] is its smallest slot.
+    // Record it so the consolidation step can restore flush order regardless of task registration order.
+    result_batch.slot_idx = groups[0].slot_idx;
+
     // Tracks the last group index included in this task (used for cleanup at end)
     int64_t stop_idx = -1;
 

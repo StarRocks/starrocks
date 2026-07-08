@@ -83,6 +83,10 @@ public:
      */
     const std::unique_ptr<TabletWriter>& writer() const { return _writer; }
 
+    // Smallest slot_idx (memtable flush order) of this task's merge batch. Used to consolidate task
+    // results in flush order, since tasks may be registered out of order under concurrent eager merge.
+    int64_t slot_idx() const;
+
 private:
     // Owned writer clone for independent parallel writes
     std::unique_ptr<TabletWriter> _writer;
