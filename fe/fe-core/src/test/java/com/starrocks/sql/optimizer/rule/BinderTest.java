@@ -16,8 +16,12 @@
 package com.starrocks.sql.optimizer.rule;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -26,12 +30,20 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLanceScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class BinderTest {
@@ -105,6 +117,28 @@ public class BinderTest {
         OptExpression result = bindNext(pattern, expr);
 
         assertEquals(OperatorType.LOGICAL_JOIN, result.getOp().getOpType());
+    }
+
+    @Test
+    public void testMergeLimitDirectMatchesLanceScan() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator idRef = columnRefFactory.create("id", Type.INT, true);
+        Column idColumn = new Column("id", Type.INT, true);
+        LanceTable table = new LanceTable("lance_catalog", "default", "tbl", List.of(idColumn),
+                ImmutableMap.of(LanceTable.DATASET_URI, "file:///tmp/tbl.lance"));
+        LogicalLanceScanOperator scan = new LogicalLanceScanOperator(table, Map.of(idRef, idColumn),
+                Map.of(idColumn, idRef), -1, null);
+        OptExpression expr = OptExpression.create(LogicalLimitOperator.local(1), OptExpression.create(scan));
+
+        MergeLimitDirectRule rule = new MergeLimitDirectRule();
+        OptExpression bound = bindNext(rule.getPattern(), expr);
+        assertNotNull(bound);
+
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(columnRefFactory);
+        OptExpression transformed = rule.transform(bound, optimizerContext).get(0);
+        assertEquals(OperatorType.LOGICAL_LANCE_SCAN, transformed.getOp().getOpType());
+        assertEquals(1, transformed.getOp().getLimit());
+        assertEquals(0, transformed.getInputs().size());
     }
 
 
