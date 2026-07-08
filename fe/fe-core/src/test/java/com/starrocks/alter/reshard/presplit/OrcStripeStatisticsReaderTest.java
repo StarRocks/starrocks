@@ -255,7 +255,8 @@ class OrcStripeStatisticsReaderTest {
         // DOUBLE is outside the meta-tier mapping window even for a numeric sort key.
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("payload", IntegerType.BIGINT), null));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("payload", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -301,7 +302,8 @@ class OrcStripeStatisticsReaderTest {
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
-                        PresplitTestSupport.statusOf(orcPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT), null));
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("sort_key", IntegerType.BIGINT), null));
     }
 
     @Test
