@@ -74,11 +74,14 @@ struct IcebergDeleteSinkContext : public ConnectorChunkSinkContext {
 // IcebergDeleteSinkProvider creates IcebergDeleteSink for writing position delete files
 class IcebergDeleteSinkProvider final : public ConnectorChunkSinkProvider {
 public:
+    explicit IcebergDeleteSinkProvider(std::shared_ptr<IcebergDeleteSinkContext> ctx);
     ~IcebergDeleteSinkProvider() override = default;
 
     // Create a sink for writing delete files
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+
+private:
+    std::shared_ptr<IcebergDeleteSinkContext> _ctx;
 };
 
 // IcebergDeleteSink writes position delete files for Iceberg Merge-On-Read operations.

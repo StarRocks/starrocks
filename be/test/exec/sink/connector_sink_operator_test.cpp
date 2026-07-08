@@ -174,7 +174,6 @@ protected:
 
 TEST_F(ConnectorSinkOperatorTest, test_factory) {
     {
-        auto provider = std::make_unique<connector::HiveChunkSinkProvider>();
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
@@ -189,6 +188,7 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context;
+        auto provider = std::make_unique<connector::HiveChunkSinkProvider>(sink_ctx);
         auto op_factory =
                 std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
         auto op = op_factory->create(1, 0);

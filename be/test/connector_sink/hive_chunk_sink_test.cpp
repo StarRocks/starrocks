@@ -94,8 +94,6 @@ TEST_F(HiveChunkSinkTest, test_callback) {
 }
 
 TEST_F(HiveChunkSinkTest, test_factory) {
-    HiveChunkSinkProvider provider;
-
     {
         auto sink_ctx = std::make_shared<connector::HiveChunkSinkContext>();
         sink_ctx->path = "/path/to/directory/";
@@ -111,7 +109,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -132,7 +131,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -153,7 +153,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context.get();
-        auto sink = provider.create_chunk_sink(sink_ctx, 0).value();
+        HiveChunkSinkProvider provider(sink_ctx);
+        auto sink = provider.create_chunk_sink(0).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init());
