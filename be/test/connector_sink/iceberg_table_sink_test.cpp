@@ -34,6 +34,7 @@
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/runtime/pipeline.h"
 #include "formats/io/async_flush_stream_poller.h"
+#include "formats/utils.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "types/type_descriptor.h"
@@ -872,6 +873,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     iceberg_table_sink.__set_location("/path/to/table");
     iceberg_table_sink.__set_data_location("/path/to/table/data");
     iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_file_format(formats::PARQUET);
     iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_MIXED);
     iceberg_table_sink.__set_target_max_file_size(128LL * 1024 * 1024);
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
