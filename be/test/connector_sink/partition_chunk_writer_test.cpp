@@ -32,6 +32,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
 #include "runtime/chunk_helper.h"
