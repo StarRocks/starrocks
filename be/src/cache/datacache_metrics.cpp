@@ -42,11 +42,18 @@ static void update_datacache_metrics(bool use_same_instance) {
     auto* local_disk_cache = cache_env->local_disk_cache();
     DataCacheDiskMetrics disk_metrics{};
     int64_t meta_used_bytes = 0;
+    int64_t block_cache_hit_count = 0;
+    int64_t block_cache_miss_count = 0;
     if (local_disk_cache && local_disk_cache->is_initialized()) {
         disk_metrics = local_disk_cache->cache_metrics();
         auto* starcache = static_cast<StarCacheEngine*>(local_disk_cache);
         auto&& star_metrics = starcache->starcache_metrics(0);
         meta_used_bytes = star_metrics.meta_used_bytes;
+        // hit_count()/lookup_count() read the lightweight level-1 detail; miss = lookup - hit.
+        const size_t hit_count = local_disk_cache->hit_count();
+        const size_t lookup_count = local_disk_cache->lookup_count();
+        block_cache_hit_count = static_cast<int64_t>(hit_count);
+        block_cache_miss_count = static_cast<int64_t>(lookup_count >= hit_count ? lookup_count - hit_count : 0);
     }
 #ifdef USE_STAROS
     if (!use_same_instance) {
@@ -64,39 +71,17 @@ static void update_datacache_metrics(bool use_same_instance) {
     StarRocksMetrics::instance()->datacache_disk_used_bytes.set_value(disk_metrics.disk_used_bytes);
     StarRocksMetrics::instance()->datacache_meta_used_bytes.set_value(meta_used_bytes);
 
-<<<<<<< HEAD
     // Update hit rate metrics from DataCacheHitRateCounter
     auto* hit_rate_counter = DataCacheHitRateCounter::instance();
     StarRocksMetrics::instance()->block_cache_hit_bytes.set_value(hit_rate_counter->block_cache_hit_bytes());
     StarRocksMetrics::instance()->block_cache_miss_bytes.set_value(hit_rate_counter->block_cache_miss_bytes());
+    StarRocksMetrics::instance()->block_cache_hit_count.set_value(block_cache_hit_count);
+    StarRocksMetrics::instance()->block_cache_miss_count.set_value(block_cache_miss_count);
 }
 
 void register_datacache_metrics(bool use_same_instance) {
     StarRocksMetrics::instance()->metrics()->register_hook(
             "update_datacache_metrics", [use_same = use_same_instance] { update_datacache_metrics(use_same); });
-=======
-    registry->register_metric("datacache_mem_quota_bytes", &datacache_mem_quota_bytes);
-    registry->register_metric("datacache_mem_used_bytes", &datacache_mem_used_bytes);
-    registry->register_metric("datacache_disk_quota_bytes", &datacache_disk_quota_bytes);
-    registry->register_metric("datacache_disk_used_bytes", &datacache_disk_used_bytes);
-    registry->register_metric("datacache_meta_used_bytes", &datacache_meta_used_bytes);
-    registry->register_metric("block_cache_hit_bytes", &block_cache_hit_bytes);
-    registry->register_metric("block_cache_miss_bytes", &block_cache_miss_bytes);
-    registry->register_metric("block_cache_hit_count", &block_cache_hit_count);
-    registry->register_metric("block_cache_miss_count", &block_cache_miss_count);
-}
-
-void DataCacheMetrics::update(const DataCacheMetricsSnapshot& snapshot) {
-    datacache_mem_quota_bytes.set_value(snapshot.mem_quota_bytes);
-    datacache_mem_used_bytes.set_value(snapshot.mem_used_bytes);
-    datacache_disk_quota_bytes.set_value(snapshot.disk_quota_bytes);
-    datacache_disk_used_bytes.set_value(snapshot.disk_used_bytes);
-    datacache_meta_used_bytes.set_value(snapshot.meta_used_bytes);
-    block_cache_hit_bytes.set_value(snapshot.block_cache_hit_bytes);
-    block_cache_miss_bytes.set_value(snapshot.block_cache_miss_bytes);
-    block_cache_hit_count.set_value(snapshot.block_cache_hit_count);
-    block_cache_miss_count.set_value(snapshot.block_cache_miss_count);
->>>>>>> 7d4c9d4d1e ([Enhancement] expose datacache metrics through /metrics endpoint (#58204))
 }
 #endif
 
