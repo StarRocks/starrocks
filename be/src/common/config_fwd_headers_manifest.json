@@ -583,6 +583,7 @@
         "object_storage_rename_file_request_timeout_ms",
         "object_storage_max_retries",
         "object_storage_retry_scale_factor",
+        "object_storage_client_cache_size",
         "fallback_to_hadoop_fs_list",
         "s3_compatible_fs_list",
         "s3_use_list_objects_v1",
