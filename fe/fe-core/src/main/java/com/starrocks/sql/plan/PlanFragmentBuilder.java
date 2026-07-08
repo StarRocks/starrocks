@@ -993,6 +993,12 @@ public class PlanFragmentBuilder {
                 // selected tablet ids      : tablet_2
                 // total tablets num        : 1
                 Set<Long> selectedNonEmptyPartitionIds = Sets.newLinkedHashSet();
+                // Accumulate the whole-scan bucketSeq across every sub-partition into one map (rather than a
+                // fresh per-sub-partition map that overwrites), so the dispatch-time alignment guard in
+                // OlapScanNode.getBucketNums() validates the complete assignment instead of only the last
+                // sub-partition's slice. This mirrors the legacy OlapScanNode.computeScanRangeLocations path.
+                Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                 for (Long partitionId : scanNode.getSelectedPartitionIds()) {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     List<TKeyRange> partitionRange = List.of();
@@ -1007,7 +1013,6 @@ public class PlanFragmentBuilder {
                             continue;
                         }
                         selectedNonEmptyPartitionIds.add(partitionId);
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
@@ -1022,6 +1027,10 @@ public class PlanFragmentBuilder {
                             if (rangeColocateMap != null) {
                                 tabletId2BucketSeq.putAll(rangeColocateMap);
                             } else {
+                                // Range-colocate but transiently unaligned: fall back to position-based
+                                // bucketSeq so a non-colocate scan still works. getBucketNums() fails closed
+                                // on the colocate-dispatch path by validating this built assignment against
+                                // the aligned mapping, so no unaligned observation needs to be recorded here.
                                 for (int i = 0; i < allTabletIds.size(); i++) {
                                     tabletId2BucketSeq.put(allTabletIds.get(i), i);
                                 }
@@ -1032,7 +1041,6 @@ public class PlanFragmentBuilder {
                                 tabletId2BucketSeq.put(allTabletIds.get(i), i);
                             }
                         }
-                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
