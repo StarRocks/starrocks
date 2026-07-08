@@ -525,8 +525,8 @@ class OrcStripeStatisticsReaderTest {
 
     @Test
     void timestampInstantFallsBackToDataTier() throws Exception {
-        // TIMESTAMP_INSTANT (timestamp with local time zone) gets a session-tz offset at load time
-        // that this reader cannot reproduce → defer to data tier.
+        // No load timezone (null) -> no fixed offset -> the meta tier cannot match the BE session-tz
+        // offset for a TIMESTAMP_INSTANT, so it defers to the data tier.
         Path orcPath = writeOrc(
                 "struct<event_ts:timestamp with local time zone>",
                 /*rowCount=*/ 2,
@@ -541,6 +541,120 @@ class OrcStripeStatisticsReaderTest {
                 OrcStripeStatisticsReader.read(
                         PresplitTestSupport.statusOf(orcPath), new Configuration(),
                         new Column("event_ts", DateType.DATETIME), null));
+    }
+
+    @Test
+    void timestampInstantWithFixedOffsetReachesMetaTier() throws Exception {
+        // TIMESTAMP_INSTANT stores the UTC instant; a +08:00 load adds a constant +8h offset (BE does the
+        // same for a fixed-offset zone). getMinimumUTC() = raw UTC millis; 1000ms = 1970-01-01 00:00:01 UTC
+        // -> 1970-01-01 08:00:01 local; +1000ms/row.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 3,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("event_ts", DateType.DATETIME), "+08:00");
+
+        Assertions.assertFalse(stats.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics stripe : stats) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("1970-01-01 08:00:01", globalMin);
+        Assertions.assertTrue(globalMax.startsWith("1970-01-01 08:00:03"), "unexpected max " + globalMax);
+    }
+
+    @Test
+    void timestampInstantWithFixedOffsetKeepsMicroseconds() throws Exception {
+        // Sub-second must survive the offset add. time=1000ms + nanos=500123000 = 1.500123 s UTC; +8h ->
+        // 1970-01-01 08:00:01.500123 local.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 1000L;
+                    vector.nanos[batchRow] = 500_123_000;
+                });
+
+        List<RowGroupStatistics> stats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("event_ts", DateType.DATETIME), "+08:00");
+
+        Assertions.assertEquals("1970-01-01 08:00:01.500123",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void timestampInstantWithDstZoneFallsBackToDataTier() throws Exception {
+        // A DST zone applies a per-instant offset the meta tier cannot reproduce with one scalar -> data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 2,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = (rowIndex + 1) * 1000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "America/New_York"));
+    }
+
+    @Test
+    void timestampInstantOffsetCrossesDate() throws Exception {
+        // The offset must roll the calendar date. UTC 1970-01-01 20:00:00 (time=72000000 ms) + 08:00 ->
+        // 1970-01-02 04:00:00 local.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 72_000_000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertEquals("1970-01-02 04:00:00",
+                OrcStripeStatisticsReader.read(PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "+08:00")
+                        .get(0).getMinTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void timestampInstantOutsideWindowAfterOffsetFallsBackToDataTier() throws Exception {
+        // The window gate runs on the OFFSET-ADJUSTED local date. MAX time 253402300799000 ms =
+        // 9999-12-31 23:59:59 UTC; +08:00 -> year 10000 -> data tier.
+        Path orcPath = writeOrc(
+                "struct<event_ts:timestamp with local time zone>",
+                /*rowCount=*/ 1,
+                (batch, batchRow, rowIndex) -> {
+                    TimestampColumnVector vector = (TimestampColumnVector) batch.cols[0];
+                    vector.setIsUTC(true);
+                    vector.time[batchRow] = 253_402_300_799_000L;
+                    vector.nanos[batchRow] = 0;
+                });
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                OrcStripeStatisticsReader.read(
+                        PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                        new Column("event_ts", DateType.DATETIME), "+08:00"));
     }
 
     @Test
