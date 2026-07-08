@@ -16,15 +16,16 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.FlussTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
+import com.starrocks.connector.fluss.FlussSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -52,7 +53,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -61,7 +61,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class FlussScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(FlussScanNode.class);
-    private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private final FlussTable flussTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
@@ -111,11 +110,23 @@ public class FlussScanNode extends ScanNode {
                                         long limit) throws IOException {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+        GetRemoteFilesParams.Builder paramsBuilder = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setFieldNames(fieldNames)
-                .setLimit(limit)
-                .build();
+                .setLimit(limit);
+        List<PartitionKey> partitionKeys = new ArrayList<>();
+        if (!flussTable.isUnPartitioned()) {
+            for (long partitionId : scanNodePredicates.getSelectedPartitionIds()) {
+                PartitionKey partitionKey = scanNodePredicates.getIdToPartitionKey().get(partitionId);
+                partitionKeys.add(partitionKey);
+            }
+            paramsBuilder.setPartitionKeys(partitionKeys);
+        }
+        LOG.debug("Fluss scan remote file params table={}.{}, selectedPartitionIds={}, partitionKeys={}, " +
+                        "predicate={}, fieldNames={}, limit={}",
+                flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
+                scanNodePredicates.getSelectedPartitionIds(), partitionKeys, predicate, fieldNames, limit);
+        GetRemoteFilesParams params = paramsBuilder.build();
         List<RemoteFileInfo> fileInfos;
         try (Timer ignored = Tracers.watchScope(EXTERNAL,
                 flussTable.getCatalogTableName() + ".getFlussRemoteFileInfos")) {
@@ -123,7 +134,10 @@ public class FlussScanNode extends ScanNode {
         }
 
         FlussRemoteFileDesc remoteFileDesc = (FlussRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        List<SourceSplitBase> splits = remoteFileDesc.getFlussSplitsInfo();
+        FlussSplitsInfo flussSplitsInfo = remoteFileDesc.getFlussSplitsInfo();
+        List<SourceSplitBase> splits = flussSplitsInfo.getFlussSplits();
+        LOG.debug("Fluss scan remote file result table={}.{}, splitCount={}",
+                flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), splits.size());
 
         if (splits.isEmpty()) {
             LOG.warn("There is no fluss splits on {}.{} and predicate: [{}]",
@@ -131,15 +145,10 @@ public class FlussScanNode extends ScanNode {
             return;
         }
 
-        Map<String, Long> selectedPartitions = Maps.newHashMap();
+        String predicateInfo = PaimonScanNode.encodeObjectToString(flussSplitsInfo.getPredicates());
         for (SourceSplitBase split : splits) {
-            String partitionValue = split.getPartitionName();
-            if (!selectedPartitions.containsKey(partitionValue)) {
-                selectedPartitions.put(partitionValue, nextPartitionId());
-            }
-            addSplitScanRangeLocations(split);
+            addSplitScanRangeLocations(split, predicateInfo);
         }
-        scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
         traceReaderMetrics();
     }
 
@@ -148,12 +157,13 @@ public class FlussScanNode extends ScanNode {
         Tracers.record(EXTERNAL, prefix + "totalSplitNum", String.valueOf(scanRangeLocationsList.size()));
     }
 
-    public void addSplitScanRangeLocations(SourceSplitBase split) {
+    public void addSplitScanRangeLocations(SourceSplitBase split, String predicateInfo) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_fluss_jni_reader(true);
         hdfsScanRange.setFluss_split_info(encodeSplitToString(split));
+        hdfsScanRange.setJni_predicate_info(predicateInfo);
         hdfsScanRange.setFile_length(1);
         hdfsScanRange.setLength(1);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
@@ -167,10 +177,6 @@ public class FlussScanNode extends ScanNode {
         scanRangeLocations.addToLocations(scanRangeLocation);
 
         scanRangeLocationsList.add(scanRangeLocations);
-    }
-
-    private long nextPartitionId() {
-        return partitionIdGen.getAndIncrement();
     }
 
     @Override
@@ -219,7 +225,7 @@ public class FlussScanNode extends ScanNode {
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     flussTable.getCatalogName(), flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));

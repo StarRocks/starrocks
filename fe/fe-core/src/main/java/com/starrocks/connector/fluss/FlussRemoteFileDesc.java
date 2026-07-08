@@ -15,24 +15,21 @@
 package com.starrocks.connector.fluss;
 
 import com.starrocks.connector.RemoteFileDesc;
-import org.apache.fluss.flink.source.split.SourceSplitBase;
-
-import java.util.List;
 
 public class FlussRemoteFileDesc extends RemoteFileDesc {
 
-    private List<SourceSplitBase> flussSplitsInfo;
+    private FlussSplitsInfo flussSplitsInfo;
 
-    private FlussRemoteFileDesc(List<SourceSplitBase> flussSplitsInfo) {
+    private FlussRemoteFileDesc(FlussSplitsInfo flussSplitsInfo) {
         super(null, null, 0, 0, null);
         this.flussSplitsInfo = flussSplitsInfo;
     }
 
-    public static FlussRemoteFileDesc createFlussRemoteFileDesc(List<SourceSplitBase> flussSplitsInfo) {
+    public static FlussRemoteFileDesc createFlussRemoteFileDesc(FlussSplitsInfo flussSplitsInfo) {
         return new FlussRemoteFileDesc(flussSplitsInfo);
     }
 
-    public List<SourceSplitBase> getFlussSplitsInfo() {
+    public FlussSplitsInfo getFlussSplitsInfo() {
         return flussSplitsInfo;
     }
 

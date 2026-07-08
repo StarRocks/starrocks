@@ -23,8 +23,6 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.fluss.config.Configuration;
 import org.apache.fluss.metadata.TableInfo;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +35,6 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.planner.PaimonScanNode.encodeObjectToString;
 
 public class FlussTable extends Table {
-    private static final Logger LOG = LogManager.getLogger(FlussTable.class);
     private String catalogName;
     private String databaseName;
     private String tableName;
@@ -45,8 +42,9 @@ public class FlussTable extends Table {
     private String uuid;
     private List<String> partColumnNames;
     private List<String> flussFieldNames;
-    private Map<String, String> properties;
-    private Configuration configuration;
+    // Catalog-level Fluss/lake options copied from CREATE EXTERNAL CATALOG. Table properties are
+    // merged into a fresh runtime config only when FE plans lake splits or serializes this table to BE.
+    private Configuration catalogConf;
     private String tableNamePrefix = "";
 
     public FlussTable() {
@@ -54,15 +52,15 @@ public class FlussTable extends Table {
     }
 
     public FlussTable(String catalogName, String dbName, String tblName, List<Column> schema,
-                      org.apache.fluss.client.table.Table nativeFlussTable, Configuration configuration) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.FLUSS, schema);
+                      org.apache.fluss.client.table.Table nativeFlussTable, Configuration catalogConf) {
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.FLUSS, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
         this.tableInfo = nativeFlussTable.getTableInfo();
         this.partColumnNames = tableInfo.getPartitionKeys();
         this.flussFieldNames = tableInfo.getSchema().getColumnNames();
-        this.configuration = configuration;
+        this.catalogConf = catalogConf;
     }
 
     @Override
@@ -84,8 +82,13 @@ public class FlussTable extends Table {
         return tableInfo;
     }
 
-    public Configuration getConfiguration() {
-        return configuration;
+    public Configuration buildRuntimeConf() {
+        Configuration runtimeConf = catalogConf == null ? new Configuration() :
+                Configuration.fromMap(catalogConf.toMap());
+        for (Map.Entry<String, String> entry : getProperties().entrySet()) {
+            runtimeConf.setString(entry.getKey(), entry.getValue());
+        }
+        return runtimeConf;
     }
 
     @Override
@@ -104,10 +107,10 @@ public class FlussTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
-        if (properties == null) {
-            this.properties = new HashMap<>();
+        if (tableInfo == null) {
+            return new HashMap<>();
         }
-        return properties;
+        return new HashMap<>(tableInfo.getProperties().toMap());
     }
 
     @Override
@@ -142,8 +145,9 @@ public class FlussTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TFlussTable tFlussTable = new TFlussTable();
-        tFlussTable.setTable_conf(encodeObjectToString(this.configuration));
+        tFlussTable.setRuntime_conf(encodeObjectToString(buildRuntimeConf()));
         tFlussTable.setTime_zone(TimeUtils.getSessionTimeZone());
+        tFlussTable.setCatalog_name(this.catalogName);
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.FLUSS_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);

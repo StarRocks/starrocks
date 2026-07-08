@@ -26,7 +26,7 @@ public class PhysicalFlussScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
     public PhysicalFlussScanOperator(LogicalFlussScanOperator scan) {
-        super(OperatorType.LOGICAL_FLUSS_SCAN, scan);
+        super(OperatorType.PHYSICAL_FLUSS_SCAN, scan);
         this.predicates = scan.getScanOperatorPredicates();
     }
 

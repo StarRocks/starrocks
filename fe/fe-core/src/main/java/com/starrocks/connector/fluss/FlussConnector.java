@@ -27,15 +27,16 @@ import org.apache.fluss.client.admin.Admin;
 import org.apache.fluss.config.Configuration;
 
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class FlussConnector implements Connector {
     public static final String BOOTSTRAP_SERVERS = "bootstrap.servers";
+    private static final String FLUSS_OPTION_PREFIX = "fluss.option.";
+    private static final String LAKE_PROPERTY_PREFIX = "table.datalake.";
     private final Connection connection;
     private final Admin admin;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
+    private final Configuration catalogConf;
 
     public FlussConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -48,23 +49,29 @@ public class FlussConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", BOOTSTRAP_SERVERS);
         }
 
-        Configuration conf = new Configuration();
-        conf.setString(BOOTSTRAP_SERVERS, bootstrapServers);
-        String keyPrefix = "fluss.option.";
-        Set<String> optionKeys = properties.keySet().stream()
-                .filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
-        for (String k : optionKeys) {
-            String key = k.substring(keyPrefix.length());
-            conf.setString(key, properties.get(k));
+        Configuration flussClientConf = new Configuration();
+        flussClientConf.setString(BOOTSTRAP_SERVERS, bootstrapServers);
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith(FLUSS_OPTION_PREFIX)) {
+                flussClientConf.setString(key.substring(FLUSS_OPTION_PREFIX.length()), entry.getValue());
+            }
         }
 
-        this.connection = ConnectionFactory.createConnection(conf);
+        this.catalogConf = Configuration.fromMap(flussClientConf.toMap());
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(LAKE_PROPERTY_PREFIX)) {
+                this.catalogConf.setString(entry.getKey(), entry.getValue());
+            }
+        }
+
+        this.connection = ConnectionFactory.createConnection(flussClientConf);
         this.admin = connection.getAdmin();
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new FlussMetadata(catalogName, hdfsEnvironment, this.connection, this.admin);
+        return new FlussMetadata(catalogName, hdfsEnvironment, this.connection, this.admin, catalogConf);
     }
 
     @Override

@@ -31,6 +31,7 @@ import org.apache.fluss.predicate.Predicate;
 import org.apache.fluss.predicate.PredicateBuilder;
 import org.apache.fluss.row.BinaryString;
 import org.apache.fluss.row.Decimal;
+import org.apache.fluss.row.TimestampLtz;
 import org.apache.fluss.row.TimestampNtz;
 import org.apache.fluss.types.BigIntType;
 import org.apache.fluss.types.BinaryType;
@@ -43,6 +44,7 @@ import org.apache.fluss.types.DecimalType;
 import org.apache.fluss.types.DoubleType;
 import org.apache.fluss.types.FloatType;
 import org.apache.fluss.types.IntType;
+import org.apache.fluss.types.LocalZonedTimestampType;
 import org.apache.fluss.types.RowType;
 import org.apache.fluss.types.SmallIntType;
 import org.apache.fluss.types.StringType;
@@ -53,6 +55,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -64,11 +67,13 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
     private final PredicateBuilder builder;
     private final List<String> fieldNames;
     private final List<DataType> fieldTypes;
+    private final ZoneId sessionZoneId;
 
-    public FlussPredicateConverter(RowType rowType) {
+    public FlussPredicateConverter(RowType rowType, ZoneId sessionZoneId) {
         this.builder = new PredicateBuilder(rowType);
         this.fieldTypes = rowType.getFields().stream().map(DataField::getType).collect(Collectors.toList());
         this.fieldNames = rowType.getFields().stream().map(DataField::getName).collect(Collectors.toList());
+        this.sessionZoneId = sessionZoneId == null ? ZoneOffset.UTC : sessionZoneId;
     }
 
     public Predicate convert(ScalarOperator operator) {
@@ -215,7 +220,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
         return operator.accept(new ExtractLiteralValue(), dataType);
     }
 
-    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
+    private class ExtractLiteralValue extends ScalarOperatorVisitor<Object, DataType> {
         @Override
         public Object visit(ScalarOperator scalarOperator, DataType dataType) {
             return null;
@@ -262,7 +267,14 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
                     return (int) ChronoUnit.DAYS.between(epochDay, localDate);
                 case DATETIME:
                     LocalDateTime localDateTime = operator.getDatetime();
-                    return TimestampNtz.fromLocalDateTime(localDateTime);
+                    if (dataType instanceof LocalZonedTimestampType) {
+                        Instant instant = localDateTime.atZone(sessionZoneId)
+                                .withZoneSameInstant(ZoneOffset.UTC)
+                                .toInstant();
+                        return TimestampLtz.fromInstant(instant);
+                    } else {
+                        return TimestampNtz.fromLocalDateTime(localDateTime);
+                    }
                 default:
                     return null;
             }
@@ -302,7 +314,8 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
                 case DATE:
                     return !(dataType instanceof DateType);
                 case DATETIME:
-                    return !(dataType instanceof TimestampType);
+                    return !(dataType instanceof TimestampType)
+                            && !(dataType instanceof LocalZonedTimestampType);
                 default:
                     return true;
             }
@@ -314,7 +327,7 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
                 res = operator.castTo(com.starrocks.type.BooleanType.BOOLEAN);
             } else if (dataType instanceof DateType) {
                 res = operator.castTo(com.starrocks.type.DateType.DATE);
-            } else if (dataType instanceof TimestampType) {
+            } else if (dataType instanceof TimestampType || dataType instanceof LocalZonedTimestampType) {
                 res = operator.castTo(com.starrocks.type.DateType.DATETIME);
             } else if (dataType instanceof StringType) {
                 res = operator.castTo(com.starrocks.type.StringType.STRING);

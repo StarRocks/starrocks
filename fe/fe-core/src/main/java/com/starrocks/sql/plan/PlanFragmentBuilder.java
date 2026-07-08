@@ -1755,10 +1755,15 @@ public class PlanFragmentBuilder {
                     flussScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
-                flussScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
                 HDFSScanNodePredicates scanNodePredicates = flussScanNode.getScanNodePredicates();
+                scanNodePredicates.setSelectedPartitionIds(
+                        node.getScanOperatorPredicates().getSelectedPartitionIds());
+                scanNodePredicates.setIdToPartitionKey(
+                        node.getScanOperatorPredicates().getIdToPartitionKey());
+                flussScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+                scanNodePredicates.getNonPartitionConjuncts().addAll(scanNodePredicates.getNoEvalPartitionConjuncts());
             } catch (Exception e) {
                 LOG.warn("Fluss scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);

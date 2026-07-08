@@ -400,7 +400,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isExternalTableWithFileSystem() {
-        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable() || isKuduTable();
+        return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable()
+                || isPaimonTable() || isKuduTable() || isFlussTable();
     }
 
     public boolean isHiveTable() {

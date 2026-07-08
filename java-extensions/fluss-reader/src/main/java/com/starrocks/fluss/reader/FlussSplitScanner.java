@@ -31,20 +31,23 @@ import org.apache.fluss.lake.paimon.source.PaimonLakeSource;
 import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.source.LakeSplit;
 import org.apache.fluss.metadata.TablePath;
+import org.apache.fluss.predicate.Predicate;
 import org.apache.fluss.row.InternalRow;
 import org.apache.fluss.types.DataField;
 import org.apache.fluss.types.DataType;
 import org.apache.fluss.types.RowType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.utils.InstantiationUtil;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -52,9 +55,25 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class FlussSplitScanner extends ConnectorScanner {
     private static final Logger LOG = LogManager.getLogger(FlussSplitScanner.class);
     private static final Base64.Decoder BASE64_DECODER = Base64.getUrlDecoder();
+    private static final ConcurrentHashMap<String, Connection> CONNECTION_CACHE = new ConcurrentHashMap<>();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            for (Connection connection : CONNECTION_CACHE.values()) {
+                try {
+                    connection.close();
+                } catch (Exception e) {
+                    // best effort during JVM shutdown
+                }
+            }
+            CONNECTION_CACHE.clear();
+        }, "fluss-reader-connection-cleanup"));
+    }
 
     private final String splitInfo;
-    private final String tableConf;
+    private final String predicateInfo;
+    private final String runtimeConf;
+    private final String catalogName;
     private final String dbName;
     private final String tableName;
     private final String timeZone;
@@ -74,7 +93,9 @@ public class FlussSplitScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(params.get("required_fields"), ",");
         this.splitInfo = params.get("split_info");
-        this.tableConf = params.get("table_conf");
+        this.predicateInfo = params.get("predicate_info");
+        this.runtimeConf = params.get("runtime_conf");
+        this.catalogName = params.get("catalog_name");
         this.dbName = params.get("db_name");
         this.tableName = params.get("table_name");
         this.timeZone = params.get("time_zone");
@@ -84,8 +105,9 @@ public class FlussSplitScanner extends ConnectorScanner {
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            Configuration conf = decodeStringToObject(tableConf);
-            connection = ConnectionFactory.createConnection(conf);
+            Configuration conf = decodeStringToObject(runtimeConf);
+            String cacheKey = getConnectionCacheKey();
+            connection = CONNECTION_CACHE.computeIfAbsent(cacheKey, ignoredKey -> ConnectionFactory.createConnection(conf));
             table = connection.getTable(TablePath.of(dbName, tableName));
 
             RowType rowType = table.getTableInfo().getRowType();
@@ -112,8 +134,21 @@ public class FlussSplitScanner extends ConnectorScanner {
 
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
 
+            String dataLakePrefix = "table.datalake.paimon.";
+            Map<String, String> paimonProps = new HashMap<>();
+            for (Map.Entry<String, String> entry : conf.toMap().entrySet()) {
+                if (entry.getKey().startsWith(dataLakePrefix)) {
+                    paimonProps.put(entry.getKey().substring(dataLakePrefix.length()), entry.getValue());
+                }
+            }
+            Configuration paimonConfig = Configuration.fromMap(paimonProps);
             @SuppressWarnings("unchecked")
-            LakeSource<LakeSplit> lakeSource = (LakeSource<LakeSplit>) (LakeSource<?>) new PaimonLakeSource(null, null);
+            LakeSource<LakeSplit> lakeSource = (LakeSource<LakeSplit>) (LakeSource<?>)
+                    new PaimonLakeSource(paimonConfig, TablePath.of(dbName, tableName));
+            List<Predicate> lakePredicates = decodeLakePredicates(predicateInfo);
+            if (!lakePredicates.isEmpty()) {
+                lakeSource.withFilters(lakePredicates);
+            }
             SourceSplitSerializer serializer = new SourceSplitSerializer(lakeSource);
             byte[] splitBytes = BASE64_DECODER.decode(splitInfo.getBytes(UTF_8));
             SourceSplitBase split = serializer.deserialize(0, splitBytes);
@@ -122,6 +157,9 @@ public class FlussSplitScanner extends ConnectorScanner {
                 delegateScanner = new FlussLogScanner(table, split.asLogSplit(), projectedFields);
             } else if (split.isLakeSplit()) {
                 if (split instanceof LakeSnapshotSplit) {
+                    lakeSource.withProject(Arrays.stream(projectedFields)
+                            .mapToObj(field -> new int[] {field})
+                            .toArray(int[][]::new));
                     delegateScanner = new FlussSnapshotScanner(lakeSource, (LakeSnapshotSplit) split);
                 } else if (split instanceof LakeSnapshotAndFlussLogSplit) {
                     delegateScanner = new FlussSnapshotAndLogScanner(
@@ -153,9 +191,7 @@ public class FlussSplitScanner extends ConnectorScanner {
             if (table != null) {
                 table.close();
             }
-            if (connection != null) {
-                connection.close();
-            }
+            connection = null;
         } catch (Exception e) {
             String msg = "Failed to close the fluss reader for " + dbName + "." + tableName;
             LOG.error(msg, e);
@@ -195,11 +231,24 @@ public class FlussSplitScanner extends ConnectorScanner {
     @SuppressWarnings("unchecked")
     public static <T> T decodeStringToObject(String encodedStr) {
         byte[] bytes = BASE64_DECODER.decode(encodedStr.getBytes(UTF_8));
-        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
-            return (T) ois.readObject();
+        try {
+            return InstantiationUtil.deserializeObject(bytes, FlussSplitScanner.class.getClassLoader());
         } catch (Exception e) {
             throw new RuntimeException("Failed to decode object from string", e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Predicate> decodeLakePredicates(String encodedStr) {
+        if (encodedStr == null || encodedStr.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return decodeStringToObject(encodedStr);
+    }
+
+    private String getConnectionCacheKey() {
+        String keyPrefix = catalogName == null || catalogName.isEmpty() ? dbName + "." + tableName : catalogName;
+        return keyPrefix + ":" + Integer.toHexString(runtimeConf.hashCode());
     }
 
     @Override

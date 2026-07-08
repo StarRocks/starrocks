@@ -25,6 +25,7 @@ import org.apache.fluss.row.InternalRow;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.List;
 
 public class FlussLogScanner extends ConnectorScannerProxy {
     private static final Duration POLL_TIMEOUT = Duration.ofSeconds(5);
@@ -36,18 +37,25 @@ public class FlussLogScanner extends ConnectorScannerProxy {
     private Iterator<ScanRecord> currentBatch;
     private boolean finished = false;
     private final long stoppingOffset;
+    private TableBucket tableBucket;
 
     public FlussLogScanner(Table table, LogSplit logSplit, int[] projectedFields) {
         this.table = table;
         this.logSplit = logSplit;
         this.projectedFields = projectedFields;
-        this.stoppingOffset = logSplit.getStoppingOffset().orElse(LogScanner.NO_STOPPING_OFFSET);
+        this.stoppingOffset = logSplit.getStoppingOffset().orElseThrow(
+                () -> new IllegalArgumentException("Stopping offset is required for Fluss log split: " + logSplit));
     }
 
     @Override
     void open() throws IOException {
+        tableBucket = logSplit.getTableBucket();
+        if (stoppingOffset <= 0 || logSplit.getStartingOffset() >= stoppingOffset) {
+            finished = true;
+            return;
+        }
+
         logScanner = table.newScan().project(projectedFields).createLogScanner();
-        TableBucket tableBucket = logSplit.getTableBucket();
         if (tableBucket.getPartitionId() != null) {
             logScanner.subscribe(tableBucket.getPartitionId(),
                     tableBucket.getBucket(), logSplit.getStartingOffset());
@@ -58,29 +66,44 @@ public class FlussLogScanner extends ConnectorScannerProxy {
 
     @Override
     boolean hasNext() throws IOException {
-        if (finished) {
-            return false;
-        }
         if (currentBatch != null && currentBatch.hasNext()) {
             return true;
         }
+        if (finished) {
+            return false;
+        }
         ScanRecords records = logScanner.poll(POLL_TIMEOUT);
-        if (records.isEmpty()) {
+        List<ScanRecord> bucketRecords = records.records(tableBucket);
+        if (bucketRecords.isEmpty()) {
             finished = true;
             return false;
         }
-        currentBatch = records.iterator();
+        currentBatch = trimToStoppingOffset(bucketRecords).iterator();
         return currentBatch.hasNext();
     }
 
     @Override
     InternalRow getNext() throws IOException {
         ScanRecord record = currentBatch.next();
-        if (stoppingOffset != LogScanner.NO_STOPPING_OFFSET
-                && record.logOffset() >= stoppingOffset - 1) {
-            finished = true;
-        }
         return record.getRow();
+    }
+
+    List<ScanRecord> trimToStoppingOffset(List<ScanRecord> records) {
+        ScanRecord lastRecord = records.get(records.size() - 1);
+        if (lastRecord.logOffset() < stoppingOffset - 1) {
+            return records;
+        }
+
+        finished = true;
+        if (lastRecord.logOffset() < stoppingOffset) {
+            return records;
+        }
+
+        int endIndex = records.size();
+        while (endIndex > 0 && records.get(endIndex - 1).logOffset() >= stoppingOffset) {
+            endIndex--;
+        }
+        return records.subList(0, endIndex);
     }
 
     @Override
