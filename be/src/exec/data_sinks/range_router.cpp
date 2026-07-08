@@ -24,6 +24,7 @@
 #include "fmt/format.h"
 #include "runtime/descriptors.h"
 #include "storage/types.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -55,7 +56,12 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, const s
                 continue;
             }
             TypeDescriptor boundary_type = TypeDescriptor::from_thrift(boundary->type);
-            if (boundary_type.type != key_types[i].type) {
+            // CHAR and VARCHAR share one string domain: StarRocks normalizes CHAR to VARCHAR in
+            // expression typing, so a CHAR sort key surfaces here as a VARCHAR routing key while the
+            // tablet-range boundary keeps its declared CHAR type. Their routing comparison is the same
+            // raw-byte memcmp for either type, so accept a CHAR/VARCHAR pairing instead of rejecting it.
+            if (boundary_type.type != key_types[i].type &&
+                !(is_string_type(boundary_type.type) && is_string_type(key_types[i].type))) {
                 return Status::InternalError(fmt::format(
                         "routing key type mismatch at column {}: key type {} incompatible with boundary type {}", i,
                         key_types[i].debug_string(), boundary_type.debug_string()));

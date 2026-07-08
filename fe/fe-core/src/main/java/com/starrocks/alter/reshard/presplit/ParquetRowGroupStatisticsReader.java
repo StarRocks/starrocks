@@ -72,11 +72,15 @@ import java.util.Objects;
  *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
  *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
  *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
- *   <li>Parquet BINARY with UTF8 (string) annotation -> StarRocks VARCHAR
+ *   <li>Parquet BINARY with UTF8 (string) annotation -> StarRocks VARCHAR or CHAR
  *       (footer min/max are decoded as UTF-8 and used directly; FE compares them in the
- *       same unsigned-byte order the BE uses to route rows). CHAR is deferred -> data tier:
- *       the BE pads/truncates a CHAR value to its fixed width before routing, so raw footer
- *       stats would not match the routed key.</li>
+ *       same unsigned-byte order the BE uses to route rows). CHAR is safe even though the BE
+ *       right-pads a CHAR routing key with '\0' to its fixed width before routing: '\0' is the
+ *       minimum byte, so fixed-width '\0'-padding is order-preserving under the BE unsigned
+ *       memcmp + shorter-prefix-is-smaller tiebreak, and the BE stores the boundary itself
+ *       stripped, so a NUL-free CHAR boundary separates rows exactly as VARCHAR does. A CHAR
+ *       min/max that contains a '\0' is the one exception (the BE truncates a CHAR boundary at
+ *       the first NUL while FE compares raw bytes) and is rejected -> data tier.</li>
  *   <li>Parquet INT32/INT64 with DECIMAL annotation → StarRocks DECIMAL of the SAME
  *       precision and scale (the unscaled integer's signed order equals the decimal order).</li>
  *   <li>Parquet FIXED_LEN_BYTE_ARRAY/BINARY with DECIMAL annotation → StarRocks DECIMAL of the
@@ -241,11 +245,13 @@ public final class ParquetRowGroupStatisticsReader {
             case BOOLEAN -> logicalAnnotation == null && starRocksPrimitive == PrimitiveType.BOOLEAN;
             case BINARY -> {
                 if (logicalAnnotation instanceof StringLogicalTypeAnnotation) {
-                    // VARCHAR only. A CHAR(N) load pads/truncates every value to the fixed width
-                    // before the BE routes the row (pad_char_values, be/src/exec/data_sinks/tablet_sink.cpp),
-                    // so the raw footer min/max would not match the routed key and could yield a
-                    // skewed split. CHAR falls back to the data tier, which samples the post-cast rows.
-                    yield starRocksPrimitive == PrimitiveType.VARCHAR;
+                    // VARCHAR and CHAR. The BE right-pads a CHAR routing key with '\0' to its fixed
+                    // width before routing (_padding_char_column, be/src/exec/data_sinks/tablet_sink.cpp),
+                    // but '\0' is the minimum byte, so fixed-width '\0'-padding is order-preserving under
+                    // the BE unsigned memcmp + shorter-prefix tiebreak, and a CHAR StringVariant is
+                    // canonicalized (truncated at the first '\0') to match the BE's strnlen view of a
+                    // CHAR value, so a CHAR boundary separates rows exactly as a VARCHAR one does.
+                    yield starRocksPrimitive.isCharFamily();
                 }
                 yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
@@ -350,6 +356,7 @@ public final class ParquetRowGroupStatisticsReader {
         String rendered = location.parquetTypeName == PrimitiveTypeName.BINARY
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
+        // A CHAR value is NUL-canonicalized in the StringVariant constructor; VARCHAR keeps raw bytes.
         return Variant.of(location.starRocksColumn.getType(), rendered);
     }
 
