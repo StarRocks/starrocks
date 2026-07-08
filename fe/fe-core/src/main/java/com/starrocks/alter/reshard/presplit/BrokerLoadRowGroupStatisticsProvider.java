@@ -86,7 +86,7 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
                         Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
                 FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
+                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn, context.loadTimeZone()));
             }
         }
         return aggregated;

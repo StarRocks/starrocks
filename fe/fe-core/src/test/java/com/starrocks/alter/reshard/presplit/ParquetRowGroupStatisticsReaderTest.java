@@ -57,7 +57,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("sort_key", (long) rowIndex));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT), null);
 
         Assertions.assertFalse(rowGroupStatistics.isEmpty());
         long totalRowCount = 0L;
@@ -88,7 +88,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("tenant", String.format("tenant-%02d", rowIndex)));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("tenant", VarcharType.VARCHAR), null);
 
         Assertions.assertFalse(rowGroupStatistics.isEmpty());
         String globalMin = null;
@@ -121,7 +121,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("tenant", TypeFactory.createCharType(16)));
+                new Column("tenant", TypeFactory.createCharType(16)), null);
 
         Assertions.assertFalse(rowGroupStatistics.isEmpty());
         String globalMin = null;
@@ -150,7 +150,7 @@ class ParquetRowGroupStatisticsReaderTest {
         // CHAR target: min/max canonicalized to the prefix before the first NUL ("a"), no NUL kept.
         List<RowGroupStatistics> charStats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("tenant", TypeFactory.createCharType(16)));
+                new Column("tenant", TypeFactory.createCharType(16)), null);
         Assertions.assertFalse(charStats.isEmpty());
         for (RowGroupStatistics rowGroup : charStats) {
             Assertions.assertEquals("a", rowGroup.getMinTuple().getValues().get(0).getStringValue());
@@ -160,7 +160,7 @@ class ParquetRowGroupStatisticsReaderTest {
         // VARCHAR target: same NUL data keeps the raw bytes (BE does not strnlen a VARCHAR boundary).
         List<RowGroupStatistics> varcharStats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("tenant", VarcharType.VARCHAR));
+                new Column("tenant", VarcharType.VARCHAR), null);
         Assertions.assertFalse(varcharStats.isEmpty());
         for (RowGroupStatistics rowGroup : varcharStats) {
             Assertions.assertTrue(rowGroup.getMinTuple().getValues().get(0).getStringValue().indexOf('\0') >= 0);
@@ -180,7 +180,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("opaque_bytes", VarcharType.VARCHAR)));
+                        new Column("opaque_bytes", VarcharType.VARCHAR), null));
     }
 
     @Test
@@ -191,7 +191,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("region_id", rowIndex + 100));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("region_id", IntegerType.INT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("region_id", IntegerType.INT), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals("100", rowGroupStatistics.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -206,7 +206,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("flag", rowIndex % 2 == 0));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("flag", BooleanType.BOOLEAN));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("flag", BooleanType.BOOLEAN), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals(2L, rowGroupStatistics.get(0).getRowCount());
@@ -222,7 +222,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("missing_sort_key", IntegerType.BIGINT)));
+                        new Column("missing_sort_key", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -237,7 +237,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("payload", IntegerType.BIGINT)));
+                        new Column("payload", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -251,7 +251,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("region_id", VarcharType.VARCHAR)));
+                        new Column("region_id", VarcharType.VARCHAR), null));
     }
 
     @Test
@@ -270,7 +270,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("sort_key", IntegerType.BIGINT)));
+                        new Column("sort_key", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -286,7 +286,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("wide_value", IntegerType.TINYINT)));
+                        new Column("wide_value", IntegerType.TINYINT), null));
     }
 
     @Test
@@ -300,7 +300,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("keepalive", (long) rowIndex));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("sort_key", IntegerType.BIGINT), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         RowGroupStatistics only = rowGroupStatistics.get(0);
@@ -320,7 +320,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_day", rowIndex));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertFalse(rowGroupStatistics.get(0).isTruncated());
@@ -342,7 +342,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_day", IntegerType.BIGINT)));
+                        new Column("event_day", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -356,7 +356,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_day", -1 - rowIndex));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals("1969-12-31",
@@ -373,7 +373,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_day", -171499));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals("1500-06-15",
@@ -389,7 +389,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_day", -719162));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals("0001-01-01",
@@ -407,7 +407,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_day", DateType.DATE)));
+                        new Column("event_day", DateType.DATE), null));
     }
 
     @Test
@@ -419,7 +419,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_day", 2932896));
 
         List<RowGroupStatistics> rowGroupStatistics = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_day", DateType.DATE), null);
 
         Assertions.assertEquals(1, rowGroupStatistics.size());
         Assertions.assertEquals("9999-12-31",
@@ -437,7 +437,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_day", DateType.DATE)));
+                        new Column("event_day", DateType.DATE), null));
     }
 
     private static MessageType timestampSchema(LogicalTypeAnnotation.TimeUnit unit, boolean isAdjustedToUTC) {
@@ -464,7 +464,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", rowIndex * 1000L));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -483,7 +483,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", 1_500_000L));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertEquals("1970-01-01 00:00:01.500000",
@@ -501,7 +501,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", 1_500_000_500L));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals("1970-01-01 00:00:01.500000",
                 stats.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -519,7 +519,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", -2000L + rowIndex * 1000L));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertEquals("1969-12-31 23:59:58",
@@ -538,7 +538,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", -500L));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals("1969-12-31 23:59:59.500000",
                 stats.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -556,7 +556,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("event_ts", millis));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("event_ts", DateType.DATETIME), null);
 
         Assertions.assertEquals("1500-06-15 12:00:00",
                 stats.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -573,7 +573,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_ts", DateType.DATETIME)));
+                        new Column("event_ts", DateType.DATETIME), null));
     }
 
     @Test
@@ -588,7 +588,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_ts", DateType.DATETIME)));
+                        new Column("event_ts", DateType.DATETIME), null));
     }
 
     @Test
@@ -601,7 +601,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("event_ts", IntegerType.BIGINT)));
+                        new Column("event_ts", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -614,7 +614,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -633,7 +633,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -652,7 +652,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertEquals("-2.00", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -670,7 +670,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4)), null));
     }
 
     @Test
@@ -684,7 +684,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2))));
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2)), null));
     }
 
     @Test
@@ -698,7 +698,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", IntegerType.BIGINT)));
+                        new Column("d", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -714,7 +714,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -750,7 +750,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 20, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -780,7 +780,7 @@ class ParquetRowGroupStatisticsReaderTest {
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
                 PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)));
+                new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 2)), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -802,7 +802,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4))));
+                        new Column("d", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4)), null));
     }
 
     @Test
@@ -839,7 +839,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("u", 250 + rowIndex));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.SMALLINT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.SMALLINT), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -854,7 +854,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("u", 65530 + rowIndex));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT), null);
 
         Assertions.assertEquals("65530", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
         Assertions.assertEquals("65534", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
@@ -869,7 +869,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("u", (int) (3_000_000_000L + rowIndex)));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.BIGINT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.BIGINT), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertFalse(stats.get(0).isTruncated());
@@ -886,7 +886,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("u", IntegerType.BIGINT)));
+                        new Column("u", IntegerType.BIGINT), null));
     }
 
     @Test
@@ -898,7 +898,7 @@ class ParquetRowGroupStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
-                        new Column("u", IntegerType.INT)));
+                        new Column("u", IntegerType.INT), null));
     }
 
     @Test
@@ -909,7 +909,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("u", 2_000_000_000 + rowIndex));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.INT), null);
 
         Assertions.assertEquals(1, stats.size());
         Assertions.assertEquals("2000000000", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
@@ -924,7 +924,7 @@ class ParquetRowGroupStatisticsReaderTest {
                 (group, rowIndex) -> group.append("u", 100 + rowIndex));
 
         List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
-                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.TINYINT));
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(), new Column("u", IntegerType.TINYINT), null);
 
         Assertions.assertEquals("100", stats.get(0).getMinTuple().getValues().get(0).getStringValue());
         Assertions.assertEquals("104", stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
