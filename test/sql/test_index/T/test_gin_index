@@ -126,11 +126,26 @@ show create table t2_primary;
 
 drop database test_gin_index;
 
+-- name: test_gin_not_match_excludes_null @native
+create database test_gin_null_${uuid0};
+use test_gin_null_${uuid0};
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 
+CREATE TABLE t_null (
+    id int NOT NULL,
+    c  varchar(30) NULL,
+    INDEX idx_c (c) USING GIN ("parser" = "none")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
 
+insert into t_null values (1, 'hello'), (2, 'world'), (3, NULL), (4, 'hxllo');
 
+-- 基线/回归：正向 MATCH 不应返回 NULL 行（期望 1 hello）
+[ORDER] select id, c from t_null where c match 'hello';
 
+-- Bug-1：NOT MATCH 必须排除 NULL 行 id=3（期望 2 world / 4 hxllo，不含 3）
+[ORDER] select id, c from t_null where c not match 'hello';
 
-
-
-
+drop database test_gin_null_${uuid0};
