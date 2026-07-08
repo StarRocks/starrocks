@@ -59,8 +59,7 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
@@ -116,10 +115,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
     auto sink = std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
                                                            std::move(partition_column_evaluators),
                                                            std::move(partition_chunk_writer_factory), runtime_state);
-    sink->set_io_poller(create_context.io_poller);
-    DCHECK(create_context.sink_mem_mgr != nullptr);
-    sink->set_operator_mem_mgr(
-            create_context.sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
     return sink;
 }
 

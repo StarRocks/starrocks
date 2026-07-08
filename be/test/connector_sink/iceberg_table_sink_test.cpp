@@ -916,12 +916,13 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     // Now drive IcebergRowDeltaSinkProvider::create_chunk_sink() success path.
     formats::AsyncFlushStreamPoller poller;
     connector::SinkMemoryManager mgr(nullptr, nullptr);
-    connector::ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
-    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0, create_context);
+    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0);
     ASSERT_OK(sink_or.status());
     auto created_sink = std::move(sink_or).value();
     ASSERT_NE(created_sink, nullptr);
     EXPECT_NE(dynamic_cast<connector::IcebergRowDeltaSink*>(created_sink.get()), nullptr);
+    EXPECT_EQ(created_sink->op_mem_mgr(), nullptr);
+    ASSERT_OK(created_sink->init(&poller, nullptr, &mgr));
     EXPECT_NE(created_sink->op_mem_mgr(), nullptr);
 }
 

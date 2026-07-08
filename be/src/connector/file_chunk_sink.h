@@ -60,8 +60,7 @@ public:
     explicit FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx);
     ~FileChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
-            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<FileChunkSinkContext> _ctx;

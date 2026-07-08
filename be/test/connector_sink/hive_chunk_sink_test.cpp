@@ -113,10 +113,10 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
-        auto sink = provider.create_chunk_sink(0, create_context).value();
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
         EXPECT_NE(sink->op_mem_mgr(), nullptr);
-        EXPECT_OK(sink->init());
     }
 
     {
@@ -137,10 +137,10 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
-        auto sink = provider.create_chunk_sink(0, create_context).value();
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_OK(sink->init(&poller, nullptr, &mgr));
         EXPECT_NE(sink->op_mem_mgr(), nullptr);
-        EXPECT_OK(sink->init());
     }
 
     {
@@ -161,10 +161,9 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         HiveChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
-        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
-        auto sink = provider.create_chunk_sink(0, create_context).value();
-        EXPECT_NE(sink->op_mem_mgr(), nullptr);
-        EXPECT_ERROR(sink->init());
+        auto sink = provider.create_chunk_sink(0).value();
+        EXPECT_EQ(sink->op_mem_mgr(), nullptr);
+        EXPECT_ERROR(sink->init(&poller, nullptr, &mgr));
     }
 }
 

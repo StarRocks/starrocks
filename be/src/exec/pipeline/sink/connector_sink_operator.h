@@ -31,7 +31,6 @@ class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
-                          std::unique_ptr<formats::AsyncFlushStreamPoller> _io_poller,
                           std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
                           FragmentContext* fragment_context);
 

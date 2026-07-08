@@ -46,8 +46,7 @@ public:
     explicit IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx);
     ~IcebergRowDeltaSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
-            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<IcebergRowDeltaSinkContext> _ctx;
@@ -75,7 +74,8 @@ public:
 
     ~IcebergRowDeltaSink() override = default;
 
-    Status init() override;
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                SinkMemoryManager* sink_mem_mgr) override;
 
     void callback_on_commit(const CommitResult& result) override;
 

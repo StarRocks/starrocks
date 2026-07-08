@@ -30,6 +30,7 @@
 #include "connector/iceberg_connector.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -45,8 +46,10 @@ public:
 
     void callback_on_commit(const CommitResult& result) override {}
 
-    // Skip the base class setup that this routing mock doesn't need.
-    Status init() override { return Status::OK(); }
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                SinkMemoryManager* sink_mem_mgr) override {
+        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+    }
 
     Status add(const ChunkPtr& chunk) override {
         received_chunks.push_back(chunk);
@@ -334,9 +337,9 @@ TEST_F(IcebergRowDeltaSinkTest, rollback_forwards_to_both_sub_sinks) {
     EXPECT_EQ(data_mock->rollback_count, 1);
 }
 
-// Test 7: Verify init() keeps the sub-sink SinkOperatorMemoryManagers that
-// provider creation already installed.
-TEST_F(IcebergRowDeltaSinkTest, init_preserves_provider_wired_sub_sink_mem_managers) {
+// Test 7: Verify init() gives the composite sink and both sub-sinks distinct
+// SinkOperatorMemoryManagers.
+TEST_F(IcebergRowDeltaSinkTest, init_wires_distinct_outer_and_sub_sink_mem_managers) {
     auto query_pool_tracker =
             std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest_pool");
     auto query_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY, -1, "IcebergRowDeltaSinkTest_query");
@@ -346,21 +349,16 @@ TEST_F(IcebergRowDeltaSinkTest, init_preserves_provider_wired_sub_sink_mem_manag
     auto data_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
     auto* delete_ptr = delete_sink.get();
     auto* data_ptr = data_sink.get();
-    auto* delete_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
-    auto* data_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
-    delete_sink->set_operator_mem_mgr(delete_mgr);
-    data_sink->set_operator_mem_mgr(data_mgr);
 
     IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, _runtime_state.get());
-    // Provide an outer SinkOperatorMemoryManager so the base init() path doesn't
-    // dereference a null pointer and so the add_candidates() branch is exercised.
-    auto* outer_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
-    sink.set_operator_mem_mgr(outer_mgr);
+    formats::AsyncFlushStreamPoller poller;
 
-    ASSERT_OK(sink.init());
+    ASSERT_OK(sink.init(&poller, nullptr, &mgr));
 
-    EXPECT_EQ(delete_ptr->get_op_mem_mgr(), delete_mgr);
-    EXPECT_EQ(data_ptr->get_op_mem_mgr(), data_mgr);
+    auto* outer_mgr = sink.op_mem_mgr();
+    EXPECT_NE(delete_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_NE(data_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_NE(outer_mgr, nullptr);
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), data_ptr->get_op_mem_mgr());
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), outer_mgr);
     EXPECT_NE(data_ptr->get_op_mem_mgr(), outer_mgr);
