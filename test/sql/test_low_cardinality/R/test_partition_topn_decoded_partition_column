@@ -1,0 +1,103 @@
+-- name: test_partition_topn_decoded_partition_column
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = true;
+-- result:
+-- !result
+CREATE TABLE `topn_decoded_fact` (
+  `id` bigint NOT NULL,
+  `pid` bigint NULL,
+  `s` varchar(128) NULL,
+  `ts` datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `topn_decoded_map` (
+  `id` bigint NOT NULL,
+  `pid` bigint NULL,
+  `m` varchar(128) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into topn_decoded_fact
+select
+    generate_series,
+    generate_series,
+    concat('S', generate_series % 2),
+    seconds_add('2026-01-01 00:00:00', generate_series)
+from TABLE(generate_series(0, 299));
+-- result:
+-- !result
+insert into topn_decoded_map
+select
+    generate_series,
+    generate_series % 300,
+    concat('M', generate_series % 2)
+from TABLE(generate_series(0, 599));
+-- result:
+-- !result
+[UC] analyze full table topn_decoded_fact;
+[UC] analyze full table topn_decoded_map;
+function: wait_global_dict_ready('s', 'topn_decoded_fact')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('m', 'topn_decoded_map')
+-- result:
+
+-- !result
+function: assert_explain_contains('SELECT s, m, rn FROM (SELECT t.s, r.m, row_number() over (partition by t.s order by t.s, r.m) rn FROM (SELECT pid, s FROM (SELECT pid, s, row_number() over (partition by s order by ts) rn2 FROM topn_decoded_fact) x WHERE rn2 = 1) t LEFT JOIN topn_decoded_map r ON r.pid = t.pid) y WHERE rn = 1', 'PARTITION-TOP-N')
+-- result:
+None
+-- !result
+[ORDER]SELECT s, m, rn
+FROM (
+  SELECT t.s, r.m,
+         row_number() over (partition by t.s order by t.s, r.m) rn
+  FROM (
+    SELECT pid, s
+    FROM (
+      SELECT pid, s, row_number() over (partition by s order by ts) rn2
+      FROM topn_decoded_fact
+    ) x
+    WHERE rn2 = 1
+  ) t
+  LEFT JOIN topn_decoded_map r ON r.pid = t.pid
+) y
+WHERE rn = 1
+ORDER BY s;
+-- result:
+S0	M0	1
+S1	M1	1
+-- !result
+[ORDER]SELECT s, m, rn
+FROM (
+  SELECT t.s, r.m,
+         row_number() over (partition by t.s order by t.s, r.m) rn
+  FROM (
+    SELECT pid, s
+    FROM (
+      SELECT pid, s, lead(s, 1, 'NONE') over (partition by pid order by ts) nxt
+      FROM topn_decoded_fact
+    ) x
+    WHERE nxt != 'ZZZ'
+  ) t
+  LEFT JOIN topn_decoded_map r ON r.pid = t.pid
+) y
+WHERE rn = 1
+ORDER BY s;
+-- result:
+S0	M0	1
+S1	M1	1
+-- !result
