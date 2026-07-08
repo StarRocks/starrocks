@@ -269,6 +269,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: Boolean
 * **引入版本**: v3.2.0
 
+### cbo_derive_predicate_null_alternative
+
+* **描述**: 优化器是否可以从包含 `IS NULL` 或 null 安全等值（`<=>`）条件的 `OR` 谓词中推导出额外的扫描过滤条件。例如，`WHERE (v1 = 1 AND v2 = 2) OR (v1 IS NULL AND v2 = 4)` 会额外推导出 `(v1 = 1) OR (v1 IS NULL)`，下推到 Scan 节点用于分区裁剪和数据过滤。永远不可能为真的条件（如 `v1 <=> NULL AND v1 = 3`）会直接返回空结果，不读取任何数据。该变量不影响查询结果，只影响扫描的数据量。
+* **作用域**: Session
+* **默认值**: `true`
+* **数据类型**: Boolean
+* **引入版本**: -
+
 ### cbo_disabled_rules
 
 * **描述**: 以逗号分隔的优化器规则名称列表，用于在当前会话中禁用规则。每个名称必须与 `RuleType` 枚举值匹配，且仅可禁用名称以 `TF_`（转换规则）或 `GP_`（组组合规则）开头的规则。该会话变量存储在 `SessionVariable`（`getCboDisabledRules` / `setCboDisabledRules`）中，并由优化器通过 `OptimizerOptions.applyDisableRuleFromSessionVariable()` 应用；该方法解析列表并清除对应的规则开关，从而在规划期间跳过这些规则。通过 SET 语句设置时，值会被校验，服务器会以明确错误信息拒绝未知名称或不以 `TF_`/`GP_` 开头的名称（例如 "Unknown rule name(s): ..." 或 "Only TF_ ... and GP_ ... can be disabled"）。在规划器运行时，未知的规则名称会被忽略并记录警告（记录为 "Ignoring unknown rule name: ... (may be from different version)"）。名称必须与枚举标识符完全匹配（区分大小写）。名称周围的空白会被修剪；空条目会被忽略。
