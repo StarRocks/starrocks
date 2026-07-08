@@ -17,14 +17,10 @@
 #include <aws/core/Aws.h>
 #include <aws/core/client/ClientConfiguration.h>
 
-<<<<<<< HEAD
-=======
 #include <memory>
 #include <mutex>
 #include <vector>
 
-#include "base/random/random.h"
->>>>>>> 186b410af0 ([Enhancement] Make object storage client cache size runtime mutable (#75851))
 #include "fs/credential/cloud_configuration.h"
 #include "fs/fs.h"
 #include "util/random.h"

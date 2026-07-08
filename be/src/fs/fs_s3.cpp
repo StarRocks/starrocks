@@ -132,11 +132,8 @@ void S3ClientFactory::_put_client(const ClientCacheKey& client_cache_key, const 
         _client_cache_keys.pop_back();
         _clients.pop_back();
     }
-<<<<<<< HEAD
-=======
     _client_cache_keys.push_back(client_cache_key);
     _clients.push_back(client);
->>>>>>> 186b410af0 ([Enhancement] Make object storage client cache size runtime mutable (#75851))
 }
 
 // clang-format: off

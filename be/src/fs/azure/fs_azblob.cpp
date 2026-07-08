@@ -20,12 +20,7 @@
 #include <azure/identity.hpp>
 #include <azure/storage/blobs.hpp>
 
-<<<<<<< HEAD
-=======
-#include "base/concurrency/stopwatch.hpp"
-#include "base/random/random.h"
-#include "common/config_object_storage_fwd.h"
->>>>>>> 186b410af0 ([Enhancement] Make object storage client cache size runtime mutable (#75851))
+#include "common/config.h"
 #include "fs/azure/azblob_uri.h"
 #include "fs/azure/utils.h"
 #include "fs/credential/cloud_configuration_factory.h"
@@ -322,22 +317,17 @@ BlobContainerClientPtr AzBlobClientFactory::new_blob_container_client(
             }
         }
 
-<<<<<<< HEAD
-        auto& client =
-                _client_cache.size() < kMaxItems ? _client_cache.emplace_back() : _client_cache[rand() % kMaxItems];
-=======
         // Snapshot the runtime-mutable cache capacity once for this creation. Random victims are
         // evicted until the cache stays within capacity, so lowering object_storage_client_cache_size
         // shrinks the cache instead of only overwriting entries.
         const size_t max_items = std::max<int64_t>(1, config::object_storage_client_cache_size);
         while (!_client_cache.empty() && _client_cache.size() >= max_items) {
-            int32_t idx = ThreadLocalRandomUniform(static_cast<int32_t>(_client_cache.size()));
+            size_t idx = rand() % _client_cache.size();
             std::swap(_client_cache[idx], _client_cache.back());
             _client_cache.pop_back();
         }
 
         auto& client = _client_cache.emplace_back();
->>>>>>> 186b410af0 ([Enhancement] Make object storage client cache size runtime mutable (#75851))
         client.azure_cloud_credential = azure_cloud_credential;
         client.blob_container_client = container_client;
     }
