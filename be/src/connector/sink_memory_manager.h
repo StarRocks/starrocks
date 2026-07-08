@@ -67,7 +67,7 @@ class SinkMemoryManager {
 public:
     SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker);
 
-    SinkOperatorMemoryManager* create_child_manager();
+    SinkOperatorMemoryManager* register_child_manager(std::unique_ptr<SinkOperatorMemoryManager> child_manager);
 
     // thread-safe
     // may lower frequency if overhead is significant

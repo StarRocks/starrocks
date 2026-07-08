@@ -337,9 +337,9 @@ TEST_F(IcebergRowDeltaSinkTest, rollback_forwards_to_both_sub_sinks) {
     EXPECT_EQ(data_mock->rollback_count, 1);
 }
 
-// Test 7: Verify init() creates a child SinkOperatorMemoryManager for each sub-sink
-// when a SinkMemoryManager is supplied, so memory pressure logic can see both
-// sub-sinks' writer lists (OOM-safety wiring described in the commit).
+// Test 7: Verify init() registers a child SinkOperatorMemoryManager for each
+// sub-sink when a SinkMemoryManager is supplied, so memory pressure logic can
+// see both sub-sinks' writer lists (OOM-safety wiring described in the commit).
 TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
     auto query_pool_tracker =
             std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest_pool");
@@ -355,12 +355,12 @@ TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
                              _runtime_state.get());
     // Provide an outer SinkOperatorMemoryManager so the base init() path doesn't
     // dereference a null pointer and so the add_candidates() branch is exercised.
-    sink.set_operator_mem_mgr(mgr.create_child_manager());
+    sink.set_operator_mem_mgr(mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
 
     ASSERT_OK(sink.init());
 
-    // Each sub-sink should now have its own child manager, distinct from each other
-    // and from nullptr. This confirms lines 40–43 of iceberg_row_delta_sink.cpp ran.
+    // Each sub-sink should now have its own child manager, distinct from each
+    // other and from nullptr.
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), nullptr);
     EXPECT_NE(data_ptr->get_op_mem_mgr(), nullptr);
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), data_ptr->get_op_mem_mgr());

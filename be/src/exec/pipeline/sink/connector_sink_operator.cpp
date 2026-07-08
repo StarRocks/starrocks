@@ -146,7 +146,7 @@ OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, 
     auto io_poller = std::make_unique<formats::AsyncFlushStreamPoller>();
     connector::ConnectorChunkSinkCreateContext create_context{io_poller.get(), _sink_mem_mgr.get()};
     auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence, create_context).value();
-    auto op_mem_mgr = _sink_mem_mgr->create_child_manager();
+    auto* op_mem_mgr = _sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
     chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
                                                    driver_sequence, std::move(chunk_sink), std::move(io_poller),

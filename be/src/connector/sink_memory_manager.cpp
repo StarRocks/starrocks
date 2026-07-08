@@ -95,8 +95,10 @@ SinkMemoryManager::SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker*
     _urgent_space_ratio = config::connector_sink_mem_urgent_space_ratio;
 }
 
-SinkOperatorMemoryManager* SinkMemoryManager::create_child_manager() {
-    _children.push_back(std::make_unique<SinkOperatorMemoryManager>());
+SinkOperatorMemoryManager* SinkMemoryManager::register_child_manager(
+        std::unique_ptr<SinkOperatorMemoryManager> child_manager) {
+    DCHECK(child_manager != nullptr);
+    _children.push_back(std::move(child_manager));
     auto* p = _children.back().get();
     DCHECK(p != nullptr);
     return p;

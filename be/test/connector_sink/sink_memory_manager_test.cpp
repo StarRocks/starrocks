@@ -71,6 +71,9 @@ public:
 
     Status flush() override {
         _flushed = true;
+        if (_clear_flushable_on_flush) {
+            _flushable_bytes = 0;
+        }
         return Status::OK();
     }
 
@@ -78,8 +81,11 @@ public:
 
     void set_flushable_bytes(int64_t bytes) { _flushable_bytes = bytes; }
 
+    void clear_flushable_on_flush() { _clear_flushable_on_flush = true; }
+
 private:
     bool _flushed = false;
+    bool _clear_flushable_on_flush = false;
     int64_t _flushable_bytes = 0;
 };
 
@@ -239,6 +245,53 @@ TEST_F(SinkMemoryManagerTest, update_writer_occupied_memory) {
     int64_t total_memory = sink_mem_mgr->update_writer_occupied_memory();
     EXPECT_EQ(total_memory, 1500);
     EXPECT_EQ(sink_mem_mgr->writer_occupied_memory(), 1500);
+}
+
+TEST_F(SinkMemoryManagerTest, registered_children_participate_in_total_occupied_memory) {
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    auto partition_chunk_writer_ctx =
+            std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
+                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+
+    MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "registered_children_pool");
+    MemTracker query_tracker(MemTrackerType::QUERY, -1, "registered_children_query");
+    query_pool_tracker.consume(950);
+    SinkMemoryManager manager(&query_pool_tracker, &query_tracker);
+
+    auto child1 = std::make_unique<SinkOperatorMemoryManager>();
+    auto* child1_ptr = child1.get();
+    ASSERT_EQ(manager.register_child_manager(std::move(child1)), child1_ptr);
+
+    auto child2 = std::make_unique<SinkOperatorMemoryManager>();
+    auto* child2_ptr = child2.get();
+    ASSERT_EQ(manager.register_child_manager(std::move(child2)), child2_ptr);
+
+    std::vector<int8_t> partition_field_null_list = {};
+    std::vector<PartitionChunkWriterPtr> child1_writers;
+    auto child1_writer =
+            std::make_shared<MockPartitionChunkWriter>("child1", partition_field_null_list, partition_chunk_writer_ctx);
+    child1_writer->set_flushable_bytes(10);
+    child1_writer->clear_flushable_on_flush();
+    child1_writer->_out_stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+    child1_writers.push_back(child1_writer);
+
+    std::vector<PartitionChunkWriterPtr> child2_writers;
+    auto child2_writer =
+            std::make_shared<MockPartitionChunkWriter>("child2", partition_field_null_list, partition_chunk_writer_ctx);
+    child2_writer->set_flushable_bytes(100);
+    child2_writers.push_back(child2_writer);
+
+    formats::AsyncFlushStreamPoller child1_poller;
+    formats::AsyncFlushStreamPoller child2_poller;
+    ASSERT_OK(child1_ptr->init(&child1_writers, &child1_poller));
+    ASSERT_OK(child2_ptr->init(&child2_writers, &child2_poller));
+    EXPECT_EQ(child2_ptr->update_writer_occupied_memory(), 100);
+
+    EXPECT_TRUE(manager.can_accept_more_input(child1_ptr));
+    EXPECT_TRUE(child1_writer->is_flushed());
 }
 
 TEST_F(SinkMemoryManagerTest, iceberg_delete_sink_scenario) {

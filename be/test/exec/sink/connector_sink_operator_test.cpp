@@ -211,7 +211,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
+    auto* op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
     ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
@@ -249,7 +249,7 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     stream.reset();
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
-    auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
+    auto* op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
     std::vector<connector::PartitionChunkWriterPtr> writers;
     formats::AsyncFlushStreamPoller empty_poller;
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
