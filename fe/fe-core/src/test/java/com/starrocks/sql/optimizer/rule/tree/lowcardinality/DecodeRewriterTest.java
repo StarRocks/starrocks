@@ -14,7 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
-import com.starrocks.qe.SessionVariable;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -26,8 +27,6 @@ import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -43,7 +42,7 @@ public class DecodeRewriterTest {
                 1,
                 SortPhase.FINAL,
                 TopNType.ROW_NUMBER,
-                false, false, false,
+                false, false,
                 null, null, null);
     }
 
@@ -58,8 +57,8 @@ public class DecodeRewriterTest {
     @Test
     public void testTopNPartitionColumnDecodedBelowKeepsStringRef() {
         ColumnRefFactory factory = new ColumnRefFactory();
-        ColumnRefOperator stringRef = factory.create("s", TypeFactory.createVarcharType(128), true);
-        ColumnRefOperator dictRef = factory.create("s", IntegerType.INT, true);
+        ColumnRefOperator stringRef = factory.create("s", ScalarType.createVarcharType(128), true);
+        ColumnRefOperator dictRef = factory.create("s", Type.INT, true);
 
         DecodeContext context = new DecodeContext(factory);
         context.stringRefToDictRefMap.put(stringRef, dictRef);
@@ -69,7 +68,7 @@ public class DecodeRewriterTest {
         // arrive in dict form, so inputStringColumns stays empty
         context.operatorDecodeInfo.put(topN, DecodeInfo.create());
 
-        DecodeRewriter rewriter = new DecodeRewriter(factory, context, new SessionVariable());
+        DecodeRewriter rewriter = new DecodeRewriter(factory, context);
         OptExpression result = rewriter.visitPhysicalTopN(newOptExpression(topN), new ColumnRefSet());
 
         PhysicalTopNOperator newTopN = result.getOp().cast();
@@ -82,8 +81,8 @@ public class DecodeRewriterTest {
     @Test
     public void testTopNPartitionColumnInDictFormRewrittenToDictRef() {
         ColumnRefFactory factory = new ColumnRefFactory();
-        ColumnRefOperator stringRef = factory.create("s", TypeFactory.createVarcharType(128), true);
-        ColumnRefOperator dictRef = factory.create("s", IntegerType.INT, true);
+        ColumnRefOperator stringRef = factory.create("s", ScalarType.createVarcharType(128), true);
+        ColumnRefOperator dictRef = factory.create("s", Type.INT, true);
 
         DecodeContext context = new DecodeContext(factory);
         context.stringRefToDictRefMap.put(stringRef, dictRef);
@@ -94,7 +93,7 @@ public class DecodeRewriterTest {
         info.inputStringColumns.union(new ColumnRefSet(stringRef.getId()));
         context.operatorDecodeInfo.put(topN, info);
 
-        DecodeRewriter rewriter = new DecodeRewriter(factory, context, new SessionVariable());
+        DecodeRewriter rewriter = new DecodeRewriter(factory, context);
         OptExpression result = rewriter.visitPhysicalTopN(newOptExpression(topN), new ColumnRefSet());
 
         PhysicalTopNOperator newTopN = result.getOp().cast();
