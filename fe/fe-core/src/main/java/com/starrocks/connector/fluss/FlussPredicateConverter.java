@@ -14,8 +14,8 @@
 
 package com.starrocks.connector.fluss;
 
-import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -311,31 +311,31 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
         private ConstantOperator tryCastToResultType(ConstantOperator operator, DataType dataType) {
             Optional<ConstantOperator> res = Optional.empty();
             if (dataType instanceof BooleanType) {
-                res = operator.castTo(com.starrocks.catalog.Type.BOOLEAN);
+                res = operator.castTo(com.starrocks.type.BooleanType.BOOLEAN);
             } else if (dataType instanceof DateType) {
-                res = operator.castTo(com.starrocks.catalog.Type.DATE);
+                res = operator.castTo(com.starrocks.type.DateType.DATE);
             } else if (dataType instanceof TimestampType) {
-                res = operator.castTo(com.starrocks.catalog.Type.DATETIME);
+                res = operator.castTo(com.starrocks.type.DateType.DATETIME);
             } else if (dataType instanceof StringType) {
-                res = operator.castTo(com.starrocks.catalog.Type.STRING);
+                res = operator.castTo(com.starrocks.type.StringType.STRING);
             } else if (dataType instanceof CharType) {
-                res = operator.castTo(com.starrocks.catalog.Type.CHAR);
+                res = operator.castTo(com.starrocks.type.CharType.CHAR);
             } else if (dataType instanceof BinaryType) {
-                res = operator.castTo(com.starrocks.catalog.Type.VARBINARY);
+                res = operator.castTo(com.starrocks.type.VarbinaryType.VARBINARY);
             } else if (dataType instanceof IntType) {
-                res = operator.castTo(com.starrocks.catalog.Type.INT);
+                res = operator.castTo(com.starrocks.type.IntegerType.INT);
             } else if (dataType instanceof BigIntType) {
-                res = operator.castTo(com.starrocks.catalog.Type.BIGINT);
+                res = operator.castTo(com.starrocks.type.IntegerType.BIGINT);
             } else if (dataType instanceof TinyIntType) {
-                res = operator.castTo(com.starrocks.catalog.Type.TINYINT);
+                res = operator.castTo(com.starrocks.type.IntegerType.TINYINT);
             } else if (dataType instanceof SmallIntType) {
-                res = operator.castTo(com.starrocks.catalog.Type.SMALLINT);
+                res = operator.castTo(com.starrocks.type.IntegerType.SMALLINT);
             } else if (dataType instanceof FloatType) {
-                res = operator.castTo(com.starrocks.catalog.Type.FLOAT);
+                res = operator.castTo(com.starrocks.type.FloatType.FLOAT);
             } else if (dataType instanceof DoubleType) {
-                res = operator.castTo(com.starrocks.catalog.Type.DOUBLE);
+                res = operator.castTo(com.starrocks.type.FloatType.DOUBLE);
             } else if (dataType instanceof DecimalType) {
-                res = operator.castTo(com.starrocks.catalog.Type.DEFAULT_DECIMAL128);
+                res = operator.castTo(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
             }
             return res.orElse(operator);
         }

@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.FlussScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
@@ -38,7 +39,6 @@ import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplem
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.FlussScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;

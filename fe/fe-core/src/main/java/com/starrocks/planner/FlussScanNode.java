@@ -17,12 +17,11 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FlussTable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.fluss.FlussRemoteFileDesc;
@@ -219,7 +218,8 @@ public class FlussScanNode extends ScanNode {
             }
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    flussTable.getCatalogName(), flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
+                    flussTable.getCatalogName(), flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
+                    ConnectorMetadatRequestContext.DEFAULT);
             output.append(prefix).append(
                     String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
                             partitionNames.size() == 0 ? 1 : partitionNames.size()));
@@ -227,11 +227,6 @@ public class FlussScanNode extends ScanNode {
         }
 
         return output.toString();
-    }
-
-    @Override
-    public int getNumInstances() {
-        return scanRangeLocationsList.size();
     }
 
     @Override
