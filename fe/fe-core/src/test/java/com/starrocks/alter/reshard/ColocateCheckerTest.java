@@ -909,6 +909,110 @@ public class ColocateCheckerTest {
         }
     }
 
+    // ---- Alignment convergence latch (stops the alignment-job storm) ----
+
+    @Test
+    public void testDecideAlignmentFiresOnNewOrChangedSignature() {
+        // No prior attempt -> fire, abort counter reset.
+        TableAlignmentLatch.AlignmentDecision first = TableAlignmentLatch.decideAlignment(null, 100L, false);
+        Assertions.assertTrue(first.fire());
+        Assertions.assertEquals(0, first.nextAbortRetries());
+
+        // Signature changed (real progress / new data possible) -> fire, abort counter reset.
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 2);
+        TableAlignmentLatch.AlignmentDecision changed = TableAlignmentLatch.decideAlignment(prev, 200L, false);
+        Assertions.assertTrue(changed.fire());
+        Assertions.assertEquals(0, changed.nextAbortRetries());
+    }
+
+    @Test
+    public void testDecideAlignmentSuppressesUnchangedNonAborted() {
+        // Same signature, previous job finished (not aborted): deterministic no-progress -> suppress.
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 0);
+        Assertions.assertFalse(TableAlignmentLatch.decideAlignment(prev, 100L, false).fire());
+    }
+
+    @Test
+    public void testDecideAlignmentBoundedAbortRelease() {
+        // Same signature but the previous attempt aborted (transient) and under the cap -> fire, and
+        // the abort counter increments so a persistent abort cannot re-fire forever.
+        TableAlignmentLatch.TableAlignmentAttempt prev =
+                new TableAlignmentLatch.TableAlignmentAttempt(100L, 1L, 0);
+        TableAlignmentLatch.AlignmentDecision aborted = TableAlignmentLatch.decideAlignment(prev, 100L, true);
+        Assertions.assertTrue(aborted.fire());
+        Assertions.assertEquals(1, aborted.nextAbortRetries());
+
+        // Aborted but at the cap -> stop re-firing (bounded abort-release).
+        TableAlignmentLatch.TableAlignmentAttempt capped = new TableAlignmentLatch.TableAlignmentAttempt(
+                100L, 1L, TableAlignmentLatch.ALIGNMENT_ABORT_RETRY_CAP);
+        Assertions.assertFalse(TableAlignmentLatch.decideAlignment(capped, 100L, true).fire());
+    }
+
+    @Test
+    public void testConvergenceSignatureDeterministicAndReArmsOnDataAndRangeChange() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        long expectedRangesSig = ColocateChecker.expectedRangesSignature(expectedRanges);
+
+        long sig1 = ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig);
+        long sig2 = ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig);
+        Assertions.assertEquals(sig1, sig2, "signature must be deterministic across calls on unchanged state");
+
+        PhysicalPartition pp = table.getPhysicalPartitions().iterator().next();
+        // A visibleVersion bump alone (as a reshard fallback publish does) must NOT re-arm the latch.
+        pp.setVisibleVersion(pp.getVisibleVersion() + 1, System.currentTimeMillis());
+        Assertions.assertEquals(sig1,
+                ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig),
+                "a visibleVersion bump (reshard fallback publish) must not change the signature");
+
+        // A dataVersion bump (as a real load does) MUST re-arm: more data can change the external-
+        // boundaries split's feasibility (segment envelope / rowset weights) without any range change.
+        pp.setDataVersion(pp.getDataVersion() + 1);
+        Assertions.assertNotEquals(sig1,
+                ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig),
+                "a dataVersion bump (real load) must change the signature");
+
+        // A tablet-range change (real reshard progress) MUST also re-arm.
+        long sigAfterLoad = ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig);
+        MaterializedIndex index = pp.getLatestMaterializedIndices(IndexExtState.VISIBLE).iterator().next();
+        Tablet tablet = index.getTablets().iterator().next();
+        TabletRange originalRange = tablet.getRange();
+        tablet.setRange(new TabletRange(Range.lt(
+                new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "42"))))));
+        try {
+            Assertions.assertNotEquals(sigAfterLoad,
+                    ColocateChecker.tableConvergenceSignature(db, table, expectedRangesSig),
+                    "a tablet-range change (reshard progress) must change the signature");
+        } finally {
+            tablet.setRange(originalRange);
+        }
+    }
+
+    @Test
+    public void testTransientSubmitFailureDoesNotLatchTable() throws Exception {
+        // A misaligned table whose alignment job fails to submit (here: addTabletReshardJob throws, as
+        // an admission failure would) is a transient obstacle, not a deterministic dead-end. The table
+        // must NOT be latched, so a later cycle retries it once the transient clears — otherwise an
+        // unchanged signature would suppress the still-misaligned table forever.
+        spliceSecondColocateRangeAt100AndMarkUnstable();
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void addTabletReshardJob(TabletReshardJob job) throws com.starrocks.common.StarRocksException {
+                throw new com.starrocks.common.StarRocksException("mocked admission failure");
+            }
+        };
+
+        ColocateChecker checker = new ColocateChecker();
+        checker.runOneCycle();
+
+        Assertions.assertFalse(checker.hasRecordedAttempt(table.getId()),
+                "a transient submit failure must not latch the table (must stay retryable)");
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId),
+                "group must remain unstable so a later cycle retries the alignment");
+    }
+
     // ---- Misplaced-PACK-group detection (pure, no cluster) ----
     //
     // These exercise the read-only detection logic that reassignShardGroups consumes. They build
