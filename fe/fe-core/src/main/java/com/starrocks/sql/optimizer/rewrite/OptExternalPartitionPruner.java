@@ -449,7 +449,6 @@ public class OptExternalPartitionPruner {
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .listPartitionNames(flussTable.getCatalogName(), flussTable.getCatalogDBName(),
                             flussTable.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
-            LOG.debug("Fluss partition pruner list partition names: {}", partitionNames);
             for (String partitionName : partitionNames) {
                 List<String> values = toPartitionValues(partitionName);
                 PartitionKey partitionKey = createPartitionKey(values, partitionColumns, flussTable);
@@ -551,7 +550,6 @@ public class OptExternalPartitionPruner {
                 throw new AnalysisException(msg);
             }
         } else if (table instanceof FlussTable) {
-            FlussTable flussTable = (FlussTable) table;
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
@@ -572,23 +570,9 @@ public class OptExternalPartitionPruner {
                 throw new AnalysisException(msg);
             }
 
-            LOG.debug("Fluss partition prune result table={}.{}.{}, partitionConjuncts={}, selectedIds={}, " +
-                            "selectedKeys={}, totalPartitions={}, noEvalConjuncts={}",
-                    flussTable.getCatalogName(), flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
-                    scanOperatorPredicates.getPartitionConjuncts(), selectedPartitionIds,
-                    formatPartitionKeys(selectedPartitionIds, scanOperatorPredicates.getIdToPartitionKey()),
-                    scanOperatorPredicates.getIdToPartitionKey().size(), partitionPruner.getNoEvalConjuncts());
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         }
-    }
-
-    private static List<String> formatPartitionKeys(Collection<Long> partitionIds,
-                                                    Map<Long, PartitionKey> idToPartitionKey) {
-        return partitionIds.stream()
-                .sorted()
-                .map(partitionId -> partitionId + "=" + idToPartitionKey.get(partitionId))
-                .collect(Collectors.toList());
     }
 
     /**
