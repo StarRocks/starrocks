@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
+import java.util.Optional;
 
 public class MetaTierTemporalWindowTest {
 
@@ -97,5 +98,31 @@ public class MetaTierTemporalWindowTest {
         String yearOneText = MetaTierTemporalWindow.renderDateTime(yearOne);
         Assertions.assertEquals("0001-01-01 00:00:00.000001", yearOneText);
         Assertions.assertEquals(yearOne, DateUtils.parseStrictDateTime(yearOneText));
+    }
+
+    @Test
+    void fixedOffsetZoneResolvesToConstantOffset() {
+        Assertions.assertEquals(ZoneOffset.ofHoursMinutes(8, 0),
+                MetaTierTemporalWindow.fixedLoadOffset("+08:00").orElseThrow());
+        Assertions.assertEquals(ZoneOffset.UTC,
+                MetaTierTemporalWindow.fixedLoadOffset("UTC").orElseThrow());
+        Assertions.assertEquals(ZoneOffset.ofHours(-5),
+                MetaTierTemporalWindow.fixedLoadOffset("-05:00").orElseThrow());
+    }
+
+    @Test
+    void namedOrDstOrAliasZoneResolvesToEmpty() {
+        // DST / named zones apply a per-instant offset the meta tier cannot reproduce with one scalar.
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("America/New_York").isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("Asia/Shanghai").isEmpty());
+        // CST resolves (via FE) to Asia/Shanghai, itself non-fixed; ZoneId.of("CST") throws -- either way empty.
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("CST").isEmpty());
+    }
+
+    @Test
+    void nullEmptyOrUnparseableZoneResolvesToEmpty() {
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset(null).isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("").isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("not-a-zone").isEmpty());
     }
 }
