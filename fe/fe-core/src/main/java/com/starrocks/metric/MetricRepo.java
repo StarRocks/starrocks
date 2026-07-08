@@ -84,6 +84,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -441,6 +443,8 @@ public final class MetricRepo {
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
+    public static GaugeMetric<Long> GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES;
+
     public static List<LeaderAwareGaugeMetric<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
     public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
@@ -740,6 +744,20 @@ public final class MetricRepo {
                 "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
         GAUGE_ENCRYPTION_KEY_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ENCRYPTION_KEY_NUM);
+
+        // Per-FE dict cache size, so not leader-aware.
+        GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES = new GaugeMetric<Long>("low_cardinality_dict_cache_bytes", MetricUnit.BYTES,
+                "total bytes of cached dictionary data in the low-cardinality global dictionary cache") {
+            @Override
+            public Long getValue() {
+                IDictManager dictManager = IDictManager.getInstance();
+                if (dictManager instanceof CacheDictManager) {
+                    return ((CacheDictManager) dictManager).getCacheWeightedBytes();
+                }
+                return 0L;
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");

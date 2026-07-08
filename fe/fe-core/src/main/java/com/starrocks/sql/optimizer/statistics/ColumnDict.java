@@ -48,6 +48,8 @@ public final class ColumnDict extends StatsVersion {
     };
 
     private final ImmutableMap<ByteBuffer, Integer> dict;
+    // Serialized dict bytes, precomputed so the cache weigher is O(1).
+    private final int byteSize;
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
@@ -58,11 +60,21 @@ public final class ColumnDict extends StatsVersion {
         Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
+        this.byteSize = computeByteSize(dict);
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
         super(collectedVersion, version);
         this.dict = dict;
+        this.byteSize = computeByteSize(dict);
+    }
+
+    private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
+        int size = 0;
+        for (ByteBuffer buf : dict.keySet()) {
+            size += buf.limit() - buf.position() + 4; // string bytes + offset id
+        }
+        return size;
     }
 
     public ImmutableMap<ByteBuffer, Integer> getDict() {
@@ -71,6 +83,10 @@ public final class ColumnDict extends StatsVersion {
 
     public int getDictSize() {
         return dict.size();
+    }
+
+    public int getByteSize() {
+        return byteSize;
     }
 
     public String toJson() {

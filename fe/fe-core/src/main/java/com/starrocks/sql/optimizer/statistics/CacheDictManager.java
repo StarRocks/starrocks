@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
@@ -63,7 +64,7 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
  * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
  * <p>
  * 2. Cache Management:
- * - Uses Caffeine AsyncLoadingCache with maximum size from Config.statistic_dict_columns
+ * - Uses Caffeine AsyncLoadingCache bounded by total dictionary bytes (Config.low_cardinality_dict_cache_max_bytes)
  * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
  * - Cache automatically loads dictionaries asynchronously when accessed
  * <p>
@@ -138,8 +139,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 }
             };
 
+    // Bounded by total dict bytes, not entry count. Empty Optional (non-low-card column) weighs 1.
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .maximumSize(Config.statistic_dict_columns)
+            .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
+            .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
+                    value.map(ColumnDict::getByteSize).orElse(1))
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(dictLoader);
 
@@ -440,5 +444,28 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public long estimateSize() {
         return Estimator.estimate(dictStatistics.asMap(), 20);
+    }
+
+    // Exact total dict bytes, maintained by Caffeine (O(1)). Serialized size, a lower bound on heap.
+    public long getCacheWeightedBytes() {
+        return dictStatistics.synchronous().policy().eviction()
+                .map(eviction -> eviction.weightedSize().orElse(0L))
+                .orElse(0L);
+    }
+
+    // Apply low_cardinality_dict_cache_max_bytes changes to the live cache. Called once, after GlobalStateMgr is up.
+    public void registerConfigRefreshListener() {
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::refreshCacheMaximum);
+    }
+
+    private void refreshCacheMaximum() {
+        dictStatistics.synchronous().policy().eviction().ifPresent(eviction -> {
+            long oldMax = eviction.getMaximum();
+            long newMax = Config.low_cardinality_dict_cache_max_bytes;
+            if (oldMax != newMax) {
+                eviction.setMaximum(newMax);
+                LOG.info("update dict cache max bytes from {} to {}", oldMax, newMax);
+            }
+        });
     }
 }
