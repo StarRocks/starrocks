@@ -1262,8 +1262,6 @@ public class MVRewriteTest extends StarRocksTestBase {
         String createMVSQL =
                 "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary % 10) "
                         + "from " + EMPS_TABLE_NAME + " group by deptno;";
-        String query = "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
-                "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno";
         try {
             starRocksAssert.withMaterializedView(createMVSQL);
             Assertions.fail();

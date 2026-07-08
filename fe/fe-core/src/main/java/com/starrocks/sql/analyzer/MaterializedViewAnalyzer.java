@@ -1122,7 +1122,6 @@ public class MaterializedViewAnalyzer {
                             "must be base table partition column", partitionRefTableExpr.getPos());
                 }
                 Column refPartitionCol = refPartitionColOpt.get();
-                Type partitionExprType = refPartitionCol.getType();
                 // To olap table, determine mv's partition by its ref base table's partition column type:
                 // - if the partition column is string type && no use `str2date`, use list partition.
                 // - otherwise use range partition as before.
@@ -1631,13 +1630,11 @@ public class MaterializedViewAnalyzer {
 
     private static @NotNull Column getPartitionColumn(List<Column> columns, SlotRef slotRef) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             throw new SemanticException("Materialized view partition exp column:"
@@ -1777,13 +1774,11 @@ public class MaterializedViewAnalyzer {
      */
     public static void tryToResolveRefToMVColumns(List<Column> columns, SlotRef slotRef, TableName mvTableName) {
         Column mvPartitionColumn = null;
-        int columnId = 0;
         for (Column column : columns) {
             if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                 mvPartitionColumn = column;
                 break;
             }
-            columnId++;
         }
         if (mvPartitionColumn == null) {
             LOG.warn("Materialized view partition exp column:" + slotRef.getColumnName() + " is not found in query statement");

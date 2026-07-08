@@ -1134,9 +1134,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         GetRemoteFilesParams params = key.getParams();
         boolean enableCollectColumnStatistics = params.isEnableColumnStats();
 
-        String dbName = icebergTable.getCatalogDBName();
-        String tableName = icebergTable.getCatalogTableName();
-
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Types.StructType schema = nativeTbl.schema().asStruct();
 

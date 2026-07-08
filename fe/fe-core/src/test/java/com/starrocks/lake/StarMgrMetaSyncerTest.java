@@ -152,7 +152,6 @@ public class StarMgrMetaSyncerTest {
         long tableId = 2L;
         long partitionId = 3L;
         long physicalPartitionId = 4L;
-        long indexId = 5L;
 
 
         new Expectations() {
@@ -396,8 +395,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        Exception exception =
-                Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
+        Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
         starMgrMetaSyncer.syncTableMetaAndColocationInfo();
     }
 
@@ -417,8 +415,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        Exception exception =
-                Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
+        Assertions.assertThrows(DdlException.class, () -> starMgrMetaSyncer.syncTableMeta("db", "table", true));
     }
 
     @Test
@@ -1838,7 +1835,6 @@ public class StarMgrMetaSyncerTest {
         long groupIdToClear = shardGroupId + 1;
         // build shardGroupInfos
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        int numOfShards = allShardIds.size();
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
@@ -1900,7 +1896,6 @@ public class StarMgrMetaSyncerTest {
         long groupIdToClear = shardGroupId + 1;
         // build shardGroupInfos
         List<Long> allShardIds = Stream.of(1000L, 1001L, 1002L, 1003L).collect(Collectors.toList());
-        int numOfShards = allShardIds.size();
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)

@@ -2043,7 +2043,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
     @Test
     public void testRefreshTableException(@Mocked CachingIcebergCatalog icebergCatalog) {
-        ConnectContext ctx = new ConnectContext();
+        new ConnectContext();
         new Expectations() {
             {
                 icebergCatalog.refreshTable(anyString, anyString, (ConnectContext) any, null);
@@ -2348,7 +2348,6 @@ public class IcebergMetadataTest extends TableTestBase {
 
         TableName tableName = new TableName("db", "tbl");
         SlotRef partitionSlot = new SlotRef(tableName, "dt");
-        FunctionCallExpr dayExpr = new FunctionCallExpr("day", Lists.newArrayList(partitionSlot));
         FunctionCallExpr monthExpr = new FunctionCallExpr("month", Lists.newArrayList(partitionSlot));
 
         // First add month(dt) so table has both day(dt) and month(dt)
@@ -2407,7 +2406,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 new Column("k3", STRING),
                 new Column("k4", STRING),
                 new Column("k5", STRING));
-        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
+        new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", columns, mockedNativeTableH, Maps.newHashMap());
         Assertions.assertEquals(0, IcebergMetadata.traceIcebergMetricsConfig(mockedNativeTableH).size());
         Map<String, String> icebergProperties = Maps.newHashMap();

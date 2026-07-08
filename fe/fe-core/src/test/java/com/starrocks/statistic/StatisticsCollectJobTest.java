@@ -1529,9 +1529,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
         OlapTable olapTable =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tcount");
-        long dbid = db.getId();
 
-        SampleStatisticsCollectJob sampleStatisticsCollectJob = new SampleStatisticsCollectJob(
+        new SampleStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v1", "count"),
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
