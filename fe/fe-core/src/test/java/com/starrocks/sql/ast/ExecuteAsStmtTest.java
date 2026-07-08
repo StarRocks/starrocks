@@ -26,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -142,5 +143,45 @@ public class ExecuteAsStmtTest {
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
             Assertions.fail("No exception throws.");
         });
+    }
+
+    @Test
+    public void testExternalWithNoRevert() throws Exception {
+        // external users are not required to exist in the internal user table
+        new Expectations(auth) {
+            {
+                auth.doesUserExist((UserIdentity) any);
+                maxTimes = 0; // must NOT be called for external users
+            }
+        };
+
+        ConnectContext connectContext = new ConnectContext();
+        ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "execute as external 'extuser'@'%' with no revert", 1).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+
+        Assertions.assertEquals("extuser", stmt.getToUser().getUser());
+        Assertions.assertEquals("%", stmt.getToUser().getHost());
+        Assertions.assertTrue(stmt.getToUser().isExternal());
+        Assertions.assertFalse(stmt.isAllowRevert());
+        Assertions.assertEquals("EXECUTE AS EXTERNAL 'extuser'@'%' WITH NO REVERT", stmt.toString());
+
+        ExecuteAsExecutor.execute(stmt, connectContext);
+
+        UserIdentity identity = connectContext.getCurrentUserIdentity();
+        Assertions.assertEquals("extuser", identity.getUser());
+        Assertions.assertEquals("%", identity.getHost());
+        Assertions.assertTrue(identity.isEphemeral());
+    }
+
+    @Test
+    public void testExternalToString() {
+        ExecuteAsStmt withRevert = new ExecuteAsStmt(
+                new UserRef("extuser", "%", false, true, NodePosition.ZERO), true);
+        Assertions.assertEquals("EXECUTE AS EXTERNAL 'extuser'@'%'", withRevert.toString());
+
+        ExecuteAsStmt noRevert = new ExecuteAsStmt(
+                new UserRef("extuser", "%", false, true, NodePosition.ZERO), false);
+        Assertions.assertEquals("EXECUTE AS EXTERNAL 'extuser'@'%' WITH NO REVERT", noRevert.toString());
     }
 }

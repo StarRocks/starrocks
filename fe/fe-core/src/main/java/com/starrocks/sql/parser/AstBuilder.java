@@ -7176,8 +7176,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitExecuteAsStatement(com.starrocks.sql.parser.StarRocksParser.ExecuteAsStatementContext context) {
         boolean allowRevert = context.WITH() == null;
+        UserRef userRef = (UserRef) visit(context.user());
+        if (context.EXTERNAL() != null) {
+            userRef = new UserRef(userRef.getUser(), userRef.getHost(), userRef.isDomain(), true, createPos(context));
+        }
         // we only support WITH NO REVERT for now
-        return new ExecuteAsStmt((UserRef) visit(context.user()), allowRevert, createPos(context));
+        return new ExecuteAsStmt(userRef, allowRevert, createPos(context));
     }
 
     @Override
