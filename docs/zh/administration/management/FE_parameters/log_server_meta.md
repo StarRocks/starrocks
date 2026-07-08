@@ -1281,6 +1281,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 集群中 Leader、Follower 和 Observer FE 之间通信使用的端口。
 - 引入版本: -
 
+### `edit_log_roll_bytes`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: 自上次日志滚动以来写入的元数据日志条目总大小超过该值后，将创建新的日志文件（在每个写入批次之后检查）。该参数是对 `edit_log_roll_num` 的补充，适用于单条日志条目较大的场景，可以按大小（而不仅按条数）限制 FE 重启时需要回放的日志量。`0`（默认值）表示禁用基于大小的触发；`edit_log_roll_num` 始终生效。
+- 引入版本: -
+
 ### `edit_log_roll_num`
 
 - 默认值: 50000
