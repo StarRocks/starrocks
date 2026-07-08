@@ -26,8 +26,8 @@ ADD_BE_LIB(Connector
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
         utils.cpp
-        sink_memory_manager.cpp
         partition_chunk_writer.cpp
+        partition_chunk_writer_memory_manager.cpp
         connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
         iceberg_delete_sink.cpp

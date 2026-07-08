@@ -25,7 +25,7 @@
 #include "column/sorting/sorting.h"
 #include "common/config_exec_fwd.h"
 #include "connector/partition_chunk_writer.h"
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/column_evaluator.h"

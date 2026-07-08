@@ -19,6 +19,7 @@ set(CONNECTOR_PRIMITIVE_FILES
         connector.cpp
         data_source.cpp
         data_source_provider.cpp
+        sink_memory_manager.cpp
 )
 
 ADD_BE_LIB(ConnectorPrimitive

@@ -14,55 +14,39 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <vector>
 
-#include "common/status.h"
-#include "connector/partition_chunk_writer.h"
-#include "formats/io/async_flush_stream_poller.h"
-#include "runtime/mem_tracker.h"
+namespace starrocks {
 
-namespace starrocks::connector {
+class MemTracker;
 
-/// manage memory of a single sink operator
-/// not thread-safe except `releasable_memory()`
+namespace connector {
+
+/// Interface for operator-level sink memory managers.
 class SinkOperatorMemoryManager {
 public:
-    SinkOperatorMemoryManager() = default;
-
-    Status init(std::vector<PartitionChunkWriterPtr>* writers, formats::AsyncFlushStreamPoller* io_poller);
-
-    // Register an additional writer list. Used by composite sinks
-    // (e.g. IcebergRowDeltaSink) so memory pressure logic can see writers
-    // owned by their sub-sinks.
-    void add_candidates(std::vector<PartitionChunkWriterPtr>* writers);
+    virtual ~SinkOperatorMemoryManager() = default;
 
     // return true if a victim is found and killed, otherwise return false
-    bool kill_victim();
+    virtual bool kill_victim() = 0;
 
-    int64_t update_releasable_memory();
+    virtual int64_t update_releasable_memory() = 0;
 
-    int64_t update_writer_occupied_memory();
-
-    // thread-safe
-    int64_t releasable_memory() { return _releasable_memory.load(); }
+    virtual int64_t update_writer_occupied_memory() = 0;
 
     // thread-safe
-    int64_t writer_occupied_memory() { return _writer_occupied_memory.load(); }
+    virtual int64_t releasable_memory() const = 0;
 
-private:
-    // One or more references to writer lists owned by sink operator(s).
-    std::vector<std::vector<PartitionChunkWriterPtr>*> _candidate_lists;
-    formats::AsyncFlushStreamPoller* _io_poller;
-    std::atomic_int64_t _releasable_memory{0};
-    std::atomic_int64_t _writer_occupied_memory{0};
+    // thread-safe
+    virtual int64_t writer_occupied_memory() const = 0;
 };
 
 /// 1. manage all sink operators in a query
 /// 2. calculates releasable memory across all
-/// 3. kill (early-close) writers to enlarge releasable memory, which are flushed to remote storage and freed asynchronously
+/// 3. kill (early-close) writers to enlarge releasable memory, which are flushed to remote storage and freed
+/// asynchronously
 class SinkMemoryManager {
 public:
     SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker);
@@ -88,4 +72,5 @@ private:
     std::vector<std::unique_ptr<SinkOperatorMemoryManager>> _children;
 };
 
-} // namespace starrocks::connector
+} // namespace connector
+} // namespace starrocks

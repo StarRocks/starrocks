@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/sink_memory_manager.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -25,6 +23,7 @@
 #include "base/utility/integer_util.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
+#include "connector/partition_chunk_writer_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
@@ -114,7 +113,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim) {
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                     {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
 
-    auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
+    auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
 
     std::vector<int8_t> partition_field_null_list = {};
@@ -160,7 +159,7 @@ TEST_F(SinkMemoryManagerTest, init_with_vector) {
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                     {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
 
-    auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
+    auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
 
     std::vector<int8_t> partition_field_null_list = {};
@@ -188,7 +187,7 @@ TEST_F(SinkMemoryManagerTest, kill_victim_selects_max_flushable_bytes) {
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                     {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
 
-    auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
+    auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
 
     std::vector<int8_t> partition_field_null_list = {};
@@ -225,7 +224,7 @@ TEST_F(SinkMemoryManagerTest, update_writer_occupied_memory) {
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                     {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
 
-    auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
+    auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
 
     std::vector<int8_t> partition_field_null_list = {};
@@ -261,11 +260,11 @@ TEST_F(SinkMemoryManagerTest, registered_children_participate_in_total_occupied_
     query_pool_tracker.consume(950);
     SinkMemoryManager manager(&query_pool_tracker, &query_tracker);
 
-    auto child1 = std::make_unique<SinkOperatorMemoryManager>();
+    auto child1 = std::make_unique<PartitionChunkWriterMemoryManager>();
     auto* child1_ptr = child1.get();
     ASSERT_EQ(manager.register_child_manager(std::move(child1)), child1_ptr);
 
-    auto child2 = std::make_unique<SinkOperatorMemoryManager>();
+    auto child2 = std::make_unique<PartitionChunkWriterMemoryManager>();
     auto* child2_ptr = child2.get();
     ASSERT_EQ(manager.register_child_manager(std::move(child2)), child2_ptr);
 
@@ -303,7 +302,7 @@ TEST_F(SinkMemoryManagerTest, iceberg_delete_sink_scenario) {
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                     {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
 
-    auto sink_mem_mgr = std::make_shared<SinkOperatorMemoryManager>();
+    auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
 
     std::vector<int8_t> partition_field_null_list = {};

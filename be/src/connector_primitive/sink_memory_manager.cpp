@@ -12,80 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
+
+#include <algorithm>
 
 #include "common/config_connector_sink_fwd.h"
-#include "exec/exec_env.h"
+#include "common/logging.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::connector {
-
-Status SinkOperatorMemoryManager::init(std::vector<PartitionChunkWriterPtr>* writers,
-                                       formats::AsyncFlushStreamPoller* io_poller) {
-    _candidate_lists.clear();
-    _candidate_lists.push_back(writers);
-    _io_poller = io_poller;
-    return Status::OK();
-}
-
-void SinkOperatorMemoryManager::add_candidates(std::vector<PartitionChunkWriterPtr>* writers) {
-    if (writers == nullptr) {
-        return;
-    }
-    _candidate_lists.push_back(writers);
-}
-
-bool SinkOperatorMemoryManager::kill_victim() {
-    // Find a target file writer to flush across all registered candidate lists.
-    // For buffered partition writer, choose the the writer with the largest file size.
-    // For spillable partition writer, choose the the writer with the largest memory size that can be spilled.
-    PartitionChunkWriterPtr victim = nullptr;
-    for (auto* candidates : _candidate_lists) {
-        if (candidates == nullptr) {
-            continue;
-        }
-        for (auto& writer : *candidates) {
-            int64_t flushable_bytes = writer->get_flushable_bytes();
-            if (flushable_bytes == 0) {
-                continue;
-            }
-            if (victim && flushable_bytes < victim->get_flushable_bytes()) {
-                continue;
-            }
-            victim = writer;
-        }
-    }
-    if (victim == nullptr) {
-        return false;
-    }
-
-    // The flush will decrease the writer flushable memory bytes, so it usually
-    // will not be choosed in a short time.
-    const auto filename = victim->out_stream()->filename();
-    size_t flush_bytes = victim->get_flushable_bytes();
-    const auto result = victim->flush();
-    LOG(INFO) << "kill victim: " << filename << ", result: " << result << ", flushable_bytes: " << flush_bytes;
-    return true;
-}
-
-int64_t SinkOperatorMemoryManager::update_releasable_memory() {
-    int64_t releasable_memory = _io_poller->releasable_memory();
-    _releasable_memory.store(releasable_memory);
-    return releasable_memory;
-}
-
-int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
-    int64_t writer_occupied_memory = 0;
-    for (auto* candidates : _candidate_lists) {
-        if (candidates == nullptr) {
-            continue;
-        }
-        for (auto& writer : *candidates) {
-            writer_occupied_memory += writer->get_flushable_bytes();
-        }
-    }
-    _writer_occupied_memory.store(writer_occupied_memory);
-    return _writer_occupied_memory;
-}
 
 SinkMemoryManager::SinkMemoryManager(MemTracker* query_pool_tracker, MemTracker* query_tracker)
         : _query_pool_tracker(query_pool_tracker), _query_tracker(query_tracker) {

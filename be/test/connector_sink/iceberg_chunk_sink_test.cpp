@@ -28,10 +28,11 @@
 #include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector/connector_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 
 namespace starrocks::connector {

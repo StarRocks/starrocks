@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
+#include "connector/partition_chunk_writer_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 
 namespace starrocks::connector {
@@ -44,17 +45,18 @@ Status IcebergRowDeltaSink::init(formats::AsyncFlushStreamPoller* poller, Runtim
     RETURN_IF_ERROR(_delete_sink->init(poller, _profile, sink_mem_mgr));
     RETURN_IF_ERROR(_data_sink->init(poller, _profile, sink_mem_mgr));
 
-    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
-    RETURN_IF_ERROR(_op_mem_mgr->init(&_writers, _io_poller));
+    auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
+    RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
 
     // This composite sink owns no writers of its own (NopPartitionChunkWriterFactory),
     // so the operator-level kill-victim / backpressure path would see an empty
     // candidate list. Register sub-sink writer lists with the outer manager so
     // memory pressure logic can flush real writers held by the sub-sinks.
-    if (_op_mem_mgr != nullptr) {
-        _op_mem_mgr->add_candidates(_delete_sink->writers());
-        _op_mem_mgr->add_candidates(_data_sink->writers());
-    }
+    op_mem_mgr->add_candidates(_delete_sink->writers());
+    op_mem_mgr->add_candidates(_data_sink->writers());
+
+    _partition_writer_mem_mgr = op_mem_mgr.get();
+    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
 
     return Status::OK();
 }

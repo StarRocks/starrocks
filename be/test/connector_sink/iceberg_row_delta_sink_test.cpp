@@ -28,6 +28,7 @@
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
 #include "connector/iceberg_connector.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/io/async_flush_stream_poller.h"

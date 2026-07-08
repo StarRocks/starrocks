@@ -18,7 +18,7 @@
 
 #include "base/url_coding.h"
 #include "common/logging.h"
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
