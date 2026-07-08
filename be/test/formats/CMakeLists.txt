@@ -16,6 +16,7 @@ set(FORMAT_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     disk_range_test.cpp
     io/async_flush_output_stream_test.cpp
+    io/async_flush_stream_poller_test.cpp
     io/formatted_output_stream_file_test.cpp
     ${BE_TEST_JNI_ENV_STUB}
 )

@@ -23,12 +23,12 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "connector/async_flush_stream_poller.h"
 #include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "formats/io/async_flush_output_stream.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 #include "runtime/current_thread.h"
 
@@ -200,7 +200,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     init_mem_trackers();
 
     constexpr int64_t kTrackedBytes = 100;
-    connector::AsyncFlushStreamPoller poller;
+    formats::AsyncFlushStreamPoller poller;
     std::vector<connector::PartitionChunkWriterPtr> writers;
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
@@ -218,7 +218,7 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(
             &factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
-            std::make_unique<connector::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
+            std::make_unique<formats::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -244,14 +244,14 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     ASSERT_EQ(_query_tracker->consumption(), kTrackedBytes);
     ASSERT_OK(stream->close());
 
-    auto io_poller = std::make_unique<connector::AsyncFlushStreamPoller>();
+    auto io_poller = std::make_unique<formats::AsyncFlushStreamPoller>();
     io_poller->enqueue(stream);
     stream.reset();
 
     auto sink_mem_mgr = std::make_shared<connector::SinkMemoryManager>(_query_pool_tracker.get(), _query_tracker.get());
     auto* op_mem_mgr = sink_mem_mgr->create_child_manager();
     std::vector<connector::PartitionChunkWriterPtr> writers;
-    connector::AsyncFlushStreamPoller empty_poller;
+    formats::AsyncFlushStreamPoller empty_poller;
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller, [](const connector::CommitResult&) {}));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);

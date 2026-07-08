@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "async_flush_stream_poller.h"
 #include "connector/connector_chunk_sink.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::connector {
@@ -26,7 +26,7 @@ class SinkOperatorMemoryManager {
 public:
     SinkOperatorMemoryManager() = default;
 
-    Status init(std::vector<PartitionChunkWriterPtr>* writers, AsyncFlushStreamPoller* io_poller,
+    Status init(std::vector<PartitionChunkWriterPtr>* writers, formats::AsyncFlushStreamPoller* io_poller,
                 CommitFunc commit_func);
 
     // Register an additional writer list. Used by composite sinks
@@ -51,7 +51,7 @@ private:
     // One or more references to writer lists owned by sink operator(s).
     std::vector<std::vector<PartitionChunkWriterPtr>*> _candidate_lists;
     CommitFunc _commit_func;
-    AsyncFlushStreamPoller* _io_poller;
+    formats::AsyncFlushStreamPoller* _io_poller;
     std::atomic_int64_t _releasable_memory{0};
     std::atomic_int64_t _writer_occupied_memory{0};
 };

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/async_flush_stream_poller.h"
+#include "formats/io/async_flush_stream_poller.h"
 
 #include <gtest/gtest.h>
 
@@ -23,29 +23,25 @@
 #include "base/testutil/assert.h"
 #include "common/object_pool.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/io/async_flush_output_stream.h"
 #include "fs/fs_memory.h"
+#include "runtime/runtime_state.h"
 
-namespace starrocks::connector {
+namespace starrocks::formats {
 namespace {
+
+using Stream = AsyncFlushOutputStream;
 
 class AsyncFlushStreamPollerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+        _runtime_state->init_instance_mem_tracker();
         _io_executor = _pool.add(new PriorityThreadPool("test", 1, 100));
         _file = _fs.new_writable_file("/test.out").value();
     }
 
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     RuntimeState* _runtime_state;
     PriorityThreadPool* _io_executor;
     MemoryFileSystem _fs;
@@ -53,7 +49,7 @@ protected:
 };
 
 TEST_F(AsyncFlushStreamPollerTest, poll_until_async_status_ready) {
-    auto stream = std::make_shared<formats::AsyncFlushOutputStream>(std::move(_file), _io_executor, _runtime_state);
+    auto stream = std::make_shared<Stream>(std::move(_file), _io_executor, _runtime_state);
     auto* raw_stream = stream.get();
     AsyncFlushStreamPoller poller;
     poller.enqueue(std::move(stream));
@@ -83,4 +79,4 @@ TEST_F(AsyncFlushStreamPollerTest, poll_until_async_status_ready) {
 }
 
 } // namespace
-} // namespace starrocks::connector
+} // namespace starrocks::formats

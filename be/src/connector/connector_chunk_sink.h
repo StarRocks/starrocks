@@ -25,9 +25,12 @@
 #include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
+namespace starrocks::formats {
+class AsyncFlushStreamPoller;
+} // namespace starrocks::formats
+
 namespace starrocks::connector {
 
-class AsyncFlushStreamPoller;
 class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
@@ -40,7 +43,7 @@ public:
                        std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
                        bool support_null_partition);
 
-    void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
+    void set_io_poller(formats::AsyncFlushStreamPoller* poller) { _io_poller = poller; }
 
     void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
@@ -75,7 +78,7 @@ protected:
     void push_rollback_action(const std::function<void()>& action);
     void init_profile();
 
-    AsyncFlushStreamPoller* _io_poller = nullptr;
+    formats::AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 
     std::vector<std::string> _partition_column_names;
@@ -101,7 +104,7 @@ struct ConnectorChunkSinkContext {
 };
 
 struct ConnectorChunkSinkCreateContext {
-    AsyncFlushStreamPoller* io_poller = nullptr;
+    formats::AsyncFlushStreamPoller* io_poller = nullptr;
     SinkMemoryManager* sink_mem_mgr = nullptr;
 };
 
