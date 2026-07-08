@@ -34,6 +34,8 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -56,8 +58,16 @@ public class ConnectionAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/connection", new ConnectionAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String connStr = request.getSingleParameter("connection_id");
         if (connStr == null) {
             response.getContent().append("not valid parameter");

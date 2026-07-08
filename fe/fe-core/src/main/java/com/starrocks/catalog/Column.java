@@ -880,6 +880,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     @Override
     public boolean equals(Object obj) {
+        if (!equalsIgnoreComment(obj)) {
+            return false;
+        }
+
+        Column other = (Column) obj;
+        return comment == null ? other.comment == null : comment.equals(other.getComment());
+    }
+
+    public boolean equalsIgnoreComment(Object obj) {
         if (obj == this) {
             return true;
         }
@@ -913,18 +922,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-        if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
+        if (this.isGeneratedColumn() != other.isGeneratedColumn()) {
             return false;
         }
         if (this.isGeneratedColumn() &&
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
-        if (this.isHidden != other.isHidden()) {
-            return false;
-        }
-
-        return comment == null ? other.comment == null : comment.equals(other.getComment());
+        return this.isHidden == other.isHidden();
     }
 
     public boolean isSchemaCompatible(Column other) {

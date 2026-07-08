@@ -16,6 +16,10 @@ package com.starrocks.service;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -38,11 +42,14 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.MetricVisitor;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -51,6 +58,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -59,6 +67,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -67,6 +76,8 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TFeMetricsResult;
+import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
@@ -103,6 +114,7 @@ import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
@@ -157,6 +169,7 @@ import static com.starrocks.thrift.TFileType.FILE_STREAM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -196,6 +209,201 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+    @Test
+    public void testGetFeMetrics() throws TException {
+        // information_schema.fe_metrics is served over this RPC instead of scraping HTTP /metrics.
+        // It returns the same JSON payload as /metrics?type=json with an OK status.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getJson_metrics());
+    }
+
+    @Test
+    public void testGetFeMetricsReturnsErrorStatusOnException() throws TException {
+        // When metric collection throws, getFeMetrics must return an INTERNAL_ERROR status
+        // (with an error message) instead of propagating the exception.
+        new MockUp<MetricRepo>() {
+            @Mock
+            public String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
+                throw new RuntimeException("boom");
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertFalse(result.getStatus().getError_msgs().isEmpty());
+    }
+
+    @Test
+    public void testCheckAuthRejectsMissingCredentials() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TFeResult nullRequestResult = impl.checkAuth(null);
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, nullRequestResult.getStatus().getStatus_code());
+
+        TFeResult emptyRequestResult = impl.checkAuth(new TAuthenticateParams());
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, emptyRequestResult.getStatus().getStatus_code());
+
+        TAuthenticateParams missingPasswordRequest = new TAuthenticateParams();
+        missingPasswordRequest.setUser("root");
+        TFeResult missingPasswordResult = impl.checkAuth(missingPasswordRequest);
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, missingPasswordResult.getStatus().getStatus_code());
+    }
+
+    private static TAuthenticateParams buildAuthParams(TPrivilegeRequirement priv) {
+        TAuthenticateParams params = new TAuthenticateParams();
+        params.setUser("ut_user");
+        params.setPasswd("ut_pwd");
+        if (priv != null) {
+            params.setRequired_privilege(priv);
+        }
+        return params;
+    }
+
+    @Test
+    public void testCheckAuth_None_validCredentials_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(buildAuthParams(null));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Operate_authorized_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+            // checkSystemAction is void; default mock = no-op (i.e. authorized)
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            mockedAuthz.verify(
+                    () -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Operate_denied_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+            mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)))
+                    .thenThrow(new AccessDeniedException("internal denial reason — operator only"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+            // The internal denial reason MUST NOT leak to the HTTP client; only a
+            // generic "Access denied for user@host" is exposed.
+            String errMsg = String.join(";", result.getStatus().getError_msgs());
+            Assertions.assertFalse(errMsg.contains("internal denial reason"));
+            Assertions.assertTrue(errMsg.startsWith("Access denied for"));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Node_authorized_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            mockedAuthz.verify(
+                    () -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Node_denied_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+            mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)))
+                    .thenThrow(new AccessDeniedException("denied"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_AuthenticationException_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenThrow(new AuthenticationException("wrong password"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_nullRequiredPrivilege_returnsInternalError() throws TException {
+        // A newer BE may send a thrift enum value this FE does not know.
+        // TPrivilegeRequirement.findByValue would return null in the generated thrift
+        // accessor, but isSetRequired_privilege() would still report true. Spy on a
+        // real request to reproduce that combination and verify the pre-switch
+        // null-guard rejects cleanly instead of throwing NPE on switch(null).
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TAuthenticateParams real = buildAuthParams(TPrivilegeRequirement.OPERATE);
+        TAuthenticateParams spy = Mockito.spy(real);
+        Mockito.doReturn(true).when(spy).isSetRequired_privilege();
+        Mockito.doReturn(null).when(spy).getRequired_privilege();
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(spy);
+            Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_debugLogEnabled_doesNotCrash() throws TException {
+        // Flip the FrontendServiceImpl logger to DEBUG so the isDebugEnabled() guard
+        // fires and the LOG.debug(...) format call executes. Asserts the call doesn't
+        // NPE when host / required_privilege are unset.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        org.apache.logging.log4j.core.config.Configurator.setLevel(
+                FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.DEBUG);
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+                    .thenReturn(UserIdentity.ROOT);
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("ut_user");
+            params.setPasswd("ut_pwd");
+            // intentionally leave host + required_privilege unset to exercise the
+            // ternaries in the debug log.
+            TFeResult result = impl.checkAuth(params);
+            Assertions.assertNotNull(result.getStatus());
+        } finally {
+            org.apache.logging.log4j.core.config.Configurator.setLevel(
+                    FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.INFO);
+        }
     }
 
     private static ConnectContext connectContext;

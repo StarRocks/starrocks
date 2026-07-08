@@ -55,7 +55,8 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     // Original tablet id -> resharding tablet info
     protected final Map<Long, ReshardingTabletInfo> reshardingTabletInfos = Maps.newConcurrentMap();
 
-    // Colocate checker: stateless, invoked from this manager's tick. Owns no
+    // Colocate checker: invoked from this manager's tick. Holds only a small per-leader,
+    // in-memory placement-convergence negative cache (non-journaled). Owns no
     // thread of its own — shares this manager's scheduler cadence
     // ({@code tablet_reshard_job_scheduler_interval_ms}) and self-gates on shared-data-mode,
     // leader status, and empty unstable-groups before doing any real work.
@@ -328,8 +329,11 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
                 continue;
             }
 
-            // Job is done, remove expired job
-            if (job.isExpired()) {
+            // Job is done, remove expired job once no automated cluster snapshot still covers the
+            // pre-reshard state it retains (the parent/source tablets). Keeping the job keeps
+            // isTableSafeToDeleteTablet() reporting the table's tablets as unsafe to reclaim.
+            if (job.isExpired() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .isDeletionSafeToExecute(job.getFinishedTimeMs())) {
                 iterator.remove();
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveTabletReshardJob(job.getJobId());
                 LOG.info("Removed expired tablet reshard job. {}", job);

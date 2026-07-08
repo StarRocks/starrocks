@@ -436,7 +436,16 @@ public class HiveMetadata implements ConnectorMetadata {
             Map<ColumnRefOperator, ColumnStatistic> columnStatistics = statistics.getColumnStatistics();
             if (columnStatistics.isEmpty()) {
                 double outputRowNums = statistics.getOutputRowCount();
-                statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys, outputRowNums);
+                if (session.getSessionVariable().enableHiveColumnStats()) {
+                    // Column stats enabled but unavailable (e.g. exception) — estimate from type/partition info
+                    statistics = statisticsProvider.createUnknownStatistics(table, columnRefOperators, partitionKeys,
+                            outputRowNums);
+                } else {
+                    // Column stats explicitly disabled — keep UNKNOWN so the optimizer respects the intent
+                    Statistics.Builder unknownBuilder = Statistics.builder().setOutputRowCount(outputRowNums);
+                    columnRefOperators.forEach(c -> unknownBuilder.addColumnStatistic(c, ColumnStatistic.unknown()));
+                    statistics = unknownBuilder.build();
+                }
             }
         }
 

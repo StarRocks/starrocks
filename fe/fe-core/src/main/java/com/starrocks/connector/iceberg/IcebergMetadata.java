@@ -856,6 +856,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Optional<Long> getVersionCommitTimeMillis(String dbName, Table table, long version) {
+        Snapshot snapshot = ((IcebergTable) table).getNativeTable().snapshot(version);
+        return snapshot == null ? Optional.empty() : Optional.of(snapshot.timestampMillis());
+    }
+
+    @Override
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
@@ -1348,7 +1354,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         Scan tableScan = scan;
-        return new CloseableIterator<>() {
+        return new SynchronizedCloseableIterator<>(new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -1397,7 +1403,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             public void close() {
                 closePlannedTaskIterator();
             }
-        };
+        });
     }
 
     private boolean hasPositionDeletes(FileScanTask task) {

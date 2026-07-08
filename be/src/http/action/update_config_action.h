@@ -56,6 +56,8 @@ public:
     // hack to share update_config method with be_configs schema table sink
     static UpdateConfigAction* instance() { return _instance.load(); }
 
+    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
 private:
     static std::atomic<UpdateConfigAction*> _instance;
     ExecEnv* _exec_env;

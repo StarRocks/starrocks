@@ -813,6 +813,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 HTTP 服务器监听的端口。
 - 引入版本: -
 
+### `enable_http_auth`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 引入版本: v4.2.0
+- 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
+  - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+
+  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
 ### `http_web_page_display_hardware`
 
 - 默认值: true
@@ -1382,10 +1395,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: No
-- 描述: 是否对 catalog 名称、数据库名称、表名称、视图名称和物化视图名称启用不区分大小写的处理。当前，表名称默认区分大小写。
-  - 启用此功能后，所有相关名称将以小写形式存储，并且所有包含这些名称的 SQL 命令将自动将其转换为小写。
-  - 您只能在创建集群时启用此功能。**集群启动后，此配置的值无法通过任何方式修改**。任何修改尝试都将导致错误。FE 在检测到此配置项的值与集群首次启动时不一致时将无法启动。
-  - 当前，此功能不支持 JDBC catalog 和表名称。如果您想对 JDBC 或 ODBC 数据源执行不区分大小写的处理，请不要启用此功能。
+- 描述: 是否对 catalog 名称、数据库名称、表名称、视图名称和物化视图名称启用不区分大小写的处理。此功能默认关闭，即上述名称默认区分大小写。启用后，StarRocks 会将上述名称以小写形式存储，并在**查询和写入（DDL/DML）处理阶段强制将所有 Catalog、数据库、表、视图和物化视图名称转换为小写**。此功能只能在创建集群时启用。**除非您有明确且充分理解的理由，否则强烈建议您保持此功能关闭**，原因如下：
+  - **可能导致外表和 External Catalog 大面积不可用。** 不同的 External Catalog 服务遵循各自不同的命名及大小写约定。如果某个外部 Schema、数据库或表的名称本身并非全小写，StarRocks 会在将 SQL 中的名称传递给 Connector 之前将其转换为小写，从而在数据源中查找一个并不存在的名称，导致查询因 "not found" 错误而失败。
+  - **集群创建后无法修改。** 集群启动后，此配置的值无法通过任何方式修改；任何修改尝试都将导致错误，且当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。
+  - 仅当您能够确保所有对象名称（包括您计划访问的每一个外部数据源中的名称）均已为小写时，才在新建集群上启用此功能。
 - 引入版本: v4.0
 
 ### `enable_task_history_archive`

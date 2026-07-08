@@ -2759,26 +2759,36 @@ public class GlobalStateMgr {
                 lockedDbMap.put(dbId, db);
             }
 
-            // lock all dbs
-            for (Database db : lockedDbMap.values()) {
-                locker.lockDatabase(db.getId(), LockType.READ);
-            }
-            LOG.info("acquired all the dbs' read lock.");
-
-            long journalId = getMaxJournalId();
-            File dumpFile = new File(Config.meta_dir, "image." + journalId);
-            dumpFilePath = dumpFile.getAbsolutePath();
+            // Track the dbs actually locked. lockDatabase() can throw (deadlock victim / interrupt),
+            // so on a partial acquisition we must release only what we hold. Releasing a never-locked
+            // db throws IllegalMonitorStateException, which would abort the finally before unlock()
+            // runs and strand the global meta lock indefinitely.
+            List<Database> lockedDbs = new ArrayList<>();
             try {
-                LOG.info("begin to dump {}", dumpFilePath);
-                saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
-            } catch (IOException e) {
-                LOG.error("failed to dump image to {}", dumpFilePath, e);
+                // lock all dbs
+                for (Database db : lockedDbMap.values()) {
+                    locker.lockDatabase(db.getId(), LockType.READ);
+                    lockedDbs.add(db);
+                }
+                LOG.info("acquired all the dbs' read lock.");
+
+                long journalId = getMaxJournalId();
+                File dumpFile = new File(Config.meta_dir, "image." + journalId);
+                dumpFilePath = dumpFile.getAbsolutePath();
+                try {
+                    LOG.info("begin to dump {}", dumpFilePath);
+                    saveImage(new ImageWriter(Config.meta_dir, journalId), dumpFile);
+                } catch (IOException e) {
+                    LOG.error("failed to dump image to {}", dumpFilePath, e);
+                }
+            } finally {
+                // unlock only the dbs we actually locked
+                for (Database db : lockedDbs) {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
             }
         } finally {
-            // unlock all
-            for (Database db : lockedDbMap.values()) {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
+            // Always release the global meta lock, even if db-lock acquisition or release above threw.
             unlock();
         }
 

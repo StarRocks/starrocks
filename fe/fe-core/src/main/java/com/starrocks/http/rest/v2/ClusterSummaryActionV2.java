@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -62,7 +63,9 @@ public class ClusterSummaryActionV2 extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         LocalMetastore infoService = GlobalStateMgr.getCurrentState().getLocalMetastore();
 
         GlobalStateMgr globalState = GlobalStateMgr.getCurrentState();

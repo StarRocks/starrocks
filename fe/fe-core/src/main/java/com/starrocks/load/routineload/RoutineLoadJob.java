@@ -1801,6 +1801,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return sb.toString();
     }
 
+    // Escape a value for embedding in a double-quoted SQL string literal: backslash first, then
+    // double quote. Pairs with the parser's escapeBackSlash() so the emitted DDL parses back to
+    // the original value. escapeJava is unsuitable here: it emits \\uXXXX for non-ASCII chars,
+    // which escapeBackSlash() cannot decode, silently corrupting e.g. CJK jsonpaths.
+    private static String escapeForDoubleQuotedSql(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
     public String jobPropertiesToSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("(\n");
@@ -1829,13 +1837,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(getFormat()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONPATHS).append("\"=\"");
-        sb.append(getJsonPaths()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonPaths())).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY).append("\"=\"");
         sb.append(isStripOuterArray()).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
-        sb.append(getJsonRoot()).append("\",\n");
+        sb.append(escapeForDoubleQuotedSql(getJsonRoot())).append("\",\n");
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");
@@ -1851,7 +1859,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         if (getMergeCondition() != null) {
             sb.append("\"").append(LoadStmt.MERGE_CONDITION).append("\"=\"");
-            sb.append(getMergeCondition()).append("\",\n");
+            sb.append(escapeForDoubleQuotedSql(getMergeCondition())).append("\",\n");
         }
 
         sb.append("\"").append(CreateRoutineLoadStmt.TRIMSPACE).append("\"=\"");

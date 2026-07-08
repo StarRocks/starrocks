@@ -64,7 +64,7 @@ Status HorizontalPkTabletWriter::write(const Chunk& data, SegmentPB* segment, bo
     return Status::OK();
 }
 
-Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
+Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes, uint32_t op_offset) {
     auto name = gen_del_filename(_txn_id);
     WritableFileOptions wopts;
     std::string encryption_meta;
@@ -88,6 +88,8 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
         // Use _dels_mutex to protect _dels concurrenctly append by multiple threads.
         std::lock_guard lg(_dels_mutex);
         _dels.emplace_back(FileInfo{std::move(name), content.size(), encryption_meta});
+        // Keep _del_op_offsets positionally aligned with _dels.
+        _del_op_offsets.emplace_back(op_offset);
     }
     return Status::OK();
 }

@@ -244,7 +244,9 @@ public class StarRocksIcebergTableScan
     }
 
     private boolean useCache() {
-        return dataFileCache != null && (!shouldReturnColumnStats() || dataFileCacheWithMetrics);
+        // A scan that needs full per-column statistics must not reuse the manifest cache, which
+        // may hold selectively-pruned entries; it reads full stats fresh via the non-cache path.
+        return dataFileCache != null && !shouldReturnColumnStats();
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
@@ -365,7 +367,18 @@ public class StarRocksIcebergTableScan
     }
 
     private Set<Integer> getIdentifierFieldIds() {
-        if (dataFileCache == null || deleteFileIndex == null || dataFileCacheWithMetrics) {
+        if (dataFileCache == null || deleteFileIndex == null) {
+            return null;
+        }
+
+        if (dataFileCacheWithMetrics) {
+            // Cache statistics only for the prune-effective keep-set; an empty keep set caches all
+            // columns. Scans that need full column stats never reach here -- useCache() routes them
+            // to the non-cache path.
+            Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
+            if (!keepColumnIds.isEmpty()) {
+                return keepColumnIds;
+            }
             return null;
         }
 
@@ -376,6 +389,16 @@ public class StarRocksIcebergTableScan
         }
 
         return null;
+    }
+
+    // Columns where file-level min/max actually prunes: partition source columns and sort-order
+    // source columns -- unioned across all specs and sort orders so partition/sort evolution stays
+    // covered -- plus identifier columns (equality-delete correctness). Empty result caches all.
+    static Set<Integer> statsKeepColumnIds(Table table, Schema schema) {
+        Set<Integer> ids = new HashSet<>(schema.identifierFieldIds());
+        table.specs().values().forEach(spec -> spec.fields().forEach(field -> ids.add(field.sourceId())));
+        table.sortOrders().values().forEach(order -> order.fields().forEach(field -> ids.add(field.sourceId())));
+        return ids;
     }
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {

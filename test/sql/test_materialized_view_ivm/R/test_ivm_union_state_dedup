@@ -1,0 +1,213 @@
+-- name: test_ivm_union_state_dedup
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+  k int,
+  v int,
+  s varchar(20),
+  s2 varchar(20),
+  d decimal(10, 2),
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into t1 values
+  (1, 100, 'a', 'p', 1.00, '2023-12-01'),
+  (1, 200, 'a', 'q', 2.00, '2023-12-01'),
+  (2, 300, 'b', 'r', 3.00, '2023-12-02');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pure PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     bitmap_union(bitmap_hash(s)) AS b,
+     hll_union(hll_hash(s)) AS h,
+     percentile_union(percentile_hash(d)) AS p
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mixed PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     hll_union(hll_hash(s)) AS h,
+     sum(v) AS ss,
+     bitmap_union(bitmap_hash(s2)) AS b
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_two_bmp PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt,
+     bitmap_union(bitmap_hash(s)) AS b1,
+     bitmap_union(bitmap_hash(s2)) AS b2
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_wrapped PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "incremental")
+AS SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2))) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   GROUP BY k, dt;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b), hll_cardinality(h), round(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k, dt;
+-- result:
+1	2023-12-01	1	1	1.5
+2	2023-12-02	1	1	3.0
+-- !result
+SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k, dt;
+-- result:
+1	2023-12-01	1	300	2
+2	2023-12-02	1	300	1
+-- !result
+SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k, dt;
+-- result:
+1	2023-12-01	1	2
+2	2023-12-02	1	1
+-- !result
+SELECT k, dt, cnt FROM mv_wrapped ORDER BY k, dt;
+-- result:
+1	2023-12-01	2
+2	2023-12-02	1
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b), hll_cardinality(h) FROM mv_pure
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed
+  EXCEPT
+  SELECT k, dt, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, cnt FROM mv_wrapped
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
+  (1, 300, 'c', 's', 4.00, '2023-12-01'),
+  (2, 400, 'b', 'r', 5.00, '2023-12-02');
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_pure WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_mixed WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_two_bmp WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_wrapped WITH SYNC MODE;
+SELECT k, dt, bitmap_count(b), hll_cardinality(h), round(percentile_approx_raw(p, 0.5), 3) FROM mv_pure ORDER BY k, dt;
+-- result:
+1	2023-12-01	2	2	2.0
+2	2023-12-02	1	1	4.0
+-- !result
+SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed ORDER BY k, dt;
+-- result:
+1	2023-12-01	2	600	3
+2	2023-12-02	1	700	1
+-- !result
+SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp ORDER BY k, dt;
+-- result:
+1	2023-12-01	2	3
+2	2023-12-02	1	1
+-- !result
+SELECT k, dt, cnt FROM mv_wrapped ORDER BY k, dt;
+-- result:
+1	2023-12-01	3
+2	2023-12-02	1
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b), hll_cardinality(h) FROM mv_pure
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), hll_cardinality(hll_union(hll_hash(s)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, hll_cardinality(h), ss, bitmap_count(b) FROM mv_mixed
+  EXCEPT
+  SELECT k, dt, hll_cardinality(hll_union(hll_hash(s))), sum(v), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, bitmap_count(b1), bitmap_count(b2) FROM mv_two_bmp
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s))), bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+SELECT count(*) FROM (
+  SELECT k, dt, cnt FROM mv_wrapped
+  EXCEPT
+  SELECT k, dt, bitmap_count(bitmap_union(bitmap_hash(s2)))
+    FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY k, dt) t;
+-- result:
+0
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

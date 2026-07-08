@@ -679,6 +679,51 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    private void fillKeyAndAggregationTypeForModColumn(OlapTable olapTable, Column modColumn) {
+        if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null) {
+                if (baseColumn.isKey()) {
+                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
+                    // we will keep it as a key column which is the same as before.
+                    modColumn.setIsKey(baseColumn.isKey());
+                }
+                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
+            }
+        } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
+            if (null == modColumn.getAggregationType()) {
+                // in aggregate key table, no aggregation method indicate key column
+                modColumn.setIsKey(true);
+            }
+        } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.REPLACE, true);
+            }
+        } else {
+            if (!modColumn.isKey() && null == modColumn.getAggregationType()) {
+                modColumn.setAggregationType(AggregateType.NONE, true);
+            }
+        }
+    }
+
+    // Returns true when the MODIFY COLUMN clause changes nothing but the column comment, so it can take the
+    // lightweight ModifyColumnComment path instead of spawning a schema change job.
+    private boolean isCommentOnlyModification(ModifyColumnClause alterClause, OlapTable olapTable) {
+        // Repositioning the column, targeting a rollup, or carrying column properties is a real change.
+        if (alterClause.getColPos() != null || alterClause.getRollupName() != null
+                || (alterClause.getProperties() != null && !alterClause.getProperties().isEmpty())) {
+            return false;
+        }
+        Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
+        Column oriColumn = olapTable.getBaseColumn(modColumn.getName());
+        if (oriColumn == null) {
+            // Leave the "column does not exist" error to processModifyColumn.
+            return false;
+        }
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
+        return oriColumn.equalsIgnoreComment(modColumn) && !Objects.equals(oriColumn.getComment(), modColumn.getComment());
+    }
+
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                         Map<Long, LinkedList<Column>> indexMetaIdToSchema,
@@ -690,20 +735,14 @@ public class SchemaChangeHandler extends AlterHandler {
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
-            if (baseColumn != null) {
-                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
-                if (baseColumn.isKey()) {
-                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
-                    // we will keep it as a key column which is the same as before.
-                    modColumn.setIsKey(baseColumn.isKey());
-                    if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
-                        throw new DdlException(
-                            "Can not modify key column: " + modColumn.getName() +
-                                " for primary key table except for increasing varchar length");
-                    }
-                    if (modColumn.isAllowNull()) {
-                        throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
-                    }
+            if (baseColumn != null && baseColumn.isKey()) {
+                if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
+                    throw new DdlException(
+                        "Can not modify key column: " + modColumn.getName() +
+                            " for primary key table except for increasing varchar length");
+                }
+                if (modColumn.isAllowNull()) {
+                    throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
                 }
             }
 
@@ -723,26 +762,19 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
             } else if (null == modColumn.getAggregationType()) {
                 Preconditions.checkArgument(modColumn.getType().isScalarType());
-                // in aggregate key table, no aggregation method indicate key column
-                modColumn.setIsKey(true);
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.REPLACE, true);
-            }
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
                         modColumn.getName());
             }
-            if (!modColumn.isKey()) {
-                modColumn.setAggregationType(AggregateType.NONE, true);
-            }
         }
+        fillKeyAndAggregationTypeForModColumn(olapTable, modColumn);
 
         if (!modColumn.isGeneratedColumn() && olapTable.hasGeneratedColumn()) {
             for (Column column : olapTable.getFullSchema()) {
@@ -2210,6 +2242,23 @@ public class SchemaChangeHandler extends AlterHandler {
                                 newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
+
+                // A MODIFY COLUMN that only changes the comment does not need a schema change job; route it to
+                // the lightweight ModifyColumnCommentClause path instead, mirroring the explicit
+                // MODIFY COLUMN COMMENT syntax (including its restriction against batching). This is checked
+                // before processModifyColumn so a comment-only change on a primary key column is not rejected
+                // by the key-column validation there.
+                if (isCommentOnlyModification(modifyColumnClause, olapTable)) {
+                    // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("MODIFY COLUMN COMMENT can not be combined with other alter operations");
+                    }
+                    ColumnDef columnDef = modifyColumnClause.getColumnDef();
+                    ModifyColumnCommentClause commentClause = new ModifyColumnCommentClause(
+                            columnDef.getName(), columnDef.getComment(), modifyColumnClause.getPos());
+                    processModifyColumnComment(commentClause, db, olapTable, indexMetaIdToSchema);
+                    return null;
+                }
 
                 // check relative mvs with the modified column
                 Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumnDef().getName());

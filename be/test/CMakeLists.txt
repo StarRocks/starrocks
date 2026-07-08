@@ -78,12 +78,14 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
+        ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
+        ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
@@ -97,6 +99,7 @@ set(EXEC_FILES
         ./exec/schema_columns_scanner_test.cpp
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_loads_scanner_test.cpp
+        ./exec/schema_materialized_view_refresh_jobs_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/exec_schema_scanners_test.cpp
@@ -284,6 +287,7 @@ set(EXEC_FILES
         ./geo/wkt_parse_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
+        ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -458,6 +462,7 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
@@ -502,6 +507,7 @@ SET(DW_TEST_FILES
     ./storage/binlog_reader_test.cpp
     ./storage/binlog_test_base.cpp
     ./storage/chunk_aggregator_test.cpp
+    ./storage/choose_inverted_index_query_type_test.cpp
     ./storage/chunk_helper_test.cpp
     ./storage/column_aggregator_test.cpp
     ./storage/column_and_predicate_test.cpp

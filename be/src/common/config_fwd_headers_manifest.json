@@ -456,7 +456,8 @@
         "max_download_speed_kbps",
         "download_low_speed_limit_kbps",
         "download_low_speed_time",
-        "enable_token_check"
+        "enable_token_check",
+        "enable_http_auth"
       ]
     },
     {
@@ -582,6 +583,7 @@
         "object_storage_rename_file_request_timeout_ms",
         "object_storage_max_retries",
         "object_storage_retry_scale_factor",
+        "object_storage_client_cache_size",
         "fallback_to_hadoop_fs_list",
         "s3_compatible_fs_list",
         "s3_use_list_objects_v1",
@@ -783,7 +785,8 @@
         "enable_pk_strict_memcheck",
         "apply_version_slow_log_sec",
         "pk_column_lazy_load_threshold_bytes",
-        "column_mode_partial_update_insert_batch_size"
+        "column_mode_partial_update_insert_batch_size",
+        "lake_enable_pk_preserve_txn_delete_order"
       ]
     },
     {

@@ -17,12 +17,14 @@ package com.starrocks.scheduler.mv.ivm;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
@@ -35,6 +37,7 @@ import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -1443,6 +1446,91 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Long snapshotId = pinnedSnapshotIdMap.values().iterator().next();
         Assertions.assertEquals(2L, snapshotId.longValue(),
                 "pinnedSnapshotIdMap value should match the PCT-synced snapshot id");
+    }
+
+    /**
+     * Verify the TVR version range consumed per base table is recorded on the task run's extra
+     * message so it is visible via information_schema.task_runs.EXTRA_MESSAGE.
+     */
+    @Test
+    public void testImvSourceVersionRangeRecordedOnExtraMessage() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        // Synthetic version: no Iceberg snapshot with this id exists on the mock native table,
+        // so commit-time resolution must degrade to an empty per-table map.
+        advanceTableVersionTo(999999L);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(TvrVersion.of(0L), TvrVersion.of(999999L)),
+                        TvrDeltaStats.EMPTY)));
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        Map<String, Map<String, String>> versionRanges = extraMessage.getImvSourceVersionRange();
+        Assertions.assertEquals(Map.of("start", "0", "end", "999999"),
+                versionRanges.get("iceberg0.unpartitioned_db.t0"),
+                "imvSourceVersionRange should record the consumed TVR range, got: " + versionRanges);
+        Assertions.assertTrue(extraMessage.toString().contains("\"imvSourceVersionRange\""),
+                "extra message JSON should contain imvSourceVersionRange: " + extraMessage);
+
+        Map<String, String> timestampRange =
+                extraMessage.getImvSourceTimestampRange().get("iceberg0.unpartitioned_db.t0");
+        Assertions.assertNotNull(timestampRange,
+                "imvSourceTimestampRange should have an entry per staged base table");
+        Assertions.assertTrue(timestampRange.isEmpty(),
+                "unresolvable snapshot ids should degrade to an empty map, got: " + timestampRange);
+    }
+
+    /**
+     * Verify commit times of the consumed snapshot range are recorded as imvSourceTimestampRange
+     * when the source snapshots are resolvable on the native Iceberg table.
+     */
+    @Test
+    public void testImvSourceTimestampRangeRecordedOnExtraMessage() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental", "`date`", null);
+
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        org.apache.iceberg.Table nativeTable = ((IcebergTable) MvUtils.getTableWithIdentifier(
+                mv.getBaseTableInfos().get(0)).get()).getNativeTable();
+        // Two real Iceberg commits so both range endpoints have resolvable commit times.
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 10, "date=2020-01-02");
+        long startSnapshotId = nativeTable.currentSnapshot().snapshotId();
+        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 10, "date=2020-01-03");
+        long endSnapshotId = nativeTable.currentSnapshot().snapshotId();
+
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = mv.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableInfoTvrVersionRangeMap();
+        for (BaseTableInfo info : mv.getBaseTableInfos()) {
+            tvrMap.put(info, TvrTableSnapshot.of(startSnapshotId));
+        }
+        advanceTableVersionTo(endSnapshotId);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(TvrVersion.of(startSnapshotId), TvrVersion.of(endSnapshotId)),
+                        TvrDeltaStats.EMPTY)));
+
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(mv);
+        Assertions.assertInstanceOf(MVIVMRefreshProcessor.class, processor.getMVRefreshProcessor());
+
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        String tableKey = "iceberg0.partitioned_db.t1";
+        Assertions.assertEquals(
+                Map.of("start", String.valueOf(startSnapshotId), "end", String.valueOf(endSnapshotId)),
+                extraMessage.getImvSourceVersionRange().get(tableKey),
+                "got: " + extraMessage.getImvSourceVersionRange());
+        Assertions.assertEquals(
+                Map.of("start", String.valueOf(nativeTable.snapshot(startSnapshotId).timestampMillis()),
+                        "end", String.valueOf(nativeTable.snapshot(endSnapshotId).timestampMillis())),
+                extraMessage.getImvSourceTimestampRange().get(tableKey),
+                "got: " + extraMessage.getImvSourceTimestampRange());
     }
 
     @Test

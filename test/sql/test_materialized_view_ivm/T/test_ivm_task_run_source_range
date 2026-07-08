@@ -1,0 +1,49 @@
+-- name: test_ivm_task_run_source_range
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table t_src (k int, v bigint);
+insert into t_src values (1, 10), (2, 20);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src;
+
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv1';
+
+-- First refresh builds the PCT baseline: no IVM source range is recorded.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND EXTRA_MESSAGE LIKE '%"imvSourceVersionRange":{"mv_iceberg_%';
+
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src values (3, 30);
+
+-- Incremental refresh records the consumed snapshot range: start must equal the
+-- PCT-anchored first snapshot (parent_id IS NULL), end the second (appended) one.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT count(*) FROM test_mv1;
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceVersionRange":{"mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src":{"start":"', (SELECT cast(snapshot_id as varchar) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src$snapshots WHERE parent_id IS NULL), '","end":"', (SELECT cast(snapshot_id as varchar) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src$snapshots WHERE parent_id IS NOT NULL), '"}}%');
+-- Recorded commit times are epoch millis; their second-level prefix must match
+-- the committed_at of the corresponding snapshots.
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL' AND EXTRA_MESSAGE LIKE concat('%"imvSourceTimestampRange":{"mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src":{"start":"', (SELECT cast(unix_timestamp(committed_at) as varchar) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src$snapshots WHERE parent_id IS NULL), '%","end":"', (SELECT cast(unix_timestamp(committed_at) as varchar) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src$snapshots WHERE parent_id IS NOT NULL), '%');
+
+drop materialized view test_mv1;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_src force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

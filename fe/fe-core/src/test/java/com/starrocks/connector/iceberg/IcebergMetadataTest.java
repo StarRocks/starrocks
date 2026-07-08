@@ -244,6 +244,23 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetVersionCommitTimeMillis() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.refresh();
+        Snapshot snapshot = mockedNativeTableA.currentSnapshot();
+        IcebergTable table = new IcebergTable(1, "tableA", CATALOG_NAME, CATALOG_NAME, "iceberg_db",
+                "tableA", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        Assertions.assertEquals(Optional.of(snapshot.timestampMillis()),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId()));
+        Assertions.assertEquals(Optional.empty(),
+                metadata.getVersionCommitTimeMillis("iceberg_db", table, snapshot.snapshotId() + 1));
+    }
+
+    @Test
     public void testGetDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
         String db = "db";
 
@@ -1473,7 +1490,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 icebergTable, colRefToColumnMetaMap, null, null, -1, versionRange);
         Assertions.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
+        Assertions.assertFalse(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
         ColumnStatistic columnStatistic = statistics.getColumnStatistic(columnRefOperator1);
         Assertions.assertEquals(1.0, columnStatistic.getMinValue(), 0.001);
         Assertions.assertEquals(2.0, columnStatistic.getMaxValue(), 0.001);

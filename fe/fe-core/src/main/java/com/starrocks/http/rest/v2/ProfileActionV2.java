@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -43,7 +44,9 @@ public class ProfileActionV2 extends RestBaseAction {
     }
 
     @Override
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String authorization = request.getAuthorizationHeader();
         String queryId = request.getSingleParameter("query_id");
         String isRequestAllStr = request.getSingleParameter("is_request_all_frontend", "false");

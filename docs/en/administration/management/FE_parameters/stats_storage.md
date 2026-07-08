@@ -554,6 +554,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of new tablets that an old tablet can be split into.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_min_split_size`
+
+- Default: 2147483648 (2 GB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. Should be no larger than `tablet_reshard_target_size`.
+- Introduced in: v4.1.0
+
 ### `tablet_reshard_history_job_max_keep_ms`
 
 - Default: 259200000 (72 hours)

@@ -37,6 +37,7 @@ import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
@@ -300,9 +301,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
     }
 
     @Override
-    public void generateNextTaskRunIfNeeded() {
+    public boolean generateNextTaskRunIfNeeded() {
         if (!mvContext.hasNextBatchPartition() || mvContext.getTaskRun().isKilled()) {
-            return;
+            return false;
         }
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -352,6 +353,9 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         int priority = executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
                 executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
         ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        if (mvContext.getStatus() != null) {
+            option.setSubmitUser(mvContext.getStatus().getSubmitUser());
+        }
         logger.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
                         "priority={}, properties={}", mv.getName(), mv.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority, newProperties);
@@ -364,9 +368,11 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     .setExecuteOption(option)
                     .build();
             nextTaskRun = taskRun;
-        } else {
-            taskManager.executeTask(taskName, option);
+            return true;
         }
+        // Report the job as continued only if the successor run was accepted; a rejected submit (e.g. queue
+        // full) means no successor runs, so the current run stays the job's terminal run.
+        return taskManager.executeTask(taskName, option).getStatus() == SubmitResult.SubmitStatus.SUBMITTED;
     }
 
     @VisibleForTesting

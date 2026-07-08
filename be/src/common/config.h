@@ -722,6 +722,11 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
+// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
+// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
+// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+CONF_Bool(enable_http_auth, "false");
+
 // to open/close system metrics
 CONF_Bool(enable_system_metrics, "true");
 
@@ -784,6 +789,10 @@ CONF_mBool(enable_new_load_on_memory_limit_exceeded, "false");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
+// Release retained chunk capacity in compaction when the current tracker consumption exceeds this percentage.
+// Currently only used by PK compaction in shared-nothing mode.
+// Set it to a negative value to disable this behavior.
+CONF_mInt32(compaction_chunk_reset_memory_tracker_threshold_percent, "-1");
 CONF_String(consistency_max_memory_limit, "10G");
 CONF_Int32(consistency_max_memory_limit_percent, "20");
 CONF_Int32(update_memory_limit_percent, "60");
@@ -1169,6 +1178,12 @@ CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
 CONF_Int64(object_storage_max_retries, "10");
 CONF_Int64(object_storage_retry_scale_factor, "25");
 
+// Maximum number of object storage clients (S3 and Azure Blob) cached per client factory.
+// Mutable at runtime: the value is snapshotted on each client creation, so a lowered value
+// takes effect as cached clients are evicted on subsequent creations. Values below 1 are
+// treated as 1.
+CONF_mInt64(object_storage_client_cache_size, "8");
+
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
@@ -1366,6 +1381,15 @@ CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
+// Persist the in-transaction upsert/delete order (op_offset) for shared-data PK del files.
+// DISABLED by default for downgrade safety: when on, a correctly-interleaved load can persist a
+// del file that references a key still live in the same rowset (the re-upsert wins). A pre-fix BE
+// (rollback, or a not-yet-upgraded node / cross-version OpReplication target) treats deletes as
+// "after all segments" and would erase that key on index rebuild while the delvec keeps it live,
+// turning a benign "missing row" into a duplicate primary key. Leaving op_offset unset keeps the
+// whole apply/persist/rebuild chain on the legacy "delete after all segments" path. Enable only
+// after the cluster is fully upgraded and no rollback to a pre-fix BE is expected.
+CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread

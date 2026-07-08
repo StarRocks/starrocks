@@ -334,6 +334,12 @@ public class SchemaScanNode extends ScanNode {
             feInfo.setId(fe.getNodeName());
             feInfo.setIp(fe.getHost());
             feInfo.setHttp_port(Config.http_port);
+            // Thrift (FrontendService) port, used by the BE fe_metrics scanner to fetch
+            // metrics over RPC instead of scraping the HTTP /metrics endpoint. Prefer the
+            // per-FE port reported via heartbeat (Frontend.getRpcPort()); fall back to the
+            // local Config.rpc_port only when it is not yet known (e.g. before the first
+            // heartbeat of the local node).
+            feInfo.setRpc_port(fe.getRpcPort() > 0 ? fe.getRpcPort() : Config.rpc_port);
             frontends.add(feInfo);
         }
     }

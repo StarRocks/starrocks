@@ -40,6 +40,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -547,6 +548,19 @@ public class FunctionAnalyzer {
             }
         }
 
+        // histogram(expr, bucket_num, sample_ratio[, ...]): bucket_num is a constant INT used as a
+        // divisor / bucket-size base in the BE finalize step. A non-positive value divided by zero
+        // (SIGFPE crash) or mis-bucketed every row; reject it here at analysis instead.
+        if (fnName.equals(FunctionSet.HISTOGRAM) && functionCallExpr.hasChild(1)) {
+            Expr bucketNumExpr = functionCallExpr.getChild(1);
+            Optional<Long> bucketNum = extractIntegerValue(bucketNumExpr);
+            if (!bucketNum.isPresent() || bucketNum.get() <= 0) {
+                throw new SemanticException(
+                        "The second parameter (bucket_num) of histogram must be a constant positive integer: " +
+                                ExprToSql.toSql(functionCallExpr), bucketNumExpr.getPos());
+            }
+        }
+
         if (fnName.equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
@@ -691,6 +705,12 @@ public class FunctionAnalyzer {
     private static Optional<Long> extractIntegerValue(Expr expr) {
         if (expr instanceof UserVariableExpr) {
             expr = ((UserVariableExpr) expr).getValue();
+        }
+
+        // Unwrap a cast over a constant integer, e.g. cast(64 as int). Auto-generated statistics
+        // collection SQL wraps the bucket_num literal in such a cast, so fold it to the inner value.
+        if (expr instanceof CastExpr && expr.getType().isFixedPointType()) {
+            return extractIntegerValue(expr.getChild(0));
         }
 
         if (expr instanceof LiteralExpr && expr.getType().isFixedPointType()) {

@@ -264,6 +264,16 @@ AWS Glue 的 `MetastoreParams`：
 必需：否
 描述：要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。
 
+###### aws.glue.resource_share_type
+
+必需：否
+描述：配置发送给 AWS Glue GetDatabases API 的 `ResourceShareType`，用于控制列出数据库时返回哪些数据库。此项不区分大小写。有效值：
+- `ALL`：返回所有本地数据库以及所有共享和联合数据库。
+- `FOREIGN`：返回其他用户与您的账户共享的数据库。
+- `FEDERATED`：返回通过 AWS Lake Formation 连接的外部数据库。
+
+当此项未设置或为空时，配置将返回一个空的可选对象，且该字段在 `GetDatabasesRequest` 中将不被设置——在此情况下，AWS Glue 将回退到其自身的默认设置，仅返回本地数据库。
+
 有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 </TabItem>
@@ -846,7 +856,7 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | false                 | 是否缓存列的统计信息。                  |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
