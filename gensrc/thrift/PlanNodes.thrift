@@ -420,8 +420,8 @@ struct THdfsScanRange {
     // paimon split info
     14: optional string paimon_split_info
 
-    // paimon predicate info
-    15: optional string paimon_predicate_info
+    // predicate info for JNI scanners
+    15: optional string jni_predicate_info
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time

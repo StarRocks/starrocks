@@ -32,6 +32,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 public class FlussColumnValue implements ColumnValue {
@@ -129,6 +130,12 @@ public class FlussColumnValue implements ColumnValue {
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
         InternalRow row = (InternalRow) fieldData;
         List<DataField> fields = ((RowType) dataType).getFields();
+        if (structFieldIndex == null) {
+            structFieldIndex = new ArrayList<>(fields.size());
+            for (int i = 0; i < fields.size(); i++) {
+                structFieldIndex.add(i);
+            }
+        }
         for (int i = 0; i < structFieldIndex.size(); i++) {
             Integer idx = structFieldIndex.get(i);
             FlussColumnValue cv = null;
