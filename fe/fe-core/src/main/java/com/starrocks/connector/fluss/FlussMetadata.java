@@ -84,6 +84,8 @@ public class FlussMetadata implements ConnectorMetadata {
 
     private static final String LAKE_TABLE_SPLITTER = "$lake";
     public static final String RT_TABLE_SPLITTER = "$rt";
+    private static final String PRIMARY_KEY_READ_MODE_ERROR = "Fluss primary-key table does not support $lake or $rt " +
+            "suffix; query the base table for merged primary-key view";
 
     private final Connection connection;
     private final Admin admin;
@@ -203,6 +205,9 @@ public class FlussMetadata implements ConnectorMetadata {
 
         try {
             TableInfo tableInfo = this.admin.getTableInfo(flussIdentifier).get();
+            if (tableInfo.hasPrimaryKey() && hasReadModeSuffix(tblName)) {
+                throw new StarRocksConnectorException(PRIMARY_KEY_READ_MODE_ERROR);
+            }
             List<Schema.Column> flussColumns = tableInfo.getSchema().getColumns();
             ArrayList<Column> fullSchema = new ArrayList<>(flussColumns.size());
             for (Schema.Column flussColumn : flussColumns) {
@@ -215,14 +220,16 @@ public class FlussMetadata implements ConnectorMetadata {
             FlussTable table = new FlussTable(catalogName, dbName, realTblName, fullSchema,
                     connection.getTable(flussIdentifier), catalogConf);
             table.setComment(comment);
-            if (tblName.contains(LAKE_TABLE_SPLITTER)) {
+            if (hasLakeTableSuffix(tblName)) {
                 table.setTableNamePrefix(LAKE_TABLE_SPLITTER);
             }
-            if (tblName.contains(RT_TABLE_SPLITTER)) {
+            if (hasRtTableSuffix(tblName)) {
                 table.setTableNamePrefix(RT_TABLE_SPLITTER);
             }
             this.tables.put(cacheKey, table);
             return table;
+        } catch (StarRocksConnectorException e) {
+            throw e;
         } catch (Exception e) {
             LOG.error("Failed to get Fluss table {}.{}.{}.", catalogName, dbName, tblName, e);
             throw new StarRocksConnectorException(e.getMessage());
@@ -242,13 +249,25 @@ public class FlussMetadata implements ConnectorMetadata {
 
     private String normalizeTableName(String tableName) {
         String realTableName = tableName;
-        if (tableName.contains(LAKE_TABLE_SPLITTER)) {
+        if (hasLakeTableSuffix(tableName)) {
             realTableName = tableName.split("\\" + LAKE_TABLE_SPLITTER)[0];
         }
-        if (tableName.contains(RT_TABLE_SPLITTER)) {
+        if (hasRtTableSuffix(tableName)) {
             realTableName = tableName.split("\\" + RT_TABLE_SPLITTER)[0];
         }
         return realTableName;
+    }
+
+    private boolean hasReadModeSuffix(String tableName) {
+        return hasLakeTableSuffix(tableName) || hasRtTableSuffix(tableName);
+    }
+
+    private boolean hasLakeTableSuffix(String tableName) {
+        return tableName.endsWith(LAKE_TABLE_SPLITTER);
+    }
+
+    private boolean hasRtTableSuffix(String tableName) {
+        return tableName.endsWith(RT_TABLE_SPLITTER);
     }
 
     @Override
