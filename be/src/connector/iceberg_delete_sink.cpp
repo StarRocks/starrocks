@@ -217,8 +217,7 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(int32_t driver_id) {
     auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
@@ -341,7 +340,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     auto sink = std::make_unique<IcebergDeleteSink>(
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
-    sink->set_io_poller(create_context.io_poller);
     return sink;
 }
 
