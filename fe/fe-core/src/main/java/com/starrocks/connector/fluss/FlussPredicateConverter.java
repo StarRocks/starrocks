@@ -254,9 +254,8 @@ public class FlussPredicateConverter extends ScalarOperatorVisitor<Predicate, Vo
                 case DECIMAL64:
                 case DECIMAL128:
                     BigDecimal bigDecimal = operator.getDecimal();
-                    PrimitiveType type = operator.getType().getPrimitiveType();
-                    return Decimal.fromBigDecimal(bigDecimal, PrimitiveType.getMaxPrecisionOfDecimal(type),
-                            PrimitiveType.getDefaultScaleOfDecimal(type));
+                    DecimalType decimalType = (DecimalType) dataType;
+                    return Decimal.fromBigDecimal(bigDecimal, decimalType.getPrecision(), decimalType.getScale());
                 case HLL:
                 case VARCHAR:
                 case CHAR:

@@ -84,7 +84,6 @@ public class FlussMetadata implements ConnectorMetadata {
 
     private static final String LAKE_TABLE_SPLITTER = "$lake";
     public static final String RT_TABLE_SPLITTER = "$rt";
-    private static final int MAX_LOG_PARTITION_NAME_LENGTH = 128;
 
     private final Connection connection;
     private final Admin admin;
@@ -199,13 +198,7 @@ public class FlussMetadata implements ConnectorMetadata {
             return tables.get(cacheKey);
         }
 
-        String realTblName = tblName;
-        if (tblName.contains(LAKE_TABLE_SPLITTER)) {
-            realTblName = tblName.split("\\" + LAKE_TABLE_SPLITTER)[0];
-        }
-        if (tblName.contains(RT_TABLE_SPLITTER)) {
-            realTblName = tblName.split("\\" + RT_TABLE_SPLITTER)[0];
-        }
+        String realTblName = normalizeTableName(tblName);
         TablePath flussIdentifier = TablePath.of(dbName, realTblName);
 
         try {
@@ -239,7 +232,7 @@ public class FlussMetadata implements ConnectorMetadata {
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) {
         try {
-            TablePath identifier = TablePath.of(dbName, tableName);
+            TablePath identifier = TablePath.of(dbName, normalizeTableName(tableName));
             return admin.tableExists(identifier).get();
         } catch (Exception e) {
             LOG.warn("Failed to get Fluss table {}.{}.{}.", catalogName, dbName, tableName, e);
@@ -247,19 +240,33 @@ public class FlussMetadata implements ConnectorMetadata {
         }
     }
 
-    private List<org.apache.fluss.metadata.PartitionInfo> listFlussPartitions(Table table) {
-        FlussTable flussTable = (FlussTable) table;
-        TablePath identifier = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
-        Map<String, org.apache.fluss.metadata.PartitionInfo> partitionInfo =
-                flussPartitionInfos.computeIfAbsent(identifier, ignored -> loadPartitionInfo(
-                        flussTable.getCatalogDBName(), flussTable.getCatalogTableName()));
-        return new ArrayList<>(partitionInfo.values());
+    private String normalizeTableName(String tableName) {
+        String realTableName = tableName;
+        if (tableName.contains(LAKE_TABLE_SPLITTER)) {
+            realTableName = tableName.split("\\" + LAKE_TABLE_SPLITTER)[0];
+        }
+        if (tableName.contains(RT_TABLE_SPLITTER)) {
+            realTableName = tableName.split("\\" + RT_TABLE_SPLITTER)[0];
+        }
+        return realTableName;
     }
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         FlussTable flussTable = (FlussTable) table;
+        List<PartitionKey> selectedPartitionKeys = params.getPartitionKeys();
+        if (!flussTable.isUnPartitioned()) {
+            Objects.requireNonNull(selectedPartitionKeys,
+                    "FlussScanNode should provide selected partition keys for partitioned Fluss tables");
+            if (selectedPartitionKeys.isEmpty()) {
+                FlussSplitsInfo flussSplitsInfo = new FlussSplitsInfo(Lists.newArrayList(), Lists.newArrayList());
+                remoteFileInfo.setFiles(ImmutableList.of(
+                        FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo)));
+                return Lists.newArrayList(remoteFileInfo);
+            }
+        }
+
         TablePath identifier = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
         TableInfo tableInfo = flussTable.getTableInfo();
 
@@ -282,70 +289,41 @@ public class FlussMetadata implements ConnectorMetadata {
             }
         }
 
-        List<PartitionKey> selectedPartitionKeys = params.getPartitionKeys();
-        // Null means the caller did not provide an FE pruning result, so partitioned tables fall back to all
-        // Fluss partitions. An empty list means FE pruning has run and selected zero partitions; return empty splits
-        // without asking Fluss for a lake snapshot.
-        Set<String> selectedQualifiedPartitionNames = null;
-        Set<String> selectedFlussPartitionNames = null;
         Supplier<Set<org.apache.fluss.metadata.PartitionInfo>> listPartitionSupplier;
-        boolean selectedNoPartitions = false;
         if (flussTable.isUnPartitioned()) {
             listPartitionSupplier = LinkedHashSet::new;
-        } else if (selectedPartitionKeys == null) {
-            listPartitionSupplier = () -> new LinkedHashSet<>(listFlussPartitions(table));
-        } else if (selectedPartitionKeys.isEmpty()) {
-            selectedNoPartitions = true;
-            selectedQualifiedPartitionNames = new LinkedHashSet<>();
-            selectedFlussPartitionNames = new LinkedHashSet<>();
-            listPartitionSupplier = LinkedHashSet::new;
         } else {
-            // Fluss ResolvedPartitionSpec#getPartitionQualifiedName uses the same key=value/key2=value2 shape
-            // as Hive partition names for normal partition values; raw value-only partition names are logged below.
-            selectedQualifiedPartitionNames = selectedPartitionKeys.stream()
+            Set<String> selectedQualifiedPartitionNames = selectedPartitionKeys.stream()
                     .filter(Objects::nonNull)
                     .map(partitionKey -> toHivePartitionName(flussTable.getPartitionColumnNames(), partitionKey))
-                    .collect(Collectors.toSet());
-            List<org.apache.fluss.metadata.PartitionInfo> allPartitions = listFlussPartitions(table);
-            Set<String> selectedNames = selectedQualifiedPartitionNames;
-            Set<org.apache.fluss.metadata.PartitionInfo> selectedPartitions = allPartitions.stream()
-                    .filter(p -> selectedNames.contains(
-                            p.getResolvedPartitionSpec().getPartitionQualifiedName()))
                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            selectedFlussPartitionNames = selectedPartitions.stream()
-                    .map(org.apache.fluss.metadata.PartitionInfo::getPartitionName)
-                    .collect(Collectors.toSet());
+            Map<String, org.apache.fluss.metadata.PartitionInfo> allPartitions =
+                    flussPartitionInfos.computeIfAbsent(identifier, ignored -> loadPartitionInfo(
+                            flussTable.getCatalogDBName(), flussTable.getCatalogTableName()));
+            Set<org.apache.fluss.metadata.PartitionInfo> selectedPartitions = allPartitions.values().stream()
+                    .filter(partitionInfo -> selectedQualifiedPartitionNames.contains(
+                            partitionInfo.getResolvedPartitionSpec().getPartitionQualifiedName()))
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
             listPartitionSupplier = () -> selectedPartitions;
         }
-        LOG.debug("Fluss remote file partition params table={}.{}.{}, inputPartitionKeys={}, " +
-                        "selectedQualifiedPartitions={}, selectedFlussPartitions={}, predicate={}, " +
-                        "fieldNames={}, limit={}",
-                catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
-                selectedPartitionKeys, selectedQualifiedPartitionNames, selectedFlussPartitionNames,
-                params.getPredicate(), params.getFieldNames(), params.getLimit());
         List<SourceSplitBase> splits = new ArrayList<>();
-        if (!selectedNoPartitions) {
-            LakeSplitGenerator lakeSplitGenerator = new LakeSplitGenerator(
-                    tableInfo, admin,
-                    lakeSource, bucketOffsetsRetriever,
-                    new LatestOffsetsInitializer(), tableInfo.getNumBuckets(), listPartitionSupplier);
-            try {
-                splits = lakeSplitGenerator.generateHybridLakeFlussSplits();
-            } catch (Exception e) {
-                LOG.error("Failed to get Fluss splits for table {}.{}.{}.",
-                        catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e);
-                throw new StarRocksConnectorException("Failed to get Fluss splits for table %s.%s.%s: %s",
-                        catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e.getMessage());
-            }
-            if (splits == null) {
-                // Fluss returns null when no readable lake snapshot exists. Do not turn that into an empty result:
-                // empty splits are reserved for predicates pruned to zero partitions.
-                throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s",
-                        catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
-            }
-            LOG.debug("Fluss split generation result table={}.{}.{}, splitCount={}, splitPartitions={}",
-                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(),
-                    splits.size(), summarizeSplitPartitions(splits));
+        LakeSplitGenerator lakeSplitGenerator = new LakeSplitGenerator(
+                tableInfo, admin,
+                lakeSource, bucketOffsetsRetriever,
+                new LatestOffsetsInitializer(), tableInfo.getNumBuckets(), listPartitionSupplier);
+        try {
+            splits = lakeSplitGenerator.generateHybridLakeFlussSplits();
+        } catch (Exception e) {
+            LOG.error("Failed to get Fluss splits for table {}.{}.{}.",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e);
+            throw new StarRocksConnectorException("Failed to get Fluss splits for table %s.%s.%s: %s",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName(), e.getMessage());
+        }
+        if (splits == null) {
+            // Fluss returns null when no readable lake snapshot exists. Do not turn that into an empty result:
+            // empty splits are reserved for predicates pruned to zero partitions.
+            throw new StarRocksConnectorException("No readable Fluss lake snapshot exists for table %s.%s.%s",
+                    catalogName, flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
         }
         if (flussTable.getTableNamePrefix().equals(LAKE_TABLE_SPLITTER)) {
             // Flink supports $lake reads on primary-key tables via LakeSnapshotAndFlussLogSplit.
@@ -362,39 +340,6 @@ public class FlussMetadata implements ConnectorMetadata {
                 FlussRemoteFileDesc.createFlussRemoteFileDesc(flussSplitsInfo));
         remoteFileInfo.setFiles(remoteFileDescs);
         return Lists.newArrayList(remoteFileInfo);
-    }
-
-    private Map<String, Long> summarizeSplitPartitions(List<SourceSplitBase> splits) {
-        return splits.stream().collect(Collectors.groupingBy(
-                split -> formatPartitionNameForLog(split.getPartitionName()), Collectors.counting()));
-    }
-
-    private String formatPartitionNameForLog(String partitionName) {
-        if (partitionName == null) {
-            return "null";
-        }
-
-        StringBuilder builder = new StringBuilder();
-        boolean escaped = false;
-        int index = 0;
-        while (index < partitionName.length() && builder.length() < MAX_LOG_PARTITION_NAME_LENGTH) {
-            char ch = partitionName.charAt(index++);
-            if (ch >= 0x20 && ch <= 0x7e) {
-                builder.append(ch);
-            } else {
-                builder.append("\\u");
-                String hex = Integer.toHexString(ch);
-                for (int i = hex.length(); i < 4; i++) {
-                    builder.append('0');
-                }
-                builder.append(hex);
-                escaped = true;
-            }
-        }
-        if (index < partitionName.length()) {
-            builder.append("...");
-        }
-        return escaped ? "escaped:" + builder : builder.toString();
     }
 
     private List<Predicate> convertLakePredicates(FlussTable flussTable, ScalarOperator predicate) {
