@@ -165,11 +165,44 @@ class OrcStripeStatisticsReaderTest {
     }
 
     @Test
-    void charSortKeyFallsBackToDataTier() throws Exception {
-        // A CHAR(N) sort key is padded/truncated to its fixed width by the BE before routing,
-        // so the raw stripe min/max cannot be trusted for a meta-tier split -- reject eagerly.
+    void readsCharTargetStatistics() throws Exception {
+        // A CHAR(N) sort key is meta-tier-eligible: the BE right-pads a CHAR routing key with '\0'
+        // to its fixed width before routing, but '\0'-padding is order-preserving under the BE
+        // unsigned memcmp + shorter-prefix tiebreak and the boundary is stored stripped, so a
+        // NUL-free CHAR boundary separates rows exactly as a VARCHAR one. Same ORC STRING source
+        // and stats as readsStringStatistics, just with a CHAR(16) target column.
         Path orcPath = writeOrc(
                 "struct<tenant:string>",
+                /*rowCount=*/ 8,
+                (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
+                        .setVal(batchRow, String.format("tenant-%02d", rowIndex).getBytes(StandardCharsets.UTF_8)));
+
+        List<RowGroupStatistics> stripeStatistics = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("tenant", TypeFactory.createCharType(16)));
+
+        Assertions.assertFalse(stripeStatistics.isEmpty());
+        String globalMin = null;
+        String globalMax = null;
+        for (RowGroupStatistics stripe : stripeStatistics) {
+            Assertions.assertFalse(stripe.isTruncated());
+            String minValue = stripe.getMinTuple().getValues().get(0).getStringValue();
+            String maxValue = stripe.getMaxTuple().getValues().get(0).getStringValue();
+            Assertions.assertTrue(minValue.compareTo(maxValue) <= 0);
+            globalMin = (globalMin == null || minValue.compareTo(globalMin) < 0) ? minValue : globalMin;
+            globalMax = (globalMax == null || maxValue.compareTo(globalMax) > 0) ? maxValue : globalMax;
+        }
+        Assertions.assertEquals("tenant-00", globalMin);
+        Assertions.assertEquals("tenant-07", globalMax);
+    }
+
+    @Test
+    void orcCharSourceCategoryFallsBackToDataTier() throws Exception {
+        // The ORC CHAR *source category* stays deferred even though the CHAR *target* is now
+        // accepted: ORC space-pads a CHAR column in its own stripe stats, a separate concern. A
+        // VARCHAR target isolates that this rejection is about the ORC source category, not the target.
+        Path orcPath = writeOrc(
+                "struct<tenant:char(16)>",
                 /*rowCount=*/ 4,
                 (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
                         .setVal(batchRow, String.format("tenant-%02d", rowIndex).getBytes(StandardCharsets.UTF_8)));
@@ -177,7 +210,38 @@ class OrcStripeStatisticsReaderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () ->
                 OrcStripeStatisticsReader.read(
                         PresplitTestSupport.statusOf(orcPath), new Configuration(),
-                        new Column("tenant", TypeFactory.createCharType(16))));
+                        new Column("tenant", VarcharType.VARCHAR)));
+    }
+
+    @Test
+    void charSortKeyWithNulCanonicalizedToPrefix() throws Exception {
+        // A CHAR value is defined only up to its first '\0' (the BE strnlen-truncates it), so a CHAR
+        // StringVariant canonicalizes a boundary to the prefix; VARCHAR keeps the raw bytes.
+        // The NUL byte is built numerically (byte[]{...,0,...}) to keep the source ASCII-clean.
+        Path orcPath = writeOrc(
+                "struct<tenant:string>",
+                /*rowCount=*/ 4,
+                (batch, batchRow, rowIndex) -> ((BytesColumnVector) batch.cols[0])
+                        .setVal(batchRow, new byte[] {'a', 0, 'z', '-', (byte) ('0' + rowIndex)}));
+
+        // CHAR target: min/max canonicalized to the prefix before the first NUL ("a"), no NUL kept.
+        List<RowGroupStatistics> charStats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("tenant", TypeFactory.createCharType(16)));
+        Assertions.assertFalse(charStats.isEmpty());
+        for (RowGroupStatistics stripe : charStats) {
+            Assertions.assertEquals("a", stripe.getMinTuple().getValues().get(0).getStringValue());
+            Assertions.assertEquals("a", stripe.getMaxTuple().getValues().get(0).getStringValue());
+        }
+
+        // VARCHAR target: same NUL data keeps the raw bytes (BE does not strnlen a VARCHAR boundary).
+        List<RowGroupStatistics> varcharStats = OrcStripeStatisticsReader.read(
+                PresplitTestSupport.statusOf(orcPath), new Configuration(),
+                new Column("tenant", VarcharType.VARCHAR));
+        Assertions.assertFalse(varcharStats.isEmpty());
+        for (RowGroupStatistics stripe : varcharStats) {
+            Assertions.assertTrue(stripe.getMinTuple().getValues().get(0).getStringValue().indexOf('\0') >= 0);
+        }
     }
 
     @Test
