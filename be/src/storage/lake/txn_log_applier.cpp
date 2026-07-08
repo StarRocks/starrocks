@@ -555,6 +555,18 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
+        // [COMPACT-DIAG] log which input rowsets a PK compaction removes and the output rowset id,
+        // so a later "not found lake rssid=r" on this tablet can be correlated: if r is an input
+        // rowset removed here and the index still points at it, the post-split compaction remap
+        // failed to reconcile it (S2).
+        if (!op_compaction.input_rowsets().empty()) {
+            std::string ins;
+            for (auto rid : op_compaction.input_rowsets()) ins += std::to_string(rid) + ",";
+            LOG(WARNING) << "[COMPACT-DIAG] tablet=" << _tablet.id() << " txn=" << txn_id
+                         << " output_next_rowset_id=" << _metadata->next_rowset_id()
+                         << " input_rowsets=[" << ins << "]";
+        }
+
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             // Apply the compaction operation to the cloud native pk index.
@@ -599,6 +611,15 @@ private:
                                          ",")
                              << "]";
                 continue;
+            }
+
+            // [COMPACT-DIAG] parallel subtask: log removed input rowsets + output id (see single path).
+            {
+                std::string ins;
+                for (auto rid : subtask_op.input_rowsets()) ins += std::to_string(rid) + ",";
+                LOG(WARNING) << "[COMPACT-DIAG] tablet=" << _tablet.id() << " txn=" << txn_id
+                             << " (parallel subtask " << i << ") output_next_rowset_id="
+                             << _metadata->next_rowset_id() << " input_rowsets=[" << ins << "]";
             }
 
             // Reuse publish_primary_compaction for each subtask
