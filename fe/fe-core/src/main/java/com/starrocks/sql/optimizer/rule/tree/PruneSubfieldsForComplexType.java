@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
+import com.starrocks.catalog.ComplexTypeAccessPaths;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -185,36 +186,107 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         @Override
         public Void visitPhysicalTableFunction(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
             PhysicalTableFunctionOperator operator = (PhysicalTableFunctionOperator) optExpression.getOp();
-            for (int i = 0; i < operator.getFnResultColRefs().size(); i++) {
+            List<ColumnRefOperator> paramColRefs = operator.getFnParamColumnRefs();
+            for (int i = 0; i < operator.getFnResultColRefs().size() && i < paramColRefs.size(); i++) {
                 ColumnRefOperator output = operator.getFnResultColRefs().get(i);
+                ColumnRefOperator input = paramColRefs.get(i);
                 if (output.getType().isComplexType() && context.hasUnnestColRefMapKey(output)) {
-                    // The unnest input array element type is narrowed via the access group that
-                    // setUnnest() propagated from this output to the input array. The output element
-                    // type must be narrowed by that SAME access group, otherwise the unnest emits rows
-                    // whose struct width differs from its (narrowed) input element -> StructColumn::append
-                    // field-count mismatch (BE abort under DCHECK, silent under-read in release). The
-                    // unnest output is not a scan ref, so the scanRefs-gated pruneForComplexType() skips
-                    // it; narrow it directly by its access group instead.
-                    pruneUnnestResultType(output, context);
+                    // Only prune the UNNEST output when its input array is a real prune boundary that
+                    // will actually be pruned to matching subfields: a scan column that is not also
+                    // fully materialized elsewhere. For a derived input (e.g. a struct subfield kept
+                    // full via SELECT t.*) or a fully-materialized scan column, the input array keeps
+                    // every subfield, so the output must stay full too. Pruning it would make FE
+                    // declare a narrower struct than BE materializes for that input, producing
+                    // "encode size does not equal when decoding" on shuffle deserialization.
+                    if (!canSafelyPruneUnnestOutput(input, context, optExpression)) {
+                        continue;
+                    }
+                    // Prune the output to the INPUT array column's access group (not the output's own
+                    // group), so the output struct equals exactly the element type the input/scan
+                    // column is pruned to. The input's group is the union of every access to that array
+                    // (multiple UNNESTs of the same array, or the array also read directly), which is
+                    // what BE materializes - the output's own group can be a strict subset of it.
+                    pruneUnnestOutputToInputGroup(output, input, context);
                     operator.getFn().getTableFnReturnTypes().set(i, output.getType());
                 }
             }
             return visit(optExpression, context);
         }
 
-        // Narrow an unnest result column by its visited access group, ignoring the scanRefs gate that
-        // pruneForComplexType() applies (the unnest output is never a scan ref). The access group is the
-        // same one setUnnest() copied to the input array, so input and output element types stay in sync.
-        private static void pruneUnnestResultType(ColumnRefOperator columnRefOperator,
-                                                  PruneComplexTypeUtil.Context context) {
-            ComplexTypeAccessGroup accessGroup = context.getVisitedAccessGroup(columnRefOperator);
-            if (accessGroup == null) {
+        // The UNNEST output may be pruned only when its input array element is itself pruned to a
+        // narrower type. That holds when the input has a non-empty, non-"select all" access group AND
+        // is a real prune boundary:
+        //   - a scan column, or
+        //   - another UNNEST output whose input is (recursively) prunable (stacked UNNEST), or
+        //   - a derived struct-subfield column (unnest(c3.c3_sub1)) whose BASE scan column is
+        //     (recursively) prunable - following the parameter expression back to its source instead
+        //     of blanket-treating every non-scan input as unsafe.
+        // If the input (or a derived input's base column) is fully materialized (empty / "select all"
+        // access path, e.g. via SELECT t.*), the element stays full, so the output must stay full to
+        // match what BE materializes.
+        private static boolean canSafelyPruneUnnestOutput(ColumnRefOperator input,
+                                                          PruneComplexTypeUtil.Context context,
+                                                          OptExpression optExpression) {
+            ComplexTypeAccessGroup inputGroup = context.getVisitedAccessGroup(input);
+            if (inputGroup == null) {
+                return false;
+            }
+            for (ComplexTypeAccessPaths paths : inputGroup.getAccessGroup()) {
+                if (paths.isEmpty()) {
+                    return false;
+                }
+            }
+            if (context.getScanRefs().contains(input)) {
+                return true;
+            }
+            ColumnRefOperator innerInput = context.getUnnestInput(input);
+            if (innerInput != null) {
+                // Stacked UNNEST: the input is itself an UNNEST output, pruned here iff its own input
+                // is safely prunable. Recurse so we only prune when the whole chain ends at a pruned
+                // scan column, and keep the output full otherwise.
+                return canSafelyPruneUnnestOutput(innerInput, context, optExpression);
+            }
+            // Derived input (e.g. unnest(c3.c3_sub1)): a synthesized column from a child Project, not a
+            // scan ref. Follow it to its base column and gate on THAT column, so a base kept full via
+            // SELECT t.* keeps the output full while a base pruned narrow prunes the output in lockstep.
+            ScalarOperator definition = findDefiningExpr(input, optExpression);
+            if (definition != null) {
+                List<ColumnRefOperator> baseColumns = definition.getColumnRefs();
+                if (baseColumns.size() == 1 && !baseColumns.get(0).equals(input)) {
+                    return canSafelyPruneUnnestOutput(baseColumns.get(0), context, optExpression);
+                }
+            }
+            return false;
+        }
+
+        // Find the scalar expression that defines a (derived) column by searching projections in the
+        // table function's input subtree; null if the column is not produced by a projection.
+        private static ScalarOperator findDefiningExpr(ColumnRefOperator col, OptExpression optExpression) {
+            for (OptExpression child : optExpression.getInputs()) {
+                Projection projection = child.getOp().getProjection();
+                if (projection != null && projection.getColumnRefMap().get(col) != null) {
+                    return projection.getColumnRefMap().get(col);
+                }
+                ScalarOperator definition = findDefiningExpr(col, child);
+                if (definition != null) {
+                    return definition;
+                }
+            }
+            return null;
+        }
+
+        private static void pruneUnnestOutputToInputGroup(ColumnRefOperator output, ColumnRefOperator input,
+                                                          PruneComplexTypeUtil.Context context) {
+            ComplexTypeAccessGroup inputGroup = context.getVisitedAccessGroup(input);
+            if (inputGroup == null) {
                 return;
             }
-            Type cloneType = columnRefOperator.getType().clone();
-            PruneComplexTypeUtil.setAccessGroup(cloneType, accessGroup);
+            // The input array's access paths are relative to its element, so applying them to the
+            // output struct selects the same subfields the input/scan column retains.
+            Type cloneType = output.getType().clone();
+            PruneComplexTypeUtil.setAccessGroup(cloneType, inputGroup);
             cloneType.pruneUnusedSubfields();
-            columnRefOperator.setType(cloneType);
+            output.setType(cloneType);
         }
 
         private static void pruneForColumnRefMap(Map<ColumnRefOperator, ScalarOperator> map,
