@@ -41,8 +41,10 @@ Status IcebergRowDeltaSink::init() {
     // Each sub-sink needs its own SinkOperatorMemoryManager because
     // ConnectorChunkSink::init() binds the manager to the sink's _writers list.
     if (_sink_mem_mgr != nullptr) {
-        _delete_sink->set_operator_mem_mgr(_sink_mem_mgr->create_child_manager());
-        _data_sink->set_operator_mem_mgr(_sink_mem_mgr->create_child_manager());
+        _delete_sink->set_operator_mem_mgr(
+                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
+        _data_sink->set_operator_mem_mgr(
+                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
     }
 
     if (_profile != nullptr) {

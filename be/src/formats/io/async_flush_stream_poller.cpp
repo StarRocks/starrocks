@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "async_flush_stream_poller.h"
+#include "formats/io/async_flush_stream_poller.h"
 
-namespace starrocks::connector {
+namespace starrocks::formats {
 
 void AsyncFlushStreamPoller::enqueue(std::shared_ptr<Stream> stream) {
     auto async_status = stream->io_status();
@@ -47,4 +47,4 @@ int64_t AsyncFlushStreamPoller::releasable_memory() {
     return releasable_memory;
 }
 
-} // namespace starrocks::connector
+} // namespace starrocks::formats

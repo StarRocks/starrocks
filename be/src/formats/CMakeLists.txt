@@ -20,6 +20,7 @@ ADD_BE_LIB(FormatCore
         disk_range.hpp
         file_writer.cpp
         io/async_flush_output_stream.cpp
+        io/async_flush_stream_poller.cpp
         io/formatted_output_stream_file.cpp
         reserved_columns.h
         scan_context.cpp

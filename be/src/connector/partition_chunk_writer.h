@@ -37,11 +37,13 @@ class FragmentContext;
 
 } // namespace starrocks
 
+namespace starrocks::formats {
+class AsyncFlushStreamPoller;
+} // namespace starrocks::formats
+
 namespace starrocks::connector {
 
 class ConnectorSinkSpillExecutor;
-
-class AsyncFlushStreamPoller;
 
 struct SortOrdering {
     std::vector<uint32_t> sort_key_idxes;
@@ -97,7 +99,7 @@ public:
 
     std::shared_ptr<formats::AsyncFlushOutputStream> out_stream() { return _out_stream; }
 
-    void set_io_poller(AsyncFlushStreamPoller* io_poller) { _io_poller = io_poller; }
+    void set_io_poller(formats::AsyncFlushStreamPoller* io_poller) { _io_poller = io_poller; }
 
     void set_commit_callback(const CommitFunc& commit_callback) { _commit_callback = commit_callback; }
 
@@ -116,7 +118,7 @@ protected:
     std::shared_ptr<LocationProvider> _location_provider;
     int64_t _max_file_size = 0;
     bool _is_default_partition = false;
-    AsyncFlushStreamPoller* _io_poller = nullptr;
+    formats::AsyncFlushStreamPoller* _io_poller = nullptr;
 
     // The destruction of _file_writer triggers a flush of _out_stream.
     // Therefore, we must ensure _file_writer is destroyed first, followed by _out_stream.
