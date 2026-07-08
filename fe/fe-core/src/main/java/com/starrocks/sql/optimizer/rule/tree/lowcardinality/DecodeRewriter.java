@@ -422,9 +422,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         List<ColumnRefOperator> newPartitionByColumns = null;
 
         if (topN.getPartitionByColumns() != null) {
-            newPartitionByColumns =
-                    topN.getPartitionByColumns().stream().map(c -> context.stringRefToDictRefMap.getOrDefault(c, c))
-                            .collect(Collectors.toList());
+            // only rewrite to the dict ref when the column still arrives at this TopN in dict
+            // form; a column decoded below (e.g. under a join) must keep its string ref
+            newPartitionByColumns = topN.getPartitionByColumns().stream()
+                    .map(c -> info.inputStringColumns.contains(c.getId())
+                            ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+                    .collect(Collectors.toList());
         }
 
         Map<ColumnRefOperator, CallOperator> preAggCall = null;
