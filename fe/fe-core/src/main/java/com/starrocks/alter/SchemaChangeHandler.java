@@ -310,8 +310,9 @@ public class SchemaChangeHandler extends AlterHandler {
             column.setUniqueId(colUniqueIdSupplier.getAsInt());
         }
 
+        boolean isRoutedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, alterClause);
         return addColumnInternal(olapTable, column, columnPos, targetIndexMetaId, baseIndexMetaId, indexMetaIdToSchema,
-                newColNameSet);
+                newColNameSet, isRoutedRangeRewrite);
 
     }
 
@@ -351,17 +352,18 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        boolean isRoutedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, alterClause);
         boolean ligthSchemaChange = olapTable.getUseFastSchemaEvolution();
         if (alterClause.getGeneratedColumnPos() == null) {
             for (Column column : columns) {
                 ligthSchemaChange &= addColumnInternal(olapTable, column, null, targetIndexMetaId, baseIndexMetaId,
-                        indexMetaIdToSchema, newColNameSet);
+                        indexMetaIdToSchema, newColNameSet, isRoutedRangeRewrite);
             }
         } else {
             for (int i = columns.size() - 1; i >= 0; --i) {
                 Column column = columns.get(i);
                 addColumnInternal(olapTable, column, alterClause.getGeneratedColumnPos(),
-                        targetIndexMetaId, baseIndexMetaId, indexMetaIdToSchema, newColNameSet);
+                        targetIndexMetaId, baseIndexMetaId, indexMetaIdToSchema, newColNameSet, isRoutedRangeRewrite);
                 // add a generated column need to rewrite data, can not use light schema change
                 ligthSchemaChange = false;
             }
@@ -397,8 +399,14 @@ public class SchemaChangeHandler extends AlterHandler {
          *      Can not drop any key column is has value with REPLACE method
          */
         long baseIndexMetaId = olapTable.getBaseIndexMetaId();
-        rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
-                "DROP COLUMN", dropColName);
+        // A routed range-rewrite re-sorts/re-routes all data into a freshly sampled K-tablet shadow
+        // index, so the stored boundary values do not need to stay valid -- skip the sort-key touch
+        // reject for it (mirrors the MODIFY COLUMN keyness-flip guard above).
+        boolean isRoutedRangeRewrite = needsRangeRewriteSchemaChange(olapTable, alterClause);
+        if (!isRoutedRangeRewrite) {
+            rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
+                    "DROP COLUMN", dropColName);
+        }
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
@@ -1308,13 +1316,17 @@ public class SchemaChangeHandler extends AlterHandler {
      * @param baseIndexMetaId
      * @param indexMetaIdToSchema Modified schema will be saved in 'indexSchemaMap'
      * @param newColNameSet
+     * @param isRoutedRangeRewrite whether {@link #needsRangeRewriteSchemaChange} has already decided to
+     *                             route this add to the range-rewrite job; when true, the range-specific
+     *                             key-add reject below is skipped (mirrors the DROP/MODIFY keyness-flip
+     *                             routing gates elsewhere in this class)
      * @return true: can light schema change, false: cannot
      * @throws DdlException
      */
     private boolean addColumnInternal(OlapTable olapTable, Column newColumn, ColumnPosition columnPos,
                                       long targetIndexMetaId, long baseIndexMetaId,
                                       Map<Long, LinkedList<Column>> indexMetaIdToSchema,
-                                      Set<String> newColNameSet) throws DdlException {
+                                      Set<String> newColNameSet, boolean isRoutedRangeRewrite) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
         if (defaultValueType != Column.DefaultValueType.CONST && defaultValueType != Column.DefaultValueType.NULL) {
@@ -1409,8 +1421,11 @@ public class SchemaChangeHandler extends AlterHandler {
         // Range-distribution guard runs AFTER the keys-type block above,
         // which may promote a no-aggregate column to KEY on AGG tables
         // (line ~1276). Checking newColumn.isKey() here sees the final
-        // post-promotion value.
-        rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(newColumn));
+        // post-promotion value. Skipped when needsRangeRewriteSchemaChange has already decided to
+        // route this add to the range-rewrite job instead of rejecting it.
+        if (!isRoutedRangeRewrite) {
+            rejectAddingKeyColumnOnRangeDistribution(olapTable, ImmutableList.of(newColumn));
+        }
 
         // hll must be used in agg_keys
         if (newColumn.getType().isHllType() && KeysType.AGG_KEYS != olapTable.getKeysType()) {
@@ -2221,6 +2236,66 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
+     * Build a {@link LakeRangeRewriteSchemaChangeJob} for an ADD COLUMN of a range key column that
+     * joins a key-derived range sort key (see {@link #needsRangeRewriteSchemaChange}) on a shared-data
+     * range table. The shadow schema is the post-add base schema with every newly-added column (a name
+     * not present in the live pre-add base index schema) renamed with {@link #SHADOW_NAME_PREFIX}, so
+     * the added column stays out of the user namespace until flip (mirrors HASH ADD COLUMN;
+     * {@code renameColumnNamePrefix} restores the real name at flip). {@code sortKeyIdxes} is left null
+     * so the new sort key is derived from the shadow schema's key columns, which includes the prefixed
+     * added key.
+     */
+    private AlterJobV2 buildRoutedAddKeyColumnJob(Database db, OlapTable olapTable,
+                                                  Map<Long, LinkedList<Column>> indexMetaIdToSchema,
+                                                  List<AlterClause> alterClauses) throws StarRocksException {
+        long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+        List<Column> postAddSchema = indexMetaIdToSchema.get(baseIndexMetaId);
+        if (!rangeRewriteKeySchemaIsValid(postAddSchema)) {
+            // e.g. a key column added after a value column breaks the key prefix -- reject precisely,
+            // do NOT fall through to the normal job.
+            throw new DdlException("ADD COLUMN produced an invalid key schema (keys must be a contiguous "
+                    + "prefix) on range-distribution table " + olapTable.getName());
+        }
+        if (alterClauses.size() > 1) {
+            throw new DdlException("ADD COLUMN that changes the range sort key on a range-distribution table "
+                    + "can not be combined with other alter operations");
+        }
+        // Detect the newly-added column(s): names not in the LIVE (pre-add) base index schema. Prefix
+        // them in the shadow schema; keep every other column's real name.
+        Set<String> baseNames = olapTable.getSchemaByIndexMetaId(baseIndexMetaId).stream()
+                .map(Column::getName).collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+        List<Column> shadowSchema = new ArrayList<>(postAddSchema.size());
+        for (Column column : postAddSchema) {
+            Column copy = column.deepCopy();
+            if (!baseNames.contains(column.getName())) {
+                // A routed added key column's default must be materializable by fillShadowColumns
+                // (CONST/NULL scalar). Key columns are scalar (complex ARRAY/MAP/STRUCT are forbidden as
+                // keys), so this holds, but guard explicitly rather than rely on it. Scope the guard to the
+                // KEY column: a multi-column ADD may also bundle a non-key value column with a complex
+                // (ARRAY/MAP/STRUCT) constant default. That value column is shadow-prefixed and materialized
+                // by fillShadowColumns -> materializeShadowColumnDefault, which renders the constant default
+                // as a VARCHAR constant (via calculatedDefaultValue(), falling back to getDefaultValue()'s
+                // toSql() for a complex literal) and casts it to the column type -- so it needs no key-only
+                // reject.
+                if (copy.isKey() && copy.getDefaultExpr() != null && copy.getDefaultExpr().hasExprObject()) {
+                    throw new DdlException("ADD COLUMN of a range key column requires a scalar constant "
+                            + "default; complex/expression defaults are not supported. Column: " + column.getName());
+                }
+                copy.setName(SHADOW_NAME_PREFIX + column.getName()); // hide the in-flight added column until flip
+            }
+            shadowSchema.add(copy);
+        }
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(shadowSchema, null);
+        // No MV inactivation: an added base column breaks no dependent MV. No checkPartitionColumnChange:
+        // ADD removes no column, so every partition column is still present (that check only rejects
+        // drops). Call buildRangeRewriteJob DIRECTLY, NOT createRangeRewriteJob(List<Column>) -- the
+        // latter strips the SHADOW_NAME_PREFIX, which would un-hide the added column and defeat the
+        // prefixing above.
+        return buildRangeRewriteJob(db, olapTable, baseIndexMetaId, shadowSchema,
+                olapTable.getKeysType(), null, null, shortKeyColumnCount);
+    }
+
+    /**
      * Construct and populate a {@link LakeRangeRewriteSchemaChangeJob} with the new-schema information
      * it consumes before {@code runPendingJob}: the new full schema, the new sort key
      * ({@code sortKeyIdxes}/{@code sortKeyUniqueIds} and the projected sort-key {@link Column}s used to
@@ -2507,10 +2582,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add column
                 fastSchemaEvolution &=
                         processAddColumn((AddColumnClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+                if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                }
             } else if (alterClause instanceof AddColumnsClause) {
                 // add columns
                 fastSchemaEvolution &=
                         processAddColumns((AddColumnsClause) alterClause, olapTable, indexMetaIdToSchema, colUniqueIdSupplier);
+                if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                    return buildRoutedAddKeyColumnJob(db, olapTable, indexMetaIdToSchema, alterClauses);
+                }
             } else if (alterClause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
@@ -2521,6 +2602,105 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution &=
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
+
+                List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+                if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
+                    // The routed early-return bypasses finalAnalyze, and the range-specific reject was
+                    // already relaxed above, so the finalAnalyze validations that still apply must be
+                    // re-run HERE and an invalid post-drop schema rejected with a precise error --
+                    // never fall through to the normal (non-rewrite) job, which for a range sort-key
+                    // change would produce invalid tablet boundaries.
+                    // (a) Partition column cannot be dropped -- finalAnalyze's checkPartitionColumnChange
+                    //     is bypassed by the early return. checkDistributionColumnChange is a no-op for
+                    //     range (RangeDistributionInfo.getDistributionColumns() == emptyList), so it is
+                    //     intentionally not re-run: dropping a range sort-key column IS the routed
+                    //     operation.
+                    checkPartitionColumnChange(olapTable, postDropBaseSchema, olapTable.getBaseIndexMetaId(), null);
+                    // (b) key-set invariants (>=1 key, keys form a prefix).
+                    if (!rangeRewriteKeySchemaIsValid(postDropBaseSchema)) {
+                        throw new DdlException("DROP COLUMN " + dropColumnClause.getColName()
+                                + " would leave no key column on range-distribution table " + olapTable.getName());
+                    }
+                    // (c) processDropColumn() above already removed any secondary index (BITMAP/GIN/NGRAM)
+                    //     on the dropped column from newIndexes -- a copy -- not from OlapTable.indexes
+                    //     itself. The routed early return never commits newIndexes back onto the table
+                    //     (that happens in finalAnalyze, which this path bypasses), so silently continuing
+                    //     would leave OlapTable.indexes referencing a now-missing column. Reject instead.
+                    Column droppedColumnForIndexCheck = olapTable.getColumn(dropColumnClause.getColName());
+                    if (droppedColumnForIndexCheck != null && olapTable.getIndexes().stream()
+                            .anyMatch(index -> index.getColumns().stream()
+                                    .anyMatch(c -> c.equalsIgnoreCase(droppedColumnForIndexCheck.getColumnId())))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a secondary index "
+                                + "(BITMAP/GIN/NGRAM) is not supported on range-distribution tables; drop the index "
+                                + "first with DROP INDEX. Column: " + dropColumnClause.getColName());
+                    }
+                    // (c') A plain bloom filter is tracked on OlapTable.bfColumns, NOT in getIndexes(), so
+                    //     the secondary-index check above misses it. The routed early return never re-writes
+                    //     the bloom-filter set, so dropping a bloom-filter column would leave a dangling
+                    //     ColumnId after the flip. Reject; the user must remove it from bloom_filter_columns
+                    //     first.
+                    Set<String> bfColumnNames = olapTable.getBfColumnNames();
+                    if (bfColumnNames != null && bfColumnNames.stream()
+                            .anyMatch(n -> n.equalsIgnoreCase(dropColumnClause.getColName()))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a bloom filter is "
+                                + "not supported on range-distribution tables; remove it from "
+                                + "bloom_filter_columns first. Column: " + dropColumnClause.getColName());
+                    }
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("DROP COLUMN that changes the range sort key on a "
+                                + "range-distribution table can not be combined with other alter operations");
+                    }
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    // Compute the EXPLICIT post-drop range sort key = current range sort key minus the
+                    // dropped column, remapped to post-drop positions, and build the job directly. Do NOT
+                    // use createRangeRewriteJob(List<Column>) (it forces sortKeyIdxes=null ->
+                    // resolveSortKeyColumns derives from isKey()): a DUP table whose explicit ORDER BY is a
+                    // superset of KEY() (e.g. KEY(k1) ORDER BY(k1,k2,k3)) would silently lose its non-key
+                    // sort-key columns.
+                    List<String> oldSortKeyNames =
+                            MetaUtils.getRangeDistributionColumns(olapTable, olapTable.getBaseIndexMetaId())
+                                    .stream().map(Column::getName).collect(Collectors.toList());
+                    List<Integer> dropSortKeyIdxes = new ArrayList<>();
+                    List<Integer> dropSortKeyUniqueIds = new ArrayList<>();
+                    boolean useSortKeyUniqueId = true;
+                    for (String skName : oldSortKeyNames) {
+                        if (skName.equalsIgnoreCase(dropColumnClause.getColName())) {
+                            continue;
+                        }
+                        for (int i = 0; i < postDropBaseSchema.size(); i++) {
+                            if (postDropBaseSchema.get(i).getName().equalsIgnoreCase(skName)) {
+                                dropSortKeyIdxes.add(i);
+                                // Mirror processModifySortKeyColumn: only carry sort-key unique ids when
+                                // every surviving sort-key column has one. A table whose columns predate
+                                // unique-id assignment (uniqueId == COLUMN_UNIQUE_ID_INIT_VALUE) must fall
+                                // back to positional idxes; otherwise the flipped index stores a bogus
+                                // sentinel [-1, ...] that a later alter would mis-resolve by uniqueId.
+                                if (useSortKeyUniqueId
+                                        && postDropBaseSchema.get(i).getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                                    dropSortKeyUniqueIds.add(postDropBaseSchema.get(i).getUniqueId());
+                                } else {
+                                    useSortKeyUniqueId = false;
+                                    dropSortKeyUniqueIds.clear();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (dropSortKeyIdxes.isEmpty()) {
+                        // The dropped column was the entire explicit sort key (e.g. KEY(k1, k2)
+                        // ORDER BY(k1)); fall back to the key-derived sort key (the remaining key
+                        // columns), as a range table with no explicit ORDER BY resolves. Guaranteed
+                        // non-empty by the rangeRewriteKeySchemaIsValid check above (>=1 key remains).
+                        short fallbackShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null);
+                        return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                                olapTable.getKeysType(), null, null, fallbackShortKeyCount);
+                    }
+                    short dropShortKeyCount =
+                            GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null, dropSortKeyIdxes);
+                    return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                            olapTable.getKeysType(), dropSortKeyIdxes, dropSortKeyUniqueIds, dropShortKeyCount);
+                }
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
@@ -4438,13 +4618,15 @@ public class SchemaChangeHandler extends AlterHandler {
      *       by {@code InsertAnalyzer} on a non-system MV target;</li>
      *   <li>the table uses range distribution;</li>
      *   <li>the clause is either a sort-key reorder ({@code ALTER TABLE ... ORDER BY (...)}, which
-     *       always shifts the range sort key) or a {@link ModifyColumnClause} that flips a column's
-     *       keyness AND that flip shifts the range sort key.</li>
+     *       always shifts the range sort key), a {@link ModifyColumnClause} that flips a column's
+     *       keyness AND that flip shifts the range sort key, a {@link DropColumnClause} whose
+     *       column is in the range sort key, or an {@link AddColumnClause}/{@link AddColumnsClause}
+     *       that adds a key column joining a key-derived range sort key.</li>
      * </ul>
      *
-     * <p>Column-set-changing operations (add/drop key) remain out of scope and are rejected
-     * elsewhere; this predicate only decides between routing and the existing keyness-flip /
-     * sort-key-reorder rejections.
+     * <p>A drop or add that shifts the range sort key is now routed here; keysType filtering
+     * (PK/UNIQUE/AGG-REPLACE key drops, PK key adds) is left to the existing universal guards, which
+     * run regardless of routing.
      */
     public static boolean needsRangeRewriteSchemaChange(OlapTable table, AlterClause clause) {
         if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
@@ -4479,7 +4661,42 @@ public class SchemaChangeHandler extends AlterHandler {
         if (clause instanceof ModifyColumnClause) {
             return modifyColumnShiftsRangeSortKey(table, (ModifyColumnClause) clause);
         }
+        if (clause instanceof DropColumnClause) {
+            String dropCol = ((DropColumnClause) clause).getColName();
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            return MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+                    .anyMatch(c -> c.getName().equalsIgnoreCase(dropCol));
+        }
+        if (clause instanceof AddColumnClause) {
+            return addTouchesKeyDerivedRangeSortKey(table, ((AddColumnClause) clause).getColumnDef());
+        }
+        if (clause instanceof AddColumnsClause) {
+            return ((AddColumnsClause) clause).getColumnDefs().stream()
+                    .anyMatch(columnDef -> addTouchesKeyDerivedRangeSortKey(table, columnDef));
+        }
         return false;
+    }
+
+    /**
+     * Whether adding {@code columnDef} would join a key-derived range sort key: the added column
+     * resolves to a KEY column (explicit {@code KEY}, or on AGG a no-aggregate column auto-promoted to
+     * key -- mirrors {@link #resolveModifyColumnKeyness}), AND the base index's range sort key is
+     * key-derived, i.e. {@link MetaUtils#getRangeDistributionColumns} equals the base key-column set.
+     * This excludes a DUP table with a divergent explicit {@code ORDER BY}: the added key column does
+     * not touch that sort key, so the add stays on its current (rejected) path.
+     */
+    private static boolean addTouchesKeyDerivedRangeSortKey(OlapTable table, ColumnDef columnDef) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        boolean addedIsKey = columnDef.isKey()
+                || (table.getKeysType() == KeysType.AGG_KEYS && columnDef.getAggregateType() == null);
+        if (!addedIsKey) {
+            return false;
+        }
+        List<String> sortKeyNames = MetaUtils.getRangeDistributionColumns(table, baseIndexMetaId).stream()
+                .map(Column::getName).collect(Collectors.toList());
+        List<String> keyColumnNames = table.getSchemaByIndexMetaId(baseIndexMetaId).stream()
+                .filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
+        return sortKeyNames.equals(keyColumnNames);
     }
 
     /**

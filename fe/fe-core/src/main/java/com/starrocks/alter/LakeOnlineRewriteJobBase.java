@@ -55,8 +55,10 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -128,6 +130,11 @@ public abstract class LakeOnlineRewriteJobBase
         Long rewriteTxnId;
         @SerializedName(value = "commitVersion")
         Long commitVersion;
+        // True when the rewrite INSERT wrote no source op_write because the partition was empty at the
+        // watershed (zero tablet commit infos). Drives the flip's shadow_rewrite_source_empty so BE
+        // synthesizes an empty op_schema_change@W for ANY W (null = not yet determined).
+        @SerializedName(value = "sourceEmpty")
+        Boolean sourceEmpty;
 
         PartitionRewriteState() {}
 
@@ -138,6 +145,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.watershedVersion = other.watershedVersion;
             this.rewriteTxnId = other.rewriteTxnId;
             this.commitVersion = other.commitVersion;
+            this.sourceEmpty = other.sourceEmpty;
         }
     }
 
@@ -200,6 +208,12 @@ public abstract class LakeOnlineRewriteJobBase
     public Long getWatershedVersion(long physicalPartitionId) {
         PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
         return partitionState == null ? null : partitionState.watershedVersion;
+    }
+
+    @VisibleForTesting
+    public Boolean getSourceEmpty(long physicalPartitionId) {
+        PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
+        return partitionState == null ? null : partitionState.sourceEmpty;
     }
 
     @VisibleForTesting
@@ -758,7 +772,34 @@ public abstract class LakeOnlineRewriteJobBase
             }
         }
 
-        // All partitions' rewrites have published: hand off to the flip phase.
+        // All partitions' rewrites have published (every partition's rewrite txn is VISIBLE here).
+        // Record whether each rewrite produced a source op_write: a partition empty at the watershed
+        // rewrites zero rows, so there is no source op_write on object storage. The flip passes this to BE
+        // (shadow_rewrite_source_empty) so it synthesizes an empty op_schema_change@W instead of 404ing on
+        // the absent source -- this is the empty-at-W>1 case (a repeat online rewrite of an empty range
+        // partition; W==1 empty is already handled by BE). Read from the rewrite txn's (persisted)
+        // InsertTxnCommitAttachment, the same attachment classifyRewrite already relies on, so a leader
+        // failover that re-runs this recovers it; and journaled by the persist below.
+        for (long physicalPartitionId : partitionStates.keySet()) {
+            PartitionRewriteState state = partitionStates.get(physicalPartitionId);
+            if (state.sourceEmpty == null && state.rewriteTxnId != null) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, state.rewriteTxnId);
+                if (txnState != null) {
+                    state.sourceEmpty = rewriteSourceEmpty(txnState);
+                } else {
+                    // The rewrite txn just went VISIBLE (classifyRewrite returned DONE this tick), so it is
+                    // normally still present; a replay that finds it evicted re-runs the rewrite instead of
+                    // reaching here. If it is nonetheless unavailable, leave sourceEmpty unset (treated as
+                    // false at the flip -> BE loads the source). That is safe for a non-empty partition; an
+                    // empty-at-W>1 partition would fall back to the pre-fix flip-publish retry until
+                    // recovered. Log it so the rare degradation is diagnosable rather than silent.
+                    LOG.warn("online rewrite job {}: rewrite txn {} state unavailable while recording "
+                            + "sourceEmpty for partition {}; leaving it unset", jobId, state.rewriteTxnId,
+                            physicalPartitionId);
+                }
+            }
+        }
         this.finishedTimeMs = System.currentTimeMillis();
         persistStateChange(this, JobState.FINISHED_REWRITING);
 
@@ -821,6 +862,27 @@ public abstract class LakeOnlineRewriteJobBase
         }
         // PREPARE / PREPARED / COMMITTED: in flight, wait.
         return RewriteStatus.IN_FLIGHT;
+    }
+
+    /**
+     * Whether a rewrite txn loaded zero rows, i.e. the partition was empty at the watershed. Read from the
+     * rewrite INSERT's {@link InsertTxnCommitAttachment} (loadedRows), which is persisted on the
+     * TransactionState and carries the same shadow-rewrite markers {@link #classifyRewrite} already reads,
+     * so it survives a leader failover. Drives {@code shadow_rewrite_source_empty} so BE synthesizes an
+     * empty {@code op_schema_change@W} for any W rather than 404ing on the absent source op_write.
+     */
+    private static boolean rewriteSourceEmpty(TransactionState txnState) {
+        // The partition was empty at the watershed iff the rewrite INSERT wrote zero rows. Read loadedRows
+        // from the rewrite txn's InsertTxnCommitAttachment: it is persisted (so it survives a leader
+        // failover) and is the only emptiness signal still available here. This runs only after the rewrite
+        // txn is VISIBLE (classifyRewrite -> DONE), and the VISIBLE finish resets
+        // TransactionState.tabletCommitInfos to null (a memory optimization, on the leader too), so the
+        // commit-info list cannot be consulted at this point. loadedRows == 0 is authoritative: a lake load
+        // that wrote rows reports them via the DPP_NORMAL_ALL counter (the same counter behind "N rows
+        // affected"), so 0 uniquely means an empty rewrite.
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        return (attachment instanceof InsertTxnCommitAttachment)
+                && ((InsertTxnCommitAttachment) attachment).getLoadedRows() == 0;
     }
 
     /**
@@ -1113,7 +1175,7 @@ public abstract class LakeOnlineRewriteJobBase
                 Preconditions.checkState(watershedVersion != null,
                         "watershed version not captured for partition " + physicalPartitionId);
                 publishInfos.add(new PartitionPublishInfo(shadowTablets, originTablets,
-                        commitVersion, rewriteTxnId, watershedVersion));
+                        commitVersion, rewriteTxnId, watershedVersion, Boolean.TRUE.equals(state.sourceEmpty)));
             }
         } catch (AlterCancelException e) {
             LOG.warn("online rewrite job {}: table dropped before publish", jobId);
@@ -1142,6 +1204,8 @@ public abstract class LakeOnlineRewriteJobBase
                 shadowTxnInfo.commitTime = finishedTimeMs / 1000;
                 shadowTxnInfo.gtid = watershedGtid;
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
+                // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
+                shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
                 if (!isFileBundling) {
                     Utils.publishVersion(info.shadowTablets, shadowTxnInfo, 1, info.commitVersion,
                             computeResource, false);
@@ -1172,14 +1236,16 @@ public abstract class LakeOnlineRewriteJobBase
         final long commitVersion;
         final long rewriteTxnId;
         final long watershedVersion;
+        final boolean sourceEmpty;
 
         PartitionPublishInfo(List<Tablet> shadowTablets, List<Tablet> originTablets,
-                             long commitVersion, long rewriteTxnId, long watershedVersion) {
+                             long commitVersion, long rewriteTxnId, long watershedVersion, boolean sourceEmpty) {
             this.shadowTablets = shadowTablets;
             this.originTablets = originTablets;
             this.commitVersion = commitVersion;
             this.rewriteTxnId = rewriteTxnId;
             this.watershedVersion = watershedVersion;
+            this.sourceEmpty = sourceEmpty;
         }
     }
 
