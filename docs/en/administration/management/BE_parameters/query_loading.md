@@ -358,6 +358,15 @@ This topic introduces the following types of BE configurations:
 - Description: The minimum number of file descriptors in the BE process.
 - Introduced in: -
 
+### object_storage_client_cache_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of object storage clients (S3-compatible and Azure Blob) cached per client factory. The value is read on each client creation, so lowering it takes effect gradually as cached clients are evicted during subsequent creations. Values below `1` are treated as `1`.
+- Introduced in: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - Default: -1
