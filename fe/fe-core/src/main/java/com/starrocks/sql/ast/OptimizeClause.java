@@ -132,16 +132,21 @@ public class OptimizeClause extends AlterTableClause {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("OPTIMIZE");
 
-        // PARTITION p1, p2
+        // PARTITIONS (p1, p2)
         if (partitionNames != null && !partitionNames.getPartitionNames().isEmpty()) {
-            sb.append(" ").append(partitionNames.toString());
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionNames.toString());
         }
 
         // DUPLICATE KEY(`col1`, `col2`) etc.
         if (keysDesc != null) {
-            sb.append(" ").append(keysDesc.getKeysType().toSql());
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(keysDesc.getKeysType().toSql());
             List<String> keyColumns = keysDesc.getKeysColumnNames();
             if (keyColumns != null && !keyColumns.isEmpty()) {
                 sb.append("(");
@@ -157,23 +162,32 @@ public class OptimizeClause extends AlterTableClause {
 
         // PARTITION BY RANGE(...)
         if (partitionDesc != null) {
-            sb.append(" ").append(partitionDesc.toString());
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(partitionDesc);
         }
 
-        // ORDER BY `col1`, `col2`
+        // ORDER BY (`col1`, `col2`)
         if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(" ORDER BY ");
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("ORDER BY (");
             for (int i = 0; i < sortKeys.size(); i++) {
                 if (i != 0) {
                     sb.append(", ");
                 }
                 sb.append(SqlUtils.getIdentSql(sortKeys.get(i)));
             }
+            sb.append(")");
         }
 
         // DISTRIBUTED BY HASH(`col1`) BUCKETS 10
         if (distributionDesc != null) {
-            sb.append(" ");
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
             if (distributionDesc instanceof HashDistributionDesc) {
                 HashDistributionDesc hashDesc = (HashDistributionDesc) distributionDesc;
                 sb.append("DISTRIBUTED BY HASH(");
@@ -201,7 +215,17 @@ public class OptimizeClause extends AlterTableClause {
 
         // BETWEEN start AND end
         if (range != null) {
-            sb.append(range);
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append("BETWEEN ");
+            if (range.getStart() != null) {
+                sb.append(range.getStart().getStringValue()).append(" ");
+            }
+            sb.append("AND");
+            if (range.getEnd() != null) {
+                sb.append(" ").append(range.getEnd().getStringValue());
+            }
         }
 
         return sb.toString();

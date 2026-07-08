@@ -27,8 +27,8 @@ public class OptimizeClauseTest {
     @Test
     public void testToSqlBasic() {
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, null);
-        Assertions.assertEquals("OPTIMIZE", clause.toSql());
-        Assertions.assertEquals("OPTIMIZE", clause.toString());
+        Assertions.assertEquals("", clause.toSql());
+        Assertions.assertEquals("", clause.toString());
     }
 
     @Test
@@ -36,7 +36,7 @@ public class OptimizeClauseTest {
         PartitionRef partitionRef = new PartitionRef(
                 Lists.newArrayList("p1", "p2"), false, NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionRef, null);
-        Assertions.assertEquals("OPTIMIZE PARTITIONS (p1, p2)", clause.toSql());
+        Assertions.assertEquals("PARTITIONS (p1, p2)", clause.toSql());
     }
 
     @Test
@@ -45,77 +45,77 @@ public class OptimizeClauseTest {
                 Lists.newArrayList(), false, NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, partitionRef, null);
         // empty partition names should not add anything
-        Assertions.assertEquals("OPTIMIZE", clause.toSql());
+        Assertions.assertEquals("", clause.toSql());
     }
 
     @Test
     public void testToSqlWithDuplicateKey() {
         KeysDesc keysDesc = new KeysDesc(KeysType.DUP_KEYS, Lists.newArrayList("col1", "col2"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, null, null, null, null);
-        Assertions.assertEquals("OPTIMIZE DUPLICATE KEY(`col1`, `col2`)", clause.toSql());
+        Assertions.assertEquals("DUPLICATE KEY(`col1`, `col2`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithPrimaryKey() {
         KeysDesc keysDesc = new KeysDesc(KeysType.PRIMARY_KEYS, Lists.newArrayList("id"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, null, null, null, null);
-        Assertions.assertEquals("OPTIMIZE PRIMARY KEY(`id`)", clause.toSql());
+        Assertions.assertEquals("PRIMARY KEY(`id`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithAggregateKey() {
         KeysDesc keysDesc = new KeysDesc(KeysType.AGG_KEYS, Lists.newArrayList("k1", "k2"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, null, null, null, null);
-        Assertions.assertEquals("OPTIMIZE AGGREGATE KEY(`k1`, `k2`)", clause.toSql());
+        Assertions.assertEquals("AGGREGATE KEY(`k1`, `k2`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithUniqueKey() {
         KeysDesc keysDesc = new KeysDesc(KeysType.UNIQUE_KEYS, Lists.newArrayList("uid"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, null, null, null, null);
-        Assertions.assertEquals("OPTIMIZE UNIQUE KEY(`uid`)", clause.toSql());
+        Assertions.assertEquals("UNIQUE KEY(`uid`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithSortKeys() {
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, null);
         clause.setSortKeys(Lists.newArrayList("col1", "col2"));
-        Assertions.assertEquals("OPTIMIZE ORDER BY `col1`, `col2`", clause.toSql());
+        Assertions.assertEquals("ORDER BY (`col1`, `col2`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithEmptySortKeys() {
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, null);
         clause.setSortKeys(Collections.emptyList());
-        Assertions.assertEquals("OPTIMIZE", clause.toSql());
+        Assertions.assertEquals("", clause.toSql());
     }
 
     @Test
     public void testToSqlWithDistributionDesc() {
         HashDistributionDesc distributionDesc = new HashDistributionDesc(10, Lists.newArrayList("col1"));
         OptimizeClause clause = new OptimizeClause(null, null, distributionDesc, null, null, null);
-        Assertions.assertEquals("OPTIMIZE DISTRIBUTED BY HASH(`col1`) BUCKETS 10", clause.toSql());
+        Assertions.assertEquals("DISTRIBUTED BY HASH(`col1`) BUCKETS 10", clause.toSql());
     }
 
     @Test
     public void testToSqlWithDistributionDescNoBuckets() {
         HashDistributionDesc distributionDesc = new HashDistributionDesc(-1, Lists.newArrayList("col1"));
         OptimizeClause clause = new OptimizeClause(null, null, distributionDesc, null, null, null);
-        Assertions.assertEquals("OPTIMIZE DISTRIBUTED BY HASH(`col1`)", clause.toSql());
+        Assertions.assertEquals("DISTRIBUTED BY HASH(`col1`)", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRandomDistributionDesc() {
         RandomDistributionDesc distributionDesc = new RandomDistributionDesc(10);
         OptimizeClause clause = new OptimizeClause(null, null, distributionDesc, null, null, null);
-        Assertions.assertEquals("OPTIMIZE DISTRIBUTED BY RANDOM BUCKETS 10", clause.toSql());
+        Assertions.assertEquals("DISTRIBUTED BY RANDOM BUCKETS 10", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRandomDistributionDescNoBuckets() {
         RandomDistributionDesc distributionDesc = new RandomDistributionDesc(-1);
         OptimizeClause clause = new OptimizeClause(null, null, distributionDesc, null, null, null);
-        Assertions.assertEquals("OPTIMIZE DISTRIBUTED BY RANDOM", clause.toSql());
+        Assertions.assertEquals("DISTRIBUTED BY RANDOM", clause.toSql());
     }
 
     @Test
@@ -125,21 +125,21 @@ public class OptimizeClauseTest {
                 new StringLiteral("2024-12-31"),
                 NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("OPTIMIZE BETWEEN 2024-01-01 AND 2024-12-31", clause.toSql());
+        Assertions.assertEquals("BETWEEN 2024-01-01 AND 2024-12-31", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRangeNullStart() {
         OptimizeRange range = new OptimizeRange(null, new StringLiteral("2024-12-31"), NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("OPTIMIZE BETWEEN  AND 2024-12-31", clause.toSql());
+        Assertions.assertEquals("BETWEEN AND 2024-12-31", clause.toSql());
     }
 
     @Test
     public void testToSqlWithRangeNullEnd() {
         OptimizeRange range = new OptimizeRange(new StringLiteral("2024-01-01"), null, NodePosition.ZERO);
         OptimizeClause clause = new OptimizeClause(null, null, null, null, null, range);
-        Assertions.assertEquals("OPTIMIZE BETWEEN 2024-01-01 AND ", clause.toSql());
+        Assertions.assertEquals("BETWEEN 2024-01-01 AND", clause.toSql());
     }
 
     @Test
@@ -147,7 +147,7 @@ public class OptimizeClauseTest {
         KeysDesc keysDesc = new KeysDesc(KeysType.DUP_KEYS, Lists.newArrayList("col1"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, null, null, null, null);
         clause.setSortKeys(Lists.newArrayList("col2", "col3"));
-        Assertions.assertEquals("OPTIMIZE DUPLICATE KEY(`col1`) ORDER BY `col2`, `col3`", clause.toSql());
+        Assertions.assertEquals("DUPLICATE KEY(`col1`) ORDER BY (`col2`, `col3`)", clause.toSql());
     }
 
     @Test
@@ -156,7 +156,7 @@ public class OptimizeClauseTest {
         HashDistributionDesc distributionDesc = new HashDistributionDesc(10, Lists.newArrayList("col1"));
         OptimizeClause clause = new OptimizeClause(keysDesc, null, distributionDesc, null, null, null);
         Assertions.assertEquals(
-                "OPTIMIZE DUPLICATE KEY(`col1`) DISTRIBUTED BY HASH(`col1`) BUCKETS 10",
+                "DUPLICATE KEY(`col1`) DISTRIBUTED BY HASH(`col1`) BUCKETS 10",
                 clause.toSql());
     }
 
@@ -167,8 +167,8 @@ public class OptimizeClauseTest {
         OptimizeClause clause = new OptimizeClause(null, partitionDesc, null, null, null, null);
         String result = clause.toSql();
         // Verify partitionDesc output is included and starts with "PARTITION BY RANGE"
-        Assertions.assertTrue(result.startsWith("OPTIMIZE PARTITION BY RANGE"),
-                "Expected to start with 'OPTIMIZE PARTITION BY RANGE', but was: " + result);
+        Assertions.assertTrue(result.startsWith("PARTITION BY RANGE"),
+                "Expected to start with 'PARTITION BY RANGE', but was: " + result);
     }
 
     @Test
@@ -187,7 +187,7 @@ public class OptimizeClauseTest {
         clause.setSortKeys(Lists.newArrayList("col2"));
 
         Assertions.assertEquals(
-                "OPTIMIZE PARTITIONS (p1) DUPLICATE KEY(`col1`) ORDER BY `col2` " +
+                "PARTITIONS (p1) DUPLICATE KEY(`col1`) ORDER BY (`col2`) " +
                         "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 BETWEEN 2024-01-01 AND 2024-12-31",
                 clause.toSql());
     }
