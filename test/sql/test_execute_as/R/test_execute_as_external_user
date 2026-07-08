@@ -1,4 +1,4 @@
--- name: test_execute_as_external_user
+-- name: test_execute_as_external_user @sequential
 shell: mkdir -p $STARROCKS_HOME/conf && printf "ext_group1:ext_user\n" > $STARROCKS_HOME/conf/group_mapping_external
 -- result:
 0
