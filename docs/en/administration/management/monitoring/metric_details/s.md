@@ -504,7 +504,7 @@ All transaction metrics share the following labels:
 - Unit: Count
 - Type: Cumulative
 - Labels: `cache` — see `starrocks_fe_statistics_cache_estimated_size` for the possible values.
-- Description: Cumulative number of statistics cache lookups that were not found in the cache and triggered a load. Only registered and exposed when the FE config `enable_statistic_cache_metrics`.
+- Description: Cumulative number of statistics cache lookups that were not found in the cache and triggered a load. Only registered and exposed when the FE config `enable_statistic_cache_metrics` is set to `true`.
 
 ## `starrocks_fe_tablet_pre_split_eligibility_skipped`
 
