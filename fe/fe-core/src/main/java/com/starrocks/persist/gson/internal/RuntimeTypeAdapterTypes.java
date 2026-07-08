@@ -19,6 +19,7 @@ import com.google.gson.JsonDeserializer;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeMvSortKeyRewriteJob;
 import com.starrocks.alter.LakeRangeRewriteSchemaChangeJob;
 import com.starrocks.alter.LakeRangeRollupJob;
 import com.starrocks.alter.LakeRollupJob;
@@ -247,6 +248,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                         .registerSubtype(LakeRangeRewriteSchemaChangeJob.class, "LakeRangeRewriteSchemaChangeJob")
                         .registerSubtype(LakeRangeRollupJob.class, "LakeRangeRollupJob")
+                        .registerSubtype(LakeMvSortKeyRewriteJob.class, "LakeMvSortKeyRewriteJob")
                         .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
                         .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                         .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob")

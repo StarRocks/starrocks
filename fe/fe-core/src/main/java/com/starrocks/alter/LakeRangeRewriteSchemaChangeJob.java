@@ -151,6 +151,10 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         this.newSortKeyColumns = newSortKeyColumns;
     }
 
+    protected List<Column> getNewSortKeyColumns() {
+        return newSortKeyColumns;
+    }
+
     public void setShadowIndex(long shadowIndexMetaId, long originIndexMetaId, String shadowIndexName,
                                short shadowShortKeyColumnCount) {
         this.shadowIndexMetaId = shadowIndexMetaId;
