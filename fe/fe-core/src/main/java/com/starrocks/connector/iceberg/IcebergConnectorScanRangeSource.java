@@ -101,7 +101,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     private final Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
-    private final Map<StructLikeWrapper, Long> partitionKeyToId = Maps.newHashMap();
+    // specId, StructLikeWrapper -> partitionId
+    private final Map<Pair<Integer, StructLikeWrapper>, Long> partitionKeyToId = Maps.newHashMap();
 
     // spec_id -> Map(partition_field_index_in_partitionSpec, PartitionField)
     private final Map<Integer, BiMap<Integer, PartitionField>> indexToFieldCache = Maps.newHashMap();
@@ -423,20 +424,24 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             partitionSlotIdsCache.put(spec.specId(), buildPartitionSlotIds(task.spec()));
         }
 
-        // Make sure the partition data with byte[], decimal value object etc. can get the same hash code.
-        StructLike origPartition = task.partition();
-        StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
-        StructLikeWrapper partition = partitionWrapper.copyFor(task.file().partition());
-        if (partitionKeyToId.containsKey(partition)) {
-            return partitionKeyToId.get(partition);
-        }
-
         BiMap<Integer, PartitionField> indexToPartitionField = indexToFieldCache.computeIfAbsent(spec.specId(),
                 ignore -> getIdentityPartitions(task.spec()));
 
         List<Integer> partitionFieldIndexes = indexesCache.computeIfAbsent(spec.specId(),
                 ignore -> getPartitionFieldIndexes(spec, indexToPartitionField));
+
+        StructLike origPartition = task.partition();
         PartitionKey partitionKey = getPartitionKey(origPartition, task.spec(), partitionFieldIndexes, indexToPartitionField);
+
+        StructLikeWrapper wrappedPartition = StructLikeWrapper.forType(spec.partitionType())
+                .copyFor(task.file().partition());
+        Pair<Integer, StructLikeWrapper> cacheKey = Pair.create(spec.specId(), wrappedPartition);
+
+        Long cachedId = partitionKeyToId.get(cacheKey);
+        if (cachedId != null) {
+            return cachedId;
+        }
+
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
 
         Path filePath = new Path(URLDecoder.decode(task.file().path().toString(), StandardCharsets.UTF_8));
@@ -444,13 +449,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
                         filePath.getParent().toString());
 
-        partitionKeyToId.put(partition, partitionId);
+        partitionKeyToId.put(cacheKey, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
         return partitionId;
     }
 
     private List<Integer> buildPartitionSlotIds(PartitionSpec spec) {
         return spec.fields().stream()
+                .filter(x -> x.transform().isIdentity())
                 .map(x -> desc.getColumnSlot(x.name()))
                 .filter(Objects::nonNull)
                 .map(SlotDescriptor::getId)
@@ -460,6 +466,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private List<Integer> getPartitionFieldIndexes(PartitionSpec spec, BiMap<Integer, PartitionField> indexToField) {
         return spec.fields().stream()
+                .filter(x -> x.transform().isIdentity())
                 .filter(x -> desc.getColumnSlot(x.name()) != null)
                 .map(x -> indexToField.inverse().get(x))
                 .collect(Collectors.toList());
