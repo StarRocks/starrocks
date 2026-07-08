@@ -211,10 +211,10 @@ public class IVMAnalyzer {
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            // Retractable queries produce their own __ROW_ID__ (encode(group_by_keys)); non-retractable
-            // append-only scans rely on storage AUTO_INCREMENT.
-            boolean isRetractable = rewriteImpl(queryRelation);
-            RowIdStrategy strategy = isRetractable
+            // A query that computes its own __ROW_ID__ (e.g. an aggregate's encode(group_by_keys)) uses
+            // QUERY_COMPUTED; an append-only scan without one relies on storage AUTO_INCREMENT.
+            boolean hasComputedRowId = rewriteImpl(queryRelation);
+            RowIdStrategy strategy = hasComputedRowId
                     ? RowIdStrategy.QUERY_COMPUTED
                     : RowIdStrategy.AUTO_INCREMENT;
             // Trial-rewrite catches drift the analyzer-level checks can't: e.g. a new logical
@@ -260,8 +260,8 @@ public class IVMAnalyzer {
 
     private boolean checkSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
         QueryStatement subQueryStatement = subqueryRelation.getQueryStatement();
-        boolean isChildRetractable = rewriteImpl(subQueryStatement.getQueryRelation());
-        if (isChildRetractable) {
+        boolean childHasComputedRowId = rewriteImpl(subQueryStatement.getQueryRelation());
+        if (childHasComputedRowId) {
             throw new SemanticException("IVMAnalyzer does not support subquery relation, " +
                     "but got: %s", subqueryRelation.getClass().getSimpleName());
         }
@@ -291,8 +291,8 @@ public class IVMAnalyzer {
                 throw new SemanticException("UnionRelation in IVMAnalyzer should not have aggregate functions, " +
                         "but got: %s", aggregateExprs);
             }
-            boolean isChildRetractable = checkRelation(selectChild);
-            if (isChildRetractable) {
+            boolean childHasComputedRowId = checkRelation(selectChild);
+            if (childHasComputedRowId) {
                 throw new SemanticException("IVMAnalyzer does not support UnionRelation with retractable sink, " +
                         "but got: %s", unionRelation.getClass().getSimpleName());
             }
@@ -324,10 +324,10 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
                     groupByClause.getGroupingType());
         }
-        boolean isRetractable = checkAggregate(selectRelation);
+        boolean hasComputedRowId = checkAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
-        isRetractable |= checkRelation(innerRelation);
-        return isRetractable;
+        hasComputedRowId |= checkRelation(innerRelation);
+        return hasComputedRowId;
     }
 
     private boolean checkRelation(Relation relation) throws AnalysisException {
