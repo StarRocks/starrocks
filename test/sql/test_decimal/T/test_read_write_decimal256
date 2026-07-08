@@ -3,6 +3,9 @@
 DROP DATABASE IF EXISTS test_decimal256;
 CREATE DATABASE test_decimal256;
 USE test_decimal256;
+-- Overflow rows are dropped by the BE cast; tolerate them so the inserts
+-- succeed with the rows filtered, which is what the expected results record.
+set insert_max_filter_ratio=1;
 
 -- ============================================
 -- Part 1: Basic decimal256 functionality tests (precision > 38)

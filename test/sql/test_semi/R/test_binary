@@ -68,7 +68,7 @@ E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 57. 
 -- !result
 select * from sc2 where array3 = [map{"a":21,"b":22},null] order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 57. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 57. Detail message: Column type array<struct<`a` int(11), `b` int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
 select * from sc2 where array3 = [named_struct("a",21,"b",22),null] order by v1;
 -- result:
@@ -185,7 +185,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. D
 -- !result
 select array3 = [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 40. Detail message: Column type array<struct<`a` int(11), `b` int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
 select array3 = [named_struct("a",21,"b",22),null] from sc2 order by v1;
 -- result:
@@ -532,7 +532,7 @@ select * from sc2 where st1 = row(2,[2,3,4], map{202:3}, row(222,220)) order by 
 -- !result
 select * from sc2 where st1 = named_struct("s1", 5,"s2",[5,50,51],"s3",3,"s4", row(3,550)) order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 89. Detail message: Column type struct<s1 int(11), s2 array<int(11)>, s3 map<int(11),int(11)>, s4 struct<e int(11), f int(11)>> does not support binary predicate operation with type struct<s1 tinyint(4), s2 array<tinyint(4)>, s3 tinyint(4), s4 struct<col1 tinyint(4), col2 smallint(6)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 24 to line 1, column 89. Detail message: Column type struct<`s1` int(11), `s2` array<int(11)>, `s3` map<int(11),int(11)>, `s4` struct<`e` int(11), `f` int(11)>> does not support binary predicate operation with type struct<`s1` tinyint(4), `s2` array<tinyint(4)>, `s3` tinyint(4), `s4` struct<`col1` tinyint(4), `col2` smallint(6)>>.')
 -- !result
 select array1 <=> [11,null,31,41] from sc2 order by v1;
 -- result:
@@ -566,7 +566,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 42. D
 -- !result
 select array3 <=> [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 42. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 42. Detail message: Column type array<struct<`a` int(11), `b` int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
 select array3 <=> [named_struct("a",21,"b",22),null] from sc2 order by v1;
 -- result:
@@ -873,7 +873,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. D
 -- !result
 select array3 != [map{"a":21,"b":22},null] from sc2 order by v1;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: Column type array<struct<a int(11), b int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 41. Detail message: Column type array<struct<`a` int(11), `b` int(11)>> does not support binary predicate operation with type array<map<varchar,tinyint(4)>>.')
 -- !result
 select array3 != [named_struct("a",21,"b",22),null] from sc2 order by v1;
 -- result:

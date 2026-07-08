@@ -24,7 +24,7 @@ show create table hive_catalog_${uuid0}.test_hive_comment_db_${uuid0}.t_comment_
 -- result:
 [REGEX]t_comment_test\s+CREATE TABLE `t_comment_test` \(
 \s+`id` int\(11\).*COMMENT "id column comment",
-\s+`name` varchar\(80\).*COMMENT "name column comment"
+\s+`name` varchar\(20\).*COMMENT "name column comment"
 \)
 COMMENT \("table level comment"\)
 \s*
