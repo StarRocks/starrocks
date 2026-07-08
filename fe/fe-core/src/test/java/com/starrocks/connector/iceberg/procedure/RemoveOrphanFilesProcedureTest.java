@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.InternalData;
 import org.apache.iceberg.ManifestContent;
 import org.apache.iceberg.ManifestFile;
@@ -425,6 +426,69 @@ public class RemoveOrphanFilesProcedureTest {
                         mockStatic(org.apache.iceberg.ReachableFileUtil.class);
                 MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
             mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+                    .thenReturn(manifestReader);
+
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
+                    .thenReturn(Collections.emptySet());
+            reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations(any(Table.class)))
+                    .thenReturn(Collections.emptyList());
+
+            FileSystem mockFs = mock(FileSystem.class);
+            RemoteIterator<LocatedFileStatus> emptyIterator = new RemoteIterator<LocatedFileStatus>() {
+                @Override
+                public boolean hasNext() {
+                    return false;
+                }
+
+                @Override
+                public LocatedFileStatus next() {
+                    throw new java.util.NoSuchElementException();
+                }
+            };
+            when(mockFs.listFiles(any(Path.class), eq(true))).thenReturn(emptyIterator);
+            fsStatic.when(() -> FileSystem.get(any(), any())).thenReturn(mockFs);
+
+            IcebergTableProcedureContext context = createContext(table);
+            assertDoesNotThrow(() -> procedure.execute(context, Collections.emptyMap()));
+        }
+    }
+
+    /**
+     * Covers: a DELETE manifest is opened via readDeleteManifest (the DELETES branch of
+     * readerForManifest) and its content file locations are added to the valid file names.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void testExecuteWithDeleteManifestContainingContentFile_addsContentFileToValidNames() throws Exception {
+        RemoveOrphanFilesProcedure procedure = RemoveOrphanFilesProcedure.getInstance();
+        ManifestFile manifest = mock(ManifestFile.class);
+        when(manifest.path()).thenReturn("s3://bucket/table/metadata/m-del.avro");
+        when(manifest.content()).thenReturn(ManifestContent.DELETES);
+
+        DeleteFile deleteFile = mock(DeleteFile.class);
+        when(deleteFile.location()).thenReturn("s3://bucket/table/data/delete-file.parquet");
+
+        ManifestReader<DeleteFile> manifestReader = mock(ManifestReader.class);
+        when(manifestReader.select(any())).thenReturn(manifestReader);
+        when(manifestReader.iterator()).thenReturn(
+                CloseableIterable.withNoopClose(Collections.singletonList(deleteFile)).iterator());
+
+        Snapshot snapshot = mock(Snapshot.class);
+        when(snapshot.manifestListLocation()).thenReturn(null);
+        when(snapshot.allManifests(any(FileIO.class))).thenReturn(Collections.singletonList(manifest));
+
+        FileIO fileIO = mock(FileIO.class);
+        Table table = mock(Table.class);
+        when(table.location()).thenReturn(TABLE_LOCATION);
+        when(table.currentSnapshot()).thenReturn(snapshot);
+        when(table.snapshots()).thenReturn(Collections.singletonList(snapshot));
+        when(table.io()).thenReturn(fileIO);
+
+        try (MockedStatic<ManifestFiles> mfStatic = mockStatic(ManifestFiles.class);
+                MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
+                        mockStatic(org.apache.iceberg.ReachableFileUtil.class);
+                MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
+            mfStatic.when(() -> ManifestFiles.readDeleteManifest(any(ManifestFile.class), any(FileIO.class), any()))
                     .thenReturn(manifestReader);
 
             reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
