@@ -1542,17 +1542,17 @@ TEST_F(AvroScannerTest, test_struct_type) {
     }
 }
 
-// Regression for issue #11522: a BOOLEAN nested inside a native STRUCT target column.
+// Regression for issue #11522: a BOOLEAN element nested inside a native ARRAY target column.
 // BooleanColumn is FixedLengthColumn<uint8_t>, but the nested (non-adaptive) add_nullable_column
 // dispatched TYPE_BOOLEAN through add_nullable_numeric_column<int8_t>, so add_numeric_column's
 // down_cast<FixedLengthColumn<int8_t>*> tripped the dynamic_cast assert (casts.h) under ASAN/DEBUG.
-// This STRUCT crash path was made reachable by PR #74901. The nested ARRAY/MAP paths carry the same
-// latent mismatch (since #19866) and are corrected by the same one-line dispatch fix in
-// add_nullable_column (add_nullable_numeric_column<int8_t> -> <uint8_t>).
-TEST_F(AvroScannerTest, test_struct_with_boolean) {
-    // record root { record s { boolean b_true; boolean b_false; int i; } }
+// STRUCT/MAP/ARRAY all funnel their leaf columns through this same add_nullable_column dispatch, so
+// the ARRAY case exercises (and guards) the one-line fix for every container. ARRAY is used here
+// because it is the path present on all release branches (the STRUCT crash path came from #74901).
+TEST_F(AvroScannerTest, test_array_with_boolean) {
+    // record root { array<boolean> a }
     std::string schema_json =
-            R"({"type":"record","name":"root","fields":[{"name":"s","type":{"type":"record","name":"inner","fields":[{"name":"b_true","type":"boolean"},{"name":"b_false","type":"boolean"},{"name":"i","type":"int"}]}}]})";
+            R"({"type":"record","name":"root","fields":[{"name":"a","type":{"type":"array","items":"boolean"}}]})";
 
     AvroHelper avro_helper;
     init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
@@ -1562,36 +1562,34 @@ TEST_F(AvroScannerTest, test_struct_with_boolean) {
         avro_value_decref(&avro_helper.avro_val);
     });
 
-    avro_value_t s_value;
-    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "s", &s_value, NULL));
-    avro_value_t b_true;
-    if (avro_value_get_by_name(&s_value, "b_true", &b_true, NULL) == 0) {
-        avro_value_set_boolean(&b_true, true);
-    }
-    avro_value_t b_false;
-    if (avro_value_get_by_name(&s_value, "b_false", &b_false, NULL) == 0) {
-        avro_value_set_boolean(&b_false, false);
-    }
-    avro_value_t i_value;
-    if (avro_value_get_by_name(&s_value, "i", &i_value, NULL) == 0) {
-        avro_value_set_int(&i_value, 7);
-    }
+    avro_value_t a_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "a", &a_value, NULL));
+    avro_value_t e0;
+    avro_value_append(&a_value, &e0, NULL);
+    avro_value_set_boolean(&e0, true);
+    avro_value_t e1;
+    avro_value_append(&a_value, &e1, NULL);
+    avro_value_set_boolean(&e1, false);
+    avro_value_t e2;
+    avro_value_append(&a_value, &e2, NULL);
+    avro_value_set_boolean(&e2, true);
 
-    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_struct_boolean_data.avro";
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_array_boolean_data.avro";
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_struct_type(
-            {"b_true", "b_false", "i"},
-            {TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_BOOLEAN), TypeDescriptor(TYPE_INT)}));
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_BOOLEAN);
+    types.emplace_back(t);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.jsonpaths = false;
     range.__set_path(data_path);
     ranges.emplace_back(range);
 
-    auto scanner = create_avro_scanner(types, ranges, {"s"}, avro_helper.schema_text);
+    auto scanner = create_avro_scanner(types, ranges, {"a"}, avro_helper.schema_text);
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st;
     auto st2 = scanner->get_next();
@@ -1600,7 +1598,11 @@ TEST_F(AvroScannerTest, test_struct_with_boolean) {
     ChunkPtr chunk = st2.value();
     EXPECT_EQ(1, chunk->num_columns());
     EXPECT_EQ(1, chunk->num_rows());
-    EXPECT_EQ("{b_true:1,b_false:0,i:7}", chunk->get_column_by_index(0)->debug_item(0));
+    auto array = chunk->get(0)[0].get_array();
+    ASSERT_EQ(3, array.size());
+    EXPECT_EQ(1, array[0].get_int8());
+    EXPECT_EQ(0, array[1].get_int8());
+    EXPECT_EQ(1, array[2].get_int8());
 }
 
 TEST_F(AvroScannerTest, test_array_of_nullable_string) {
