@@ -410,8 +410,9 @@ public class CachingIcebergCatalogTest {
 
         ExecutorService es = Executors.newFixedThreadPool(5);
         try {
-            new CachingIcebergCatalog("iceberg0", delegate, props, es);
-
+            CachingIcebergCatalog catalog = new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            catalog.getTable(ctx, "db1", "t1");
+            catalog.getTable(ctx, "db1", "t1");
 
             new Verifications() {
                 {
@@ -794,7 +795,8 @@ public class CachingIcebergCatalogTest {
         LoadingCache<IcebergTableName, Table> tables = Deencapsulation.getField(catalog, "tables");
         Table tmp1 = delegate.getTable(ctx, dbName, tblName);
         Table tmp2 = delegate.getTable(ctx, dbName, tblName);
-        
+        delegate.getTable(ctx, dbName, tblName);
+
         System.out.println("===== cache test =====");
         catalog.getTable(ctx, dbName, tblName);
         catalog.refreshTable(dbName, tblName, ctx, null);

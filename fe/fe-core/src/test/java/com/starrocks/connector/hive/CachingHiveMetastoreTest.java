@@ -812,8 +812,10 @@ public class CachingHiveMetastoreTest {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, executor,
                 expireAfterWriteSec, 1, 1000L, false);
+        cachingHiveMetastore.getTable("db1", "tbl1");
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
+        cachingHiveMetastore.getTable("db1", "external_table");
         Partition externalPartition = cachingHiveMetastore.getPartition(
                 "db1", "external_table", Lists.newArrayList("par1"));
 
