@@ -346,6 +346,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 进程中文件描述符的最小数量。
 - 引入版本：-
 
+### object_storage_client_cache_size
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：每个客户端工厂缓存的对象存储客户端（S3 兼容及 Azure Blob）的最大数量。该值在每次创建客户端时读取，因此调低该值不会立即生效，而是随着后续创建过程中缓存客户端被逐出而逐步生效。小于 `1` 的值按 `1` 处理。
+- 引入版本：v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - 默认值：-1

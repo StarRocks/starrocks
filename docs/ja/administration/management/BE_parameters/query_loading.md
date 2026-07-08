@@ -359,6 +359,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BEプロセスにおけるファイルディスクリプタの最小数。
 - 導入バージョン: -
 
+### object_storage_client_cache_size
+
+- デフォルト: 8
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クライアントファクトリーごとにキャッシュされるオブジェクトストレージクライアント（S3 互換および Azure Blob）の最大数。この値はクライアント作成のたびに読み取られるため、値を下げても即座には反映されず、以降の作成時にキャッシュされたクライアントが退避されるにつれて徐々に反映されます。`1` 未満の値は `1` として扱われます。
+- 導入バージョン: v4.1.4, v4.0.14
+
 ### object_storage_connect_timeout_ms
 
 - デフォルト: -1
