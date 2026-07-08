@@ -39,13 +39,11 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
-<<<<<<< HEAD
+import org.apache.iceberg.util.UUIDUtil;
 import org.apache.orc.ColumnStatistics;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
-=======
-import org.apache.iceberg.util.UUIDUtil;
 import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.statistics.Statistics;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -59,7 +57,6 @@ import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.PrimitiveType;
->>>>>>> 4c77b021d9 ([BugFix] Normalize add_files parquet stats to Iceberg logical bounds (#69207))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -333,11 +330,6 @@ public class AddFilesProcedureTest {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testExtractOrcMetrics(@Mocked Table table,
-                                      @Mocked IcebergHiveCatalog catalog,
-                                      @Mocked Reader orcReader) throws Exception {
-=======
     public void testTryConvertDecimalStatValue() {
         Types.DecimalType decimalType = Types.DecimalType.of(7, 2);
 
@@ -493,43 +485,12 @@ public class AddFilesProcedureTest {
                                                                  @Mocked IcebergHiveCatalog catalog,
                                                                  @Mocked ParquetFileReader reader,
                                                                  @Mocked HadoopInputFile inputFile) throws Exception {
->>>>>>> 4c77b021d9 ([BugFix] Normalize add_files parquet stats to Iceberg logical bounds (#69207))
         AddFilesProcedure procedure = AddFilesProcedure.getInstance();
         IcebergTableProcedureContext context =
                 new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null);
 
         Schema schema = new Schema(
                 Types.NestedField.optional(1, "id", Types.IntegerType.get()),
-<<<<<<< HEAD
-                Types.NestedField.optional(2, "name", Types.StringType.get())
-        );
-
-        FileStatus fileStatus = new FileStatus(2048L, false, 1, 0L, 0L, new Path("/tmp/data.orc"));
-
-        TypeDescription orcSchema = TypeDescription.createStruct()
-                .addField("id", TypeDescription.createInt())
-                .addField("name", TypeDescription.createString());
-
-
-        long totalRows = 100L;
-
-        // index 0: root struct statistics (should not be mapped to any column)
-        ColumnStatistics rootStats = Mockito.mock(ColumnStatistics.class);
-        Mockito.when(rootStats.getNumberOfValues()).thenReturn(totalRows);
-        Mockito.when(rootStats.hasNull()).thenReturn(false);
-
-        // index 1: "id" column statistics, 90 non-null values, has nulls
-        ColumnStatistics idStats = Mockito.mock(ColumnStatistics.class);
-        Mockito.when(idStats.getNumberOfValues()).thenReturn(90L);
-        Mockito.when(idStats.hasNull()).thenReturn(true);
-
-        // index 2: "name" column statistics, 80 non-null values, has nulls
-        ColumnStatistics nameStats = Mockito.mock(ColumnStatistics.class);
-        Mockito.when(nameStats.getNumberOfValues()).thenReturn(80L);
-        Mockito.when(nameStats.hasNull()).thenReturn(true);
-
-        ColumnStatistics[] allStats = new ColumnStatistics[] {rootStats, idStats, nameStats};
-=======
                 Types.NestedField.optional(2, "struct_col", Types.StructType.of(
                         Types.NestedField.optional(3, "nested_id", Types.IntegerType.get())))
         );
@@ -599,34 +560,12 @@ public class AddFilesProcedureTest {
         ParquetMetadata metadata = new ParquetMetadata(
                 new FileMetaData(new MessageType("test"), new HashMap<>(), "test"),
                 List.of(block1, block2));
->>>>>>> 4c77b021d9 ([BugFix] Normalize add_files parquet stats to Iceberg logical bounds (#69207))
 
         new Expectations() {
             {
                 table.schema();
                 result = schema;
 
-<<<<<<< HEAD
-                orcReader.getNumberOfRows();
-                result = totalRows;
-
-                orcReader.getSchema();
-                result = orcSchema;
-
-                orcReader.getStatistics();
-                result = allStats;
-            }
-        };
-
-        new MockUp<OrcFile>() {
-            @Mock
-            public Reader createReader(Path path, OrcFile.ReaderOptions opts) {
-                return orcReader;
-            }
-        };
-
-        java.lang.reflect.Method method = AddFilesProcedure.class.getDeclaredMethod("extractOrcMetrics",
-=======
                 reader.getFooter();
                 result = metadata;
             }
@@ -647,14 +586,87 @@ public class AddFilesProcedureTest {
         };
 
         java.lang.reflect.Method method = AddFilesProcedure.class.getDeclaredMethod("extractParquetMetrics",
->>>>>>> 4c77b021d9 ([BugFix] Normalize add_files parquet stats to Iceberg logical bounds (#69207))
                 IcebergTableProcedureContext.class, Table.class, FileStatus.class);
         method.setAccessible(true);
         Metrics metrics = (Metrics) method.invoke(procedure, context, table, fileStatus);
 
-<<<<<<< HEAD
-        assertEquals(totalRows, metrics.recordCount());
+        assertEquals(30L, metrics.recordCount());
+        assertEquals(300L, metrics.columnSizes().get(1));
+        assertEquals(50L, metrics.columnSizes().get(2));
+        assertEquals(30L, metrics.valueCounts().get(1));
+        assertEquals(5L, metrics.valueCounts().get(2));
 
+        assertFalse(metrics.nullValueCounts().containsKey(1));
+        assertFalse(metrics.nullValueCounts().containsKey(2));
+        assertTrue(metrics.lowerBounds().isEmpty());
+        assertTrue(metrics.upperBounds().isEmpty());
+    }
+
+    @Test
+    public void testExtractOrcMetrics(@Mocked Table table,
+                                      @Mocked IcebergHiveCatalog catalog,
+                                      @Mocked Reader orcReader) throws Exception {
+        AddFilesProcedure procedure = AddFilesProcedure.getInstance();
+        IcebergTableProcedureContext context =
+                new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null);
+
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "name", Types.StringType.get())
+        );
+
+        FileStatus fileStatus = new FileStatus(2048L, false, 1, 0L, 0L, new Path("/tmp/data.orc"));
+
+        TypeDescription orcSchema = TypeDescription.createStruct()
+                .addField("id", TypeDescription.createInt())
+                .addField("name", TypeDescription.createString());
+
+        long totalRows = 100L;
+
+        // index 0: root struct statistics (should not be mapped to any column)
+        ColumnStatistics rootStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(rootStats.getNumberOfValues()).thenReturn(totalRows);
+        Mockito.when(rootStats.hasNull()).thenReturn(false);
+
+        ColumnStatistics idStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(idStats.getNumberOfValues()).thenReturn(90L);
+        Mockito.when(idStats.hasNull()).thenReturn(true);
+
+        ColumnStatistics nameStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(nameStats.getNumberOfValues()).thenReturn(80L);
+        Mockito.when(nameStats.hasNull()).thenReturn(true);
+
+        ColumnStatistics[] allStats = new ColumnStatistics[] {rootStats, idStats, nameStats};
+
+        new Expectations() {
+            {
+                table.schema();
+                result = schema;
+
+                orcReader.getNumberOfRows();
+                result = totalRows;
+
+                orcReader.getSchema();
+                result = orcSchema;
+
+                orcReader.getStatistics();
+                result = allStats;
+            }
+        };
+
+        new MockUp<OrcFile>() {
+            @Mock
+            public Reader createReader(Path path, OrcFile.ReaderOptions opts) {
+                return orcReader;
+            }
+        };
+
+        java.lang.reflect.Method method = AddFilesProcedure.class.getDeclaredMethod("extractOrcMetrics",
+                IcebergTableProcedureContext.class, Table.class, FileStatus.class);
+        method.setAccessible(true);
+        Metrics metrics = (Metrics) method.invoke(procedure, context, table, fileStatus);
+
+        assertEquals(totalRows, metrics.recordCount());
 
         assertNotNull(metrics.valueCounts());
         assertTrue(metrics.valueCounts().containsKey(1));
@@ -672,18 +684,6 @@ public class AddFilesProcedureTest {
 
         // Only 2 columns should have valueCounts, rootStats should not be mapped to any column
         assertEquals(2, metrics.valueCounts().size());
-=======
-        assertEquals(30L, metrics.recordCount());
-        assertEquals(300L, metrics.columnSizes().get(1));
-        assertEquals(50L, metrics.columnSizes().get(2));
-        assertEquals(30L, metrics.valueCounts().get(1));
-        assertEquals(5L, metrics.valueCounts().get(2));
-
-        assertFalse(metrics.nullValueCounts().containsKey(1));
-        assertFalse(metrics.nullValueCounts().containsKey(2));
-        assertTrue(metrics.lowerBounds().isEmpty());
-        assertTrue(metrics.upperBounds().isEmpty());
->>>>>>> 4c77b021d9 ([BugFix] Normalize add_files parquet stats to Iceberg logical bounds (#69207))
     }
 
     private IcebergTableProcedureContext createMockContext(@Mocked Table table, @Mocked IcebergHiveCatalog catalog) {
