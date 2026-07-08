@@ -37,11 +37,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * End-to-end coordinator-side scan-range dispatch tests for range-distribution
- * colocate tables (P4). Exercises the observable behavior of
+ * colocate tables. Exercises the observable behavior of
  * {@link OlapScanNode#getBucketNums()} and the optimizer-built
  * {@link com.starrocks.sql.plan.PlanFragmentBuilder} path against real
  * shared-data tables.
@@ -93,6 +95,14 @@ public class RangeColocateScanRangeDispatchTest {
 
         OlapScanNode scanNode = newOlapScanNode(table, 1);
         scanNode.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+
+        // In production the bucketSeq fill runs before getBucketNums() (getScanRangeLocations precedes
+        // backend selection); mirror that here by populating the aligned assignment the fill would build.
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(table);
+        Assertions.assertNotNull(dispatch);
+        var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        scanNode.setTabletId2BucketSeq(new HashMap<>(
+                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()))));
 
         // Initial state: ColocateRangeMgr seeded with [MIN, MAX) -> 1 PACK shard group,
         // and createRangeColocateLakeTablets created exactly 1 tablet per partition.
@@ -208,5 +218,87 @@ public class RangeColocateScanRangeDispatchTest {
 
         Assertions.assertDoesNotThrow(() -> UtFrameUtils.getPlanAndFragment(connectContext,
                 "select v1 from t_avail"));
+    }
+
+    @Test
+    public void testGetBucketNumsFailsClosedOnStaleAssignment() throws Exception {
+        // Even when the group is currently ALIGNED (a fresh recompute returns a bucket count), a scan
+        // whose built bucketSeq does not match the aligned mapping must make getBucketNums() fail closed.
+        // This closes the fill-vs-dispatch TOCTOU that let a position-based assignment (built while the
+        // group was momentarily unaligned) reach a colocate join and silently return wrong results.
+        starRocksAssert.withTable(
+                "create table t_dispatch_flag (k1 int, k2 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_dispatch_flag:k1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_dispatch_flag");
+        OlapScanNode scanNode = newOlapScanNode(table, 11);
+        scanNode.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+
+        RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(table);
+        Assertions.assertNotNull(dispatch);
+        var physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        Map<Long, Integer> aligned =
+                dispatch.computeBucketSeq(physicalPartition.getLatestIndex(table.getBaseIndexMetaId()));
+        Assertions.assertNotNull(aligned, "single default range should be aligned");
+
+        // Built assignment matches the aligned mapping -> getBucketNums returns the bucket count.
+        scanNode.setTabletId2BucketSeq(new HashMap<>(aligned));
+        Assertions.assertEquals(1, scanNode.getBucketNums());
+
+        // Superset assignment: the whole-scan bucketSeq map legitimately holds more tablets than this
+        // partition's aligned mapping (e.g. other scanned sub-partitions). The guard checks containment,
+        // not equality, so this still passes -- this is what makes the whole-scan accumulation safe.
+        Map<Long, Integer> superset = new HashMap<>(aligned);
+        superset.put(-999L, 0);
+        scanNode.setTabletId2BucketSeq(superset);
+        Assertions.assertEquals(1, scanNode.getBucketNums());
+
+        // Stale assignment (bucketSeq perturbed, e.g. a position fallback) -> fail closed.
+        Map<Long, Integer> stale = new HashMap<>();
+        aligned.forEach((tabletId, seq) -> stale.put(tabletId, seq + 1));
+        scanNode.setTabletId2BucketSeq(stale);
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                scanNode::getBucketNums);
+        Assertions.assertTrue(exception.getMessage().contains("stale bucket assignment"),
+                "actual: " + exception.getMessage());
+    }
+
+    @Test
+    public void testPlanFragmentBuilderUnalignedScanFailsClosed() throws Exception {
+        // When computeBucketSeq returns null, the optimizer/PlanFragmentBuilder bucketSeq fill falls back
+        // to position-based bucketSeq (so a non-colocate scan still works); the later getBucketNums()
+        // colocate-dispatch guard must fail closed rather than pairing by that position fallback.
+        starRocksAssert.withTable(
+                "create table t_pfb_unaligned (k1 int, k2 int, v1 int)\n"
+                        + "order by(k1, k2)\n"
+                        + "properties('replication_num' = '1', 'colocate_with' = 'rg_pfb_unaligned:k1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_pfb_unaligned");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long grpId = colocateTableIndex.getGroup(table.getId()).grpId;
+        // 3 ColocateRanges but the single tablet still spans [MIN, MAX) -> computeBucketSeq == null.
+        // The group is left stable so PlanFragmentBuilder's colocate fill path (not shuffle) runs.
+        colocateTableIndex.getColocateRangeMgr().setColocateRanges(grpId, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 9101L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 9102L),
+                new ColocateRange(Range.ge(makeTuple(200)), 9103L)));
+
+        com.starrocks.sql.plan.ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext,
+                "select k1, k2 from t_pfb_unaligned").second;
+        OlapScanNode scan = null;
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (scanNode instanceof OlapScanNode && scanNode.getTableName().contains("t_pfb_unaligned")) {
+                scan = (OlapScanNode) scanNode;
+            }
+        }
+        Assertions.assertNotNull(scan, "expected an OlapScanNode for t_pfb_unaligned");
+        scan.setSelectedPartitionIds(new ArrayList<>(table.getAllPartitionIds()));
+        // The single tablet spans all 3 ColocateRanges, so the group is unaligned: getBucketNums() on
+        // the colocate-dispatch path must fail closed rather than pairing by the position fallback.
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                scan::getBucketNums);
+        Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
+                "actual: " + exception.getMessage());
     }
 }
