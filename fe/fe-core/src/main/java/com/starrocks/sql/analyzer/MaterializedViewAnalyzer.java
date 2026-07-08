@@ -403,7 +403,13 @@ public class MaterializedViewAnalyzer {
                     statement.setRowIdStrategy(result.rowIdStrategy());
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
                 } else {
-                    // if not ivm, set query statement directly
+                    // AUTO mode swallows the IVM SemanticException and falls back to PCT, but the trial may
+                    // have prepended __ROW_ID__ to the query in place before bailing. Re-parse the pre-trial
+                    // SQL so the PCT MV is built from the original query, not the half-rewritten one.
+                    queryStatement = (QueryStatement) SqlParser.parse(statement.getInlineViewDef(),
+                            context.getSessionVariable()).get(0);
+                    Analyzer.analyze(queryStatement, context);
+                    statement.setQueryStatement(queryStatement);
                     statement.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
                 }
             } else {
