@@ -1282,6 +1282,15 @@ This topic introduces the following types of FE configurations:
 - Description: The port that is used for communication among the Leader, Follower, and Observer FEs in the cluster.
 - Introduced in: -
 
+### `edit_log_roll_bytes`
+
+- Default: 0
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Once the total size of metadata log entries written since the last roll exceeds this value, a new log file is created (checked after each write batch). This complements `edit_log_roll_num` for workloads whose individual log entries are large, and bounds the amount of journal an FE has to replay on restart by size as well as by count. `0` (default) disables the size-based trigger; `edit_log_roll_num` always applies.
+- Introduced in: -
+
 ### `edit_log_roll_num`
 
 - Default: 50000

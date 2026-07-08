@@ -84,6 +84,8 @@ public class JournalWriter {
 
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
+    // total estimated bytes written since the last roll, for the size-based roll trigger
+    protected long rollJournalBytes = 0;
     // increment journal id
     // this is the persisted journal id
     protected long nextVisibleJournalId = -1;
@@ -395,7 +397,12 @@ public class JournalWriter {
 
     private void rollJournalAfterBatch() {
         rollJournalCounter += currentBatchTasks.size();
-        if (rollJournalCounter >= Config.edit_log_roll_num || needForceRollJournal()) {
+        for (JournalTask task : currentBatchTasks) {
+            rollJournalBytes += task.estimatedSizeByte();
+        }
+        boolean rollByCount = rollJournalCounter >= Config.edit_log_roll_num;
+        boolean rollByBytes = Config.edit_log_roll_bytes > 0 && rollJournalBytes >= Config.edit_log_roll_bytes;
+        if (rollByCount || rollByBytes || needForceRollJournal()) {
             try {
                 journal.rollJournal(nextVisibleJournalId);
             } catch (JournalException e) {
@@ -406,14 +413,18 @@ public class JournalWriter {
                 System.exit(-1);
             }
             String reason;
-            if (rollJournalCounter >= Config.edit_log_roll_num) {
+            if (rollByCount) {
                 reason = String.format("rollEditCounter %d >= edit_log_roll_num %d",
                         rollJournalCounter, Config.edit_log_roll_num);
+            } else if (rollByBytes) {
+                reason = String.format("rollEditBytes %d >= edit_log_roll_bytes %d",
+                        rollJournalBytes, Config.edit_log_roll_bytes);
             } else {
                 reason = "triggering a new checkpoint manually";
             }
             LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
+            rollJournalBytes = 0;
         }
     }
 
