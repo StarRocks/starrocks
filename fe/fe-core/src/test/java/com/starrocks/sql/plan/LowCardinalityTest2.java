@@ -3040,6 +3040,31 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testCTEConsumeDecodedColumnKeepsStringRef() throws Exception {
+        // `c_par` is a passthrough low-card column that stays dict across the materialized CTE
+        // (so the CTE-consume is visited by DecodeRewriter); `c_user` is in the global dict map
+        // but is decoded inside the producer by lead(...,'NONE'). visitPhysicalCTEConsume must
+        // NOT rewrite the c_user CTE-output entry to its dict ref, otherwise the consume carries
+        // c_user as a dict (INT) slot the produce fragment no longer emits and BE fails with
+        // "slot_id not found".
+        String sql = """
+                  WITH CTE AS (
+                    SELECT c_par, c_user, c_dept,
+                           lead(c_user, 1, 'NONE') over (partition by c_dept order by c_user) nx
+                    FROM low_card_t1
+                  ) [materialized]
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    c_par, c_user, count(*) cnt
+                  FROM CTE
+                  WHERE nx != 'ZZZ'
+                  GROUP BY c_par, c_user
+                  """;
+        String plan = getVerboseExplain(sql);
+        // c_user was decoded in the producer; it must never be carried past the CTE as a dict ref.
+        assertNotContains(plan, "c_user, INT");
+    }
+
+    @Test
     public void testCTEConsumeWithProjection() throws Exception {
         String sql = """
                   WITH CTE AS (
