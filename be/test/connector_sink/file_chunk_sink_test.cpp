@@ -28,6 +28,7 @@
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
 
 namespace starrocks::connector {
@@ -148,9 +149,11 @@ TEST_F(FileChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         FileChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0, {}).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
+        auto sink = provider.create_chunk_sink(0, create_context).value();
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
         EXPECT_OK(sink->init());
     }
 
@@ -168,9 +171,11 @@ TEST_F(FileChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         FileChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0, {}).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
+        auto sink = provider.create_chunk_sink(0, create_context).value();
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
         EXPECT_OK(sink->init());
     }
 
@@ -188,9 +193,11 @@ TEST_F(FileChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         FileChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0, {}).value();
-        SinkOperatorMemoryManager mm;
-        sink->set_operator_mem_mgr(&mm);
+        formats::AsyncFlushStreamPoller poller;
+        SinkMemoryManager mgr(nullptr, nullptr);
+        ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
+        auto sink = provider.create_chunk_sink(0, create_context).value();
+        EXPECT_NE(sink->op_mem_mgr(), nullptr);
         EXPECT_ERROR(sink->init());
     }
 }

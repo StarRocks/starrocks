@@ -16,36 +16,24 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/logging.h"
 #include "exec/pipeline/fragment_context.h"
 
 namespace starrocks::connector {
 
 IcebergRowDeltaSink::IcebergRowDeltaSink(std::unique_ptr<ConnectorChunkSink> delete_sink,
                                          std::unique_ptr<ConnectorChunkSink> data_sink, int32_t op_code_index,
-                                         SinkMemoryManager* sink_mem_mgr, RuntimeState* state)
+                                         RuntimeState* state)
         : ConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true),
           _delete_sink(std::move(delete_sink)),
           _data_sink(std::move(data_sink)),
-          _op_code_index(op_code_index),
-          _sink_mem_mgr(sink_mem_mgr) {}
+          _op_code_index(op_code_index) {}
 
 IcebergRowDeltaSinkProvider::IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx)
         : _ctx(std::move(ctx)) {}
 
 Status IcebergRowDeltaSink::init() {
     RETURN_IF_ERROR(ConnectorChunkSink::init());
-
-    _delete_sink->set_io_poller(_io_poller);
-    _data_sink->set_io_poller(_io_poller);
-
-    // Each sub-sink needs its own SinkOperatorMemoryManager because
-    // ConnectorChunkSink::init() binds the manager to the sink's _writers list.
-    if (_sink_mem_mgr != nullptr) {
-        _delete_sink->set_operator_mem_mgr(
-                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
-        _data_sink->set_operator_mem_mgr(
-                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
-    }
 
     if (_profile != nullptr) {
         _delete_sink->set_profile(_profile);
@@ -170,8 +158,11 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergRowDeltaSinkProvider::creat
     ASSIGN_OR_RETURN(auto data_sink, data_provider.create_chunk_sink(driver_id, create_context));
 
     auto sink = std::make_unique<IcebergRowDeltaSink>(std::move(delete_sink), std::move(data_sink), ctx->op_code_index,
-                                                      create_context.sink_mem_mgr, runtime_state);
+                                                      runtime_state);
     sink->set_io_poller(create_context.io_poller);
+    DCHECK(create_context.sink_mem_mgr != nullptr);
+    sink->set_operator_mem_mgr(
+            create_context.sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
     return sink;
 }
 

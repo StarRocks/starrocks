@@ -215,10 +215,11 @@ TEST_F(ConnectorSinkOperatorTest, need_input_releases_flush_memory_under_instanc
     ASSERT_OK(op_mem_mgr->init(&writers, &poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(
             &factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, std::move(chunk_sink),
-            std::make_unique<formats::AsyncFlushStreamPoller>(), sink_mem_mgr, op_mem_mgr, _fragment_context);
+            std::make_unique<formats::AsyncFlushStreamPoller>(), sink_mem_mgr, _fragment_context);
 
     {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_tracker);
@@ -255,11 +256,12 @@ TEST_F(ConnectorSinkOperatorTest, is_finished_releases_polled_stream_under_insta
     ASSERT_OK(op_mem_mgr->init(&writers, &empty_poller));
 
     auto chunk_sink = std::make_unique<TestConnectorChunkSink>(_runtime_state);
+    chunk_sink->set_operator_mem_mgr(op_mem_mgr);
     chunk_sink->set_finished(true);
     NoopConnectorSinkOperatorFactory factory;
     auto op = std::make_shared<ConnectorSinkOperator>(&factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0,
                                                       std::move(chunk_sink), std::move(io_poller), sink_mem_mgr,
-                                                      op_mem_mgr, _fragment_context);
+                                                      _fragment_context);
     ASSERT_OK(op->set_finishing(_runtime_state));
 
     {

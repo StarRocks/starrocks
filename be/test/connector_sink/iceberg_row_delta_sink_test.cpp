@@ -45,10 +45,7 @@ public:
 
     void callback_on_commit(const CommitResult& result) override {}
 
-    // Skip the base class setup (profile / writer factory / op_mem_mgr wiring) that a
-    // mock doesn't need. The outer IcebergRowDeltaSink's init() still drives real
-    // assignments against `_op_mem_mgr` before invoking this, which is what the init()
-    // test inspects via get_op_mem_mgr().
+    // Skip the base class setup that this routing mock doesn't need.
     Status init() override { return Status::OK(); }
 
     Status add(const ChunkPtr& chunk) override {
@@ -66,7 +63,7 @@ public:
 
     bool is_finished() override { return finished; }
 
-    // Expose protected _op_mem_mgr so tests can assert init() wired it.
+    // Expose protected _op_mem_mgr so tests can assert provider-time wiring.
     SinkOperatorMemoryManager* get_op_mem_mgr() const { return _op_mem_mgr; }
 
     std::vector<ChunkPtr> received_chunks;
@@ -194,7 +191,7 @@ protected:
         auto* data_ptr = data_sink.get();
 
         auto row_delta_sink = std::make_unique<IcebergRowDeltaSink>(std::move(delete_sink), std::move(data_sink),
-                                                                    op_code_index, nullptr, _runtime_state.get());
+                                                                    op_code_index, _runtime_state.get());
 
         return {std::move(row_delta_sink), delete_ptr, data_ptr};
     }
@@ -337,10 +334,9 @@ TEST_F(IcebergRowDeltaSinkTest, rollback_forwards_to_both_sub_sinks) {
     EXPECT_EQ(data_mock->rollback_count, 1);
 }
 
-// Test 7: Verify init() registers a child SinkOperatorMemoryManager for each
-// sub-sink when a SinkMemoryManager is supplied, so memory pressure logic can
-// see both sub-sinks' writer lists (OOM-safety wiring described in the commit).
-TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
+// Test 7: Verify init() keeps the sub-sink SinkOperatorMemoryManagers that
+// provider creation already installed.
+TEST_F(IcebergRowDeltaSinkTest, init_preserves_provider_wired_sub_sink_mem_managers) {
     auto query_pool_tracker =
             std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest_pool");
     auto query_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY, -1, "IcebergRowDeltaSinkTest_query");
@@ -350,20 +346,24 @@ TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
     auto data_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
     auto* delete_ptr = delete_sink.get();
     auto* data_ptr = data_sink.get();
+    auto* delete_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
+    auto* data_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
+    delete_sink->set_operator_mem_mgr(delete_mgr);
+    data_sink->set_operator_mem_mgr(data_mgr);
 
-    IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, &mgr,
-                             _runtime_state.get());
+    IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, _runtime_state.get());
     // Provide an outer SinkOperatorMemoryManager so the base init() path doesn't
     // dereference a null pointer and so the add_candidates() branch is exercised.
-    sink.set_operator_mem_mgr(mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
+    auto* outer_mgr = mgr.register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
+    sink.set_operator_mem_mgr(outer_mgr);
 
     ASSERT_OK(sink.init());
 
-    // Each sub-sink should now have its own child manager, distinct from each
-    // other and from nullptr.
-    EXPECT_NE(delete_ptr->get_op_mem_mgr(), nullptr);
-    EXPECT_NE(data_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_EQ(delete_ptr->get_op_mem_mgr(), delete_mgr);
+    EXPECT_EQ(data_ptr->get_op_mem_mgr(), data_mgr);
     EXPECT_NE(delete_ptr->get_op_mem_mgr(), data_ptr->get_op_mem_mgr());
+    EXPECT_NE(delete_ptr->get_op_mem_mgr(), outer_mgr);
+    EXPECT_NE(data_ptr->get_op_mem_mgr(), outer_mgr);
 }
 
 // Test 8: When every row in a chunk routes to the same sub-sink (pure DELETE or

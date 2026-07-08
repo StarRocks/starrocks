@@ -33,7 +33,7 @@ public:
                           std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
                           std::unique_ptr<formats::AsyncFlushStreamPoller> _io_poller,
                           std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
-                          connector::SinkOperatorMemoryManager* op_mem_mgr, FragmentContext* fragment_context);
+                          FragmentContext* fragment_context);
 
     ~ConnectorSinkOperator() override = default;
 
@@ -61,7 +61,6 @@ private:
     std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
     std::unique_ptr<formats::AsyncFlushStreamPoller> _io_poller;
     std::shared_ptr<connector::SinkMemoryManager> _sink_mem_mgr;
-    connector::SinkOperatorMemoryManager* _op_mem_mgr; // child of _sink_mem_mgr
 
     bool _no_more_input = false;
     bool _is_cancelled = false;

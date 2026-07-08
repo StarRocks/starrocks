@@ -47,6 +47,8 @@ public:
 
     void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
+    SinkOperatorMemoryManager* op_mem_mgr() const { return _op_mem_mgr; }
+
     // Expose the writer list so composite sinks can register it with the
     // outer SinkOperatorMemoryManager for aggregated memory accounting.
     std::vector<PartitionChunkWriterPtr>* writers() { return &_writers; }

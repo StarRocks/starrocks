@@ -17,6 +17,8 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/logging.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -115,6 +117,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
                                                            std::move(partition_column_evaluators),
                                                            std::move(partition_chunk_writer_factory), runtime_state);
     sink->set_io_poller(create_context.io_poller);
+    DCHECK(create_context.sink_mem_mgr != nullptr);
+    sink->set_operator_mem_mgr(
+            create_context.sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
     return sink;
 }
 

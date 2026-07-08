@@ -342,6 +342,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
     sink->set_io_poller(create_context.io_poller);
+    DCHECK(create_context.sink_mem_mgr != nullptr);
+    sink->set_operator_mem_mgr(
+            create_context.sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
     return sink;
 }
 

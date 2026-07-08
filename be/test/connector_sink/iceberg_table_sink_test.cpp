@@ -25,12 +25,14 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/runtime/pipeline.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "types/type_descriptor.h"
@@ -912,11 +914,15 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 
     // Now drive IcebergRowDeltaSinkProvider::create_chunk_sink() success path.
-    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0, {});
+    formats::AsyncFlushStreamPoller poller;
+    connector::SinkMemoryManager mgr(nullptr, nullptr);
+    connector::ConnectorChunkSinkCreateContext create_context{&poller, &mgr};
+    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0, create_context);
     ASSERT_OK(sink_or.status());
     auto created_sink = std::move(sink_or).value();
     ASSERT_NE(created_sink, nullptr);
     EXPECT_NE(dynamic_cast<connector::IcebergRowDeltaSink*>(created_sink.get()), nullptr);
+    EXPECT_NE(created_sink->op_mem_mgr(), nullptr);
 }
 
 // Tuple too short to be a row-delta layout. With only [_file, _pos]
