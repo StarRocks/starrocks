@@ -175,7 +175,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         IcebergChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_OK(sink->init());
@@ -195,7 +195,7 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
         sink_ctx->fragment_context = _fragment_context.get();
         IcebergChunkSinkProvider provider(sink_ctx);
-        auto sink = provider.create_chunk_sink(0).value();
+        auto sink = provider.create_chunk_sink(0, {}).value();
         SinkOperatorMemoryManager mm;
         sink->set_operator_mem_mgr(&mm);
         EXPECT_ERROR(sink->init()); // format is not supported

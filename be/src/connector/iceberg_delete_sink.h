@@ -78,7 +78,8 @@ public:
     ~IcebergDeleteSinkProvider() override = default;
 
     // Create a sink for writing delete files
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(
+            int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) override;
 
 private:
     std::shared_ptr<IcebergDeleteSinkContext> _ctx;

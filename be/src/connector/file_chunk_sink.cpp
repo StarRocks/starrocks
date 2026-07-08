@@ -51,7 +51,8 @@ void FileChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(
+        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
@@ -110,8 +111,10 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
     }
 
-    return std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
-                                                      std::move(partition_chunk_writer_factory), runtime_state);
+    auto sink = std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
+                                                           std::move(partition_chunk_writer_factory), runtime_state);
+    sink->set_io_poller(create_context.io_poller);
+    return sink;
 }
 
 } // namespace starrocks::connector

@@ -189,8 +189,7 @@ TEST_F(ConnectorSinkOperatorTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->fragment_context = _fragment_context;
         auto provider = std::make_unique<connector::HiveChunkSinkProvider>(sink_ctx);
-        auto op_factory =
-                std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), sink_ctx, _fragment_context);
+        auto op_factory = std::make_unique<ConnectorSinkOperatorFactory>(0, std::move(provider), _fragment_context);
         auto op = op_factory->create(1, 0);
         EXPECT_OK(op->prepare(_runtime_state));
     }

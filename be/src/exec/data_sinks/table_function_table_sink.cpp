@@ -138,8 +138,8 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     auto connector = connector::ConnectorRegistry::default_instance()->get(connector::Connector::FILE);
     ASSIGN_OR_RETURN(auto sink_provider,
                      connector->create_sink_provider(starrocks::connector::ConnectorSinkProviderType::DATA, sink_ctx));
-    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(
-            context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
+    auto op = std::make_shared<pipeline::ConnectorSinkOperatorFactory>(context->next_operator_id(),
+                                                                       std::move(sink_provider), fragment_ctx);
 
     size_t sink_dop = target_table.write_single_file ? 1 : context->data_sink_dop();
     if (sink_ctx->partition_column_indices.empty()) {

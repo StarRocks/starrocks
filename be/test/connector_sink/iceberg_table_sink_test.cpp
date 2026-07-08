@@ -56,6 +56,22 @@ protected:
     RuntimeState* _runtime_state;
 };
 
+namespace {
+
+connector::IcebergChunkSinkContext* get_iceberg_chunk_sink_context(
+        pipeline::ConnectorSinkOperatorFactory* connector_sink_factory) {
+    auto* provider =
+            dynamic_cast<connector::IcebergChunkSinkProvider*>(connector_sink_factory->_data_sink_provider.get());
+    return provider == nullptr ? nullptr : provider->_ctx.get();
+}
+
+connector::IcebergRowDeltaSinkProvider* get_iceberg_row_delta_sink_provider(
+        pipeline::ConnectorSinkOperatorFactory* connector_sink_factory) {
+    return dynamic_cast<connector::IcebergRowDeltaSinkProvider*>(connector_sink_factory->_data_sink_provider.get());
+}
+
+} // namespace
+
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
@@ -102,7 +118,8 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline) {
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
     EXPECT_EQ(sink_ctx->sort_ordering->sort_key_idxes.size(), 1);
     EXPECT_EQ(sink_ctx->sort_ordering->sort_descs.descs.size(), 1);
 }
@@ -150,7 +167,8 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+        auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+        ASSERT_NE(sink_ctx, nullptr);
 
         // Should use data_location when it's set and not empty
         EXPECT_EQ(sink_ctx->path, "s3://bucket/data-location");
@@ -173,7 +191,8 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+        auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+        ASSERT_NE(sink_ctx, nullptr);
 
         // Should use location + "/data" when data_location is not set
         EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
@@ -196,7 +215,8 @@ TEST_F(IcebergTableSinkTest, path_construction_logic) {
         pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
         pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
         auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-        auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+        auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+        ASSERT_NE(sink_ctx, nullptr);
 
         // Should use location + "/data" when data_location is empty
         EXPECT_EQ(sink_ctx->path, "s3://bucket/table-location/data");
@@ -414,7 +434,8 @@ TEST_F(IcebergTableSinkTest, row_lineage_columns_extended_during_compaction) {
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
 
     // Verify column_names was extended with row lineage columns
     ASSERT_EQ(sink_ctx->column_names.size(), 3);
@@ -500,7 +521,8 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_extended_when_column_names_al
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
 
     ASSERT_EQ(sink_ctx->column_names.size(), 3);
     ASSERT_EQ(sink_ctx->parquet_field_ids.size(), 3);
@@ -584,7 +606,8 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
     pipeline::Pipeline* pl = const_cast<pipeline::Pipeline*>(context->last_pipeline());
     pipeline::OperatorFactory* op_factory = pl->sink_operator_factory();
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
-    auto sink_ctx = dynamic_cast<connector::IcebergChunkSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* sink_ctx = get_iceberg_chunk_sink_context(connector_sink_factory);
+    ASSERT_NE(sink_ctx, nullptr);
 
     ASSERT_EQ(sink_ctx->column_names.size(), 3);
     EXPECT_EQ(sink_ctx->column_names[0], "c1");
@@ -677,8 +700,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update) {
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
     ASSERT_NE(connector_sink_factory, nullptr);
 
-    auto* row_delta_ctx =
-            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* row_delta_provider = get_iceberg_row_delta_sink_provider(connector_sink_factory);
+    ASSERT_NE(row_delta_provider, nullptr);
+    auto* row_delta_ctx = row_delta_provider->_ctx.get();
     ASSERT_NE(row_delta_ctx, nullptr);
     EXPECT_EQ(row_delta_ctx->op_code_index, -1);
 
@@ -763,8 +787,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
     ASSERT_NE(connector_sink_factory, nullptr);
 
-    auto* row_delta_ctx =
-            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* row_delta_provider = get_iceberg_row_delta_sink_provider(connector_sink_factory);
+    ASSERT_NE(row_delta_provider, nullptr);
+    auto* row_delta_ctx = row_delta_provider->_ctx.get();
     ASSERT_NE(row_delta_ctx, nullptr);
 
     // The data-only tuple descriptor must preserve the full ARRAY<INT> type, children included.
@@ -859,8 +884,9 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     auto connector_sink_factory = dynamic_cast<pipeline::ConnectorSinkOperatorFactory*>(op_factory);
     ASSERT_NE(connector_sink_factory, nullptr);
 
-    auto* row_delta_ctx =
-            dynamic_cast<connector::IcebergRowDeltaSinkContext*>(connector_sink_factory->_sink_context.get());
+    auto* row_delta_provider = get_iceberg_row_delta_sink_provider(connector_sink_factory);
+    ASSERT_NE(row_delta_provider, nullptr);
+    auto* row_delta_ctx = row_delta_provider->_ctx.get();
     ASSERT_NE(row_delta_ctx, nullptr);
     ASSERT_NE(row_delta_ctx->delete_sink_ctx, nullptr);
     ASSERT_NE(row_delta_ctx->data_sink_ctx, nullptr);
@@ -886,11 +912,7 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 
     // Now drive IcebergRowDeltaSinkProvider::create_chunk_sink() success path.
-    auto row_delta_shared_ctx =
-            std::dynamic_pointer_cast<connector::IcebergRowDeltaSinkContext>(connector_sink_factory->_sink_context);
-    ASSERT_NE(row_delta_shared_ctx, nullptr);
-    connector::IcebergRowDeltaSinkProvider provider(row_delta_shared_ctx);
-    auto sink_or = provider.create_chunk_sink(/*driver_id=*/0);
+    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0, {});
     ASSERT_OK(sink_or.status());
     auto created_sink = std::move(sink_or).value();
     ASSERT_NE(created_sink, nullptr);
