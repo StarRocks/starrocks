@@ -1085,18 +1085,19 @@ public final class MetricRepo {
             for (var nameCachePair : cachedStatisticStorage.getNamedCacheMap().entrySet()) {
                 final var cacheName = nameCachePair.getKey();
                 final var cache = nameCachePair.getValue();
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_hit_count",
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_hit_count",
                         "Cumulative number of statistics cache hits", c -> c.stats().hitCount());
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_miss_count",
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_miss_count",
                         "Cumulative number of statistics cache misses", c -> c.stats().missCount());
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_eviction_count",
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_eviction_count",
                         "Cumulative number of statistics cache evictions", c -> c.stats().evictionCount());
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_load_success_count",
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_success_count",
                         "Cumulative number of successful statistics cache loads",
                         c -> c.stats().loadSuccessCount());
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_load_failure_count",
+                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_failure_count",
                         "Cumulative number of failed statistics cache loads",
                         c -> c.stats().loadFailureCount());
+                // Current cache occupancy — a point-in-time value, so it stays a GAUGE.
                 addStatisticsCacheGauge(cacheName, cache, "statistics_cache_estimated_size",
                         "Approximate number of entries currently held in the statistics cache",
                         LoadingCache::estimatedSize);
@@ -1115,6 +1116,23 @@ public final class MetricRepo {
         };
         gauge.addLabel(new MetricLabel("cache", cacheName));
         STARROCKS_METRIC_REGISTER.addMetric(gauge);
+    }
+
+    private static void addStatisticsCacheCounter(String cacheName, LoadingCache<?, ?> cache, String metricName,
+                                                  String description, Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
+        final var counter = new CounterMetric<Long>(metricName, MetricUnit.NOUNIT, description) {
+            @Override
+            public void increase(Long delta) {
+                // No-op: the value is pulled on demand from Caffeine's cumulative stats
+            }
+
+            @Override
+            public Long getValue() {
+                return cache == null ? 0L : cacheMetricFun.apply(cache);
+            }
+        };
+        counter.addLabel(new MetricLabel("cache", cacheName));
+        STARROCKS_METRIC_REGISTER.addMetric(counter);
     }
 
     private static void initSystemMetrics() {
