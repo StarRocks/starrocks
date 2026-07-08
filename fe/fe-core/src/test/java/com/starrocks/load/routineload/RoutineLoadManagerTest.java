@@ -124,7 +124,6 @@ public class RoutineLoadManagerTest {
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
         String tableNameString = "table1";
-        new TableName(dbName, tableNameString);
         List<ParseNode> loadPropertyList = new ArrayList<>();
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         loadPropertyList.add(columnSeparator);
@@ -182,7 +181,6 @@ public class RoutineLoadManagerTest {
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
         String tableNameString = "table1";
-        new TableName(dbName, tableNameString);
         List<ParseNode> loadPropertyList = new ArrayList<>();
         ColumnSeparator columnSeparator = new ColumnSeparator(",");
         loadPropertyList.add(columnSeparator);
