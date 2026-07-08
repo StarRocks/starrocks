@@ -81,6 +81,22 @@ import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
 //     3. if insert successfully, swap the temporary partitions with source partitions
 //     4. if insert failed, remove the temporary partitions created
 //     5. if FE restart, the insert overwrite job will fail.
+//
+// Concurrency: there is NO mutual exclusion between concurrent insert overwrite jobs
+// on the same table or the same partitions. InsertOverwriteJobMgr keeps a list of
+// running jobs per table and never rejects a new one; the table locks taken by the
+// individual phases protect metadata consistency only, not job-level serialization.
+// Overwrites of disjoint partition sets run in parallel without interference. For
+// overlapping partitions the outcome depends on timing:
+//   - if one job commits before another passes prepare()/createTempPartitions(), the
+//     later job fails because its source partition ids no longer exist (the swap
+//     replaces a partition with a new one that keeps the name but gets a new id);
+//   - if both jobs pass prepare(), both succeed and the LAST commit wins: source
+//     partitions are matched by NAME in doCommit(), so the later swap replaces the
+//     earlier job's just-committed partitions, equivalent to running the two
+//     statements serially in commit order.
+// No interleaving corrupts metadata: the swap always runs under the table WRITE lock
+// and re-resolves partitions at commit time.
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
@@ -240,8 +256,26 @@ public class InsertOverwriteJobRunner {
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
+
+        // For dynamic overwrite, begin transaction to get txnId early. This allows us
+        // to persist txnId in the log, so that after FE restart, we can identify temp
+        // partitions belonging to this job (prefix: "txn{txnId}_"). Beginning the
+        // transaction only touches transaction manager state, so it runs before the
+        // table lock; if prepare fails after this point, gc() aborts the transaction.
+        if (job.isDynamicOverwrite()) {
+            long txnId = beginTransactionForDynamicOverwrite();
+            job.setTxnId(txnId);
+            LOG.info("dynamic overwrite job {} begin transaction, txnId: {}", job.getJobId(), txnId);
+        }
+
+        // A READ lock is enough here: this section only resolves partition ids to
+        // names and logs the RUNNING state change with an empty WAL applier, so no
+        // table state is mutated. The READ lock keeps the id-to-name mapping stable
+        // (rename/drop requires the table WRITE lock) until the log entry is durable.
+        // It provides NO exclusion between concurrent insert overwrite jobs on the
+        // same table (see the class comment).
         Locker locker = new Locker();
-        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
 
@@ -258,34 +292,31 @@ public class InsertOverwriteJobRunner {
             }
             job.setSourcePartitionNames(sourcePartitionNames);
 
-            // For dynamic overwrite, begin transaction here to get txnId early.
-            // This allows us to persist txnId in the log, so that after FE restart,
-            // we can identify temp partitions belonging to this job (prefix: "txn{txnId}_").
-            if (job.isDynamicOverwrite()) {
-                long txnId = beginTransactionForDynamicOverwrite(db, targetTable);
-                job.setTxnId(txnId);
-                LOG.info("dynamic overwrite job {} begin transaction, txnId: {}", job.getJobId(), txnId);
-            }
-
             InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                     InsertOverwriteJobState.OVERWRITE_RUNNING, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
                     job.getTmpPartitionIds(), job.getTxnId());
             GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
-    private long beginTransactionForDynamicOverwrite(Database db, OlapTable targetTable) throws Exception {
+    private long beginTransactionForDynamicOverwrite() throws Exception {
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         String label = MetaUtils.genInsertLabel(context.getExecutionId());
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
 
+<<<<<<< HEAD
         long txnId = transactionMgr.beginTransaction(
                 db.getId(),
                 Lists.newArrayList(targetTable.getId()),
+=======
+        return transactionMgr.beginTransaction(
+                dbId,
+                Lists.newArrayList(tableId),
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
                 label,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                         FrontendOptions.getLocalHostAddress()),
@@ -448,22 +479,45 @@ public class InsertOverwriteJobRunner {
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null || !db.isExist()) {
+            // the dynamic overwrite transaction needs only dbId and txnId to abort;
+            // clean it up even when the database is gone, otherwise it lingers until
+            // the transaction timeout checker reaps it
+            abortDynamicOverwriteTxnQuietly();
             throw new DmlException("database id:%s does not exist", dbId);
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
+            abortDynamicOverwriteTxnQuietly();
             throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
         }
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable targetTable = (OlapTable) table;
 
+        // For dynamic overwrite, the temp partition names come from the load transaction,
+        // and the transaction may still be finalizing. The wait polls with sleeps, so run
+        // it before taking the table lock; it only reads transaction state.
+        if (job.isDynamicOverwrite() && insertStmt != null && job.getTxnId() > 0) {
+            try {
+                waitTransactionSettled();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.warn("interrupted while waiting for insert overwrite transaction {} to settle", job.getTxnId(), e);
+            } catch (Exception e) {
+                LOG.warn("failed to wait for insert overwrite transaction {} to settle", job.getTxnId(), e);
+            }
+        }
+
+        Set<Tablet> sourceTablets = Sets.newHashSet();
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
+<<<<<<< HEAD
             Set<Tablet> sourceTablets = Sets.newHashSet();
 
+=======
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
             // Drop temp partitions by partition IDs (for non-dynamic overwrite)
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
@@ -504,10 +558,46 @@ public class InsertOverwriteJobRunner {
                         job.getTmpPartitionIds(), job.getTxnId());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
             }
+<<<<<<< HEAD
+=======
+
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
+                    job.getTmpPartitionIds(), job.getTxnId());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info, wal -> {
+                for (String pName : partitionNamesToDrop) {
+                    targetTable.dropTempPartition(pName, true);
+                }
+            });
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+
+        // Mark all source tablet ids force delete to drop it directly on BE. Best-effort
+        // in-memory hints, no table lock needed.
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
+
+        abortDynamicOverwriteTxnQuietly();
+    }
+
+    // Abort the transaction created in prepare() for a dynamic overwrite job, if any.
+    // It needs only dbId and txnId and takes transaction manager locks, so it must be
+    // called without the table lock held, and it works even when the target db/table
+    // has been dropped concurrently.
+    private void abortDynamicOverwriteTxnQuietly() {
+        if (!job.isDynamicOverwrite() || job.getTxnId() <= 0) {
+            return;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    dbId, job.getTxnId(), "insert overwrite job failed");
+            LOG.info("dynamic overwrite job {} aborted transaction {}", job.getJobId(), job.getTxnId());
+        } catch (Exception e) {
+            LOG.warn("failed to abort transaction {} for dynamic overwrite job {}: {}",
+                    job.getTxnId(), job.getJobId(), e.getMessage());
         }
     }
 
@@ -518,8 +608,12 @@ public class InsertOverwriteJobRunner {
      * 2. After FE restart: identify temp partitions by prefix "txn{txnId}_"
      * 3. Cancelled before prepare: no temp partitions to clean up
      */
+<<<<<<< HEAD
     private void gcDropDynamicOverwriteTempPartitions(OlapTable targetTable, Set<Tablet> sourceTablets,
                                                        boolean isReplay) throws InterruptedException {
+=======
+    private List<String> getDynamicOverwriteTempPartitions(OlapTable targetTable) {
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         List<String> tmpPartitionNames = Lists.newArrayList();
         if (!isReplay) {
             if (insertStmt != null && job.getTxnId() > 0) {
@@ -551,18 +645,35 @@ public class InsertOverwriteJobRunner {
         }
     }
 
+<<<<<<< HEAD
     private List<String> gcGetTempPartitionNamesFromTxnState(OlapTable targetTable) throws InterruptedException {
+=======
+    // Wait until the load transaction of a dynamic overwrite job is no longer running,
+    // so that getCreatedPartitionNames() below returns the complete list. This polls
+    // with sleeps and only reads transaction state, so it must be called before the
+    // table lock is taken.
+    private void waitTransactionSettled() throws InterruptedException {
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         int waitTimes = 10;
-        TransactionState txnState = null;
-        do {
-            txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+        while (true) {
+            TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(dbId, job.getTxnId());
             if (txnState == null) {
                 throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, job.getTxnId());
             }
+            if (!txnState.isRunning() || --waitTimes <= 0) {
+                return;
+            }
             Thread.sleep(200);
-        } while (txnState.isRunning() && --waitTimes > 0);
+        }
+    }
 
+    private List<String> getTempPartitionNamesFromTxnState() {
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, job.getTxnId());
+        if (txnState == null) {
+            throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, job.getTxnId());
+        }
         List<String> tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
         gcUpdateTmpPartitionIds(targetTable, tmpPartitionNames);
         LOG.info("dynamic overwrite job {} drop tmpPartitionNames:{}", job.getJobId(), tmpPartitionNames);
@@ -598,18 +709,23 @@ public class InsertOverwriteJobRunner {
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
-        Locker locker = new Locker();
-        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
-            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
-        }
         OlapTable tmpTargetTable = null;
         InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
         stats.setSourcePartitionIds(job.getSourcePartitionIds());
         stats.setTargetPartitionIds(job.getTmpPartitionIds());
+<<<<<<< HEAD
         
         // Collect partition tablet row counts for statistics sampling
         com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
         
+=======
+        Set<Tablet> sourceTablets = Sets.newHashSet();
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+        }
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -639,7 +755,6 @@ public class InsertOverwriteJobRunner {
                         return partition.getName();
                     })
                     .collect(Collectors.toList());
-            Set<Tablet> sourceTablets = Sets.newHashSet();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
@@ -721,6 +836,47 @@ public class InsertOverwriteJobRunner {
                 throw new DdlException("partition type " + partitionInfo.getType() + " is not supported");
             }
 
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getSourcePartitionNames(),
+                    job.getTmpPartitionIds(), job.getTxnId());
+            final List<String> finalSourcePartitionNames = sourcePartitionNames;
+            final List<String> finalTmpPartitionNames = tmpPartitionNames;
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info, wal -> {
+                replacePartition(targetTable, finalSourcePartitionNames, finalTmpPartitionNames);
+            });
+
+            targetTable.lastSchemaUpdateTime.set(System.nanoTime());
+        } catch (Exception e) {
+            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
+                    job.getTargetDbId(), job.getTargetTableId(), e);
+            throw new DmlException("replace partitions failed", e);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+
+        postCommit(tmpTargetTable, sourceTablets, stats);
+
+        // trigger listeners after insert overwrite committed, trigger listeners after
+        // write unlock to avoid holding lock too long
+        GlobalStateMgr.getCurrentState().getOperationListenerBus()
+                .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+    }
+
+    // Post-commit follow-up. The partition swap is already durable in the journal, so
+    // nothing here may fail the job: an exception escaping doCommit() at this point
+    // would route the job to gc(), which would drop the partitions that just became
+    // live. None of this work needs the table WRITE lock.
+    private void postCommit(OlapTable targetTable, Set<Tablet> sourceTablets, InsertOverwriteJobStats stats) {
+        // mark all source tablet ids force delete to drop it directly on BE, not to
+        // move it to trash. The marks are best-effort in-memory hints consumed by
+        // ReportHandler only after the recycle bin erases the swapped-out partitions,
+        // which happens far later than this point.
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().markTabletsForceDelete(sourceTablets);
+
+        // Collect partition tablet row counts for statistics sampling
+        com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
+        try (AutoCloseableLock ignore =
+                new AutoCloseableLock(new Locker(), dbId, Lists.newArrayList(tableId), LockType.READ)) {
             long sumTargetRows = 0;
             if (insertStmt != null && !isReplay) {
                 TransactionState txnState = GlobalStateMgr.getCurrentState()
@@ -769,6 +925,7 @@ public class InsertOverwriteJobRunner {
 
             stats.setTargetRows(sumTargetRows);
             stats.setPartitionTabletRowCounts(partitionTabletRowCounts);
+<<<<<<< HEAD
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
@@ -789,19 +946,63 @@ public class InsertOverwriteJobRunner {
 
                 targetTable.lastSchemaUpdateTime.set(System.nanoTime());
             }
+=======
+
+            // ColocateTableIndex self-protects with its own lock, and for lake tables this
+            // ends with a StarOS RPC, so it must not run under the table WRITE lock; the
+            // table READ lock is enough for the shard group reads (same locking as
+            // StarMgrMetaSyncer.syncTableColocationInfo).
+            GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(targetTable,
+                    true /* isJoin */, null /* expectGroupId */);
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         } catch (Exception e) {
-            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
-                    job.getTargetDbId(), job.getTargetTableId(), e);
-            throw new DmlException("replace partitions failed", e);
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+            // log an error if post-commit work failed, insert overwrite already succeeded
+            LOG.error("insert overwrite post-commit work failed for dbId:{}, tableId:{}, the job still succeeds",
+                    dbId, tableId, e);
         }
+<<<<<<< HEAD
 
         if (!isReplay) {
             // trigger listeners after insert overwrite committed, trigger listeners after
             // write unlock to avoid holding lock too long
             GlobalStateMgr.getCurrentState().getOperationListenerBus()
                     .onInsertOverwriteJobCommitFinish(db, tmpTargetTable, stats);
+=======
+    }
+
+    private void replacePartition(OlapTable targetTable,
+                                  List<String> sourcePartitionNames,
+                                  List<String> tmpPartitionNames) {
+        PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+        if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+            if (job.isDynamicOverwrite()) {
+                targetTable.replaceMatchPartitions(dbId, tmpPartitionNames);
+            } else {
+                targetTable.replaceTempPartitionsWithoutCheck(dbId, sourcePartitionNames, tmpPartitionNames,  false);
+            }
+        } else {
+            targetTable.replacePartition(dbId, sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+        }
+    }
+
+    protected void replayCommit() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+            return;
+        }
+        try {
+            final OlapTable targetTable = checkAndGetTable(db, tableId);
+            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .toList();
+            replacePartition(targetTable, job.getSourcePartitionNames(), tmpPartitionNames);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+>>>>>>> 5fdc14a493 ([BugFix] Reduce lock contention across the insert overwrite code path (#75828))
         }
     }
 
