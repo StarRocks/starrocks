@@ -19,6 +19,8 @@
 #include "base/url_coding.h"
 #include "common/config_connector_sink_fwd.h"
 #include "common/logging.h"
+#include "connector/common/utils.h"
+#include "connector/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -30,7 +32,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 
@@ -147,7 +148,7 @@ Status IcebergChunkSink::add(const ChunkPtr& chunk) {
     bool partitioned = !_partition_column_names.empty();
     std::vector<int8_t> partition_field_null_list;
     if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
+        ASSIGN_OR_RETURN(partition, IcebergUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators,
                                             dynamic_cast<IcebergChunkSink*>(this)->transform_expr(), chunk.get(),
                                             _support_null_partition, partition_field_null_list));

@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/hive_utils.h"
 #include "connector/partition_chunk_writer_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"

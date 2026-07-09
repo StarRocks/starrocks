@@ -14,53 +14,16 @@
 
 #pragma once
 
-#include <future>
-#include <queue>
+#include <map>
 #include <string>
 #include <utility>
-#include <vector>
 
+#include "common/logging.h"
 #include "common/statusor.h"
-#include "exprs/expr_context.h"
 #include "fmt/format.h"
-#include "formats/column_evaluator.h"
-#include "formats/parquet/parquet_file_writer.h"
-#include "formats/utils.h"
-#include "fs/fs.h"
-#include "types/type_descriptor.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks::connector {
-
-class HiveUtils {
-public:
-    static StatusOr<std::string> make_partition_name(
-            const std::vector<std::string>& column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
-            bool support_null_partition);
-
-    static StatusOr<std::string> iceberg_make_partition_name(
-            const std::vector<std::string>& partition_column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators,
-            const std::vector<std::string>& transform_exprs, Chunk* chunk, bool support_null_partition,
-            std::vector<int8_t>& field_is_null);
-
-    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
-
-    static StatusOr<std::string> iceberg_column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
-                                                      const int idx, const std::string& transform_expr,
-                                                      int8_t& is_null);
-
-    template <typename T>
-    static StatusOr<std::string> format_decimal_value(T value, int scale);
-};
-
-class IcebergUtils {
-public:
-    static std::vector<formats::FileColumnId> generate_parquet_field_ids(
-            const std::vector<TIcebergSchemaField>& fields);
-
-    inline const static std::string DATA_DIRECTORY = "/data";
-};
 
 class PathUtils {
 public:

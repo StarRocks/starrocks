@@ -21,9 +21,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/load_spill/load_chunk_spiller.h"
-#include "connector/utils.h"
-#include "connector_primitive/connector_sink_commit.h"
-#include "connector_primitive/connector_sink_profile.h"
+#include "connector/common/connector_sink_commit.h"
+#include "connector/common/connector_sink_profile.h"
+#include "connector/common/utils.h"
+#include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "fs/fs_fwd.h"
 
