@@ -40,16 +40,16 @@
 namespace starrocks::connector {
 
 // A mock ConnectorChunkSink that records chunks passed to add().
-class MockChunkSink : public ConnectorChunkSink {
+class MockChunkSink : public PartitionedConnectorChunkSink {
 public:
     explicit MockChunkSink(RuntimeState* state)
-            : ConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true) {}
+            : PartitionedConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true) {}
 
     void callback_on_commit(const CommitResult& result) override {}
 
     Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
                 SinkMemoryManager* sink_mem_mgr) override {
-        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+        return PartitionedConnectorChunkSink::init(poller, profile, sink_mem_mgr);
     }
 
     Status add(const ChunkPtr& chunk) override {

@@ -23,7 +23,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "connector/connector_chunk_sink.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"

@@ -27,7 +27,7 @@
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
-#include "connector/connector_chunk_sink.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"

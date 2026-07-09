@@ -17,9 +17,9 @@
 #include <memory>
 
 #include "common/status.h"
-#include "connector/connector_chunk_sink.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/iceberg_delete_sink.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -60,7 +60,7 @@ private:
 //   1 = delete only (position delete)
 //   2 = update (delete old row + insert new row)
 //   3 = insert only (new data row)
-class IcebergRowDeltaSink final : public ConnectorChunkSink {
+class IcebergRowDeltaSink final : public PartitionedConnectorChunkSink {
 public:
     // Op code constants
     static constexpr int8_t OP_NO_OP = 0;

@@ -19,6 +19,7 @@
 
 #include "common/logging.h"
 #include "common/statusor.h"
+#include "connector_primitive/connector_chunk_sink.h"
 #include "connector_primitive/data_source_provider.h"
 #include "gen_cpp/PlanNodes_types.h"
 
@@ -27,9 +28,6 @@ namespace starrocks {
 class ConnectorScanNode;
 
 namespace connector {
-
-class ConnectorChunkSinkContext;
-class ConnectorChunkSinkProvider;
 
 enum ConnectorType {
     HIVE = 0,

@@ -18,8 +18,8 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 #include "formats/file_writer.h"
 
 namespace starrocks {
@@ -86,7 +86,7 @@ private:
 
 // IcebergDeleteSink writes position delete files for Iceberg Merge-On-Read operations.
 // It receives chunks with columns: file_path, row_position and writes them to Parquet delete files.
-class IcebergDeleteSink final : public ConnectorChunkSink {
+class IcebergDeleteSink final : public PartitionedConnectorChunkSink {
 public:
     IcebergDeleteSink(std::vector<std::string> partition_columns, std::vector<std::string> transform_exprs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,

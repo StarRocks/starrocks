@@ -26,7 +26,6 @@
 #include "column/chunk_factory.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "connector/connector_chunk_sink.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "exec/exec_env.h"

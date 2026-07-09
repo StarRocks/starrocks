@@ -38,8 +38,8 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
                                    std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                                    RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, true),
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)) {}
 
 IcebergChunkSinkProvider::IcebergChunkSinkProvider(std::shared_ptr<IcebergChunkSinkContext> ctx)
@@ -153,7 +153,7 @@ Status IcebergChunkSink::add(const ChunkPtr& chunk) {
                                             _support_null_partition, partition_field_null_list));
     }
 
-    RETURN_IF_ERROR(ConnectorChunkSink::write_partition_chunk(partition, partition_field_null_list, chunk));
+    RETURN_IF_ERROR(PartitionedConnectorChunkSink::write_partition_chunk(partition, partition_field_null_list, chunk));
     return Status::OK();
 }
 

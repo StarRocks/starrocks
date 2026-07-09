@@ -23,9 +23,9 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
-#include "connector/connector_chunk_sink.h"
 #include "connector/hive_chunk_sink.h"
 #include "connector/partition_chunk_writer_memory_manager.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 #include "exec/exec_env.h"
 #include "formats/io/async_flush_output_stream.h"
 #include "formats/io/async_flush_stream_poller.h"
@@ -94,10 +94,11 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override { return nullptr; }
 };
 
-class TestConnectorChunkSink final : public connector::ConnectorChunkSink {
+class TestConnectorChunkSink final : public connector::PartitionedConnectorChunkSink {
 public:
     explicit TestConnectorChunkSink(RuntimeState* state)
-            : ConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {}
+            : PartitionedConnectorChunkSink({}, {}, std::make_unique<NoopPartitionChunkWriterFactory>(), state, false) {
+    }
 
     void callback_on_commit(const connector::CommitResult& result) override {}
 
@@ -110,7 +111,7 @@ public:
         if (_op_mem_mgr != nullptr) {
             return Status::OK();
         }
-        return ConnectorChunkSink::init(poller, profile, sink_mem_mgr);
+        return PartitionedConnectorChunkSink::init(poller, profile, sink_mem_mgr);
     }
 
     Status finish() override {

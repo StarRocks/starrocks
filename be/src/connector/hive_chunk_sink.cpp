@@ -36,8 +36,8 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                              std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                              RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, false) {}
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, false) {}
 
 HiveChunkSinkProvider::HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
 

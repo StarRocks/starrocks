@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector_primitive/connector.h"
@@ -37,6 +38,33 @@ class TestDataSourceProvider final : public DataSourceProvider {
 public:
     DataSourcePtr create_data_source(const TScanRange&) override { return nullptr; }
     const TupleDescriptor* tuple_descriptor(RuntimeState*) const override { return nullptr; }
+};
+
+class TestConnectorChunkSink final : public ConnectorChunkSink {
+public:
+    Status init(formats::AsyncFlushStreamPoller*, RuntimeProfile*, SinkMemoryManager*) override { return Status::OK(); }
+    Status add(const ChunkPtr&) override { return Status::OK(); }
+    Status finish() override { return Status::OK(); }
+    void rollback() override { rollback_calls++; }
+    bool is_finished() override { return finished; }
+    Status status() override { return status_value; }
+    SinkOperatorMemoryManager* op_mem_mgr() const override { return op_mem_mgr_value; }
+    void register_memory_candidates(SinkOperatorMemoryManager* op_mem_mgr) override { registered_mem_mgr = op_mem_mgr; }
+
+    bool finished = true;
+    int rollback_calls = 0;
+    Status status_value = Status::OK();
+    SinkOperatorMemoryManager* op_mem_mgr_value = nullptr;
+    SinkOperatorMemoryManager* registered_mem_mgr = nullptr;
+};
+
+struct TestConnectorChunkSinkContext final : public ConnectorChunkSinkContext {};
+
+class TestConnectorChunkSinkProvider final : public ConnectorChunkSinkProvider {
+public:
+    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t) override {
+        return std::make_unique<TestConnectorChunkSink>();
+    }
 };
 
 class TestSinkOperatorMemoryManager final : public SinkOperatorMemoryManager {
@@ -128,6 +156,21 @@ TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue)
     auto queue = std::move(queue_or).value();
     ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
     ASSERT_EQ(1, queue->num_original_morsels());
+}
+
+TEST(ConnectorPrimitiveTest, ConnectorChunkSinkContractLivesInPrimitiveLayer) {
+    TestConnectorChunkSinkProvider provider;
+
+    auto sink_or = provider.create_chunk_sink(7);
+    ASSERT_TRUE(sink_or.ok()) << sink_or.status().to_string();
+    auto sink = std::move(sink_or).value();
+
+    ASSERT_OK(sink->init(nullptr, nullptr, nullptr));
+    ASSERT_OK(sink->add(nullptr));
+    ASSERT_OK(sink->finish());
+    ASSERT_TRUE(sink->is_finished());
+    ASSERT_OK(sink->status());
+    ASSERT_EQ(nullptr, sink->op_mem_mgr());
 }
 
 TEST(ConnectorPrimitiveTest, SinkMemoryManagerRegistersAbstractOperatorManagers) {
