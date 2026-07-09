@@ -1989,8 +1989,17 @@ public class IcebergMetadata implements ConnectorMetadata {
                 org.apache.iceberg.types.Type type = partitionTypeFields.get(i).type();
                 String lower = Conversions.fromByteBuffer(type, summary.lowerBound()).toString();
                 String upper = Conversions.fromByteBuffer(type, summary.upperBound()).toString();
-                ranges.put(nameLower, new LocalDateTime[] {
-                        DateUtils.parseStrictDateTime(lower), DateUtils.parseStrictDateTime(upper)});
+                LocalDateTime lo = DateUtils.parseStrictDateTime(lower);
+                LocalDateTime hi = DateUtils.parseStrictDateTime(upper);
+                // Iceberg computes the summary min/max in the string domain. For values that parse as
+                // dates but are not lexicographically ordered as dates (e.g. non-zero-padded fields),
+                // the parsed bounds can come out inverted (lo > hi). Skip such a column so the manifest
+                // is conservatively kept rather than pruned on an inverted range.
+                if (lo.isAfter(hi)) {
+                    LOG.debug("skip inverted manifest partition range for column {}: [{}, {}]", name, lower, upper);
+                    continue;
+                }
+                ranges.put(nameLower, new LocalDateTime[] {lo, hi});
             } catch (Exception e) {
                 // Undecodable / non-temporal bounds -> leave the column out so the manifest is conservatively kept.
                 LOG.debug("skip manifest partition range for column {}", name, e);

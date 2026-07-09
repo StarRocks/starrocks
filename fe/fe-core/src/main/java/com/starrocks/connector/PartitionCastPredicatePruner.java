@@ -234,6 +234,14 @@ public class PartitionCastPredicatePruner {
         }
         LocalDateTime lo = range[0];
         LocalDateTime hi = range[1];
+        // The comparisons below assume an ordered range (lo <= hi). A caller may supply an inverted
+        // range when min/max was computed in a different ordering domain than the parsed temporal
+        // values (e.g. Iceberg's string-domain partition summary parsed back into dates for non
+        // lexicographically-sortable date strings). Treat it as unknown and conservatively keep, so
+        // pruning stays a safe over-estimate instead of silently under-counting.
+        if (lo.isAfter(hi)) {
+            return true;
+        }
         LocalDateTime c = constant.getDatetime();
         // Does some value d in [lo, hi] satisfy (d <op> c)?
         switch (bp.getBinaryType()) {

@@ -232,6 +232,9 @@ public class PartitionCastPredicatePrunerTest {
         // non-binary conjunct (OR) -> keep
         ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, eqConj, eqConj);
         Assertions.assertTrue(mayMatch(or, range("c2", dt(2020, 1, 1), dt(2020, 1, 1))));
+        // inverted range (lo > hi) -> treat as unknown and keep, so pruning stays a safe over-estimate.
+        // Without the guard the EQ check would collapse to an empty interval and wrongly prune.
+        Assertions.assertTrue(mayMatch(eqConj, range("c2", dt(2020, 12, 1), dt(2020, 1, 1))));
     }
 
     private Map<String, String> singletonMap(String k, String v) {
