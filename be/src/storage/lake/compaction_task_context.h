@@ -56,6 +56,8 @@ struct CompactionTaskStats {
     int64_t write_segment_count = 0;
     int64_t write_segment_bytes = 0;
     int64_t io_ns_write_remote = 0;
+    int64_t write_local_disk_bytes = 0;
+    int64_t io_ns_write_local_disk = 0;
     int64_t pk_sst_merge_ns = 0;
     int64_t input_file_size = 0;
 

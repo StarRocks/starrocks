@@ -303,9 +303,15 @@ public:
         }
         const auto& io_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(2);
+        stats->reserve(4);
         stats->append(kIONsWriteRemote, io_stats.io_ns_write_remote);
         stats->append(kBytesWriteRemote, io_stats.bytes_write_remote);
+        // Also surface local-disk (datacache) writes: with a write-back datacache the bytes land on
+        // local disk first and are uploaded asynchronously, so bytes_write_remote stays 0 at write
+        // time. Without this the compaction/writer profile reports 0 bytes written despite writing
+        // real segments.
+        stats->append(kIONsWriteLocalDisk, io_stats.io_ns_write_local_disk);
+        stats->append(kBytesWriteLocalDisk, io_stats.bytes_write_local_disk);
         return std::move(stats);
     }
 

@@ -42,6 +42,8 @@ void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
     write_segment_count = writer_stats.segment_count;
     write_segment_bytes = writer_stats.bytes_write_remote;
     io_ns_write_remote = writer_stats.write_remote_ns;
+    write_local_disk_bytes = writer_stats.bytes_write_local_disk;
+    io_ns_write_local_disk = writer_stats.write_local_disk_ns;
 }
 
 CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& that) const {
@@ -58,6 +60,8 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.write_segment_count += that.write_segment_count;
     diff.write_segment_bytes += that.write_segment_bytes;
     diff.io_ns_write_remote += that.io_ns_write_remote;
+    diff.write_local_disk_bytes += that.write_local_disk_bytes;
+    diff.io_ns_write_local_disk += that.io_ns_write_local_disk;
     diff.in_queue_time_sec += that.in_queue_time_sec;
     diff.pk_sst_merge_ns += that.pk_sst_merge_ns;
     diff.input_file_size += that.input_file_size;
@@ -78,6 +82,8 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.write_segment_count -= that.write_segment_count;
     diff.write_segment_bytes -= that.write_segment_bytes;
     diff.io_ns_write_remote -= that.io_ns_write_remote;
+    diff.write_local_disk_bytes -= that.write_local_disk_bytes;
+    diff.io_ns_write_local_disk -= that.io_ns_write_local_disk;
     diff.in_queue_time_sec -= that.in_queue_time_sec;
     diff.pk_sst_merge_ns -= that.pk_sst_merge_ns;
     diff.input_file_size -= that.input_file_size;
@@ -99,6 +105,8 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("write_segment_count", rapidjson::Value(s.write_segment_count), allocator);
     root.AddMember("write_remote_mb", rapidjson::Value(s.write_segment_bytes / BYTES_UNIT_MB), allocator);
     root.AddMember("write_remote_sec", rapidjson::Value(s.io_ns_write_remote / TIME_UNIT_NS_PER_SECOND), allocator);
+    root.AddMember("write_local_mb", rapidjson::Value(s.write_local_disk_bytes / BYTES_UNIT_MB), allocator);
+    root.AddMember("write_local_sec", rapidjson::Value(s.io_ns_write_local_disk / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("in_queue_sec", rapidjson::Value(s.in_queue_time_sec), allocator);
     root.AddMember("pk_sst_merge_sec", rapidjson::Value(s.pk_sst_merge_ns / TIME_UNIT_NS_PER_SECOND), allocator);
     root.AddMember("input_file_size", rapidjson::Value(s.input_file_size), allocator);

@@ -170,9 +170,11 @@ struct OlapReaderStatistics {
 
 // OlapWriterStatistics used to collect statistics when write data to storage
 struct OlapWriterStatistics {
-    int64_t write_remote_ns = 0;    // how much time is spent on write
-    int64_t bytes_write_remote = 0; // how many bytes are written
-    int64_t segment_count = 0;      // how many files are written
+    int64_t write_remote_ns = 0;        // how much time is spent on remote write
+    int64_t bytes_write_remote = 0;     // how many bytes are written to remote storage
+    int64_t write_local_disk_ns = 0;    // how much time is spent on local-disk (datacache) write
+    int64_t bytes_write_local_disk = 0; // how many bytes are written to local disk (datacache)
+    int64_t segment_count = 0;          // how many files are written
 };
 
 const char* const kBytesReadLocalDisk = "bytes_read_local_disk";

@@ -142,6 +142,10 @@ void collect_writer_stats(OlapWriterStatistics& writer_stats, SegmentWriter* seg
             writer_stats.bytes_write_remote += value;
         } else if (name == kIONsWriteRemote) {
             writer_stats.write_remote_ns += value;
+        } else if (name == kBytesWriteLocalDisk) {
+            writer_stats.bytes_write_local_disk += value;
+        } else if (name == kIONsWriteLocalDisk) {
+            writer_stats.write_local_disk_ns += value;
         }
     }
 }
