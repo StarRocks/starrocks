@@ -17,11 +17,6 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include "base/base64.h"
-#include "base/testutil/assert.h"
->>>>>>> ddfcb93f99 ([UT] Fix FunctionContext leaks in base64ToBitmapConstNullHandling (#76072))
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
