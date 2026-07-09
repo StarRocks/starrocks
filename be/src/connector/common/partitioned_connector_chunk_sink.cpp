@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/partitioned_connector_chunk_sink.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/hive_utils.h"
-#include "connector/partition_chunk_writer_memory_manager.h"
+#include "connector/common/hive_partition_utils.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"
 
@@ -113,8 +113,8 @@ Status PartitionedConnectorChunkSink::add(const ChunkPtr& chunk) {
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
         ASSIGN_OR_RETURN(partition,
-                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
-                                                        chunk.get(), _support_null_partition));
+                         HivePartitionUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
+                                                                 chunk.get(), _support_null_partition));
     }
 
     RETURN_IF_ERROR(

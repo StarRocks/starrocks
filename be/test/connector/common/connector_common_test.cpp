@@ -15,9 +15,16 @@
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
+#include <string>
+
+#include "column/chunk.h"
+#include "column/column_helper.h"
 #include "connector/common/connector_sink_commit.h"
+#include "connector/common/hive_partition_utils.h"
 #include "connector/common/utils.h"
+#include "formats/column_evaluator.h"
 #include "formats/utils.h"
+#include "types/datum.h"
 
 namespace starrocks::connector {
 
@@ -111,6 +118,55 @@ TEST(ConnectorCommonTest, LocationProviderIncludesWriterTag) {
     LocationProvider provider("s3://bucket/table", "query", 2, 3, "parquet", "data");
 
     ASSERT_EQ("s3://bucket/table/query_2_data_3_0.parquet", provider.get());
+}
+
+TEST(ConnectorCommonTest, HivePartitionUtilsFormatsDecimalScale) {
+    auto formatted = HivePartitionUtils::format_decimal_value<int32_t>(123, 2);
+    ASSERT_TRUE(formatted.ok()) << formatted.status();
+    ASSERT_EQ("1.23", formatted.value());
+
+    formatted = HivePartitionUtils::format_decimal_value<int32_t>(123, 4);
+    ASSERT_TRUE(formatted.ok()) << formatted.status();
+    ASSERT_EQ("0.0123", formatted.value());
+
+    ASSERT_FALSE(HivePartitionUtils::format_decimal_value<int32_t>(123, -1).ok());
+}
+
+TEST(ConnectorCommonTest, HivePartitionUtilsBuildsEncodedPartitionName) {
+    Chunk chunk;
+
+    auto name_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    std::string name_value = "a b/c";
+    Datum name;
+    name.set_slice(name_value);
+    name_column->append_datum(name);
+    chunk.append_column(name_column, 0);
+
+    auto day_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
+    day_column->append_datum(Datum(int32_t{7}));
+    chunk.append_column(day_column, 1);
+
+    auto evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC, TYPE_INT_DESC});
+    auto partition_name = HivePartitionUtils::make_partition_name({"name", "day"}, evaluators, &chunk, true);
+
+    ASSERT_TRUE(partition_name.ok()) << partition_name.status();
+    ASSERT_EQ("name=a%20b%2Fc/day=7/", partition_name.value());
+}
+
+TEST(ConnectorCommonTest, HivePartitionUtilsHandlesNullPartitionPolicy) {
+    Chunk chunk;
+
+    auto nullable_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    ASSERT_TRUE(nullable_column->append_nulls(1));
+    chunk.append_column(nullable_column, 0);
+
+    auto evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+    auto rejected = HivePartitionUtils::make_partition_name({"name"}, evaluators, &chunk, false);
+    ASSERT_FALSE(rejected.ok());
+
+    auto allowed = HivePartitionUtils::make_partition_name({"name"}, evaluators, &chunk, true);
+    ASSERT_TRUE(allowed.ok()) << allowed.status();
+    ASSERT_EQ("name=null/", allowed.value());
 }
 
 } // namespace starrocks::connector

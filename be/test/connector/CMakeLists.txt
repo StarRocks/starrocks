@@ -35,6 +35,8 @@ add_executable(connector_common_test
         ${BE_TEST_MACOS_LINK_STUBS}
         ${BE_TEST_JNI_ENV_STUB}
         common/connector_common_test.cpp
+        common/partition_chunk_writer_test.cpp
+        common/partition_chunk_writer_memory_manager_test.cpp
 )
 target_link_libraries(connector_common_test ${CONNECTOR_COMMON_TEST_LINK_LIBS} gtest_main)
 set_target_properties(connector_common_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

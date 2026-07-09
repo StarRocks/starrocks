@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive_utils.h"
+#include "connector/common/hive_partition_utils.h"
 
 #include <cmath>
 #include <sstream>
@@ -26,7 +26,7 @@
 
 namespace starrocks::connector {
 
-StatusOr<std::string> HiveUtils::make_partition_name(
+StatusOr<std::string> HivePartitionUtils::make_partition_name(
         const std::vector<std::string>& column_names,
         const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
         bool support_null_partition) {
@@ -45,7 +45,7 @@ StatusOr<std::string> HiveUtils::make_partition_name(
 }
 
 template <typename T>
-StatusOr<std::string> HiveUtils::format_decimal_value(T value, int scale) {
+StatusOr<std::string> HivePartitionUtils::format_decimal_value(T value, int scale) {
     if (scale < 0) {
         return Status::InvalidArgument("scale must be non-negative");
     }
@@ -68,12 +68,13 @@ StatusOr<std::string> HiveUtils::format_decimal_value(T value, int scale) {
     return res;
 }
 
-template StatusOr<std::string> HiveUtils::format_decimal_value<int32_t>(int32_t value, int scale);
-template StatusOr<std::string> HiveUtils::format_decimal_value<int64_t>(int64_t value, int scale);
-template StatusOr<std::string> HiveUtils::format_decimal_value<int128_t>(int128_t value, int scale);
+template StatusOr<std::string> HivePartitionUtils::format_decimal_value<int32_t>(int32_t value, int scale);
+template StatusOr<std::string> HivePartitionUtils::format_decimal_value<int64_t>(int64_t value, int scale);
+template StatusOr<std::string> HivePartitionUtils::format_decimal_value<int128_t>(int128_t value, int scale);
 
 // TODO(letian-jiang): translate org.apache.hadoop.hive.common.FileUtils#makePartName
-StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int i) {
+StatusOr<std::string> HivePartitionUtils::column_value(const TypeDescriptor& type_desc, const ColumnPtr& column,
+                                                       int i) {
     DCHECK(i < column->size() && i >= 0);
     auto datum = column->get(i);
     if (datum.is_null()) {

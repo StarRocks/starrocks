@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/connector_sink_executor.h"
+#include "connector/common/connector_sink_executor.h"
 
 #include "column/chunk.h"
 #include "common/config_lake_fwd.h"
@@ -20,7 +20,6 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/load_spill/load_chunk_spiller.h"
-#include "connector/partition_chunk_writer.h"
 #include "platform/store_path.h"
 #include "runtime/current_thread.h"
 
@@ -65,7 +64,7 @@ void ChunkSpillTask::run() {
 
 void MergeBlockTask::run() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-    auto st = _writer->merge_blocks();
+    auto st = _merge_func();
     if (_cb) {
         _cb(st);
     }

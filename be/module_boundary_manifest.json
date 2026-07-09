@@ -787,7 +787,7 @@
       ],
       "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "cache/", "util/"],
       "forbidden_includes": [
-        "connector/partitioned_connector_chunk_sink.h",
+        "connector/common/partitioned_connector_chunk_sink.h",
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
@@ -827,9 +827,9 @@
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorPrimitive", "ComputeEnv", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ComputeEnv", "ConnectorPrimitive", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_common_test"],
-      "allowed_test_link_deps": ["ConnectorCommon", "ConnectorPrimitive", "ComputeEnv", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_link_deps": ["ConnectorCommon", "ComputeEnv", "ConnectorPrimitive", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward."
     },
     {

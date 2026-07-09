@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "connector/partition_chunk_writer.h"
+#include "connector/common/partition_chunk_writer.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "formats/io/async_flush_stream_poller.h"
 
