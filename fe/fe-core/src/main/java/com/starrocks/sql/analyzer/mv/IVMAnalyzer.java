@@ -247,18 +247,18 @@ public class IVMAnalyzer {
         if (queryRelation instanceof SelectRelation) {
             SelectRelation selectRelation = (SelectRelation) queryRelation;
             // For SelectRelation, we rewrite it to support incremental view maintenance.
-            return checkSelectRelation(selectRelation);
+            return rewriteSelectRelation(selectRelation);
         } else if (queryRelation instanceof SetOperationRelation) {
-            return checkSetRelation((SetOperationRelation) queryRelation);
+            return rewriteSetRelation((SetOperationRelation) queryRelation);
         } else if (queryRelation instanceof SubqueryRelation) {
-            return checkSubqueryRelation((SubqueryRelation) queryRelation);
+            return rewriteSubqueryRelation((SubqueryRelation) queryRelation);
         } else {
             throw new SemanticException("IVMAnalyzer can only handle SelectRelation/UnionRelation, but got: %s",
                     queryRelation.getClass().getSimpleName());
         }
     }
 
-    private boolean checkSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
+    private boolean rewriteSubqueryRelation(SubqueryRelation subqueryRelation) throws AnalysisException {
         QueryStatement subQueryStatement = subqueryRelation.getQueryStatement();
         boolean childHasComputedRowId = rewriteImpl(subQueryStatement.getQueryRelation());
         if (childHasComputedRowId) {
@@ -268,7 +268,7 @@ public class IVMAnalyzer {
         return false;
     }
 
-    private boolean checkSetRelation(SetOperationRelation setOperationRelation) throws AnalysisException {
+    private boolean rewriteSetRelation(SetOperationRelation setOperationRelation) throws AnalysisException {
         if (!(setOperationRelation instanceof UnionRelation)) {
             throw new SemanticException("IVMAnalyzer can only handle UnionRelation, " +
                     "but got: %s", setOperationRelation.getClass().getSimpleName());
@@ -291,7 +291,7 @@ public class IVMAnalyzer {
                 throw new SemanticException("UnionRelation in IVMAnalyzer should not have aggregate functions, " +
                         "but got: %s", aggregateExprs);
             }
-            boolean childHasComputedRowId = checkRelation(selectChild);
+            boolean childHasComputedRowId = rewriteRelation(selectChild);
             if (childHasComputedRowId) {
                 throw new SemanticException("IVMAnalyzer does not support UnionRelation with retractable sink, " +
                         "but got: %s", unionRelation.getClass().getSimpleName());
@@ -300,7 +300,7 @@ public class IVMAnalyzer {
         return false;
     }
 
-    private boolean checkSelectRelation(SelectRelation selectRelation) throws AnalysisException {
+    private boolean rewriteSelectRelation(SelectRelation selectRelation) throws AnalysisException {
         if (CollectionUtils.isNotEmpty(selectRelation.getOutputAnalytic())) {
             throw new SemanticException("IVMAnalyzer does not support window functions, " +
                     "but got: %s", selectRelation.getOutputAnalytic());
@@ -324,13 +324,13 @@ public class IVMAnalyzer {
             throw new SemanticException("IVMAnalyzer does not support %s for incremental view maintenance",
                     groupByClause.getGroupingType());
         }
-        boolean hasComputedRowId = checkAggregate(selectRelation);
+        boolean hasComputedRowId = rewriteAggregate(selectRelation);
         Relation innerRelation = selectRelation.getRelation();
-        hasComputedRowId |= checkRelation(innerRelation);
+        hasComputedRowId |= rewriteRelation(innerRelation);
         return hasComputedRowId;
     }
 
-    private boolean checkRelation(Relation relation) throws AnalysisException {
+    private boolean rewriteRelation(Relation relation) throws AnalysisException {
         if (relation == null) {
             return false;
         }
@@ -341,11 +341,11 @@ public class IVMAnalyzer {
             if (!IVM_SUPPORTED_JOIN_OPS.contains(joinType)) {
                 throw new SemanticException("IVMAnalyzer does not support join type: %s", joinType);
             }
-            if (checkRelation(joinRelation.getLeft())) {
+            if (rewriteRelation(joinRelation.getLeft())) {
                 throw new SemanticException("IVMAnalyzer does not support with retractable left input, " +
                         "but got: %s", joinRelation.getLeft());
             }
-            if (checkRelation(joinRelation.getRight())) {
+            if (rewriteRelation(joinRelation.getRight())) {
                 throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
                         "but got: %s", joinRelation.getRight());
             }
@@ -372,7 +372,7 @@ public class IVMAnalyzer {
         }
     }
 
-    private boolean checkAggregate(SelectRelation selectRelation) throws AnalysisException {
+    private boolean rewriteAggregate(SelectRelation selectRelation) throws AnalysisException {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
         List<Expr> groupByExprs = selectRelation.getGroupBy();
 
@@ -428,7 +428,7 @@ public class IVMAnalyzer {
             // Whitelist gate: only (function, argument-type) combinations validated end-to-end
             // are allowed. Unsupported combinations would either fail at refresh time or silently
             // produce wrong data; reject them here so the user sees a clear CREATE-time error.
-            checkAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
+            validateAggregateFunctionInWhitelist(aggFuncExpr, aggFuncName);
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
             String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 
@@ -515,7 +515,7 @@ public class IVMAnalyzer {
         return ExprSubstitutionVisitor.rewrite(expr, substitutionMap);
     }
 
-    private static void checkAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
+    private static void validateAggregateFunctionInWhitelist(FunctionCallExpr aggFuncExpr, String aggFuncName) {
         Predicate<Type[]> rule = IVM_SUPPORTED_AGG_FUNCTIONS.get(aggFuncName.toLowerCase());
         if (rule == null) {
             throw new SemanticException(
