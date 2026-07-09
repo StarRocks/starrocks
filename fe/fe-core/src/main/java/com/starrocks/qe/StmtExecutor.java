@@ -74,6 +74,7 @@ import com.starrocks.common.QueryDumpLog;
 import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
@@ -316,8 +317,10 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -337,6 +340,8 @@ public class StmtExecutor {
     private static final Gson GSON = new Gson();
 
     private static final AtomicLong STMT_ID_GENERATOR = new AtomicLong(0);
+    private static final ExecutorService PLANNING_RESOURCE_CLEANUP_EXECUTOR =
+            ThreadPoolManager.newDaemonCacheThreadPool(32, 1024, "planning-resource-cleanup", false);
 
     private final ConnectContext context;
     private final MysqlSerializer serializer;
@@ -369,6 +374,9 @@ public class StmtExecutor {
 
     // Catalog types involved in this query (e.g., "default", "hive", "iceberg")
     private Set<String> catalogTypesInvolved = Collections.emptySet();
+    private final Set<AutoCloseable> cancellablePlanningResources = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean cancellablePlanningResourcesCleanupScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean cancellablePlanningResourcesCleared = new AtomicBoolean(false);
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -1319,6 +1327,7 @@ public class StmtExecutor {
             if (coord != null) {
                 coord.clearExternalResources();
             }
+            clearCancellablePlanningResourcesAsync();
 
             if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
                 clearQueryScopeHintContext();
@@ -1740,6 +1749,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel(String cancelledMessage) {
+        clearCancellablePlanningResourcesAsync();
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
@@ -1756,6 +1766,70 @@ public class StmtExecutor {
             if (coordRef != null) {
                 coordRef.cancel(cancelledMessage);
             }
+        }
+    }
+
+    public AutoCloseable registerCancellablePlanningResource(AutoCloseable resource) {
+        if (resource == null) {
+            return () -> {
+            };
+        }
+
+        if (cancellablePlanningResourcesCleared.get()) {
+            closeCancellablePlanningResourceAsync(resource);
+            return () -> {
+            };
+        }
+
+        cancellablePlanningResources.add(resource);
+        if (cancellablePlanningResourcesCleared.get() && cancellablePlanningResources.remove(resource)) {
+            closeCancellablePlanningResourceAsync(resource);
+        }
+        return () -> cancellablePlanningResources.remove(resource);
+    }
+
+    private void clearCancellablePlanningResourcesAsync() {
+        if (cancellablePlanningResourcesCleared.get() ||
+                !cancellablePlanningResourcesCleanupScheduled.compareAndSet(false, true)) {
+            return;
+        }
+
+        try {
+            PLANNING_RESOURCE_CLEANUP_EXECUTOR.execute(this::clearCancellablePlanningResources);
+        } catch (RejectedExecutionException e) {
+            cancellablePlanningResourcesCleanupScheduled.set(false);
+            LOG.warn("submit cancellable planning resource cleanup task failed, query id: {}",
+                    context != null ? context.getQueryId() : null, e);
+        }
+    }
+
+    private void clearCancellablePlanningResources() {
+        if (!cancellablePlanningResourcesCleared.compareAndSet(false, true)) {
+            return;
+        }
+
+        for (AutoCloseable resource : new ArrayList<>(cancellablePlanningResources)) {
+            if (cancellablePlanningResources.remove(resource)) {
+                closeCancellablePlanningResource(resource);
+            }
+        }
+    }
+
+    private void closeCancellablePlanningResourceAsync(AutoCloseable resource) {
+        try {
+            PLANNING_RESOURCE_CLEANUP_EXECUTOR.execute(() -> closeCancellablePlanningResource(resource));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("submit cancellable planning resource close task failed, query id: {}",
+                    context != null ? context.getQueryId() : null, e);
+        }
+    }
+
+    private void closeCancellablePlanningResource(AutoCloseable resource) {
+        try {
+            resource.close();
+        } catch (Exception e) {
+            LOG.warn("close cancellable planning resource failed, query id: {}",
+                    context != null ? context.getQueryId() : null, e);
         }
     }
 
