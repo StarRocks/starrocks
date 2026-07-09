@@ -25,11 +25,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.load.DeleteMgr;
 import com.starrocks.metric.MetricRepo;
->>>>>>> 23376eb183 ([BugFix] Avoid NPE when aborting a failed INSERT INTO FILES sink (#75983))
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
