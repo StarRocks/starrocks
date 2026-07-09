@@ -770,7 +770,7 @@
     {
       "id": "connectorprimitive",
       "doc_label": "ConnectorPrimitive",
-      "summary": "Connector contracts, DataSource, DataSourceProvider default mechanics, and primitive connector sink commit/profile types without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.",
+      "summary": "Connector contracts, DataSource, DataSourceProvider default mechanics, and generic connector sink memory management interfaces without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.",
       "owned_targets": ["ConnectorPrimitive"],
       "owned_roots": ["be/src/connector_primitive"],
       "allowed_include_prefixes": [
@@ -778,7 +778,6 @@
         "exec_primitive/",
         "exprs/",
         "runtime/",
-        "formats/",
         "column/",
         "types/",
         "common/",
@@ -788,14 +787,50 @@
       ],
       "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "cache/", "util/"],
       "forbidden_includes": [
-        "connector/connector_chunk_sink.h",
+        "connector/common/partitioned_connector_chunk_sink.h",
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["FormatCore", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["connector_primitive_test"],
-      "allowed_test_link_deps": ["ConnectorPrimitive", "FormatCore", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and primitive sink commit/profile types; move concrete connectors, concrete sinks, registry wiring, storage, service, and full Exec integration upward."
+      "allowed_test_link_deps": ["ConnectorPrimitive", "ExecPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and generic sink memory policies expressed through lower-level interfaces; move concrete connectors, reusable sink/file-writer helpers, registry wiring, storage, service, and full Exec integration upward."
+    },
+    {
+      "id": "connectorcommon",
+      "doc_label": "ConnectorCommon",
+      "summary": "Reusable connector sink/file-writer helpers above connector contracts, including sink commit/profile types and shared writer-side utilities, without concrete connector registry composition, service, HTTP, or full Exec coupling.",
+      "owned_targets": ["ConnectorCommon"],
+      "owned_roots": ["be/src/connector/common"],
+      "allowed_include_prefixes": [
+        "connector/common/",
+        "connector_primitive/",
+        "compute_env/",
+        "cache/",
+        "storage_primitive/",
+        "exec_primitive/",
+        "exprs/",
+        "runtime/",
+        "platform/",
+        "formats/",
+        "fs/",
+        "io/",
+        "column/",
+        "types/",
+        "common/",
+        "base/",
+        "gutil/",
+        "gen_cpp/"
+      ],
+      "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "agent/", "util/"],
+      "forbidden_includes": [
+        "connector/connector_registry.h",
+        "exec/exec_env.h"
+      ],
+      "allowed_target_deps": ["ComputeEnv", "ConnectorPrimitive", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["connector_common_test"],
+      "allowed_test_link_deps": ["ConnectorCommon", "ComputeEnv", "ConnectorPrimitive", "Cache", "StoragePrimitive", "ExecPrimitive", "Expr", "Runtime", "Platform", "FormatCore", "FileSystem", "IO", "ColumnSortCore", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward."
     },
     {
       "id": "connectorbenchmark",

@@ -52,6 +52,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
+import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.PlanMode;
@@ -278,31 +279,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             LOG.info("IcebergMetadata will use direct commit (no queue) for catalog {}", catalogName);
         }
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry);
-    }
-
-    @Deprecated
-    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
-                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
-                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
-                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
-        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, catalogProperties, properties,
-                procedureRegistry, commitQueueManager);
     }
 
     @Override
@@ -1138,8 +1114,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         Types.StructType schema = nativeTbl.schema().asStruct();
 
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
+        // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
+        // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
+        // here against each file's partition values (consistent with the backend filter).
+        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                scalarOperators, identityStringPartitionColumns(icebergTable));
+        boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
-        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1147,6 +1129,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                              connectContext, enableCollectColumnStatistics, params.getFieldNames())) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
+                if (residual.hasResidual() && !PartitionCastPredicatePruner.partitionMayMatch(residual.residual,
+                        icebergPartitionValues(scanTask, icebergTable, existPartitionTransformedEvolution))) {
+                    continue;
+                }
 
                 FileScanTask icebergSplitScanTask = scanTask;
                 if (enableCollectColumnStatistics) {
@@ -1201,10 +1187,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
+            // See collectTableStatisticsAndCacheIcebergSplit: keep cast-on-string-partition conjuncts out of the
+            // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
+            PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+                    scalarOperators, identityStringPartitionColumns(icebergTable));
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
                     icebergTable.getNativeTable().schema().asStruct());
-            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
+            if (residual.hasResidual()) {
+                baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
+                        icebergTable.hasPartitionTransformedEvolution());
+            }
         }
 
         IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
@@ -1261,6 +1255,101 @@ public class IcebergMetadata implements ConnectorMetadata {
                 }
             }
         };
+    }
+
+    // Wraps a streaming source, dropping files whose partition value cannot satisfy the residual conjuncts
+    // (cast-on-string-partition-column predicates that Iceberg cannot prune soundly).
+    private RemoteFileInfoSource filterByPartitionResidual(RemoteFileInfoSource base,
+                                                           List<ScalarOperator> residual,
+                                                           IcebergTable table,
+                                                           boolean existPartitionTransformedEvolution) {
+        return new RemoteFileInfoSource() {
+            private RemoteFileInfo next;
+
+            private void advance() {
+                while (next == null && base.hasMoreOutput()) {
+                    RemoteFileInfo candidate = base.getOutput();
+                    if (candidate instanceof IcebergRemoteFileInfo) {
+                        FileScanTask task = ((IcebergRemoteFileInfo) candidate).getFileScanTask();
+                        if (!PartitionCastPredicatePruner.partitionMayMatch(
+                                residual, icebergPartitionValues(task, table, existPartitionTransformedEvolution))) {
+                            continue;
+                        }
+                    }
+                    next = candidate;
+                }
+            }
+
+            @Override
+            public RemoteFileInfo getOutput() {
+                advance();
+                RemoteFileInfo result = next;
+                next = null;
+                return result;
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                advance();
+                return next != null;
+            }
+
+            @Override
+            public void close() throws Exception {
+                base.close();
+            }
+        };
+    }
+
+    // Identity partition columns of string type (lower-cased names). Only these can be residual-pruned here:
+    // their partition value round-trips through the same string cast the predicate carries.
+    private static Set<String> identityStringPartitionColumns(IcebergTable table) {
+        Set<String> names = new HashSet<>();
+        org.apache.iceberg.Table nativeTable = table.getNativeTable();
+        for (PartitionField field : nativeTable.spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(nativeTable.schema(), field);
+            Column column = table.getColumn(name);
+            if (column != null && column.getType().isStringType()) {
+                names.add(name.toLowerCase(Locale.ROOT));
+            }
+        }
+        return names;
+    }
+
+    // Raw string partition values for the file, keyed by (identity) partition column name. Returns an empty map
+    // under partition-transform evolution, where getIcebergPartitionValues drops non-identity fields and would
+    // misalign the value-to-column mapping (residual pruning then conservatively keeps every file).
+    private static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
+                                                              boolean existPartitionTransformedEvolution) {
+        if (existPartitionTransformedEvolution) {
+            return Collections.emptyMap();
+        }
+        PartitionSpec spec = table.getNativeTable().spec();
+        org.apache.iceberg.PartitionData partitionData =
+                (org.apache.iceberg.PartitionData) task.file().partition();
+        List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
+        Map<String, String> result = new HashMap<>();
+        int index = 0;
+        for (PartitionField field : spec.fields()) {
+            if (field.transform().isVoid()) {
+                continue;
+            }
+            if (index >= values.size()) {
+                break;
+            }
+            String value = values.get(index++);
+            if (!field.transform().isIdentity()) {
+                continue;
+            }
+            String name = table.getPartitionSourceName(table.getNativeTable().schema(), field);
+            if (value != null) {
+                result.put(name, value);
+            }
+        }
+        return result;
     }
 
     private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks, GetRemoteFilesParams params) {

@@ -12,37 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector_chunk_sink.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/common/hive_partition_utils.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
-ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_columns,
-                                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
-                                       RuntimeState* state, bool support_null_partition)
+PartitionedConnectorChunkSink::PartitionedConnectorChunkSink(
+        std::vector<std::string> partition_columns,
+        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+        std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
+        bool support_null_partition)
         : _partition_column_names(std::move(partition_columns)),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
           _partition_chunk_writer_factory(std::move(partition_chunk_writer_factory)),
           _state(state),
           _support_null_partition(support_null_partition) {}
 
-Status ConnectorChunkSink::init() {
+Status PartitionedConnectorChunkSink::init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                                           SinkMemoryManager* sink_mem_mgr) {
+    _io_poller = poller;
+    _profile = profile;
+    DCHECK(sink_mem_mgr != nullptr);
+    auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
     init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
-    RETURN_IF_ERROR(_op_mem_mgr->init(&_writers, _io_poller));
+    RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
+    _partition_writer_mem_mgr = op_mem_mgr.get();
+    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
     return Status::OK();
 }
 
-void ConnectorChunkSink::init_profile() {
+void PartitionedConnectorChunkSink::init_profile() {
     if (_profile == nullptr) {
-        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorChunkSink"));
+        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorSink"));
     }
 
     std::string partition_names = fmt::format("{}", fmt::join(_partition_column_names, ","));
@@ -66,9 +75,9 @@ void ConnectorChunkSink::init_profile() {
     _sink_profile->spilling_bytes_usage_peak = ADD_PEAK_COUNTER(_profile, "SpillingBytesUsagePeak", TUnit::BYTES);
 }
 
-Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
-                                                 const std::vector<int8_t>& partition_field_null_list,
-                                                 const ChunkPtr& chunk) {
+Status PartitionedConnectorChunkSink::write_partition_chunk(const std::string& partition,
+                                                            const std::vector<int8_t>& partition_field_null_list,
+                                                            const ChunkPtr& chunk) {
     // partition_field_null_list is used to distinguish with the secenario like NULL and string "null"
     // They are under the same dir path, but should not in the same data file.
     // We should record them in different files so that each data file could has its own meta info.
@@ -99,13 +108,13 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
     return Status::OK();
 }
 
-Status ConnectorChunkSink::add(const ChunkPtr& chunk) {
+Status PartitionedConnectorChunkSink::add(const ChunkPtr& chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
         ASSIGN_OR_RETURN(partition,
-                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
-                                                        chunk.get(), _support_null_partition));
+                         HivePartitionUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
+                                                                 chunk.get(), _support_null_partition));
     }
 
     RETURN_IF_ERROR(
@@ -113,7 +122,7 @@ Status ConnectorChunkSink::add(const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-Status ConnectorChunkSink::finish() {
+Status PartitionedConnectorChunkSink::finish() {
     // Flushing data to disk to make more memory space for subsequent merge operations.
     for (auto& [partition_key, writer] : _partition_chunk_writers) {
         RETURN_IF_ERROR(writer->flush());
@@ -127,30 +136,30 @@ Status ConnectorChunkSink::finish() {
     return Status::OK();
 }
 
-void ConnectorChunkSink::push_rollback_action(const std::function<void()>& action) {
+void PartitionedConnectorChunkSink::push_rollback_action(const std::function<void()>& action) {
     // Not a very frequent operation, so use unique_lock here is ok.
     std::unique_lock<std::shared_mutex> wlck(_mutex);
     _rollback_actions.push_back(action);
 }
 
-void ConnectorChunkSink::rollback() {
+void PartitionedConnectorChunkSink::rollback() {
     std::shared_lock<std::shared_mutex> rlck(_mutex);
     for (auto& action : _rollback_actions) {
         action();
     }
 }
 
-void ConnectorChunkSink::set_status(const Status& status) {
+void PartitionedConnectorChunkSink::set_status(const Status& status) {
     std::unique_lock<std::shared_mutex> wlck(_mutex);
     _status = status;
 }
 
-Status ConnectorChunkSink::status() {
+Status PartitionedConnectorChunkSink::status() {
     std::shared_lock<std::shared_mutex> rlck(_mutex);
     return _status;
 }
 
-bool ConnectorChunkSink::is_finished() {
+bool PartitionedConnectorChunkSink::is_finished() {
     for (auto& [partition_key, writer] : _partition_chunk_writers) {
         if (!writer->is_finished()) {
             return false;
@@ -159,13 +168,12 @@ bool ConnectorChunkSink::is_finished() {
     return true;
 }
 
-void ConnectorChunkSink::set_profile(RuntimeProfile* profile) {
-    if (_profile != nullptr) {
-        LOG(WARNING) << "ConnectorChunkSink profile is set duplicated, query_id: " << print_id(_state->query_id())
-                     << ", fragment_instance_id: " << print_id(_state->fragment_instance_id());
-        return;
+void PartitionedConnectorChunkSink::register_memory_candidates(SinkOperatorMemoryManager* op_mem_mgr) {
+    auto* partition_mem_mgr = dynamic_cast<PartitionChunkWriterMemoryManager*>(op_mem_mgr);
+    DCHECK(partition_mem_mgr != nullptr);
+    if (partition_mem_mgr != nullptr) {
+        partition_mem_mgr->add_candidates(&_writers);
     }
-    _profile = profile;
 }
 
 } // namespace starrocks::connector

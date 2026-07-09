@@ -87,6 +87,32 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
 - Introduced in: v4.1.0
+### `enable_external_predicate_columns_collection`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to record predicate column usage (columns used in WHERE/JOIN/GROUP BY) for external (non-native) tables during query optimization. StarRocks uses this usage information to narrow down which columns ANALYZE collects statistics for on wide external tables. When disabled, external table predicate columns are not recorded, and ANALYZE falls back to collecting statistics for all columns.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- Default: 168
+- Type: Long
+- Unit: Hours
+- Is mutable: Yes
+- Description: The time-to-live (TTL) of recorded external table predicate column usage. Entries whose `last_used` timestamp is older than this value are removed by the periodic vacuum job. Set to a negative value (e.g. -1) to disable vacuum. Defaults to a week because external table ANALYZE runs far less frequently than for internal tables, so a short TTL (matching the internal table's 24-hour default) would evict usage information between two collections.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The TTL of the in-memory cache that serves external table predicate column queries (for example, during automatic ANALYZE column selection). A shorter value makes newly recorded usage visible sooner but increases the query load on the underlying storage table; a longer value reduces that load at the cost of staleness.
+- Introduced in: v4.2.0
 
 ## Storage
 

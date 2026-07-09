@@ -13,11 +13,9 @@ set(EXEC_FILES
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/file_chunk_sink_test.cpp
-        ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/iceberg_row_delta_sink_test.cpp
-        ./connector_sink/sink_memory_manager_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp
@@ -98,6 +96,8 @@ set(EXEC_FILES
         ./exec/file_scanner/json_scanner_test.cpp
         ./exec/file_scanner/orc_scanner_test.cpp
         ./exec/file_scanner/parquet_scanner_test.cpp
+        ./exec/file_scanner/arrow_scanner_test.cpp
+        ./exec/file_scanner/stream_source_meta_test.cpp
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp

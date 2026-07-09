@@ -17,6 +17,9 @@
 #include <future>
 
 #include "base/url_coding.h"
+#include "common/logging.h"
+#include "connector/common/utils.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -26,7 +29,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 
@@ -34,8 +36,8 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                              std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                              RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, false) {}
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, false) {}
 
 HiveChunkSinkProvider::HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
 
@@ -57,8 +59,7 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorSink>> HiveChunkSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
@@ -97,7 +98,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
                 SpillPartitionChunkWriterContext{{file_writer_factory, location_provider, ctx->max_file_size,
                                                   ctx->partition_column_names.empty()},
                                                  fs,
-                                                 ctx->fragment_context,
+                                                 runtime_state,
                                                  query_execution_services->runtime->connector_sink_spill_executor,
                                                  nullptr,
                                                  nullptr});
@@ -114,7 +115,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
     auto sink = std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names,
                                                            std::move(partition_column_evaluators),
                                                            std::move(partition_chunk_writer_factory), runtime_state);
-    sink->set_io_poller(create_context.io_poller);
     return sink;
 }
 

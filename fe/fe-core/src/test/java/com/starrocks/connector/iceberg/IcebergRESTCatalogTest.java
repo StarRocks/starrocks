@@ -97,7 +97,7 @@ public class IcebergRESTCatalogTest {
                 CATALOG_NAME, icebergRESTCatalog, DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
 
         return new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
+                Executors.newSingleThreadExecutor(),
                 new IcebergCatalogProperties(DEFAULT_CONFIG));
     }
 

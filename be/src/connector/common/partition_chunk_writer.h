@@ -14,26 +14,32 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+#include <list>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "base/uid_util.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/thread/threadpool.h"
-#include "compute_env/load_spill/load_chunk_spiller.h"
-#include "connector/utils.h"
-#include "connector_primitive/connector_sink_commit.h"
-#include "connector_primitive/connector_sink_profile.h"
+#include "connector/common/connector_sink_commit.h"
+#include "connector/common/connector_sink_profile.h"
+#include "connector/common/utils.h"
+#include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "fs/fs_fwd.h"
 
 namespace starrocks {
 
+class RuntimeState;
 class TupleDescriptor;
-
-namespace pipeline {
-class FragmentContext;
-} // namespace pipeline
+class LoadChunkSpiller;
+class LoadSpillBlockManager;
 
 } // namespace starrocks
 
@@ -61,7 +67,7 @@ struct BufferPartitionChunkWriterContext : PartitionChunkWriterContext {};
 
 struct SpillPartitionChunkWriterContext : PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
-    pipeline::FragmentContext* fragment_context = nullptr;
+    RuntimeState* state = nullptr;
     ConnectorSinkSpillExecutor* spill_executor = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
@@ -214,7 +220,7 @@ private:
 
 private:
     std::shared_ptr<FileSystem> _fs = nullptr;
-    pipeline::FragmentContext* _fragment_context = nullptr;
+    RuntimeState* _state = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     std::shared_ptr<SortOrdering> _sort_ordering;

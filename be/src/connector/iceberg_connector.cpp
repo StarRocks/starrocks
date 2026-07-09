@@ -20,16 +20,15 @@
 
 namespace starrocks::connector {
 
-StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> IcebergConnector::create_sink_provider(
-        ConnectorSinkProviderType type, std::shared_ptr<ConnectorChunkSinkContext> context) const {
+StatusOr<std::unique_ptr<ConnectorSinkProvider>> IcebergConnector::create_sink_provider(
+        ConnectorSinkProviderType type, std::shared_ptr<ConnectorSinkContext> context) const {
     switch (type) {
     case ConnectorSinkProviderType::DATA: {
         auto ctx = std::dynamic_pointer_cast<IcebergChunkSinkContext>(context);
         if (ctx == nullptr) {
             return Status::InternalError("Iceberg connector data sink requires IcebergChunkSinkContext");
         }
-        std::unique_ptr<ConnectorChunkSinkProvider> provider =
-                std::make_unique<IcebergChunkSinkProvider>(std::move(ctx));
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergChunkSinkProvider>(std::move(ctx));
         return provider;
     }
     case ConnectorSinkProviderType::DELETE: {
@@ -37,8 +36,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> IcebergConnector::create_s
         if (ctx == nullptr) {
             return Status::InternalError("Iceberg connector delete sink requires IcebergDeleteSinkContext");
         }
-        std::unique_ptr<ConnectorChunkSinkProvider> provider =
-                std::make_unique<IcebergDeleteSinkProvider>(std::move(ctx));
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergDeleteSinkProvider>(std::move(ctx));
         return provider;
     }
     case ConnectorSinkProviderType::ROW_DELTA: {
@@ -46,8 +44,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> IcebergConnector::create_s
         if (ctx == nullptr) {
             return Status::InternalError("Iceberg connector row-delta sink requires IcebergRowDeltaSinkContext");
         }
-        std::unique_ptr<ConnectorChunkSinkProvider> provider =
-                std::make_unique<IcebergRowDeltaSinkProvider>(std::move(ctx));
+        std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<IcebergRowDeltaSinkProvider>(std::move(ctx));
         return provider;
     }
     }

@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include <future>
+#include <optional>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -25,12 +26,15 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exec/runtime/pipeline.h"
+#include "formats/io/async_flush_stream_poller.h"
+#include "formats/utils.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "types/type_descriptor.h"
@@ -621,17 +625,19 @@ TEST_F(IcebergTableSinkTest, row_lineage_field_ids_ignore_non_written_hidden_col
 }
 
 namespace {
-// Build a minimal SLOT_REF TExpr referring to slot_id in tuple 0.
-// from_exprs() / column_slot_map population only inspect node_type and slot_ref,
-// so this is enough to exercise create_row_delta_sink_context without setting
-// up full type descriptors.
-TExpr make_slot_ref_expr(int slot_id) {
+// Build a SLOT_REF TExpr referring to slot_id in tuple 0. Most row-delta context
+// tests only inspect node_type and slot_ref, but tests that initialize the
+// produced sinks also need a valid thrift type for ColumnExprEvaluator::init().
+TExpr make_slot_ref_expr(int slot_id, std::optional<TypeDescriptor> type = std::nullopt) {
     TExpr expr;
     TExprNode node;
     node.node_type = TExprNodeType::SLOT_REF;
     node.__set_slot_ref(TSlotRef());
     node.slot_ref.slot_id = slot_id;
     node.slot_ref.tuple_id = 0;
+    if (type.has_value()) {
+        node.__set_type(type->to_thrift());
+    }
     expr.nodes.push_back(node);
     return expr;
 }
@@ -802,14 +808,14 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta_update_complex_type
 }
 
 // Drives mixed row-delta create_row_delta_sink_context() end-to-end via decompose_to_pipeline,
-// then exercises IcebergRowDeltaSinkProvider::create_chunk_sink() on the
+// then exercises IcebergRowDeltaSinkProvider::create_sink() on the
 // resulting context. Covers:
 //   - the row-delta dispatch branch in decompose_to_pipeline
 //   - IcebergConnector::create_sink_provider()
 //   - the bulk of create_row_delta_sink_context() (delete sub-context, data
 //     sub-context, override_tuple_desc, op_code_index, and the unpartitioned
 //     branch)
-//   - IcebergRowDeltaSinkProvider::create_chunk_sink() success path, which in
+//   - IcebergRowDeltaSinkProvider::create_sink() success path, which in
 //     turn drives IcebergDeleteSinkProvider and IcebergChunkSinkProvider
 TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     // Tuple layout for a MERGE-style row-delta write: [_file, _pos, c1, op_code]
@@ -867,12 +873,13 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     iceberg_table_sink.__set_location("/path/to/table");
     iceberg_table_sink.__set_data_location("/path/to/table/data");
     iceberg_table_sink.__set_tuple_id(0);
+    iceberg_table_sink.__set_file_format(formats::PARQUET);
     iceberg_table_sink.__set_write_mode(TIcebergWriteMode::ROW_DELTA_MIXED);
     iceberg_table_sink.__set_target_max_file_size(128LL * 1024 * 1024);
     data_sink.__set_iceberg_table_sink(iceberg_table_sink);
 
-    std::vector<TExpr> exprs = {make_slot_ref_expr(0), make_slot_ref_expr(1), make_slot_ref_expr(2),
-                                make_slot_ref_expr(3)};
+    std::vector<TExpr> exprs = {make_slot_ref_expr(0, TYPE_VARCHAR_DESC), make_slot_ref_expr(1, TYPE_BIGINT_DESC),
+                                make_slot_ref_expr(2, TYPE_INT_DESC), make_slot_ref_expr(3, TYPE_TINYINT_DESC)};
 
     IcebergTableSink sink(&_pool, exprs);
     pipeline::OpFactories prev_operators{std::make_shared<pipeline::EmptySetOperatorFactory>(11, 11)};
@@ -911,12 +918,17 @@ TEST_F(IcebergTableSinkTest, decompose_to_pipeline_row_delta) {
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->column_names[0], "c1");
     EXPECT_EQ(row_delta_ctx->data_sink_ctx->parquet_field_ids[0].field_id, 1);
 
-    // Now drive IcebergRowDeltaSinkProvider::create_chunk_sink() success path.
-    auto sink_or = row_delta_provider->create_chunk_sink(/*driver_id=*/0, {});
+    // Now drive IcebergRowDeltaSinkProvider::create_sink() success path.
+    formats::AsyncFlushStreamPoller poller;
+    connector::SinkMemoryManager mgr(nullptr, nullptr);
+    auto sink_or = row_delta_provider->create_sink(/*driver_id=*/0);
     ASSERT_OK(sink_or.status());
     auto created_sink = std::move(sink_or).value();
     ASSERT_NE(created_sink, nullptr);
     EXPECT_NE(dynamic_cast<connector::IcebergRowDeltaSink*>(created_sink.get()), nullptr);
+    EXPECT_EQ(created_sink->op_mem_mgr(), nullptr);
+    ASSERT_OK(created_sink->init(&poller, nullptr, &mgr));
+    EXPECT_NE(created_sink->op_mem_mgr(), nullptr);
 }
 
 // Tuple too short to be a row-delta layout. With only [_file, _pos]

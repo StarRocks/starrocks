@@ -20,6 +20,7 @@
 #include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg_utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
@@ -125,7 +126,7 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     auto* iceberg_table_desc = down_cast<IcebergTableDescriptor*>(table_desc);
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
-    std::unique_ptr<connector::ConnectorChunkSinkProvider> sink_provider;
+    std::unique_ptr<connector::ConnectorSinkProvider> sink_provider;
     std::vector<TExpr> partition_expr;
     std::vector<std::string> transform_exprs = iceberg_table_desc->get_transform_exprs();
 
@@ -176,11 +177,11 @@ Status IcebergTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operat
     return Status::OK();
 }
 
-Status IcebergTableSink::create_delete_sink_context(
-        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
-        IcebergTableDescriptor* iceberg_table_desc,
-        std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSink::create_delete_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                                    pipeline::PipelineBuilderContext* context,
+                                                    IcebergTableDescriptor* iceberg_table_desc,
+                                                    std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+                                                    std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
@@ -257,7 +258,7 @@ Status IcebergTableSink::create_delete_sink_context(
 Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
                                                   pipeline::PipelineBuilderContext* context,
                                                   IcebergTableDescriptor* iceberg_table_desc,
-                                                  std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
+                                                  std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
                                                   std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
@@ -376,11 +377,11 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     return Status::OK();
 }
 
-Status IcebergTableSink::create_row_delta_sink_context(
-        const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* context,
-        IcebergTableDescriptor* iceberg_table_desc,
-        std::unique_ptr<connector::ConnectorChunkSinkProvider>& sink_provider,
-        std::vector<TExpr>& partition_expr) const {
+Status IcebergTableSink::create_row_delta_sink_context(const TDataSink& thrift_sink, RuntimeState* runtime_state,
+                                                       pipeline::PipelineBuilderContext* context,
+                                                       IcebergTableDescriptor* iceberg_table_desc,
+                                                       std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
+                                                       std::vector<TExpr>& partition_expr) const {
     auto* fragment_ctx = context->fragment_context();
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
@@ -450,7 +451,7 @@ Status IcebergTableSink::create_row_delta_sink_context(
     delete_sink_ctx->fragment_context = fragment_ctx;
 
     // Pass the full output_exprs list (one per tuple slot) so
-    // IcebergDeleteSinkProvider::create_chunk_sink()'s strict
+    // IcebergDeleteSinkProvider::create_sink()'s strict
     // `tuple_desc->slots().size() == ctx->output_exprs.size()` DCHECK holds in
     // debug builds. The delete sub-sink only consumes evaluators [0]=_file and
     // [1]=_pos at runtime; trailing data-column / op_code evaluators are held

@@ -539,11 +539,19 @@ FetchProcessorFactory::FetchProcessorFactory(int32_t target_node_id,
           _nodes_info(std::move(nodes_info)) {}
 
 FetchProcessorPtr FetchProcessorFactory::get_or_create(int32_t driver_sequence) {
-    if (!_processor_map.contains(driver_sequence)) {
-        _processor_map.try_emplace(driver_sequence, std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs,
-                                                                                     _slot_id_to_desc, _nodes_info));
-    }
-    return _processor_map.at(driver_sequence);
+    // Do the get-or-create and the read entirely under the submap lock. Returning
+    // _processor_map.at() would deref a slot reference after the lock is released,
+    // racing with a concurrent try_emplace()/resize() (another driver sequence hashing
+    // into the same submap) that frees the slot array -> heap-use-after-free.
+    FetchProcessorPtr processor;
+    _processor_map.lazy_emplace_l(
+            driver_sequence, [&](FetchProcessorPtr& value) { processor = value; },
+            [&](const auto& ctor) {
+                processor = std::make_shared<FetchProcessor>(_target_node_id, _row_pos_descs, _slot_id_to_desc,
+                                                             _nodes_info);
+                ctor(driver_sequence, processor);
+            });
+    return processor;
 }
 
 void FetchProcessorFactory::close_context(RuntimeState* state) {

@@ -87,6 +87,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
 - 引入版本: v4.1.0
+### `enable_external_predicate_columns_collection`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在查询优化过程中记录外部表（非原生表）的谓词列使用情况（WHERE/JOIN/GROUP BY 中用到的列）。StarRocks 利用这些使用信息缩小宽外部表 ANALYZE 时需要收集统计信息的列范围。禁用后不再记录外部表的谓词列，ANALYZE 会回退为收集所有列的统计信息。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- 默认值: 168
+- 类型: Long
+- 单位: 小时
+- 是否可变: Yes
+- 描述: 记录的外部表谓词列使用信息的存活时间（TTL）。`last_used` 时间早于该值的记录会被周期性的 vacuum 任务清除。设置为负值（例如 -1）可禁用 vacuum。默认值为一周，因为外部表 ANALYZE 的执行频率远低于内表，如果 TTL 太短（如内表默认的 24 小时），会导致两次收集之间使用信息被提前清除。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
+- 引入版本: v4.2.0
 
 ## 存储
 

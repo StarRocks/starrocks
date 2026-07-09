@@ -269,12 +269,20 @@ Operator-tree execution framework for query and fragment contexts, driver lifecy
 - Remediation: Keep ExecRuntime limited to the operator-tree execution framework and runtime behavior that can be expressed through ComputeEnv and ExecPrimitive contracts; move concrete operators, storage, service, connector, cache, HTTP, and broad Exec integration upward.
 
 ### ConnectorPrimitive (`connectorprimitive`)
-Connector contracts, DataSource, DataSourceProvider default mechanics, and primitive connector sink commit/profile types without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
+Connector contracts, DataSource, DataSourceProvider default mechanics, and generic connector sink memory management interfaces without concrete connectors, sinks, registry composition, storage, service, or full Exec coupling.
 - Targets: `ConnectorPrimitive`
-- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `formats/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `FormatCore`, `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `connector_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ExecPrimitive`, `Expr`, `Runtime`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_primitive_test`
-- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and primitive sink commit/profile types; move concrete connectors, concrete sinks, registry wiring, storage, service, and full Exec integration upward.
+- Remediation: Keep ConnectorPrimitive limited to connector contracts, default scan-range-to-morsel mechanics, and generic sink memory policies expressed through lower-level interfaces; move concrete connectors, reusable sink/file-writer helpers, registry wiring, storage, service, and full Exec integration upward.
+
+### ConnectorCommon (`connectorcommon`)
+Reusable connector sink/file-writer helpers above connector contracts, including sink commit/profile types and shared writer-side utilities, without concrete connector registry composition, service, HTTP, or full Exec coupling.
+- Targets: `ConnectorCommon`
+- Allowed internal include prefixes: `connector/common/`, `connector_primitive/`, `compute_env/`, `cache/`, `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `platform/`, `formats/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `ComputeEnv`, `ConnectorPrimitive`, `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FormatCore`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `connector_common_test`
+- Remediation: Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward.
 
 ### ConnectorBuiltinRegistry (`connectorbuiltinregistry`)
 Top-level built-in connector registration composition above connector contracts and concrete connector libraries.

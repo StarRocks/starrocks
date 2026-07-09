@@ -32,6 +32,7 @@
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
+#include "exec/file_scanner/arrow_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -227,6 +228,8 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     case TFileFormatType::FORMAT_AVRO:
         return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
 #endif
+    case TFileFormatType::FORMAT_ARROW:
+        return std::make_unique<ArrowScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
@@ -234,12 +237,13 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
 
 // Pure predicate extracted for testability: returns InternalError when
 // rejected-record logging is enabled but `fmt` is not in the supported
-// whitelist (CSV / JSON / Parquet / ORC). The identical check lives in
+// whitelist (CSV / JSON / Parquet / ORC / Arrow). The identical check lives in
 // file_connector.cpp; extracting to a free function DRYs both call sites.
 Status check_rejected_record_format_support(bool logging_enabled, TFileFormatType::type fmt) {
     if (logging_enabled && fmt != TFileFormatType::FORMAT_CSV_PLAIN && fmt != TFileFormatType::FORMAT_JSON &&
-        fmt != TFileFormatType::FORMAT_PARQUET && fmt != TFileFormatType::FORMAT_ORC) {
-        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
+        fmt != TFileFormatType::FORMAT_PARQUET && fmt != TFileFormatType::FORMAT_ORC &&
+        fmt != TFileFormatType::FORMAT_ARROW) {
+        return Status::InternalError("only support csv/json/parquet/orc/arrow format to log rejected record");
     }
     return Status::OK();
 }

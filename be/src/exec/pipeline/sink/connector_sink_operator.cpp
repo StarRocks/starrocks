@@ -29,30 +29,26 @@ namespace starrocks::pipeline {
 
 ConnectorSinkOperator::ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                              int32_t driver_sequence,
-                                             std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
-                                             std::unique_ptr<formats::AsyncFlushStreamPoller> io_poller,
+                                             std::unique_ptr<connector::ConnectorSink> connector_sink,
                                              std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
-                                             connector::SinkOperatorMemoryManager* op_mem_mgr,
                                              FragmentContext* fragment_context)
         : Operator(factory, id, "connector_sink", plan_node_id, false, driver_sequence),
-          _connector_chunk_sink(std::move(connector_chunk_sink)),
-          _io_poller(std::move(io_poller)),
+          _connector_sink(std::move(connector_sink)),
+          _io_poller(std::make_unique<formats::AsyncFlushStreamPoller>()),
           _sink_mem_mgr(std::move(sink_mem_mgr)),
-          _op_mem_mgr(op_mem_mgr),
           _fragment_context(fragment_context) {}
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
 #endif
-    _connector_chunk_sink->set_profile(_unique_metrics.get());
-    RETURN_IF_ERROR(_connector_chunk_sink->init());
+    RETURN_IF_ERROR(_connector_sink->init(_io_poller.get(), _unique_metrics.get(), _sink_mem_mgr.get()));
     return Status::OK();
 }
 
 void ConnectorSinkOperator::close(RuntimeState* state) {
     if (_is_cancelled) {
-        _connector_chunk_sink->rollback();
+        _connector_sink->rollback();
     }
 #ifndef BE_TEST
     Operator::close(state);
@@ -71,9 +67,9 @@ bool ConnectorSinkOperator::need_input() const {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
         std::tie(status, std::ignore) = _io_poller->poll();
         if (status.ok()) {
-            status = _connector_chunk_sink->status();
+            status = _connector_sink->status();
         }
-        can_accept_more_input = _sink_mem_mgr->can_accept_more_input(_op_mem_mgr);
+        can_accept_more_input = _sink_mem_mgr->can_accept_more_input(_connector_sink->op_mem_mgr());
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
@@ -96,9 +92,9 @@ bool ConnectorSinkOperator::is_finished() const {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
         std::tie(status, finished) = _io_poller->poll();
         if (status.ok()) {
-            status = _connector_chunk_sink->status();
+            status = _connector_sink->status();
         }
-        ret = finished && _connector_chunk_sink->is_finished();
+        ret = finished && _connector_sink->is_finished();
     }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
@@ -109,7 +105,7 @@ bool ConnectorSinkOperator::is_finished() const {
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
-    RETURN_IF_ERROR(_connector_chunk_sink->finish());
+    RETURN_IF_ERROR(_connector_sink->finish());
     return Status::OK();
 }
 
@@ -127,12 +123,12 @@ StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk));
+    RETURN_IF_ERROR(_connector_sink->add(chunk));
     return Status::OK();
 }
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
-        int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
+        int32_t id, std::unique_ptr<connector::ConnectorSinkProvider> data_sink_provider,
         FragmentContext* fragment_context)
         : OperatorFactory(id, "connector_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
@@ -143,14 +139,10 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
 }
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto io_poller = std::make_unique<formats::AsyncFlushStreamPoller>();
-    connector::ConnectorChunkSinkCreateContext create_context{io_poller.get(), _sink_mem_mgr.get()};
-    auto chunk_sink = _data_sink_provider->create_chunk_sink(driver_sequence, create_context).value();
-    auto* op_mem_mgr = _sink_mem_mgr->register_child_manager(std::make_unique<connector::SinkOperatorMemoryManager>());
-    chunk_sink->set_operator_mem_mgr(op_mem_mgr);
+    auto connector_sink = _data_sink_provider->create_sink(driver_sequence).value();
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
-                                                   driver_sequence, std::move(chunk_sink), std::move(io_poller),
-                                                   _sink_mem_mgr, op_mem_mgr, _fragment_context);
+                                                   driver_sequence, std::move(connector_sink), _sink_mem_mgr,
+                                                   _fragment_context);
 }
 
 } // namespace starrocks::pipeline

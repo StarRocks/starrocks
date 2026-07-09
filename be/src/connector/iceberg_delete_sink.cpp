@@ -24,8 +24,10 @@
 #include "column/column_helper.h"
 #include "column/sorting/sorting.h"
 #include "common/config_exec_fwd.h"
-#include "connector/partition_chunk_writer.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/common/partition_chunk_writer.h"
+#include "connector/common/utils.h"
+#include "connector/iceberg_utils.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/column_evaluator.h"
@@ -39,7 +41,6 @@
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "types/datum.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 
@@ -49,8 +50,8 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                      std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                                      RuntimeState* state, std::unordered_map<std::string, TExprNode> column_slot_map)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, true),
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)),
           _column_slot_map(std::move(column_slot_map)) {}
 
@@ -150,7 +151,7 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
 
     // Compute partition name if table is partitioned
     if (is_partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
+        ASSIGN_OR_RETURN(partition, IcebergUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators, _transform_exprs,
                                             chunk.get(), _support_null_partition, partition_field_null_list));
     }
@@ -217,8 +218,7 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");
@@ -331,7 +331,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     auto writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
             {file_writer_factory, location_provider, ctx->max_file_size, ctx->partition_column_names.empty()},
             fs,
-            ctx->fragment_context,
+            runtime_state,
             query_execution_services->runtime->connector_sink_spill_executor,
             delete_tuple_desc,
             column_evaluators,
@@ -341,7 +341,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_
     auto sink = std::make_unique<IcebergDeleteSink>(
             ctx->partition_column_names, ctx->transform_exprs, ColumnEvaluator::clone(ctx->partition_evaluators),
             std::move(partition_chunk_writer_factory), runtime_state, ctx->column_slot_map);
-    sink->set_io_poller(create_context.io_poller);
     return sink;
 }
 

@@ -8,6 +8,8 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
+import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
+import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
@@ -112,18 +114,7 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 ### Syntax
 
-```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
-[COMMENT <comment>]
-PROPERTIES
-(
-    "type" = "iceberg",
-    [SecurityParams],
-    MetastoreParams,
-    StorageCredentialParams,
-    MetadataRelatedParams
-)
-```
+<EditionSpecificIcebergCatalogSyntax />
 
 ---
 
@@ -818,6 +809,8 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 | **Parameter**                                 | **Default**           | **Description**                                         |
 | :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
 | enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
+
+<EditionSpecificIcebergCatalogParam />
 
 ### Examples
 

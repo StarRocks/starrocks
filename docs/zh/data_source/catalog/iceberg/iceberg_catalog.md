@@ -8,6 +8,8 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
 import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
+import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
+import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
@@ -111,18 +113,7 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 ### 语法
 
-```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
-[COMMENT <comment>]
-PROPERTIES
-(
-    "type" = "iceberg",
-    [SecurityParams],
-    MetastoreParams,
-    StorageCredentialParams,
-    MetadataRelatedParams
-)
-```
+<EditionSpecificIcebergCatalogSyntax />
 
 ---
 
@@ -857,6 +848,8 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                       | **默认值**             | **描述**                       |
 | :-------------------------------------------- | :-------------------- | :----------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | 是否允许系统从 Iceberg 元数据中获取统计信息。当此项设置为 `true` 时，您可以通过会话变量 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) 进一步控制要收集的统计信息类型。 |
+
+<EditionSpecificIcebergCatalogParam />
 
 ### 示例
 

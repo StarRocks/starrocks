@@ -16,53 +16,47 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/logging.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 
 namespace starrocks::connector {
 
-IcebergRowDeltaSink::IcebergRowDeltaSink(std::unique_ptr<ConnectorChunkSink> delete_sink,
-                                         std::unique_ptr<ConnectorChunkSink> data_sink, int32_t op_code_index,
-                                         SinkMemoryManager* sink_mem_mgr, RuntimeState* state)
-        : ConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true),
+IcebergRowDeltaSink::IcebergRowDeltaSink(std::unique_ptr<ConnectorSink> delete_sink,
+                                         std::unique_ptr<ConnectorSink> data_sink, int32_t op_code_index,
+                                         RuntimeState* state)
+        : PartitionedConnectorChunkSink({}, {}, std::make_unique<NopPartitionChunkWriterFactory>(), state, true),
           _delete_sink(std::move(delete_sink)),
           _data_sink(std::move(data_sink)),
-          _op_code_index(op_code_index),
-          _sink_mem_mgr(sink_mem_mgr) {}
+          _op_code_index(op_code_index) {}
 
 IcebergRowDeltaSinkProvider::IcebergRowDeltaSinkProvider(std::shared_ptr<IcebergRowDeltaSinkContext> ctx)
         : _ctx(std::move(ctx)) {}
 
-Status IcebergRowDeltaSink::init() {
-    RETURN_IF_ERROR(ConnectorChunkSink::init());
+Status IcebergRowDeltaSink::init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                                 SinkMemoryManager* sink_mem_mgr) {
+    _io_poller = poller;
+    _profile = profile;
+    DCHECK(sink_mem_mgr != nullptr);
+    init_profile();
+    RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
+    RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
 
-    _delete_sink->set_io_poller(_io_poller);
-    _data_sink->set_io_poller(_io_poller);
+    RETURN_IF_ERROR(_delete_sink->init(poller, _profile, sink_mem_mgr));
+    RETURN_IF_ERROR(_data_sink->init(poller, _profile, sink_mem_mgr));
 
-    // Each sub-sink needs its own SinkOperatorMemoryManager because
-    // ConnectorChunkSink::init() binds the manager to the sink's _writers list.
-    if (_sink_mem_mgr != nullptr) {
-        _delete_sink->set_operator_mem_mgr(
-                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
-        _data_sink->set_operator_mem_mgr(
-                _sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>()));
-    }
-
-    if (_profile != nullptr) {
-        _delete_sink->set_profile(_profile);
-        _data_sink->set_profile(_profile);
-    }
-
-    RETURN_IF_ERROR(_delete_sink->init());
-    RETURN_IF_ERROR(_data_sink->init());
+    auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
+    RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
 
     // This composite sink owns no writers of its own (NopPartitionChunkWriterFactory),
     // so the operator-level kill-victim / backpressure path would see an empty
     // candidate list. Register sub-sink writer lists with the outer manager so
     // memory pressure logic can flush real writers held by the sub-sinks.
-    if (_op_mem_mgr != nullptr) {
-        _op_mem_mgr->add_candidates(_delete_sink->writers());
-        _op_mem_mgr->add_candidates(_data_sink->writers());
-    }
+    _delete_sink->register_memory_candidates(op_mem_mgr.get());
+    _data_sink->register_memory_candidates(op_mem_mgr.get());
+
+    _partition_writer_mem_mgr = op_mem_mgr.get();
+    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
 
     return Status::OK();
 }
@@ -76,7 +70,7 @@ void IcebergRowDeltaSink::rollback() {
     // On cancel, propagate so uncommitted data / position-delete files get cleaned.
     _delete_sink->rollback();
     _data_sink->rollback();
-    ConnectorChunkSink::rollback();
+    PartitionedConnectorChunkSink::rollback();
 }
 
 // Filter the original chunk to keep only the specified rows, preserving all
@@ -154,8 +148,7 @@ bool IcebergRowDeltaSink::is_finished() {
     return _delete_sink->is_finished() && _data_sink->is_finished();
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergRowDeltaSinkProvider::create_chunk_sink(
-        int32_t driver_id, const ConnectorChunkSinkCreateContext& create_context) {
+StatusOr<std::unique_ptr<ConnectorSink>> IcebergRowDeltaSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergRowDeltaSinkProvider: context is not IcebergRowDeltaSinkContext");
@@ -164,14 +157,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergRowDeltaSinkProvider::creat
     auto runtime_state = ctx->data_sink_ctx->fragment_context->runtime_state();
 
     IcebergDeleteSinkProvider delete_provider(ctx->delete_sink_ctx);
-    ASSIGN_OR_RETURN(auto delete_sink, delete_provider.create_chunk_sink(driver_id, create_context));
+    ASSIGN_OR_RETURN(auto delete_sink, delete_provider.create_sink(driver_id));
 
     IcebergChunkSinkProvider data_provider(ctx->data_sink_ctx);
-    ASSIGN_OR_RETURN(auto data_sink, data_provider.create_chunk_sink(driver_id, create_context));
+    ASSIGN_OR_RETURN(auto data_sink, data_provider.create_sink(driver_id));
 
     auto sink = std::make_unique<IcebergRowDeltaSink>(std::move(delete_sink), std::move(data_sink), ctx->op_code_index,
-                                                      create_context.sink_mem_mgr, runtime_state);
-    sink->set_io_poller(create_context.io_poller);
+                                                      runtime_state);
     return sink;
 }
 

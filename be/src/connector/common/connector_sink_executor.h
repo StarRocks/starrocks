@@ -16,21 +16,22 @@
 
 #include <fmt/format.h>
 
+#include <functional>
 #include <map>
+#include <memory>
+#include <string>
 #include <utility>
 
 #include "column/chunk.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
-#include "connector/utils.h"
 
 namespace starrocks {
 class LoadChunkSpiller;
-}
+class MemTracker;
+} // namespace starrocks
 
 namespace starrocks::connector {
-
-class SpillPartitionChunkWriter;
 
 class ConnectorSinkExecutor {
 public:
@@ -92,13 +93,13 @@ private:
 
 class MergeBlockTask : public Runnable {
 public:
-    MergeBlockTask(SpillPartitionChunkWriter* writer, MemTracker* mem_tracker, std::function<void(const Status&)> cb)
-            : _writer(writer), _mem_tracker(mem_tracker), _cb(std::move(cb)) {}
+    MergeBlockTask(std::function<Status()> merge_func, MemTracker* mem_tracker, std::function<void(const Status&)> cb)
+            : _merge_func(std::move(merge_func)), _mem_tracker(mem_tracker), _cb(std::move(cb)) {}
 
     void run() override;
 
 private:
-    SpillPartitionChunkWriter* _writer;
+    std::function<Status()> _merge_func;
     MemTracker* _mem_tracker;
     std::function<void(const Status&)> _cb;
 };

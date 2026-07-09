@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/partition_chunk_writer.h"
+#include "connector/common/partition_chunk_writer.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include <future>
+#include <limits>
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
@@ -26,16 +27,20 @@
 #include "column/chunk_factory.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "connector/connector_chunk_sink.h"
-#include "connector/connector_sink_executor.h"
-#include "connector/iceberg_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
+#include "common/config_exec_fwd.h"
+#include "common/system/cpu_info.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
+#include "compute_env/spill/dir_manager.h"
+#include "connector/common/connector_sink_executor.h"
 #include "formats/file_writer.h"
+#include "formats/io/async_flush_stream_poller.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "runtime/chunk_helper.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::connector {
 namespace {
@@ -49,22 +54,42 @@ using ::testing::_;
 
 class PartitionChunkWriterTest : public ::testing::Test {
 protected:
+    static void SetUpTestSuite() {
+        CpuInfo::init();
+        config::vector_chunk_size = 4096;
+    }
+
     void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        ASSERT_OK(FileSystem::Default()->create_dir_recursive(kLocalSpillDir));
+        ASSIGN_OR_ABORT(auto local_fs, FileSystemFactory::CreateSharedFromString(kLocalSpillDir));
+        _local_spill_dir_mgr = std::make_unique<spill::DirManager>(std::vector<std::shared_ptr<spill::Dir>>{
+                std::make_shared<spill::Dir>(kLocalSpillDir, local_fs, std::numeric_limits<int64_t>::max())});
+        _merge_executor = std::make_unique<LoadSpillBlockMergeExecutor>();
+        ASSERT_OK(_merge_executor->init());
+        _runtime_services.spill_dir_mgr = _local_spill_dir_mgr.get();
+        _runtime_services.load_spill_block_merge_executor = _merge_executor.get();
+        _query_execution_services.runtime = &_runtime_services;
+        _runtime_state = std::make_unique<RuntimeState>();
+        _runtime_state->set_query_execution_services(&_query_execution_services);
         _spill_executor = std::make_unique<ConnectorSinkSpillExecutor>();
         ASSERT_OK(_spill_executor->init());
     }
 
-    void TearDown() override {}
+    void TearDown() override {
+        _spill_executor.reset();
+        _runtime_state.reset();
+        _merge_executor.reset();
+        _local_spill_dir_mgr.reset();
+        (void)FileSystem::Default()->delete_dir_recursive(kLocalSpillDir);
+    }
 
+    constexpr static const char* const kLocalSpillDir = "./partition_chunk_writer_local_spill";
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
-    RuntimeState* _runtime_state;
+    RuntimeServices _runtime_services;
+    QueryExecutionServices _query_execution_services;
+    std::unique_ptr<spill::DirManager> _local_spill_dir_mgr;
+    std::unique_ptr<LoadSpillBlockMergeExecutor> _merge_executor;
+    std::unique_ptr<RuntimeState> _runtime_state;
     std::unique_ptr<ConnectorSinkSpillExecutor> _spill_executor;
 };
 
@@ -184,8 +209,7 @@ TEST_F(PartitionChunkWriterTest, buffer_partition_chunk_writer) {
     std::filesystem::create_directories(fs_base_path + "/c1");
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto writer_helper = WriterHelper::instance();
     {
@@ -247,8 +271,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
     Status status;
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     // Create partition writer
     auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
@@ -263,7 +286,7 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, 100, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -378,8 +401,7 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
     c3.type.field_names.emplace_back("c3_age");
 
     parquet::Utils::SlotDesc slot_descs[] = {c1, c2, c3, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     // Create partition writer
     auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
@@ -394,7 +416,7 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, 100, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -539,8 +561,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
     std::filesystem::create_directories(fs_base_path + "/c1");
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto writer_helper = WriterHelper::instance();
     bool commited = false;
@@ -563,7 +584,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -694,8 +715,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
     std::filesystem::create_directories(fs_base_path + "/c1");
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto writer_helper = WriterHelper::instance();
     bool commited = false;
@@ -718,7 +738,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -849,8 +869,7 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
     std::filesystem::create_directories(fs_base_path + "/c1");
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto writer_helper = WriterHelper::instance();
     bool commited = false;
@@ -874,7 +893,7 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -978,8 +997,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
     std::filesystem::create_directories(fs_base_path + "/c1");
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     Fields fields;
     for (auto& slot : tuple_desc->slots()) {
@@ -1011,7 +1029,7 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, max_file_size, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -1104,8 +1122,7 @@ TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
     Status status;
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     // Create partition writer with profile
     auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
@@ -1137,7 +1154,7 @@ TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
     auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
             SpillPartitionChunkWriterContext{{mock_writer_factory, location_provider, 100, false},
                                              nullptr,
-                                             _fragment_context.get(),
+                                             _runtime_state.get(),
                                              _spill_executor.get(),
                                              tuple_desc,
                                              nullptr,
@@ -1221,8 +1238,7 @@ TEST_F(PartitionChunkWriterTest, test_buffer_partition_writer_profile_metrics) {
     Status status;
 
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
     auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
