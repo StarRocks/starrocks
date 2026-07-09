@@ -365,6 +365,26 @@ statement
     | showPipeStatement
     | descPipeStatement
 
+    // Semantic Context Statement
+    | createContextBaseStatement
+    | alterContextBaseStatement
+    | dropContextBaseStatement
+    | createContextCollectionStatement
+    | dropContextCollectionStatement
+    | createContextWorkspaceStatement
+    | dropContextWorkspaceStatement
+    | createRetrievalProfileStatement
+    | dropRetrievalProfileStatement
+    | showContextBasesStatement
+    | showContextCollectionsStatement
+    | showContextWorkspacesStatement
+    | showContextStatusStatement
+    | showContextTasksStatement
+    | showContextProfileStatement
+    | contextUpsertStatement
+    | contextDeleteStatement
+    | workspaceUpsertStatement
+
     // Compaction Statement
     | cancelCompactionStatement
 
@@ -2576,6 +2596,87 @@ showPipeStatement
     ;
 
 
+// ------------------------------------------- Semantic Context Statement ---------------------------------------------
+
+createContextBaseStatement
+    : CREATE CONTEXTBASE (IF NOT EXISTS)? qualifiedName properties?
+    ;
+
+alterContextBaseStatement
+    : ALTER CONTEXTBASE qualifiedName SET propertyList
+    | ALTER CONTEXTBASE qualifiedName RENAME TO qualifiedName
+    ;
+
+dropContextBaseStatement
+    : DROP CONTEXTBASE (IF EXISTS)? qualifiedName
+    ;
+
+createContextCollectionStatement
+    : CREATE CONTEXT COLLECTION (IF NOT EXISTS)? qualifiedName properties?
+    ;
+
+dropContextCollectionStatement
+    : DROP CONTEXT COLLECTION (IF EXISTS)? qualifiedName
+    ;
+
+createContextWorkspaceStatement
+    : CREATE WORKSPACE (IF NOT EXISTS)? qualifiedName properties?
+    ;
+
+dropContextWorkspaceStatement
+    : DROP WORKSPACE (IF EXISTS)? qualifiedName
+    ;
+
+createRetrievalProfileStatement
+    : CREATE RETRIEVAL PROFILE (IF NOT EXISTS)? qualifiedName properties?
+    ;
+
+dropRetrievalProfileStatement
+    : DROP RETRIEVAL PROFILE (IF EXISTS)? qualifiedName
+    ;
+
+showContextBasesStatement
+    : SHOW CONTEXTBASES ((LIKE pattern=string))? showPredicateClauses
+    ;
+
+showContextCollectionsStatement
+    : SHOW CONTEXT? COLLECTIONS ((FROM | IN) qualifiedName)? ((LIKE pattern=string))? showPredicateClauses
+    ;
+
+showContextWorkspacesStatement
+    : SHOW WORKSPACES ((FROM | IN) qualifiedName)? ((LIKE pattern=string))? showPredicateClauses
+    ;
+
+showContextStatusStatement
+    : SHOW CONTEXT STATUS (FROM qualifiedName)?
+    ;
+
+showContextTasksStatement
+    : SHOW CONTEXT TASKS (FROM qualifiedName)? showPredicateClauses
+    ;
+
+showContextProfileStatement
+    : SHOW CONTEXT PROFILE (qualifiedName)?
+    ;
+
+contextUpsertStatement
+    : CONTEXT UPSERT INTO qualifiedName ENTITY '(' namedArgumentList ')'
+        (EDGES '(' expressionList ')')?
+        (OPTIONS '(' namedArgumentList ')')?
+    ;
+
+contextDeleteStatement
+    : CONTEXT DELETE FROM qualifiedName WHERE expression
+        (OPTIONS '(' namedArgumentList ')')?
+    ;
+
+workspaceUpsertStatement
+    : WORKSPACE UPSERT INTO qualifiedName
+        OBJECT '(' namedArgumentList ')'
+        (OPTIONS '(' namedArgumentList ')')?
+    ;
+
+
 // ------------------------------------------- Set Statement -----------------------------------------------------------
 
 setStatement
@@ -3704,7 +3805,8 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | AI | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : COLLECTION | COLLECTIONS | CONTEXT | CONTEXTBASE | CONTEXTBASES | EDGES | ENTITY | OBJECT | OPTIONS | RETRIEVAL | TASKS | UPSERT | WORKSPACE | WORKSPACES
+    | ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | AI | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE

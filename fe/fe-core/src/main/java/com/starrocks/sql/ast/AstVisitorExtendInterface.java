@@ -15,6 +15,25 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.sql.ast.context.AlterContextBaseRenameStmt;
+import com.starrocks.sql.ast.context.AlterContextBaseStmt;
+import com.starrocks.sql.ast.context.ContextDeleteStmt;
+import com.starrocks.sql.ast.context.ContextUpsertStmt;
+import com.starrocks.sql.ast.context.CreateContextBaseStmt;
+import com.starrocks.sql.ast.context.CreateContextCollectionStmt;
+import com.starrocks.sql.ast.context.CreateRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.CreateWorkspaceStmt;
+import com.starrocks.sql.ast.context.DropContextBaseStmt;
+import com.starrocks.sql.ast.context.DropContextCollectionStmt;
+import com.starrocks.sql.ast.context.DropRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.DropWorkspaceStmt;
+import com.starrocks.sql.ast.context.ShowContextBasesStmt;
+import com.starrocks.sql.ast.context.ShowContextCollectionsStmt;
+import com.starrocks.sql.ast.context.ShowContextProfileStmt;
+import com.starrocks.sql.ast.context.ShowContextStatusStmt;
+import com.starrocks.sql.ast.context.ShowContextTasksStmt;
+import com.starrocks.sql.ast.context.ShowContextWorkspacesStmt;
+import com.starrocks.sql.ast.context.WorkspaceUpsertStmt;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -480,6 +499,83 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitDescPipeStatement(DescPipeStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    // -------------------------------------- Semantic Context Statement -----------------------------------------------
+    default R visitCreateContextBaseStatement(CreateContextBaseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterContextBaseStatement(AlterContextBaseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterContextBaseRenameStatement(AlterContextBaseRenameStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropContextBaseStatement(DropContextBaseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateContextCollectionStatement(CreateContextCollectionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropContextCollectionStatement(DropContextCollectionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateContextWorkspaceStatement(CreateWorkspaceStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropContextWorkspaceStatement(DropWorkspaceStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitCreateRetrievalProfileStatement(CreateRetrievalProfileStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropRetrievalProfileStatement(DropRetrievalProfileStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitContextUpsertStatement(ContextUpsertStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitContextDeleteStatement(ContextDeleteStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitWorkspaceUpsertStatement(WorkspaceUpsertStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowContextBasesStatement(ShowContextBasesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowContextCollectionsStatement(ShowContextCollectionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowContextWorkspacesStatement(ShowContextWorkspacesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowContextStatusStatement(ShowContextStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowContextTasksStatement(ShowContextTasksStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitShowContextProfileStatement(ShowContextProfileStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

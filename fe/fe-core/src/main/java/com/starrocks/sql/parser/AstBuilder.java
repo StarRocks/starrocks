@@ -447,6 +447,28 @@ import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.context.AlterContextBaseRenameStmt;
+import com.starrocks.sql.ast.context.AlterContextBaseStmt;
+import com.starrocks.sql.ast.context.ContextBaseName;
+import com.starrocks.sql.ast.context.ContextCollectionName;
+import com.starrocks.sql.ast.context.ContextDeleteStmt;
+import com.starrocks.sql.ast.context.ContextUpsertStmt;
+import com.starrocks.sql.ast.context.CreateContextBaseStmt;
+import com.starrocks.sql.ast.context.CreateContextCollectionStmt;
+import com.starrocks.sql.ast.context.CreateRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.CreateWorkspaceStmt;
+import com.starrocks.sql.ast.context.DropContextBaseStmt;
+import com.starrocks.sql.ast.context.DropContextCollectionStmt;
+import com.starrocks.sql.ast.context.DropRetrievalProfileStmt;
+import com.starrocks.sql.ast.context.DropWorkspaceStmt;
+import com.starrocks.sql.ast.context.ShowContextBasesStmt;
+import com.starrocks.sql.ast.context.ShowContextCollectionsStmt;
+import com.starrocks.sql.ast.context.ShowContextProfileStmt;
+import com.starrocks.sql.ast.context.ShowContextStatusStmt;
+import com.starrocks.sql.ast.context.ShowContextTasksStmt;
+import com.starrocks.sql.ast.context.ShowContextWorkspacesStmt;
+import com.starrocks.sql.ast.context.WorkspaceName;
+import com.starrocks.sql.ast.context.WorkspaceUpsertStmt;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
 import com.starrocks.sql.ast.expression.AnalyticWindowBoundary;
@@ -5954,6 +5976,294 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         PipeName pipeName = resolvePipeName(context.qualifiedName());
         AlterPipeClause alterPipeClause = (AlterPipeClause) visit(context.alterPipeClause());
         return new AlterPipeStmt(createPos(context), pipeName, alterPipeClause);
+    }
+
+    // ------------------------------------------- Semantic Context Statement ------------------------------------------
+
+    private ContextBaseName resolveContextBaseName(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext ctx) {
+        QualifiedName qn = getQualifiedName(ctx);
+        List<String> parts = qn.getParts();
+        if (parts.size() != 1) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.unsupportedOpWithInfo("contextbase must be a single identifier"));
+        }
+        return new ContextBaseName(normalizeName(parts.get(0)), createPos(ctx));
+    }
+
+    private ContextCollectionName resolveCollectionName(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext ctx) {
+        QualifiedName qn = getQualifiedName(ctx);
+        List<String> parts = qn.getParts();
+        if (parts.size() == 1) {
+            return new ContextCollectionName(null, normalizeName(parts.get(0)), createPos(ctx));
+        }
+        if (parts.size() == 2) {
+            return new ContextCollectionName(
+                    normalizeName(parts.get(0)), normalizeName(parts.get(1)), createPos(ctx));
+        }
+        throw new ParsingException(
+                PARSER_ERROR_MSG.unsupportedOpWithInfo("collection name must be contextbase.collection"));
+    }
+
+    private WorkspaceName resolveWorkspaceName(com.starrocks.sql.parser.StarRocksParser.QualifiedNameContext ctx) {
+        QualifiedName qn = getQualifiedName(ctx);
+        List<String> parts = qn.getParts();
+        if (parts.size() == 1) {
+            return new WorkspaceName(null, null, normalizeName(parts.get(0)), createPos(ctx));
+        }
+        if (parts.size() == 2) {
+            return new WorkspaceName(
+                    null, normalizeName(parts.get(0)), normalizeName(parts.get(1)), createPos(ctx));
+        }
+        if (parts.size() == 3) {
+            return new WorkspaceName(
+                    normalizeName(parts.get(0)),
+                    normalizeName(parts.get(1)),
+                    normalizeName(parts.get(2)),
+                    createPos(ctx));
+        }
+        throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo(
+                "workspace name must be [[contextbase.]collection.]workspace"));
+    }
+
+    private Map<String, Expr> collectNamedArgs(
+            com.starrocks.sql.parser.StarRocksParser.NamedArgumentListContext ctx) {
+        Map<String, Expr> args = new java.util.LinkedHashMap<>();
+        if (ctx == null) {
+            return args;
+        }
+        for (com.starrocks.sql.parser.StarRocksParser.NamedArgumentContext a : ctx.namedArgument()) {
+            com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext na =
+                    (com.starrocks.sql.parser.StarRocksParser.NamedArgumentsContext) a;
+            String key = ((Identifier) visit(na.identifier())).getValue();
+            Expr value = (Expr) visit(na.expression());
+            if (args.containsKey(key)) {
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo("duplicate argument " + key));
+            }
+            args.put(key, value);
+        }
+        return args;
+    }
+
+    @Override
+    public ParseNode visitCreateContextBaseStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateContextBaseStatementContext context) {
+        boolean ifNotExists = context.IF() != null;
+        ContextBaseName name = resolveContextBaseName(context.qualifiedName());
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
+        return new CreateContextBaseStmt(ifNotExists, name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterContextBaseStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterContextBaseStatementContext context) {
+        ContextBaseName name = resolveContextBaseName(context.qualifiedName(0));
+        if (context.RENAME() != null) {
+            ContextBaseName newName = resolveContextBaseName(context.qualifiedName(1));
+            return new AlterContextBaseRenameStmt(name, newName.getName(), createPos(context));
+        }
+        Map<String, String> properties = getCaseInsensitivePropertyList(context.propertyList());
+        return new AlterContextBaseStmt(name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropContextBaseStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropContextBaseStatementContext context) {
+        boolean ifExists = context.IF() != null;
+        ContextBaseName name = resolveContextBaseName(context.qualifiedName());
+        return new DropContextBaseStmt(ifExists, name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCreateContextCollectionStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateContextCollectionStatementContext context) {
+        boolean ifNotExists = context.IF() != null;
+        ContextCollectionName name = resolveCollectionName(context.qualifiedName());
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
+        return new CreateContextCollectionStmt(ifNotExists, name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropContextCollectionStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropContextCollectionStatementContext context) {
+        boolean ifExists = context.IF() != null;
+        ContextCollectionName name = resolveCollectionName(context.qualifiedName());
+        return new DropContextCollectionStmt(ifExists, name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCreateContextWorkspaceStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateContextWorkspaceStatementContext context) {
+        boolean ifNotExists = context.IF() != null;
+        WorkspaceName name = resolveWorkspaceName(context.qualifiedName());
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
+        return new CreateWorkspaceStmt(ifNotExists, name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropContextWorkspaceStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropContextWorkspaceStatementContext context) {
+        boolean ifExists = context.IF() != null;
+        WorkspaceName name = resolveWorkspaceName(context.qualifiedName());
+        return new DropWorkspaceStmt(ifExists, name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCreateRetrievalProfileStatement(
+            com.starrocks.sql.parser.StarRocksParser.CreateRetrievalProfileStatementContext context) {
+        boolean ifNotExists = context.IF() != null;
+        QualifiedName qn = getQualifiedName(context.qualifiedName());
+        List<String> parts = qn.getParts();
+        if (parts.size() != 1) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.unsupportedOpWithInfo("retrieval profile must be a single identifier"));
+        }
+        Map<String, String> properties = getCaseInsensitiveProperties(context.properties());
+        return new CreateRetrievalProfileStmt(ifNotExists, normalizeName(parts.get(0)), properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropRetrievalProfileStatement(
+            com.starrocks.sql.parser.StarRocksParser.DropRetrievalProfileStatementContext context) {
+        boolean ifExists = context.IF() != null;
+        QualifiedName qn = getQualifiedName(context.qualifiedName());
+        List<String> parts = qn.getParts();
+        if (parts.size() != 1) {
+            throw new ParsingException(
+                    PARSER_ERROR_MSG.unsupportedOpWithInfo("retrieval profile must be a single identifier"));
+        }
+        return new DropRetrievalProfileStmt(ifExists, normalizeName(parts.get(0)), createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowContextBasesStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextBasesStatementContext context) {
+        String like = null;
+        if (context.LIKE() != null) {
+            like = ((StringLiteral) visit(context.pattern)).getValue();
+        }
+        ShowContextBasesStmt stmt = new ShowContextBasesStmt(like, createPos(context));
+        visitShowPredicateClauses(context.showPredicateClauses(), stmt);
+        return stmt;
+    }
+
+    @Override
+    public ParseNode visitShowContextCollectionsStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextCollectionsStatementContext context) {
+        String contextBase = null;
+        if (context.qualifiedName() != null) {
+            QualifiedName qn = getQualifiedName(context.qualifiedName());
+            List<String> parts = qn.getParts();
+            contextBase = normalizeName(parts.get(parts.size() - 1));
+        }
+        String like = null;
+        if (context.LIKE() != null) {
+            like = ((StringLiteral) visit(context.pattern)).getValue();
+        }
+        ShowContextCollectionsStmt stmt = new ShowContextCollectionsStmt(contextBase, like, createPos(context));
+        visitShowPredicateClauses(context.showPredicateClauses(), stmt);
+        return stmt;
+    }
+
+    @Override
+    public ParseNode visitShowContextWorkspacesStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextWorkspacesStatementContext context) {
+        String contextBase = null;
+        if (context.qualifiedName() != null) {
+            QualifiedName qn = getQualifiedName(context.qualifiedName());
+            StringBuilder joined = new StringBuilder();
+            for (String part : qn.getParts()) {
+                if (joined.length() > 0) {
+                    joined.append('.');
+                }
+                joined.append(normalizeName(part));
+            }
+            contextBase = joined.toString();
+        }
+        String like = null;
+        if (context.LIKE() != null) {
+            like = ((StringLiteral) visit(context.pattern)).getValue();
+        }
+        ShowContextWorkspacesStmt stmt = new ShowContextWorkspacesStmt(contextBase, like, createPos(context));
+        visitShowPredicateClauses(context.showPredicateClauses(), stmt);
+        return stmt;
+    }
+
+    @Override
+    public ParseNode visitShowContextStatusStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextStatusStatementContext context) {
+        String contextBase = null;
+        if (context.qualifiedName() != null) {
+            contextBase = normalizeName(getQualifiedName(context.qualifiedName()).getParts().get(0));
+        }
+        return new ShowContextStatusStmt(contextBase, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowContextTasksStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextTasksStatementContext context) {
+        String contextBase = null;
+        if (context.qualifiedName() != null) {
+            contextBase = normalizeName(getQualifiedName(context.qualifiedName()).getParts().get(0));
+        }
+        ShowContextTasksStmt stmt = new ShowContextTasksStmt(contextBase, createPos(context));
+        visitShowPredicateClauses(context.showPredicateClauses(), stmt);
+        return stmt;
+    }
+
+    @Override
+    public ParseNode visitShowContextProfileStatement(
+            com.starrocks.sql.parser.StarRocksParser.ShowContextProfileStatementContext context) {
+        String profile = null;
+        if (context.qualifiedName() != null) {
+            profile = normalizeName(getQualifiedName(context.qualifiedName()).getParts().get(0));
+        }
+        return new ShowContextProfileStmt(profile, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitContextUpsertStatement(
+            com.starrocks.sql.parser.StarRocksParser.ContextUpsertStatementContext context) {
+        ContextCollectionName collection = resolveCollectionName(context.qualifiedName());
+        Map<String, Expr> entityArgs = collectNamedArgs(context.namedArgumentList(0));
+        List<Expr> edges = new ArrayList<>();
+        if (context.EDGES() != null) {
+            for (com.starrocks.sql.parser.StarRocksParser.ExpressionContext e : context.expressionList().expression()) {
+                edges.add((Expr) visit(e));
+            }
+        }
+        Map<String, Expr> options = new java.util.LinkedHashMap<>();
+        if (context.OPTIONS() != null) {
+            // ContextUpsertStatement grammar:
+            //   ENTITY '(' namedArgumentList ')'         -- index 0
+            //   (EDGES '(' expressionList ')')?          -- not a namedArgumentList
+            //   (OPTIONS '(' namedArgumentList ')')?     -- index 1 regardless of EDGES presence
+            options = collectNamedArgs(context.namedArgumentList(1));
+        }
+        return new ContextUpsertStmt(collection, entityArgs, edges, options, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitContextDeleteStatement(
+            com.starrocks.sql.parser.StarRocksParser.ContextDeleteStatementContext context) {
+        ContextCollectionName collection = resolveCollectionName(context.qualifiedName());
+        Expr predicate = (Expr) visit(context.expression());
+        Map<String, Expr> options = new java.util.LinkedHashMap<>();
+        if (context.OPTIONS() != null) {
+            options = collectNamedArgs(context.namedArgumentList());
+        }
+        return new ContextDeleteStmt(collection, predicate, options, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitWorkspaceUpsertStatement(
+            com.starrocks.sql.parser.StarRocksParser.WorkspaceUpsertStatementContext context) {
+        WorkspaceName workspace = resolveWorkspaceName(context.qualifiedName());
+        Map<String, Expr> objectArgs = collectNamedArgs(context.namedArgumentList(0));
+        Map<String, Expr> options = new java.util.LinkedHashMap<>();
+        if (context.OPTIONS() != null) {
+            options = collectNamedArgs(context.namedArgumentList(1));
+        }
+        return new WorkspaceUpsertStmt(workspace, objectArgs, options, createPos(context));
     }
 
     // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
