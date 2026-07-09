@@ -22,6 +22,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.columns.ExternalPredicateColumnsStorage;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
@@ -203,6 +204,11 @@ public class TableKeeper {
             keeperList.add(LoadsHistorySyncer.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
+<<<<<<< HEAD
+=======
+            keeperList.add(ExternalPredicateColumnsStorage.createKeeper());
+            keeperList.add(RejectedRecordsTable.createKeeper());
+>>>>>>> 8e0844a398 ([Enhancement] Track predicate column usage for external tables (#75938))
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }
