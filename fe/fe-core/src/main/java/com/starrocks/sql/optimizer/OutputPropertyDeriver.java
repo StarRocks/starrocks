@@ -352,14 +352,27 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         List<DistributionCol> leftOnPredicateColumns = joinHelper.getLeftCols();
         List<DistributionCol> rightOnPredicateColumns = joinHelper.getRightCols();
 
-        // Range-colocate join: both children are RangeDistributionSpec.
-        // ChildOutputPropertyGuarantor.canRangeColocateJoin already rejected
-        // right-family / full-outer joins, so the join type here is safe.
+        // Range-colocate join: both children are RangeDistributionSpec. The
+        // dominated output side mirrors the hash-colocate mapping in
+        // computeColocateJoinOutputProperty: right-family joins (right outer /
+        // semi / anti) output the right-side range spec, full-outer outputs the
+        // null-relaxed left-side spec (either side may be NULL-padded), and
+        // everything else (inner / left outer / left semi / left anti) outputs
+        // the left-side spec.
         DistributionSpec leftRawSpec = leftChildOutputProperty.getDistributionProperty().getSpec();
         DistributionSpec rightRawSpec = rightChildOutputProperty.getDistributionProperty().getSpec();
         if (leftRawSpec instanceof RangeDistributionSpec && rightRawSpec instanceof RangeDistributionSpec) {
-            // Left-dominated output (inner / left-outer / left-semi / left-anti).
-            PhysicalPropertySet outputProperty = createPropertySetByDistribution(leftRawSpec);
+            JoinOperator joinType = node.getJoinType();
+            DistributionSpec dominatedRangeSpec;
+            if (joinType.isRightJoin()) {
+                dominatedRangeSpec = rightRawSpec;
+            } else if (joinType.isFullOuterJoin()) {
+                RangeDistributionSpec leftRange = (RangeDistributionSpec) leftRawSpec;
+                dominatedRangeSpec = leftRange.getNullRelaxSpec(leftRange.getEquivalentDescriptor());
+            } else {
+                dominatedRangeSpec = leftRawSpec;
+            }
+            PhysicalPropertySet outputProperty = createPropertySetByDistribution(dominatedRangeSpec);
             return updateEquivalentDescriptor(node, outputProperty,
                     leftOnPredicateColumns, rightOnPredicateColumns);
         }
