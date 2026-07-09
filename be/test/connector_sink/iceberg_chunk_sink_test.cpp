@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
@@ -26,16 +26,17 @@
 #include "base/utility/defer_op.h"
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/common/utils.h"
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/utils.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::connector {
 namespace {
@@ -50,19 +51,20 @@ using ::testing::_;
 class IcebergChunkSinkTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _runtime_state = std::make_shared<RuntimeState>();
+        _query_execution_services.execution = &_execution_services;
+        _query_execution_services.runtime = &_runtime_services;
+        _runtime_state->set_query_execution_services(&_query_execution_services);
     }
 
     void TearDown() override {}
 
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
-    RuntimeState* _runtime_state;
+    ExecutionEnv _execution_services;
+    RuntimeServices _runtime_services;
+    QueryExecutionServices _query_execution_services;
+    TUniqueId _query_id;
+    std::shared_ptr<RuntimeState> _runtime_state;
 };
 
 class MockFileWriterFactory : public formats::FileWriterFactory {
@@ -119,7 +121,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
         auto sink = std::make_unique<connector::IcebergChunkSink>(
                 partition_column_names, transform, std::move(partition_column_evaluators),
-                std::move(partition_chunk_writer_factory), _runtime_state);
+                std::move(partition_chunk_writer_factory), _runtime_state.get());
         auto poller = MockPoller();
         SinkMemoryManager mgr(nullptr, nullptr);
         EXPECT_OK(sink->init(&poller, nullptr, &mgr));
@@ -177,7 +179,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state.get();
+        sink_ctx->query_id = _query_id;
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);
@@ -199,7 +202,8 @@ TEST_F(IcebergChunkSinkTest, test_factory) {
         sink_ctx->max_file_size = 1 << 30;
         sink_ctx->column_evaluators = ColumnSlotIdEvaluator::from_types(
                 {TypeDescriptor::from_logical_type(TYPE_VARCHAR), TypeDescriptor::from_logical_type(TYPE_INT)});
-        sink_ctx->fragment_context = _fragment_context.get();
+        sink_ctx->runtime_state = _runtime_state.get();
+        sink_ctx->query_id = _query_id;
         IcebergChunkSinkProvider provider(sink_ctx);
         formats::AsyncFlushStreamPoller poller;
         SinkMemoryManager mgr(nullptr, nullptr);

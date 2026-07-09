@@ -21,6 +21,10 @@
 #include "connector/connector_registry.h"
 #include "connector_primitive/connector.h"
 
+#ifdef STARROCKS_WITH_CONNECTOR_ICEBERG
+#include "connector/iceberg/iceberg_connector.h"
+#endif
+
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
 #include "connector/benchmark/benchmark_connector.h"
 #endif
@@ -55,6 +59,9 @@ Status bootstrap_builtin_connectors() {
     auto* registry = ConnectorRegistry::default_instance();
     DCHECK(registry != nullptr);
     install_if_absent<CacheStatsConnector>(registry, Connector::CACHE_STATS);
+#ifdef STARROCKS_WITH_CONNECTOR_ICEBERG
+    install_if_absent<IcebergConnector>(registry, Connector::ICEBERG);
+#endif
 #ifdef STARROCKS_WITH_CONNECTOR_BENCHMARK
     install_if_absent<BenchmarkConnector>(registry, Connector::BENCHMARK);
 #endif

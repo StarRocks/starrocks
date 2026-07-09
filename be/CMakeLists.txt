@@ -194,6 +194,7 @@ option(WITH_BRCP_KEEPALIVE "Build binary with brpc_socket_keepalive (requires br
 option(WITH_BENCH "Build binary with bench" OFF)
 option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" ON)
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
+option(WITH_CONNECTOR_ICEBERG "Build the Iceberg connector bootstrap" ON)
 option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
 option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
 
@@ -552,6 +553,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Connector
     ConnectorFile
+    ConnectorIceberg
     # Legacy connector registration pulls concrete connector objects that
     # depend on Exec symbols, so keep it in the static library group.
     ConnectorBuiltinRegistry

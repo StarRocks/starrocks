@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "iceberg_chunk_sink.h"
+#include "connector/iceberg/iceberg_chunk_sink.h"
 
 #include <future>
 
+#include "base/uid_util.h"
 #include "base/url_coding.h"
 #include "common/config_connector_sink_fwd.h"
 #include "common/logging.h"
 #include "connector/common/utils.h"
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "types/datum.h"
@@ -93,13 +94,16 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
 
 StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
-    auto runtime_state = ctx->fragment_context->runtime_state();
+    auto* runtime_state = ctx->runtime_state;
+    if (runtime_state == nullptr) {
+        return Status::InternalError("IcebergChunkSinkProvider: runtime_state is null");
+    }
     std::shared_ptr<FileSystem> fs =
             FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
             ColumnEvaluator::clone(ctx->column_evaluators));
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
+            ctx->path, print_id(ctx->query_id), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format), ctx->writer_tag);
 
     std::vector<std::string>& partition_columns = ctx->partition_column_names;

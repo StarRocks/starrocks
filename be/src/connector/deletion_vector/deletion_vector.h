@@ -15,10 +15,16 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "fs/fs.h"
 
 namespace starrocks {
+
+class CacheInputStream;
+class RandomAccessFile;
+class RuntimeProfile;
+class SharedBufferedInputStream;
+struct FormatScannerStats;
 
 struct DeletionVectorBuildStats {
     int64_t bitmap_deserialize_ns = 0;

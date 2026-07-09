@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg/iceberg_row_delta_sink.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -27,15 +27,14 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/status.h"
-#include "connector/iceberg_connector.h"
+#include "connector/iceberg/iceberg_connector.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::connector {
 
@@ -86,11 +85,11 @@ protected:
         TUniqueId fragment_id;
         fragment_id.hi = 0;
         fragment_id.lo = 0;
-        _runtime_state =
-                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+        _query_id = fragment_id;
+        _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+        _query_execution_services.execution = &_execution_services;
+        _query_execution_services.runtime = &_runtime_services;
+        _runtime_state->set_query_execution_services(&_query_execution_services);
         // Initialize mem trackers for the runtime state
         _runtime_state->init_instance_mem_tracker();
 
@@ -110,11 +109,6 @@ protected:
                             .ok());
         _runtime_state->set_desc_tbl(desc_tbl);
 
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::move(_runtime_state));
-        // Get the runtime state back from fragment context after moving
-        _runtime_state = _fragment_context->runtime_state_ptr();
-        _fragment_context->set_fragment_instance_id(fragment_id);
         _mem_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest");
     }
 
@@ -201,8 +195,11 @@ protected:
     }
 
     std::unique_ptr<ObjectPool> _pool;
+    ExecutionEnv _execution_services;
+    RuntimeServices _runtime_services;
+    QueryExecutionServices _query_execution_services;
+    TUniqueId _query_id;
     std::shared_ptr<RuntimeState> _runtime_state;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
     std::unique_ptr<MemTracker> _mem_tracker;
 };
 

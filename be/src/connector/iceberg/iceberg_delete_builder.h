@@ -14,19 +14,42 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+
+#include "cache/cache_options.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "formats/scan_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
+class CacheInputStream;
+class FileSystem;
+class RandomAccessFile;
+class RuntimeProfile;
+class SharedBufferedInputStream;
+} // namespace starrocks
+
+namespace starrocks::connector {
+
 struct IcebergColumnMeta;
+
+struct IcebergDeleteFileBuildContext {
+    FileSystem* fs = nullptr;
+    std::string data_file_path;
+    DataCacheOptions datacache_options;
+    FormatScannerOptions format_options;
+    RuntimeProfile* runtime_profile = nullptr;
+    int chunk_size = 0;
+    std::string timezone;
+};
 
 class IcebergDeleteBuilder {
 public:
-    IcebergDeleteBuilder(SkipRowsContextPtr skip_rows_ctx, RuntimeState* state, const HdfsScannerContext& ctx)
+    IcebergDeleteBuilder(SkipRowsContextPtr skip_rows_ctx, IcebergDeleteFileBuildContext ctx)
             : _skip_rows_ctx(std::move(skip_rows_ctx)),
-              _ctx(ctx),
-              _runtime_state(state),
+              _ctx(std::move(ctx)),
               _deletion_bitmap(std::make_shared<DeletionBitmap>(roaring64_bitmap_create())) {}
 
     ~IcebergDeleteBuilder() = default;
@@ -48,8 +71,7 @@ private:
     Status fill_skip_rowids(const ChunkPtr& chunk) const;
 
     SkipRowsContextPtr _skip_rows_ctx;
-    const HdfsScannerContext& _ctx;
-    RuntimeState* _runtime_state;
+    IcebergDeleteFileBuildContext _ctx;
     DeletionBitmapPtr _deletion_bitmap;
 };
 
@@ -64,4 +86,4 @@ public:
 private:
     static SlotDescriptor gen_slot_helper(const IcebergColumnMeta& meta);
 };
-} // namespace starrocks
+} // namespace starrocks::connector

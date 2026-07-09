@@ -20,7 +20,7 @@
 #include "base/time/timezone_utils.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
-#include "exec/iceberg/iceberg_delete_builder.h"
+#include "connector/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"
@@ -325,8 +325,16 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_ctx->table_specific.iceberg_delete_files.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+    connector::IcebergDeleteFileBuildContext delete_build_ctx{
+            .fs = _scanner_ctx->fs,
+            .data_file_path = _scanner_ctx->file_path,
+            .datacache_options = _scanner_ctx->datacache_options,
+            .format_options = _scanner_ctx->format_scan_context.options,
+            .runtime_profile = _scanner_ctx->profile.runtime_profile,
+            .chunk_size = _runtime_state->chunk_size(),
+            .timezone = _runtime_state->timezone()};
     const auto iceberg_delete_builder =
-            std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, _runtime_state, *_scanner_ctx);
+            std::make_unique<connector::IcebergDeleteBuilder>(_skip_rows_ctx, std::move(delete_build_ctx));
 
     for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
         if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {

@@ -118,6 +118,8 @@ Usage: $0 <options>
                         build Backend without the benchgen-backed benchmark connector
      --without-connector-elasticsearch
                         build Backend without the Elasticsearch connector
+     --without-connector-iceberg
+                        build Backend without the Iceberg connector bootstrap
      --without-connector-jdbc
                         build Backend without the JDBC connector
      --without-connector-mysql
@@ -179,6 +181,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
+  -l 'without-connector-iceberg' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
   -l 'with-dynamic' \
@@ -220,6 +223,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_ICEBERG=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
 WITH_CLANG_TIDY=OFF
@@ -346,6 +350,7 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+            --without-connector-iceberg) WITH_CONNECTOR_ICEBERG=OFF; shift ;;
             --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
@@ -413,6 +418,7 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CONNECTOR_BENCHMARK    -- $WITH_CONNECTOR_BENCHMARK
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
+    WITH_CONNECTOR_ICEBERG      -- $WITH_CONNECTOR_ICEBERG
     WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
@@ -565,6 +571,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+                  -DWITH_CONNECTOR_ICEBERG=${WITH_CONNECTOR_ICEBERG}      \
                   -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\

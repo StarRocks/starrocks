@@ -232,7 +232,7 @@ Status CacheSelectScanner::_fetch_iceberg_delete_files() {
 }
 
 Status CacheSelectScanner::_write_entire_file(const std::string& file_path, size_t file_size) {
-    OpenFileOptions options{};
+    connector::ScanFileOpenOptions options{};
     options.fs = _scanner_ctx->fs;
     options.file_path = file_path;
     options.file_size = file_size;

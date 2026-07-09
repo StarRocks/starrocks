@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg/iceberg_row_delta_sink.h"
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "connector/common/partition_chunk_writer_memory_manager.h"
-#include "exec/pipeline/fragment_context.h"
 
 namespace starrocks::connector {
 
@@ -154,7 +153,10 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergRowDeltaSinkProvider::create_sin
         return Status::InternalError("IcebergRowDeltaSinkProvider: context is not IcebergRowDeltaSinkContext");
     }
 
-    auto runtime_state = ctx->data_sink_ctx->fragment_context->runtime_state();
+    auto* runtime_state = ctx->data_sink_ctx->runtime_state;
+    if (runtime_state == nullptr) {
+        return Status::InternalError("IcebergRowDeltaSinkProvider: runtime_state is null");
+    }
 
     IcebergDeleteSinkProvider delete_provider(ctx->delete_sink_ctx);
     ASSIGN_OR_RETURN(auto delete_sink, delete_provider.create_sink(driver_id));

@@ -14,10 +14,12 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 
+#include <utility>
+
 #include "common/runtime_profile.h"
 #include "connector/deletion_vector/deletion_vector.h"
+#include "connector/iceberg/iceberg_delete_builder.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
-#include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/parquet/file_reader.h"
@@ -35,8 +37,16 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 
     if (!_scanner_ctx->table_specific.iceberg_delete_files.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+        connector::IcebergDeleteFileBuildContext delete_build_ctx{
+                .fs = _scanner_ctx->fs,
+                .data_file_path = _scanner_ctx->file_path,
+                .datacache_options = _scanner_ctx->datacache_options,
+                .format_options = _scanner_ctx->format_scan_context.options,
+                .runtime_profile = _scanner_ctx->profile.runtime_profile,
+                .chunk_size = runtime_state->chunk_size(),
+                .timezone = runtime_state->timezone()};
         auto iceberg_delete_builder =
-                std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, runtime_state, *_scanner_ctx);
+                std::make_unique<connector::IcebergDeleteBuilder>(_skip_rows_ctx, std::move(delete_build_ctx));
         for (const auto& delete_file : _scanner_ctx->table_specific.iceberg_delete_files) {
             if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
                 RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));

@@ -22,25 +22,12 @@
 
 #include "cache/scan/cache_input_stream.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "connector/common/scan_file_io.h"
 #include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
-
-struct OpenFileOptions {
-    FileSystem* fs = nullptr;
-    std::string file_path;
-    int64_t file_size = -1;
-    FormatScannerStats* fs_stats = nullptr;
-    FormatScannerStats* app_stats = nullptr;
-
-    // for datacache
-    DataCacheOptions datacache_options;
-
-    // for compressed text file
-    CompressionTypePB compression_type = CompressionTypePB::NO_COMPRESSION;
-};
 
 class HdfsScanner {
 public:
@@ -76,7 +63,7 @@ public:
 
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+            std::shared_ptr<CacheInputStream>& cache_input_stream, const connector::ScanFileOpenOptions& options);
 
 protected:
     Status open_random_access_file();

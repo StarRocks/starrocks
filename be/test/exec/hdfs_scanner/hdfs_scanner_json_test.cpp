@@ -40,7 +40,7 @@ public:
 
 protected:
     std::shared_ptr<FileSystem> _fs;
-    OpenFileOptions _opts;
+    connector::ScanFileOpenOptions _opts;
     FormatScannerStats _app_stats;
     FormatScannerStats _fs_stats;
     RuntimeState _runtime_state;

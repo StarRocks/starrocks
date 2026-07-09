@@ -21,14 +21,11 @@
 #include "connector/common/partition_chunk_writer.h"
 #include "connector/common/partitioned_connector_chunk_sink.h"
 #include "formats/file_writer.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 class PriorityThreadPool;
 class RuntimeState;
-
-namespace pipeline {
-class FragmentContext;
-} // namespace pipeline
 
 namespace connector {
 struct SortOrdering;
@@ -56,8 +53,8 @@ struct IcebergDeleteSinkContext : public ConnectorSinkContext {
     // Cloud configuration (S3/HDFS credentials)
     starrocks::TCloudConfiguration cloud_configuration;
 
-    // Fragment context
-    pipeline::FragmentContext* fragment_context = nullptr;
+    RuntimeState* runtime_state = nullptr;
+    TUniqueId query_id;
 
     // Thread pool for async IO
     PriorityThreadPool* executor = nullptr;

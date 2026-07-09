@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/iceberg_utils.h"
+#include "connector/iceberg/iceberg_utils.h"
 
 #include <ctime>
 #include <sstream>

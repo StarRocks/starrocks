@@ -319,7 +319,6 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
@@ -503,4 +502,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorFile ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorFile ConnectorIceberg ConnectorBuiltinRegistry)

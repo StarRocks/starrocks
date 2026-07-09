@@ -21,6 +21,7 @@ ADD_BE_LIB(ConnectorCommon
         common/partition_chunk_writer.cpp
         common/partition_chunk_writer_memory_manager.cpp
         common/partitioned_connector_chunk_sink.cpp
+        common/scan_file_io.cpp
         common/spill_partition_chunk_writer.cpp
         common/utils.cpp
 )
@@ -28,6 +29,7 @@ ADD_BE_LIB(ConnectorCommon
 target_link_libraries(ConnectorCommon PUBLIC
         ComputeEnv
         ConnectorPrimitive
+        Cache
         Runtime
         Platform
         FormatCore
@@ -47,17 +49,44 @@ ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
         lake_connector.cpp
-        iceberg_connector.cpp
         hive_chunk_sink.cpp
-        iceberg_chunk_sink.cpp
-        iceberg_utils.cpp
         deletion_vector/deletion_vector.cpp
-        iceberg_delete_sink.cpp
-        iceberg_row_delta_sink.cpp
 )
 
 target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)
 target_link_libraries(Connector PRIVATE Platform)
+
+ADD_BE_LIB(ConnectorIceberg
+        iceberg/iceberg_connector.cpp
+        iceberg/iceberg_chunk_sink.cpp
+        iceberg/iceberg_delete_sink.cpp
+        iceberg/iceberg_row_delta_sink.cpp
+        iceberg/iceberg_utils.cpp
+        iceberg/iceberg_delete_builder.cpp
+)
+
+target_link_libraries(ConnectorIceberg PUBLIC
+        ConnectorCommon
+        ConnectorPrimitive
+        ComputeEnv
+        Cache
+        Expr
+        Runtime
+        Platform
+        FormatCore
+        FormatOrc
+        FormatParquet
+        FileSystem
+        IO
+        ColumnSortCore
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
 
 ADD_BE_LIB(ConnectorFile
         file/file_connector.cpp

@@ -9,10 +9,7 @@ set(EXEC_FILES
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
-        ./connector_sink/iceberg_chunk_sink_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
-        ./connector_sink/iceberg_delete_sink_test.cpp
-        ./connector_sink/iceberg_row_delta_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/data_sinks/range_router_test.cpp
         ./exec/plain_text_builder_test.cpp

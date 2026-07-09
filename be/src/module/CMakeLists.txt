@@ -34,6 +34,13 @@ target_link_libraries(ModuleBootstrap PRIVATE
         StarRocksGen
 )
 
+if (WITH_CONNECTOR_ICEBERG)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_ICEBERG)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorIceberg
+    )
+endif()
+
 if (WITH_CONNECTOR_BENCHMARK)
     target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_BENCHMARK)
     target_link_libraries(ModuleBootstrap PRIVATE
