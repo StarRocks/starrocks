@@ -100,6 +100,14 @@
             </exclusions>
         </dependency>
 
+        <!-- aliyun-java-auth needs org.bouncycastle.*; the vulnerable bcprov-jdk15on
+             is excluded above, so ship bcprov-jdk18on in odps-reader-lib instead
+             (each BE reader has its own isolated classpath) -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>

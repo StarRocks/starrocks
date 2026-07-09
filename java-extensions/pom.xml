@@ -521,6 +521,13 @@
                 <artifactId>jackson-core</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
+            <!-- 3.18.0 fixes CVE-2025-48924; udf-extensions bundles this into its
+                 jar-with-dependencies shipped under be/lib/jni-packages -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
             <!-- hadoop-yarn-common drags in 2.12.7 copies of these; keep them
                  aligned with the managed jackson version -->
             <dependency>
@@ -697,6 +704,8 @@
                                         <exclude>junit:junit:*:jar:runtime</exclude>
                                         <!-- keep jackson-jaxrs aligned with the managed jackson version -->
                                         <exclude>com.fasterxml.jackson.jaxrs:*:[,2.15.0)</exclude>
+                                        <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
+                                        <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
                                     </excludes>
                                 </bannedDependencies>
                             </rules>
