@@ -4965,4 +4965,17 @@ public class Config extends ConfigBase {
             + "frequently-versioned entity from materializing thousands of rows as ValuesRelation "
             + "Expr nodes on the FE. Caller-supplied limits, if smaller, take precedence.")
     public static int context_entity_history_max_rows = 1000;
+
+    @ConfField(mutable = true, comment = "Hard ceiling on the hop depth honored by the semantic-"
+            + "context graph_expand TVF / REST endpoint. Caller-supplied request.depth is clamped "
+            + "to this value at the FE boundary; values exceeding the cap are silently reduced "
+            + "and logged at WARN. Each hop issues one SQL against context_entity_refs, so "
+            + "raising this ceiling multiplies BE load per request.")
+    public static int context_graph_expand_max_depth = 5;
+
+    @ConfField(mutable = true, comment = "Hard ceiling on the per-hop frontier size honored by "
+            + "the semantic-context graph_expand TVF / REST endpoint. Caller-supplied "
+            + "request.maxFrontier is clamped to this value at the FE boundary. The product "
+            + "of depth and frontier bounds the worst-case IN-list size shipped to BE per hop.")
+    public static int context_graph_expand_max_frontier = 1000;
 }

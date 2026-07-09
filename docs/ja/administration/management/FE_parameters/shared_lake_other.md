@@ -1461,3 +1461,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：呼び出し側が LIMIT を指定しない場合に、semantic-context の entity_history 読み取りパス(TVF / 読み取り API)に適用されるデフォルトの LIMIT。バージョンが頻繁に更新されるエンティティが FE 上で数千行を実体化するのを防ぎます。呼び出し側がより小さい LIMIT を指定した場合は、そちらが優先されます。
 - 導入時期：
+
+### `context_graph_expand_max_depth`
+
+- デフォルト：5
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：semantic-context の graph_expand TVF / REST エンドポイントで許可される展開ホップ数の上限（ハードリミット）。呼び出し側が指定した `depth` は FE 境界でこの値にクランプされます（上限を超えた値は縮小され、WARN でログに記録されます）。各ホップは `context_entity_refs` に対して 1 回 SQL を発行するため、この上限を上げるとリクエストあたりの BE 負荷が倍増します。
+- 導入時期：
+
+### `context_graph_expand_max_frontier`
+
+- デフォルト：1000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：semantic-context の graph_expand TVF / REST エンドポイントで許可される 1 ホップあたりのフロンティアサイズの上限（ハードリミット）。呼び出し側が指定した `maxFrontier` は FE 境界でこの値にクランプされます。depth と frontier の積が、1 ホップあたり BE に送られる最悪ケースの IN リストサイズを制限します。
+- 導入時期：

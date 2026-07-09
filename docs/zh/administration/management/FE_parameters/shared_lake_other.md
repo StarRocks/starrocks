@@ -1511,3 +1511,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 当调用方未指定 LIMIT 时，semantic-context entity_history 读取路径（TVF / 读取 API）默认应用的 LIMIT。用于防止一个频繁产生版本的实体在 FE 上物化出成千上万行。若调用方指定了更小的 LIMIT，则以调用方为准。
 - 引入版本:
+
+### `context_graph_expand_max_depth`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: semantic-context graph_expand TVF / REST 接口所允许的最大展开跳数（硬上限）。调用方传入的 `depth` 会在 FE 侧被夹到该值（超出的值会被下调并以 WARN 记录日志）。每一跳都会对 `context_entity_refs` 发起一次 SQL，因此提高该上限会成倍增加每次请求的 BE 负载。
+- 引入版本:
+
+### `context_graph_expand_max_frontier`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: semantic-context graph_expand TVF / REST 接口所允许的每跳前沿（frontier）大小上限（硬上限）。调用方传入的 `maxFrontier` 会在 FE 侧被夹到该值。depth 与 frontier 的乘积限定了每跳下发给 BE 的最坏情况 IN 列表大小。
+- 引入版本:

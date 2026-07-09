@@ -1513,3 +1513,21 @@ This topic introduces the following types of FE configurations:
 - Description: Default LIMIT applied to the semantic-context entity_history read path (TVF / read API) when the caller does not supply one. Prevents a frequently-versioned entity from materializing thousands of rows on the FE. A smaller caller-supplied limit takes precedence.
 - Introduced in:
 
+### `context_graph_expand_max_depth`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Hard ceiling on the hop depth honored by the semantic-context graph_expand TVF / REST endpoint. A caller-supplied `depth` is clamped to this value at the FE boundary (values exceeding the cap are reduced and logged at WARN). Each hop issues one SQL against `context_entity_refs`, so raising this ceiling multiplies BE load per request.
+- Introduced in:
+
+### `context_graph_expand_max_frontier`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Hard ceiling on the per-hop frontier size honored by the semantic-context graph_expand TVF / REST endpoint. A caller-supplied `maxFrontier` is clamped to this value at the FE boundary. The product of depth and frontier bounds the worst-case IN-list size shipped to the BE per hop.
+- Introduced in:
+
