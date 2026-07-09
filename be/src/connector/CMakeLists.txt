@@ -14,6 +14,18 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
+ADD_BE_LIB(ConnectorCommon
+        common/connector_sink_commit.cpp
+)
+
+target_link_libraries(ConnectorCommon PUBLIC
+        FormatCore
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
+
 ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
@@ -34,7 +46,7 @@ ADD_BE_LIB(Connector
         iceberg_row_delta_sink.cpp
 )
 
-target_link_libraries(Connector PUBLIC ConnectorPrimitive ComputeEnv Cache)
+target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)
 target_link_libraries(Connector PRIVATE Platform)
 
 ADD_BE_LIB(ConnectorCacheStats

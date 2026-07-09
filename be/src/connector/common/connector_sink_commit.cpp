@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector_primitive/connector_sink_commit.h"
+#include "connector/common/connector_sink_commit.h"
 
 #include <utility>
 

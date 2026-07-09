@@ -18,11 +18,8 @@
 #include "base/testutil/scoped_updater.h"
 #include "common/config_connector_sink_fwd.h"
 #include "connector_primitive/connector.h"
-#include "connector_primitive/connector_sink_commit.h"
 #include "connector_primitive/data_source_provider.h"
 #include "connector_primitive/sink_memory_manager.h"
-#include "formats/file_writer.h"
-#include "formats/utils.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks::connector {
@@ -108,34 +105,6 @@ TEST(ConnectorPrimitiveTest, ConnectorKeepsReadSideTypeContract) {
 
     ASSERT_EQ(ConnectorType::BENCHMARK, connector.connector_type());
     ASSERT_EQ("benchmark", Connector::BENCHMARK);
-}
-
-TEST(ConnectorPrimitiveTest, CommitResultWrapsFileResultWithConnectorMetadata) {
-    CommitResult result{
-            .file_result =
-                    {
-                            .io_status = Status::OK(),
-                            .format = formats::PARQUET,
-                            .file_statistics =
-                                    {
-                                            .record_count = 10,
-                                            .file_size = 128,
-                                    },
-                            .location = "s3://bucket/table/data.parquet",
-                    },
-    };
-
-    auto& fingerprint_ref = result.set_partition_null_fingerprint("01");
-    auto& referenced_file_ref = result.set_referenced_data_file("s3://bucket/table/original.parquet");
-
-    ASSERT_EQ(&result, &fingerprint_ref);
-    ASSERT_EQ(&result, &referenced_file_ref);
-    ASSERT_TRUE(result.file_result.io_status.ok());
-    ASSERT_EQ(formats::PARQUET, result.file_result.format);
-    ASSERT_EQ(10, result.file_result.file_statistics.record_count);
-    ASSERT_EQ(128, result.file_result.file_statistics.file_size);
-    ASSERT_EQ("01", result.partition_null_fingerprint);
-    ASSERT_EQ("s3://bucket/table/original.parquet", result.referenced_data_file);
 }
 
 TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue) {
