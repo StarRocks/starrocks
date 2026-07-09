@@ -104,6 +104,7 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -1339,6 +1340,51 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(
                 "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
                 filter.toString());
+    }
+
+    @Test
+    public void testGetRemoteFileStringDatePartitionPrune() throws Exception {
+        // A table partitioned by an identity STRING column holding date strings. A predicate
+        // CAST(datestr AS DATETIME) = <ts> must prune to the matching partition StarRocks-side, since Iceberg's
+        // native string comparison would render the constant with a time part and wrongly prune every file.
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).identity("k2").build();
+        TestTables.TestTable table = create(SCHEMA_J, spec, "tbStringDatePart", 1);
+
+        DataFile file0614 = DataFiles.builder(spec)
+                .withPath("/path/to/data-0614.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-14").withRecordCount(3).build();
+        DataFile file0615 = DataFiles.builder(spec)
+                .withPath("/path/to/data-0615.parquet").withFileSizeInBytes(20)
+                .withPartitionPath("k2=2020-06-15").withRecordCount(4).build();
+        table.newAppend().appendFile(file0614).appendFile(file0615).commit();
+        table.refresh();
+        long snapshotId = table.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("k1", INT), new Column("k2", VARCHAR));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, table, Maps.newHashMap());
+
+        // CAST(k2 AS DATETIME) = '2020-06-14 00:00:00' -> only the k2=2020-06-14 file survives.
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DATETIME, new ColumnRefOperator(3, VARCHAR, "k2", true)),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 6, 14, 0, 0, 0)));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                        .setPredicate(predicate).setFieldNames(Lists.newArrayList()).setLimit(10).build());
+        Assertions.assertEquals(1, res.size());
+        Assertions.assertEquals(3, ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file().recordCount());
+
+        // A non-matching constant prunes everything.
+        ScalarOperator noMatch = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DATETIME, new ColumnRefOperator(3, VARCHAR, "k2", true)),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0, 0)));
+        List<RemoteFileInfo> empty = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                        .setPredicate(noMatch).setFieldNames(Lists.newArrayList()).setLimit(10).build());
+        Assertions.assertEquals(0, empty.size());
     }
 
     @Test
