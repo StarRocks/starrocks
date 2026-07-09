@@ -16,16 +16,19 @@
 
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "compute_env/load_spill/load_spill_merge_input_batch.h"
 #include "compute_env/spill/block_group.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/vacuum.h"
 #include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 

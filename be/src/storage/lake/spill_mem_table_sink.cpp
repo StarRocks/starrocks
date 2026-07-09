@@ -65,7 +65,19 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
+    return _spill_and_maybe_eager_merge(chunk, slot_idx, flush_data_size);
+}
 
+Status SpillMemTableSink::flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment, bool eos,
+                                              int64_t* flush_data_size, int64_t slot_idx) {
+    // The chunk still carries the trailing __op column. Always spill (skip the single-flush
+    // direct-write shortcut, which cannot handle __op): the op-aware merge resolves upsert/delete
+    // order per key by slot, then splits the merged output into segments + del files (see
+    // TabletInternalParallelMergeTask). __op is REPLACE-aggregated through the merge.
+    return _spill_and_maybe_eager_merge(chunk_with_op, slot_idx, flush_data_size);
+}
+
+Status SpillMemTableSink::_spill_and_maybe_eager_merge(const Chunk& chunk, int64_t slot_idx, int64_t* flush_data_size) {
     // Spill chunk to temporary storage with slot_idx for ordering
     auto res = _load_chunk_spiller->spill(chunk, slot_idx);
     RETURN_IF_ERROR(res.status());

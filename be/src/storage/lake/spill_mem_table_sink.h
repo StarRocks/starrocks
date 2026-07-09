@@ -73,6 +73,10 @@ public:
     int64_t tablet_id() override;
 
 private:
+    // Spill a chunk and, if the spill threshold is reached, kick off an eager merge task. Shared by
+    // flush_chunk() (after the single-flush shortcut) and flush_chunk_with_op().
+    Status _spill_and_maybe_eager_merge(const Chunk& chunk, int64_t slot_idx, int64_t* flush_data_size);
+
     TabletWriter* _writer;
 
     // Per-load snapshot of config::lake_enable_pk_preserve_txn_delete_order (see keep_op_column()).
