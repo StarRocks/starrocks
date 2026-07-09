@@ -119,6 +119,27 @@ public class ExecPlan {
         return scanNodes;
     }
 
+    // Whether the plan scans the same LAKE (cloud-native) table with more than one scan node (e.g. self-join, or
+    // one query with multiple scans of the same table). Only lake tables matter because the prepared physical
+    // split scan only applies to them. Used to conservatively gate that optimization (it re-orders reads and
+    // hurts the downstream large-build hash-join build-column gather).
+    public boolean hasDuplicateLakeTableScan() {
+        java.util.Set<Long> seenLakeTableIds = new java.util.HashSet<>();
+        for (ScanNode scanNode : scanNodes) {
+            if (scanNode.getDesc() == null || scanNode.getDesc().getTable() == null) {
+                continue;
+            }
+            com.starrocks.catalog.Table table = scanNode.getDesc().getTable();
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                continue;
+            }
+            if (!seenLakeTableIds.add(table.getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<Expr> getOutputExprs() {
         return outputExprs;
     }

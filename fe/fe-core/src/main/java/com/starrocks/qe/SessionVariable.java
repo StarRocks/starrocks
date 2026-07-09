@@ -414,6 +414,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN =
             "enable_lake_prepared_physical_split_scan";
 
+    // Whether to keep the prepared physical split scan enabled even when the plan scans the same lake table with
+    // >=2 scan nodes (self-join / multiple scans of one table). Such plans re-order reads and hurt the downstream
+    // large-build hash-join build-column gather (worse cache locality). Default false = conservatively fall back
+    // to the non-split scan for such plans.
+    public static final String ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN =
+            "enable_lake_prepared_split_on_dup_table_scan";
+
     public static final String LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO =
             "lake_tablet_internal_parallel_skew_split_ratio";
 
@@ -1330,7 +1337,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_PHYSICAL_SPLIT_SCAN, flag = VariableMgr.INVISIBLE)
     private boolean enableLakePreparedPhysicalSplitScan = false;
 
-    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO, flag = VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
+    private boolean enableLakePreparedSplitOnDupTableScan = false;
+
+    @VariableMgr.VarAttr(name = LAKE_TABLET_INTERNAL_PARALLEL_SKEW_SPLIT_RATIO)
     private double lakeTabletInternalParallelSkewSplitRatio = 1.5;
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
@@ -4724,6 +4734,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLakePreparedPhysicalSplitScan() {
         return enableLakePreparedPhysicalSplitScan;
+    }
+
+    public boolean isEnableLakePreparedSplitOnDupTableScan() {
+        return enableLakePreparedSplitOnDupTableScan;
     }
 
     public double getLakeTabletInternalParallelSkewSplitRatio() {

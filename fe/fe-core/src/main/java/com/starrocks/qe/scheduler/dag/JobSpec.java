@@ -116,6 +116,15 @@ public class JobSpec {
             queryOptions.setQuery_type(queryType);
             queryOptions.setQuery_timeout(context.getExecTimeout());
 
+            // Same lake table scanned by >=2 scan nodes (self-join / multi-scan of one table): the prepared
+            // physical split re-orders reads and hurts the downstream large-build hash-join build-column gather
+            // (worse cache locality). Unless explicitly enabled, fall back to the non-split scan for such plans.
+            if (queryOptions.isEnable_lake_prepared_physical_split_scan()
+                    && !context.getSessionVariable().isEnableLakePreparedSplitOnDupTableScan()
+                    && execPlan.hasDuplicateLakeTableScan()) {
+                queryOptions.setEnable_lake_prepared_physical_split_scan(false);
+            }
+
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
             if (context.getLastQueryId() != null) {
