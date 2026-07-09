@@ -91,7 +91,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
 
         TableFunctionTable orcSourceTable = mockTableFunctionTable("orc", List.of(brokerFileStatus(orcPath)));
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(orcSourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(orcSourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -106,7 +106,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
     void nonParquetFormatFallsBackToDataTier() throws Exception {
         TableFunctionTable csvSourceTable = mockTableFunctionTable("csv", Collections.emptyList());
         SampleRequest request = new SampleRequest(
-                new InsertFromFilesScanContext(csvSourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(csvSourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -119,7 +119,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
         SampleRequest request = new SampleRequest(
                 new BrokerLoadScanContext(
                         null, Collections.emptyList(), Collections.emptyList(),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -147,7 +147,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
     private SampleRequest bigintSampleRequest(List<TBrokerFileStatus> fileStatuses, long byteLimit) {
         TableFunctionTable sourceTable = mockTableFunctionTable("parquet", fileStatuses);
         return new SampleRequest(
-                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class)),
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 byteLimit,
                 /*seed=*/ 0L);

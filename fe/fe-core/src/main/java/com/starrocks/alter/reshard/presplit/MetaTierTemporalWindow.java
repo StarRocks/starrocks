@@ -16,8 +16,14 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.common.util.DateUtils;
 
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.zone.ZoneRules;
+import java.util.Optional;
 
 /**
  * The value window the meta tier accepts for DATE and DATETIME sort-key boundaries:
@@ -82,5 +88,38 @@ final class MetaTierTemporalWindow {
             return dateTime.format(DateUtils.DATE_TIME_FORMATTER_UNIX);
         }
         return dateTime.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
+    }
+
+    /**
+     * Resolve the load session timezone to the FIXED UTC offset the BE load applies when shifting a
+     * UTC-adjusted Parquet timestamp / ORC TIMESTAMP_INSTANT to a local DATETIME wall clock, or empty
+     * when the meta tier cannot safely reproduce that shift.
+     *
+     * <p>The BE adds the session-tz offset to the UTC instant (Parquet Int64ToDateTimeConverter when
+     * isAdjustedToUTC=true; ORC orc_ts_to_native_ts when is_instant=true). We can match that boundary
+     * only for a FIXED-OFFSET zone, where every instant (incl. pre-1970) gets the same constant offset,
+     * so adding it to the decoded UTC min/max is order-preserving. A DST / named zone applies a
+     * per-instant offset (the BE row load uses per-instant cctz), which one scalar cannot reproduce and
+     * which can even reorder wall clocks near a fall-back transition -- return empty so the reader defers
+     * to the data tier (never a wrong split). Named-zone aliases (CST/PRC) resolve to Asia/Shanghai, also
+     * non-fixed, so they defer too.
+     *
+     * <p>FE reproduces the exact BE zone: the FE stamps TQueryGlobals.time_zone from the session variable
+     * (CoordinatorPreprocessor.genQueryGlobals) and offset forms are canonicalized to +-HH:MM at SET time,
+     * so ZoneId.of parses them. Any unresolvable / non-fixed zone -> empty (fail-safe).
+     */
+    static Optional<ZoneOffset> fixedLoadOffset(String loadTimeZone) {
+        if (loadTimeZone == null || loadTimeZone.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            ZoneRules rules = ZoneId.of(loadTimeZone).getRules();
+            if (!rules.isFixedOffset()) {
+                return Optional.empty();
+            }
+            return Optional.of(rules.getOffset(Instant.EPOCH));
+        } catch (DateTimeException unresolvable) {
+            return Optional.empty();
+        }
     }
 }
