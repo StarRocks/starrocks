@@ -470,7 +470,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
@@ -505,7 +505,7 @@ public class ExternalResourceCleanupTest {
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         ExecutorService exec = Executors.newSingleThreadExecutor();
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Method m = IcebergMetadata.class.getDeclaredMethod(
@@ -527,7 +527,7 @@ public class ExternalResourceCleanupTest {
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         ExecutorService exec = Executors.newSingleThreadExecutor();
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
@@ -554,7 +554,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
@@ -599,7 +599,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
@@ -763,7 +763,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
