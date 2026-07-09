@@ -47,10 +47,7 @@ ADD_BE_LIB(Connector
         connector_registry.cpp
         hive_connector.cpp
         lake_connector.cpp
-        file_connector.cpp
-        file_scan_metrics.cpp
         iceberg_connector.cpp
-        file_chunk_sink.cpp
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
         iceberg_utils.cpp
@@ -61,6 +58,50 @@ ADD_BE_LIB(Connector
 
 target_link_libraries(Connector PUBLIC ConnectorCommon ConnectorPrimitive ComputeEnv Cache)
 target_link_libraries(Connector PRIVATE Platform)
+
+ADD_BE_LIB(ConnectorFile
+        file/file_connector.cpp
+        file/file_scan_metrics.cpp
+        file/file_scan_utils.cpp
+        file/file_chunk_sink.cpp
+        file/scanner/avro_cpp_scanner.cpp
+        file/scanner/avro_scanner.cpp
+        file/scanner/csv_scanner.cpp
+        file/scanner/file_scanner.cpp
+        file/scanner/json_scanner.cpp
+        file/scanner/orc_scanner.cpp
+        file/scanner/parquet_scanner.cpp
+        file/scanner/arrow_scanner.cpp
+        file/scanner/stream_source_meta.cpp
+        file/scanner/parquet_reader.cpp
+        file/scanner/parquet_schema_builder.cpp
+)
+
+target_link_libraries(ConnectorFile PUBLIC
+        ConnectorCommon
+        ConnectorPrimitive
+        ComputeEnv
+        Cache
+        Expr
+        Runtime
+        Platform
+        FormatCore
+        FormatCsv
+        FormatJson
+        FormatAvro
+        FormatOrc
+        FormatParquet
+        FileSystem
+        IO
+        ColumnSortCore
+        ChunkCore
+        ColumnCore
+        Types
+        Common
+        Base
+        Gutil
+        StarRocksGen
+)
 
 ADD_BE_LIB(ConnectorCacheStats
         cache_stats/cache_stats_connector.cpp
@@ -191,6 +232,7 @@ ADD_BE_LIB(ConnectorBuiltinRegistry
 
 target_link_libraries(ConnectorBuiltinRegistry PUBLIC
         Connector
+        ConnectorFile
         Common
         Base
         Gutil

@@ -46,6 +46,7 @@ ADD_BE_LIB(DataWorkflows
 target_link_libraries(DataWorkflows PUBLIC
     Storage
     Exec
+    ConnectorFile
     Runtime
     StoragePrimitive
     Platform
