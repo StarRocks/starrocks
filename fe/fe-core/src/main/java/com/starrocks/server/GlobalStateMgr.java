@@ -116,7 +116,11 @@ import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.context.ContextMetaManager;
 import com.starrocks.context.ContextMgr;
+import com.starrocks.context.ContextReadExecutor;
+import com.starrocks.context.allocator.ContextSnapshotAllocator;
+import com.starrocks.context.allocator.ContextVersionAllocator;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.encryption.KeyRotationDaemon;
 import com.starrocks.epack.alter.SystemHandlerEPack;
@@ -540,6 +544,10 @@ public class GlobalStateMgr {
     private final AIProviderMgr aiProviderMgr;
 
     private final ContextMgr contextMgr;
+    private final ContextMetaManager contextMetaManager;
+    private final ContextVersionAllocator contextVersionAllocator;
+    private final ContextSnapshotAllocator contextSnapshotAllocator;
+    private final ContextReadExecutor contextReadExecutor;
 
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
@@ -965,6 +973,10 @@ public class GlobalStateMgr {
 
         this.aiProviderMgr = new AIProviderMgr();
         this.contextMgr = new ContextMgr();
+        this.contextMetaManager = new ContextMetaManager();
+        this.contextVersionAllocator = new ContextVersionAllocator();
+        this.contextSnapshotAllocator = new ContextSnapshotAllocator();
+        this.contextReadExecutor = new ContextReadExecutor();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1285,6 +1297,22 @@ public class GlobalStateMgr {
 
     public ContextMgr getContextMgr() {
         return contextMgr;
+    }
+
+    public ContextMetaManager getContextMetaManager() {
+        return contextMetaManager;
+    }
+
+    public ContextVersionAllocator getContextVersionAllocator() {
+        return contextVersionAllocator;
+    }
+
+    public ContextSnapshotAllocator getContextSnapshotAllocator() {
+        return contextSnapshotAllocator;
+    }
+
+    public ContextReadExecutor getContextReadExecutor() {
+        return contextReadExecutor;
     }
 
     public PipeManager getPipeManager() {
@@ -1831,6 +1859,7 @@ public class GlobalStateMgr {
         // start daemon thread to update db used data quota for db txn manager periodically
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
+        contextMetaManager.start();
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
@@ -1919,6 +1948,7 @@ public class GlobalStateMgr {
         stopOne("spmAutoCapturer", () -> spmAutoCapturer.stopGracefully(timeoutMs));
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopGracefully(timeoutMs));
         stopOne("statisticAutoCollector", () -> statisticAutoCollector.stopGracefully(timeoutMs));
+        stopOne("contextMetaManager", () -> contextMetaManager.stopGracefully(timeoutMs));
         stopOne("statisticsMetaManager", () -> statisticsMetaManager.stopGracefully(timeoutMs));
         stopOne("updateDbUsedDataQuotaDaemon", () -> updateDbUsedDataQuotaDaemon.stopGracefully(timeoutMs));
         stopOne("dynamicPartitionScheduler", () -> dynamicPartitionScheduler.stopGracefully(timeoutMs));

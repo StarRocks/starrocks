@@ -3519,6 +3519,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_experimental_vector = false;
 
+    // Master switch for the Context Base (semantic context / AgentBase) module. When false (the
+    // default), ContextMetaManager does not start: the internal context tables are not bootstrapped
+    // and no context metadata is seeded. Takes effect on FE restart.
+    @ConfField(mutable = true, comment = "Whether to enable the Context Base (semantic context) module. " +
+            "Disabled by default; when false ContextMetaManager does not start. Takes effect on FE restart.")
+    public static boolean enable_context_base = false;
+
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
