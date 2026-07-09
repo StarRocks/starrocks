@@ -2127,6 +2127,91 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
     EXPECT_EQ(10, v.entries(3).version());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_stamps_new_schema_id) {
+    // When FE allocates a new schema id/version (durability fix), apply_add_index
+    // must stamp it onto metadata->schema() so every by-id schema cache misses and
+    // picks up the indexed schema. On a fresh table (empty rowset_to_schema) no
+    // historical archiving is needed — existing rowsets resolve via schema().
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20021);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20021);
+    metadata->set_version(5);
+    metadata->mutable_schema()->set_id(100);
+    metadata->mutable_schema()->set_schema_version(5);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "s0.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+    op.set_new_schema_id(200);
+    op.set_new_schema_version(6);
+
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(200, metadata->schema().id());
+    EXPECT_EQ(6, metadata->schema().schema_version());
+    // Empty rowset_to_schema: no pins, no historical archiving.
+    EXPECT_TRUE(metadata->rowset_to_schema().empty());
+    EXPECT_EQ(0u, metadata->historical_schemas().count(200));
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
+    // Fast-evolved table (non-empty rowset_to_schema): existing rowsets are pinned
+    // to a historical schema, so both the read path and compaction resolve through
+    // historical_schemas — bumping metadata->schema() alone is bypassed. The fix
+    // must archive the indexed schema under the new id AND repoint the pins that
+    // referenced the pre-index current schema (100) to it, while leaving pins to an
+    // OLDER schema (50) untouched. rowset.cpp CHECKs that a pinned schema id exists
+    // in historical_schemas, so the archive and the repoint must happen together.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20022);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20022);
+    metadata->set_version(5);
+    metadata->mutable_schema()->set_id(100); // pre-index current schema
+    metadata->mutable_schema()->set_schema_version(5);
+    // rowsets 1,2 pinned to the current schema (100); rowset 3 to an older one (50).
+    (*metadata->mutable_rowset_to_schema())[1] = 100;
+    (*metadata->mutable_rowset_to_schema())[2] = 100;
+    (*metadata->mutable_rowset_to_schema())[3] = 50;
+    (*metadata->mutable_historical_schemas())[100].set_id(100);
+    (*metadata->mutable_historical_schemas())[50].set_id(50);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "s0.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+    op.set_new_schema_id(200);
+    op.set_new_schema_version(6);
+
+    builder.apply_add_index(op);
+
+    EXPECT_EQ(200, metadata->schema().id());
+    // Indexed schema archived under the new id (pins to it must resolve).
+    ASSERT_EQ(1u, metadata->historical_schemas().count(200));
+    EXPECT_EQ(200, metadata->historical_schemas().at(200).id());
+    // Pins on the pre-index current schema (100) repointed to the indexed id.
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(2));
+    // Pin to an OLDER (fewer-column) schema is untouched.
+    EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
+
+    // Idempotent replay: re-applying the same op is a no-op (guarded on
+    // historical_schemas already containing the new id).
+    builder.apply_add_index(op);
+    EXPECT_EQ(200, metadata->schema().id());
+    EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
+    EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
+    EXPECT_EQ(1u, metadata->historical_schemas().count(200));
+}
+
 TEST_F(MetaFileTest, test_apply_drop_index_populates_tombstone) {
     // Dropping an index from schema.table_indices must also copy the
     // TabletIndexPB into schema.dropped_table_indices so BE readers know

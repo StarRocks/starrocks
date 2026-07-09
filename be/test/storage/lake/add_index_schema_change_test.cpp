@@ -131,6 +131,15 @@ protected:
         c3->set_is_nullable(true);
         c3->set_aggregation("NONE");
 
+        auto* c4 = schema->add_column();
+        c4->set_unique_id(_c4_uid);
+        c4->set_name("c4");
+        c4->set_type("CHAR");
+        c4->set_length(16);
+        c4->set_is_key(false);
+        c4->set_is_nullable(false);
+        c4->set_aggregation("NONE");
+
         return metadata;
     }
 
@@ -145,6 +154,7 @@ protected:
         auto col_c2 = BinaryColumn::create();
         auto col_c3 = Int32Column::create();
         auto null_col_c3 = NullableColumn::create(std::move(col_c3), NullColumn::create());
+        auto col_c4 = BinaryColumn::create();
         for (int i = 0; i < nrows; ++i) {
             col_c0->append_datum(Datum(i + 1));
             col_c1->append_datum(Datum(i * 7 + 3));
@@ -154,8 +164,15 @@ protected:
             } else {
                 null_col_c3->append_datum(Datum(i * 11));
             }
+            // CHAR(16): append short (unpadded) slices — the segment writer stores
+            // CHAR and the decoder trims trailing '\0' on read-back, so the fast
+            // path's repad_char restores the declared width. Low cardinality keeps
+            // the bitmap dictionary small.
+            col_c4->append_datum(Datum(Slice("ch" + std::to_string(i % 4))));
         }
-        Chunk chunk({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(null_col_c3)}, vschema);
+        Chunk chunk(
+                {std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(null_col_c3), std::move(col_c4)},
+                vschema);
         std::vector<uint32_t> indexes(nrows);
         for (int i = 0; i < nrows; ++i) indexes[i] = i;
 
@@ -208,6 +225,7 @@ protected:
     const int32_t _c1_uid = 101;
     const int32_t _c2_uid = 102;
     const int32_t _c3_uid = 103;
+    const int32_t _c4_uid = 104; // CHAR column, exercises feed_index_from_column's repad path
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
@@ -244,6 +262,53 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_single_segment_happy_path) {
     ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
     auto exists_or = fs->path_exists(idx_path);
     EXPECT_TRUE(exists_or.ok());
+}
+
+// CHAR column: build_bitmap_for_column sets char_pad_len = column.length(), so
+// feed_index_from_column re-pads each decoder-trimmed slice back to the declared
+// width before feeding the bitmap dictionary (the CHAR-padding fix). Drives the
+// repad_char path that VARCHAR/other-type columns skip (char_pad_len == 0).
+TEST_F(AddIndexSchemaChangeTest, run_bitmap_char_column_repads) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c4_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_EQ(1, entry.keys_size());
+    EXPECT_EQ(_c4_uid, entry.keys(0).col_unique_id());
+    EXPECT_EQ(IndexType::BITMAP, entry.keys(0).index_type());
+    EXPECT_GT(entry.file_size(), 0);
+}
+
+// Same CHAR repad path through build_bloom_for_column (plain bloom filter).
+TEST_F(AddIndexSchemaChangeTest, run_bloom_char_column_repads) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c4_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_EQ(1, entry.keys_size());
+    EXPECT_EQ(_c4_uid, entry.keys(0).col_unique_id());
+    EXPECT_EQ(IndexType::BLOOM_FILTER, entry.keys(0).index_type());
+    EXPECT_GT(entry.file_size(), 0);
 }
 
 // Build NGRAMBF on a VARCHAR column with gram_num=3 / fpp=0.05 /
@@ -464,6 +529,68 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_happy_path) {
     EXPECT_EQ(1, txn_log->op_add_index().new_indexes_size());
     EXPECT_EQ(1, txn_log->op_add_index().segment_entries_size());
     EXPECT_EQ(version, txn_log->op_add_index().alter_version());
+}
+
+// The FE-allocated new schema id/version must be carried into the OpAddIndex so
+// apply_add_index can stamp them onto the tablet metadata schema (durability fix
+// — invalidates every by-id schema cache so post-index loads / compaction build
+// the index instead of reusing the cached pre-index schema).
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    request.__set_new_index_schema_id(987654);
+    request.__set_new_index_schema_version(9);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"c1"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    EXPECT_EQ(987654, txn_log->op_add_index().new_schema_id());
+    EXPECT_EQ(9, txn_log->op_add_index().new_schema_version());
+}
+
+// A TOlapTableIndex with a type but no columns must fail fast in the fast path
+// (rather than fall through to init_from_thrift's unchecked field_index()).
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_empty_columns_rejected) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({}); // no columns -> InvalidArgument
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
 }
 
 // Wrapper failure path: the request references a column name that does not
