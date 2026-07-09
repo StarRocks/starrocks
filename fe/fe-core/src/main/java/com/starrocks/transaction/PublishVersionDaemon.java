@@ -56,10 +56,12 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -1057,6 +1059,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         ComputeResource computeResource = txnState.getComputeResource();
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
+        List<Tablet> carryForwardTablets = null;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1086,6 +1089,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
             baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
+            Set<Long> publishedNormalIndexIds = Sets.newHashSet();
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameByMetaId(index.getMetaId()), txnId);
@@ -1097,7 +1101,22 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } else {
                     normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
                     normalTablets.addAll(index.getTablets());
+                    publishedNormalIndexIds.add(index.getId());
                 }
+            }
+            // File bundling stores the metadata of ALL tablets of a partition version in a single bundle
+            // file (meta/0_<version>.meta). The index set above comes from the transaction's point-in-time
+            // view (for lake compaction it is snapshotted at txn begin). If a materialized-view/rollup
+            // index became visible after this transaction began, that stale view omits it, so publishing
+            // the new version would write a bundle WITHOUT the rollup index's tablets, dropping them from
+            // this version and permanently wedging the partition's publish queue (a later publish reading
+            // those tablets at this version gets a 404). Carry forward every currently-visible NORMAL index
+            // this transaction did not touch, so the new bundle remains a complete whole-partition snapshot.
+            // Only needed for file bundling; without it each tablet keeps its own per-version metadata file.
+            if (useAggregatePublish) {
+                carryForwardTablets = collectFileBundlingCarryForwardTablets(
+                        partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE),
+                        publishedNormalIndexIds);
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
@@ -1121,8 +1140,28 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // collection, and range-distribution tablet sizes for real-time reshard triggering.
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-                Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                        computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
+                if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
+                    // Publish the touched tablets (this txn) and the carry-forward tablets (empty version
+                    // bump) in ONE aggregate request, so the whole partition's metadata for the new version
+                    // is written into a single bundle file. Two separate aggregate publishes would each
+                    // truncate-write the same meta/0_<version>.meta and lose one of the two sets.
+                    AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
+                    Utils.createSubRequestForAggregatePublish(normalTablets, Lists.newArrayList(txnInfo),
+                            baseVersion, txnVersion, null, computeResource, request);
+                    TxnInfoPB emptyTxnInfo = new TxnInfoPB();
+                    emptyTxnInfo.txnId = -1L;
+                    emptyTxnInfo.combinedTxnLog = false;
+                    emptyTxnInfo.commitTime = txnInfo.commitTime;
+                    emptyTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
+                    emptyTxnInfo.gtid = txnInfo.gtid;
+                    Utils.createSubRequestForAggregatePublish(carryForwardTablets, Lists.newArrayList(emptyTxnInfo),
+                            baseVersion, txnVersion, null, computeResource, request);
+                    Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource,
+                            compactionScores, null, tabletStats, vectorIndexBuildInfos);
+                } else {
+                    Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
+                            computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
+                }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -1148,6 +1187,28 @@ public class PublishVersionDaemon extends LeaderDaemon {
             maybeLogSlowPublishPartition(txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
                     submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, System.currentTimeMillis());
         }
+    }
+
+    // For file bundling only: from the partition's currently-visible indexes, return the tablets of every
+    // NORMAL index that this transaction did not touch (i.e. whose index id is not in publishedNormalIndexIds).
+    // These must be carried forward (empty version bump) into the new version's bundle so it stays a complete
+    // whole-partition snapshot; otherwise a transaction with a stale index view (notably lake compaction
+    // whose loaded-index set is snapshotted at txn begin, before a rollup/MV index became visible) would
+    // publish a bundle missing that index and permanently wedge the partition. Returns null when nothing
+    // needs carrying forward (e.g. a normal load already covers every visible index). Caller must hold the
+    // table read lock while obtaining visibleIndexes.
+    static List<Tablet> collectFileBundlingCarryForwardTablets(List<MaterializedIndex> visibleIndexes,
+                                                               Set<Long> publishedNormalIndexIds) {
+        List<Tablet> carryForwardTablets = null;
+        for (MaterializedIndex index : visibleIndexes) {
+            if (index.getState() == MaterializedIndex.IndexState.SHADOW
+                    || publishedNormalIndexIds.contains(index.getId())) {
+                continue;
+            }
+            carryForwardTablets = (carryForwardTablets == null) ? Lists.newArrayList() : carryForwardTablets;
+            carryForwardTablets.addAll(index.getTablets());
+        }
+        return carryForwardTablets;
     }
 
     // Per-partition publishPartition phase breakdown for slow outliers.
