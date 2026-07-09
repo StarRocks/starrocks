@@ -19,20 +19,21 @@
 
 #include "column/chunk.h"
 #ifndef __APPLE__
-#include "exec/file_scanner/avro_scanner.h"
+#include "connector/file/scanner/avro_scanner.h"
 #endif
-#include "exec/file_scanner/csv_scanner.h"
-#include "exec/file_scanner/json_scanner.h"
+#include "connector/file/scanner/csv_scanner.h"
+#include "connector/file/scanner/json_scanner.h"
 #ifndef __APPLE__
-#include "exec/file_scanner/orc_scanner.h"
+#include "connector/file/scanner/orc_scanner.h"
 #endif
 #ifndef __APPLE__
-#include "exec/file_scanner/parquet_scanner.h"
+#include "connector/file/scanner/parquet_scanner.h"
 #endif
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
-#include "exec/file_scanner/arrow_scanner.h"
+#include "connector/file/file_scan_utils.h"
+#include "connector/file/scanner/arrow_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -233,19 +234,6 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
-}
-
-// Pure predicate extracted for testability: returns InternalError when
-// rejected-record logging is enabled but `fmt` is not in the supported
-// whitelist (CSV / JSON / Parquet / ORC / Arrow). The identical check lives in
-// file_connector.cpp; extracting to a free function DRYs both call sites.
-Status check_rejected_record_format_support(bool logging_enabled, TFileFormatType::type fmt) {
-    if (logging_enabled && fmt != TFileFormatType::FORMAT_CSV_PLAIN && fmt != TFileFormatType::FORMAT_JSON &&
-        fmt != TFileFormatType::FORMAT_PARQUET && fmt != TFileFormatType::FORMAT_ORC &&
-        fmt != TFileFormatType::FORMAT_ARROW) {
-        return Status::InternalError("only support csv/json/parquet/orc/arrow format to log rejected record");
-    }
-    return Status::OK();
 }
 
 Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std::vector<ExprContext*>& conjunct_ctxs,

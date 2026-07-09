@@ -16,7 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
-#include "connector/file_chunk_sink.h"
+#include "connector/file/file_chunk_sink.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
@@ -110,7 +110,7 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     }
     sink_ctx->compression_type = target_table.compression_type;
     sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
-    sink_ctx->fragment_context = fragment_ctx;
+    sink_ctx->runtime_state = runtime_state;
     if (target_table.__isset.csv_column_seperator) {
         sink_ctx->options[formats::CSVWriterOptions::COLUMN_TERMINATED_BY] = target_table.csv_column_seperator;
     }

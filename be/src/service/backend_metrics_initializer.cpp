@@ -39,7 +39,7 @@
 #include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/spill/spill_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
-#include "connector/file_scan_metrics.h"
+#include "connector/file/file_scan_metrics.h"
 #include "exec/catalog_scan_metrics.h"
 #include "exec/query_scan_metrics.h"
 #include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
