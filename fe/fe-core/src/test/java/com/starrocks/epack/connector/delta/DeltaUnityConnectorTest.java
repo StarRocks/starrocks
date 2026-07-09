@@ -80,7 +80,7 @@ public class DeltaUnityConnectorTest {
             }
         };
 
-        new DeltaLakeConnector(new ConnectorContext("databricks0",
+        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
         ConnectorMetadata metadata = deltaUnityConnector.getMetadata();
         Assert.assertTrue(metadata instanceof DeltaLakeMetadata);
