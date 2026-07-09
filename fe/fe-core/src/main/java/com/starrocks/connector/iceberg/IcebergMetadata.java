@@ -1924,8 +1924,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         // predicate. They are instead evaluated below against each manifest's partition summary in the DATETIME
         // domain, so a manifest whose partition range definitely cannot satisfy them is still pruned. A kept
         // manifest is counted in full (manifest-level granularity), so the result stays a safe over-estimate.
+        Set<String> stringPartitionColumns = identityStringPartitionColumns(icebergTable);
         PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
-                Utils.extractConjuncts(predicate), identityStringPartitionColumns(icebergTable));
+                Utils.extractConjuncts(predicate), stringPartitionColumns);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(residual.pushable, icebergContext);
@@ -1936,7 +1937,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         long rowCount = 0;
         for (ManifestFile manifest : matchingManifests) {
             if (residual.hasResidual() && !PartitionCastPredicatePruner.rangeMayMatch(
-                    residual.residual, manifestPartitionDateRanges(manifest, icebergTable))) {
+                    residual.residual, manifestPartitionDateRanges(manifest, icebergTable, stringPartitionColumns))) {
                 continue;
             }
             if (!canCountRowsFromManifest(manifest)) {
@@ -1951,7 +1952,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     // domain, for coarse residual pruning. A column is omitted (treated as "unknown range" -> keep) when its
     // bounds are absent or cannot be parsed as a temporal value, so pruning never drops a possibly-matching
     // manifest.
-    private Map<String, LocalDateTime[]> manifestPartitionDateRanges(ManifestFile manifest, IcebergTable table) {
+    private Map<String, LocalDateTime[]> manifestPartitionDateRanges(ManifestFile manifest, IcebergTable table,
+                                                                     Set<String> stringPartitionColumns) {
         Map<String, LocalDateTime[]> ranges = new HashMap<>();
         List<ManifestFile.PartitionFieldSummary> summaries = manifest.partitions();
         if (summaries == null || summaries.isEmpty()) {
@@ -1962,7 +1964,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (spec == null) {
             return ranges;
         }
-        Set<String> stringPartitionColumns = identityStringPartitionColumns(table);
         List<PartitionField> fields = spec.fields();
         List<org.apache.iceberg.types.Types.NestedField> partitionTypeFields = spec.partitionType().fields();
         for (int i = 0; i < fields.size() && i < summaries.size() && i < partitionTypeFields.size(); i++) {
