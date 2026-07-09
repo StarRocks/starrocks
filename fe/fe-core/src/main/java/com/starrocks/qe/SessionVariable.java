@@ -761,6 +761,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_SINK_TARGET_MAX_FILE_SIZE = "connector_sink_target_max_file_size";
     public static final String ENABLE_CONNECTOR_SPLIT_IO_TASKS = "enable_connector_split_io_tasks";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
+    public static final String ENABLE_LOGICAL_MV_COLLECTOR = "enable_logical_mv_collector";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
@@ -2850,6 +2851,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
+
+    // Option X: route CK-compatible logical-sink MV loads through the N-branch collector (MultiSink)
+    // instead of the broadcast MULTI_OLAP_TABLE_SINK. Off by default (WIP; needed for JOIN/agg MVs).
+    @VarAttr(name = ENABLE_LOGICAL_MV_COLLECTOR)
+    private boolean enableLogicalMvCollector = false;
+
+    public boolean isEnableLogicalMvCollector() {
+        return enableLogicalMvCollector;
+    }
 
     @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
     private boolean queryCacheForcePopulate = false;

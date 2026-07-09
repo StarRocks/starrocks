@@ -1307,6 +1307,16 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_CREATE_LOGICAL_SINK_MV: {
+                    LogicalSinkMVOpLog logicalSinkMVLog = (LogicalSinkMVOpLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayCreateLogicalSinkMV(logicalSinkMVLog);
+                    break;
+                }
+                case OperationType.OP_DROP_LOGICAL_SINK_MV: {
+                    LogicalSinkMVOpLog logicalSinkMVLog = (LogicalSinkMVOpLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayDropLogicalSinkMV(logicalSinkMVLog);
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -2319,6 +2329,14 @@ public class EditLog {
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info, walApplier);
+    }
+
+    public void logCreateLogicalSinkMV(LogicalSinkMVOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_LOGICAL_SINK_MV, log, walApplier);
+    }
+
+    public void logDropLogicalSinkMV(LogicalSinkMVOpLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_LOGICAL_SINK_MV, log, walApplier);
     }
 
     public void logCreateSPMBaseline(BaselinePlan.Info info, WALApplier walApplier) {

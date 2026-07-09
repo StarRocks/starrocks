@@ -293,6 +293,27 @@ public class OlapTable extends Table {
 
     private Map<String, Lock> createPartitionLocks = Maps.newHashMap();
 
+    // CK-compatible logical-sink MVs (`CREATE MATERIALIZED VIEW ... TO <target>`) registered on this base
+    // table, keyed by MV id. Persisted in the table image (@SerializedName) + incremental edit-log ops.
+    @SerializedName(value = "logicalSinkMVs")
+    private final Map<Long, LogicalSinkMV> logicalSinkMVs = Maps.newConcurrentMap();
+
+    public Map<Long, LogicalSinkMV> getLogicalSinkMVs() {
+        return logicalSinkMVs;
+    }
+
+    public boolean hasLogicalSinkMV() {
+        return !logicalSinkMVs.isEmpty();
+    }
+
+    public void addLogicalSinkMV(LogicalSinkMV mv) {
+        logicalSinkMVs.put(mv.getMvId(), mv);
+    }
+
+    public void removeLogicalSinkMV(long mvId) {
+        logicalSinkMVs.remove(mvId);
+    }
+
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
     // Both the following two flags are used by StarMgrMetaSyncer

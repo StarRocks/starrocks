@@ -198,6 +198,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     @Override
+    public OptExpression visitLogicalMultiSink(OptExpression optExpression, Void context) {
+        return commonValidate(optExpression);
+    }
+
+    @Override
     public OptExpression visitLogicalCTEProduce(OptExpression optExpression, Void context) {
         return commonValidate(optExpression);
     }

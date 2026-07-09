@@ -4119,6 +4119,57 @@ public class PlanFragmentBuilder {
             return visit(optExpression.inputAt(1), context);
         }
 
+        // CK-compatible logical-sink MV "Fake Root" (Option X): translate the N-ary non-merging
+        // PhysicalMultiSink into the single-root collector fragment. Each child is an independent branch
+        // sub-plan (a CTE consumer of the shared base load, optionally joined with dimensions, projected to a
+        // target table's shape). We reuse MultiSinkDispatchNode (planRoot with N ExchangeNode children) and the
+        // MultiSink DataSink; each branch's output is network-exchanged into its collector ExchangeNode and the
+        // MultiSink writes branch i to targetTableIds[i]. The branch OlapTableSinks themselves are built later
+        // by InsertPlanner (needs txn/session); here we only record (dest_node_id, target_table_id).
+        @Override
+        public PlanFragment visitPhysicalMultiSink(OptExpression optExpression, ExecPlan context) {
+            com.starrocks.sql.optimizer.operator.physical.PhysicalMultiSinkOperator op =
+                    (com.starrocks.sql.optimizer.operator.physical.PhysicalMultiSinkOperator) optExpression.getOp();
+            List<Long> targetTableIds = op.getTargetTableIds();
+            int n = optExpression.arity();
+            List<PlanFragment> branches = Lists.newArrayList();
+            for (int i = 0; i < n; i++) {
+                branches.add(visit(optExpression.inputAt(i), context));
+            }
+            List<PlanNode> collectorExch = Lists.newArrayList();
+            for (int i = 0; i < n; i++) {
+                List<Integer> recvCols = optExpression.inputAt(i).getOutputColumns().getStream()
+                        .collect(Collectors.toList());
+                ExchangeNode cexch = new ExchangeNode(context.getNextNodeId(), branches.get(i).getPlanRoot(),
+                        DistributionSpec.DistributionType.SHUFFLE);
+                this.currentExecGroup.add(cexch, true);
+                cexch.setReceiveColumns(recvCols);
+                cexch.setDataPartition(DataPartition.UNPARTITIONED);
+                collectorExch.add(cexch);
+            }
+            com.starrocks.planner.MultiSinkDispatchNode dispatch =
+                    new com.starrocks.planner.MultiSinkDispatchNode(context.getNextNodeId(), collectorExch);
+            PlanFragment collector =
+                    new PlanFragment(context.getNextFragmentId(), dispatch, DataPartition.UNPARTITIONED);
+            com.starrocks.planner.MultiSink multiSink = new com.starrocks.planner.MultiSink();
+            for (int i = 0; i < n; i++) {
+                ExchangeNode cexch = (ExchangeNode) collectorExch.get(i);
+                branches.get(i).setDestination(cexch);
+                branches.get(i).createDataSink(TResultSinkType.MYSQL_PROTOCAL, context);
+                multiSink.addBranchDest(cexch.getId().asInt(), targetTableIds.get(i));
+            }
+            collector.setSink(multiSink);
+            collector.setHasOlapTableSink();
+            collector.setPipelineDop(1);
+            collector.disableRuntimeAdaptiveDop();
+            collector.setForceSetTableSinkDop();
+            // finalizeFragments reverses the fragment list, so APPEND the collector here to land it at
+            // fragments[0] (the execution root) after the reverse. (P2's hand-built collector used
+            // add(0, ...) because that path never calls finalizeFragments.)
+            context.getFragments().add(collector);
+            return collector;
+        }
+
         @Override
         public PlanFragment visitPhysicalNoCTE(OptExpression optExpression, ExecPlan context) {
             return visit(optExpression.inputAt(0), context);

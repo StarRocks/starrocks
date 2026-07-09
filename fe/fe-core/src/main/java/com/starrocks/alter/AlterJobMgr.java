@@ -41,6 +41,7 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -71,6 +72,7 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.LogicalSinkMVOpLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -171,6 +173,36 @@ public class AlterJobMgr {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null || !db.isExist()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        // CK-compatible logical-sink MV (`CREATE MATERIALIZED VIEW ... TO <target>`): resolve by MV name in
+        // each base table's logical-sink registry and drop the metadata (no rollup, no real table).
+        for (Table t : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+            if (!(t instanceof OlapTable)) {
+                continue;
+            }
+            OlapTable base = (OlapTable) t;
+            Optional<LogicalSinkMV> hit = base.getLogicalSinkMVs().values().stream()
+                    .filter(m -> m.getMvName().equals(stmt.getMvName()))
+                    .findFirst();
+            if (hit.isPresent()) {
+                long mvId = hit.get().getMvId();
+                Locker lsLocker = new Locker();
+                if (!lsLocker.lockTableAndCheckDbExist(db, base.getId(), LockType.WRITE)) {
+                    throw new AlterJobException("drop materialized view failed. database:" + db.getFullName()
+                            + " not exist");
+                }
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logDropLogicalSinkMV(
+                            new LogicalSinkMVOpLog(db.getId(), base.getId(), mvId),
+                            wal -> base.removeLogicalSinkMV(mvId));
+                } finally {
+                    lsLocker.unLockTableWithIntensiveDbLock(db.getId(), base.getId(), LockType.WRITE);
+                }
+                LOG.info("dropped logical-sink MV {} (id={}) on base table {}",
+                        stmt.getMvName(), mvId, base.getName());
+                return;
+            }
         }
 
         OlapTable targetTable = null;

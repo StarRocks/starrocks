@@ -62,6 +62,7 @@
 #include "exec/intersect_node.h"
 #include "exec/lake_meta_scan_node.h"
 #include "exec/lookup_node.h"
+#include "exec/multi_sink_dispatch_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/project_node.h"
@@ -244,6 +245,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         return Status::OK();
     case TPlanNodeType::EMPTY_SET_NODE:
         CREATE_NODE(EmptySetNode, pool, tnode, descs);
+        return Status::OK();
+    case TPlanNodeType::MULTI_SINK_DISPATCH_NODE:
+        CREATE_NODE(MultiSinkDispatchNode, pool, tnode, descs);
         return Status::OK();
     case TPlanNodeType::EXCHANGE_NODE:
         CREATE_NODE(ExchangeNode, pool, tnode, descs);

@@ -41,6 +41,15 @@ public:
 
     void add_independent_pipeline(const OpFactories& operators);
 
+    // Option X: MultiSinkDispatchNode stashes each branch's ExchangeSource pipeline here (keyed by the
+    // child ExchangeNode's plan-node-id); the MultiSink DataSink decompose takes them and caps each.
+    void add_multi_sink_branch(int32_t dest_node_id, OpFactories operators) {
+        _multi_sink_branch_ops.emplace_back(dest_node_id, std::move(operators));
+    }
+    std::vector<std::pair<int32_t, OpFactories>> take_multi_sink_branches() {
+        return std::move(_multi_sink_branch_ops);
+    }
+
     bool is_colocate_group() const;
 
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
@@ -85,6 +94,7 @@ private:
 
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
+    std::vector<std::pair<int32_t, OpFactories>> _multi_sink_branch_ops;
     ExecutionGroups _execution_groups;
     std::unordered_map<int32_t, ExecutionGroupPtr> _group_id_to_colocate_groups;
     // Reverse map from plan_node_id to colocate group for O(1) lookup.

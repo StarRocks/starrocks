@@ -724,6 +724,7 @@ taskScheduleDesc
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
+    (TO toTableName=qualifiedName)?
     comment?
     materializedViewDesc*
     AS queryStatement

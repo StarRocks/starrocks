@@ -72,6 +72,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -156,6 +157,7 @@ import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.LogicalSinkMVOpLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -3236,9 +3238,79 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             olapTable.checkStableAndNormal();
 
+            // CK-compatible `... TO <target>` logical-sink MV: register metadata on the base table
+            // instead of building a rollup index.
+            if (stmt.getToTableRef() != null) {
+                createLogicalSinkMV(db, olapTable, stmt);
+                return;
+            }
+
             materializedViewHandler.processCreateMaterializedView(stmt, db, olapTable);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.WRITE);
+        }
+    }
+
+    // CK-compatible `CREATE MATERIALIZED VIEW ... TO <target>`: validate the pre-existing target table and
+    // register logical-sink MV metadata on the base table (no rollup, no independent storage).
+    private void createLogicalSinkMV(Database db, OlapTable baseTable, CreateSyncMVStmt stmt) throws DdlException {
+        // Logical-sink (TO-table) MVs are insert-only fan-out (like ClickHouse). Only DUPLICATE KEY base
+        // tables are supported: they are append-only, so the target stays a faithful view. AGG/UNIQUE (merge
+        // semantics) and PRIMARY_KEYS (upsert/delete) are not supported for now.
+        if (baseTable.getKeysType() != KeysType.DUP_KEYS) {
+            throw new DdlException("CREATE MATERIALIZED VIEW ... TO <table>: only DUPLICATE KEY base tables are "
+                    + "supported (base table [" + baseTable.getName() + "] is " + baseTable.getKeysType()
+                    + "); logical-sink MVs are insert-only.");
+        }
+        TableRef toRef = stmt.getToTableRef();
+        String targetDbName = Strings.isNullOrEmpty(toRef.getDbName()) ? db.getFullName() : toRef.getDbName();
+        if (!targetDbName.equalsIgnoreCase(db.getFullName())) {
+            throw new DdlException("CREATE MATERIALIZED VIEW ... TO <table>: target table must be in the same "
+                    + "database as the base table (base db=" + db.getFullName() + ", target db=" + targetDbName + ")");
+        }
+        Table targetTable = getTable(db.getFullName(), toRef.getTableName());
+        if (targetTable == null) {
+            throw new DdlException("CREATE MATERIALIZED VIEW ... TO <table>: target table ["
+                    + toRef.getTableName() + "] does not exist");
+        }
+        if (!targetTable.isOlapOrCloudNativeTable()) {
+            throw new DdlException("CREATE MATERIALIZED VIEW ... TO <table>: target table ["
+                    + toRef.getTableName() + "] must be an OLAP table");
+        }
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        String mvName = stmt.getMVName();
+        long targetTableId = targetTable.getId();
+        long baseTableId = baseTable.getId();
+        String defineSql = stmt.getDefineSql();
+        LogicalSinkMVOpLog opLog = new LogicalSinkMVOpLog(db.getId(), baseTableId, mvId, mvName, targetTableId,
+                defineSql);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLogicalSinkMV(opLog,
+                wal -> baseTable.addLogicalSinkMV(new LogicalSinkMV(mvId, mvName, baseTableId, targetTableId,
+                        defineSql)));
+        LOG.info("created logical-sink MV {} (id={}) on base table {} -> target table {}",
+                mvName, mvId, baseTable.getName(), targetTable.getName());
+    }
+
+    public void replayCreateLogicalSinkMV(LogicalSinkMVOpLog log) {
+        Database db = getDb(log.getDbId());
+        if (db == null) {
+            return;
+        }
+        Table table = getTable(db.getId(), log.getBaseTableId());
+        if (table instanceof OlapTable) {
+            ((OlapTable) table).addLogicalSinkMV(new LogicalSinkMV(log.getMvId(), log.getMvName(),
+                    log.getBaseTableId(), log.getTargetTableId(), log.getDefineSql()));
+        }
+    }
+
+    public void replayDropLogicalSinkMV(LogicalSinkMVOpLog log) {
+        Database db = getDb(log.getDbId());
+        if (db == null) {
+            return;
+        }
+        Table table = getTable(db.getId(), log.getBaseTableId());
+        if (table instanceof OlapTable) {
+            ((OlapTable) table).removeLogicalSinkMV(log.getMvId());
         }
     }
 

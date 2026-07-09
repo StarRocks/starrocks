@@ -30,8 +30,10 @@ import com.starrocks.catalog.combinator.AggStateUnionCombinator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapAggPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
@@ -40,11 +42,13 @@ import com.starrocks.sql.analyzer.mvpattern.MVColumnPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnPercentileUnionPattern;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -132,18 +136,39 @@ public class CreateSyncMVStmtAnalyzer {
         }
 
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-        if (tables.size() != 1) {
+        boolean isLogicalSinkMv = stmt.getToTableRef() != null;
+        if (tables.size() != 1 && !isLogicalSinkMv) {
             throw new UnsupportedMVException("The materialized view only supports one table in from clause.");
         }
-        Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
-        Table table = entry.getValue();
+        // CK-compatible logical-sink (TO-table) MV may join dimension tables. Per ClickHouse semantics the
+        // base (load-trigger) table is the LEFTMOST table in the FROM clause; every other joined table is a
+        // read-only, insert-time dimension snapshot. Pick the base accordingly; single-table MVs (incl. all
+        // rollup MVs) keep the sole table.
+        Table table;
+        TableName tableName;
+        if (isLogicalSinkMv && tables.size() != 1) {
+            Relation leftmost = ((SelectRelation) queryStatement.getQueryRelation()).getRelation();
+            while (leftmost instanceof JoinRelation) {
+                leftmost = ((JoinRelation) leftmost).getLeft();
+            }
+            if (!(leftmost instanceof TableRelation)) {
+                throw new UnsupportedMVException("logical-sink MV: the leftmost FROM item must be a base table (got "
+                        + leftmost.getClass().getSimpleName() + ")");
+            }
+            table = ((TableRelation) leftmost).getTable();
+            tableName = ((TableRelation) leftmost).getName();
+        } else {
+            Map.Entry<TableName, Table> entry = tables.entrySet().iterator().next();
+            table = entry.getValue();
+            tableName = entry.getKey();
+        }
 
         // SyncMV doesn't support mv's database is different from table's db.
         if (stmt.getMvTableRef() != null && !Strings.isNullOrEmpty(stmt.getMvTableRef().getDbName()) &&
-                !stmt.getMvTableRef().getDbName().equalsIgnoreCase(entry.getKey().getDb())) {
+                !stmt.getMvTableRef().getDbName().equalsIgnoreCase(tableName.getDb())) {
             throw new UnsupportedMVException(
                     String.format("Creating materialized view does not support: MV's db %s is different " +
-                            "from table's db %s", stmt.getMvTableRef().getDbName(), entry.getKey().getDb()));
+                            "from table's db %s", stmt.getMvTableRef().getDbName(), tableName.getDb()));
         }
 
         if (table instanceof View) {
@@ -153,9 +178,31 @@ public class CreateSyncMVStmtAnalyzer {
             throw new UnsupportedMVException("The materialized view only support olap table.");
         }
 
-        TableName tableName = entry.getKey();
         stmt.setBaseIndexName(table.getName());
         stmt.setDBName(tableName.getDb());
+
+        // CK-compatible `... TO <target>` logical-sink MV: skip rollup-specific analysis (column items,
+        // keys type, order by). The target is a pre-existing table validated at create time.
+        if (stmt.getToTableRef() != null) {
+            SelectRelation toSelectRelation = (SelectRelation) queryStatement.getQueryRelation();
+            if (toSelectRelation.hasWhereClause()) {
+                stmt.setWhereClause(toSelectRelation.getWhereClause());
+            }
+            stmt.setDefineSql(AstToSQLBuilder.toSQL(queryStatement));
+            // Fail-fast: validate the MV SELECT against the target schema at CREATE time. A mismatch left for
+            // insert time would otherwise fail every INSERT into the base table.
+            String toDbName = Strings.isNullOrEmpty(stmt.getToTableRef().getDbName())
+                    ? tableName.getDb() : stmt.getToTableRef().getDbName();
+            Table toTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(toDbName, stmt.getToTableRef().getTableName());
+            // Single-table transform MVs are fail-fast validated against the target schema here. JOIN MVs are
+            // validated by the planner when the branch sub-plan is built (the sink-expr validator is single-table).
+            if (toTable instanceof OlapTable && tables.size() == 1) {
+                OlapTableSink.validateLogicalSinkTarget(stmt.getDefineSql(), (OlapTable) toTable,
+                        context.getSessionVariable());
+            }
+            return;
+        }
 
         SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
         if (!(selectRelation.getRelation() instanceof TableRelation)) {

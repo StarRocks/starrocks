@@ -14,6 +14,12 @@
 
 #include "exec/data_sinks/multi_olap_table_sink.h"
 
+#include "column/chunk.h"
+#include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
+
 namespace starrocks {
 
 MultiOlapTableSink::MultiOlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs)
@@ -22,12 +28,12 @@ MultiOlapTableSink::MultiOlapTableSink(ObjectPool* pool, const std::vector<TExpr
 Status MultiOlapTableSink::init(const TDataSink& sink, RuntimeState* state) {
     Status status;
     for (const auto& olap_table_sink : sink.multi_olap_table_sinks) {
+        // All sub-sinks share the fragment output exprs and broadcast the same chunk (double-write).
         auto olap_sink = std::make_unique<OlapTableSink>(_pool, _texprs, &status, state);
         RETURN_IF_ERROR(status);
         RETURN_IF_ERROR(olap_sink->init(olap_table_sink, state));
         _sinks.emplace_back(std::move(olap_sink));
     }
-
     return status;
 }
 
@@ -39,8 +45,8 @@ Status MultiOlapTableSink::prepare(RuntimeState* state) {
 }
 
 Status MultiOlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
-    for (auto& sink : _sinks) {
-        RETURN_IF_ERROR(sink->send_chunk(state, chunk));
+    for (size_t i = 0; i < _sinks.size(); ++i) {
+        RETURN_IF_ERROR(_send_to_sink(state, i, chunk, false));
     }
     return Status::OK();
 }
@@ -76,8 +82,8 @@ Status MultiOlapTableSink::open_wait() {
 }
 
 Status MultiOlapTableSink::send_chunk_nonblocking(RuntimeState* state, Chunk* chunk) {
-    for (auto& sink : _sinks) {
-        RETURN_IF_ERROR(sink->send_chunk_nonblocking(state, chunk));
+    for (size_t i = 0; i < _sinks.size(); ++i) {
+        RETURN_IF_ERROR(_send_to_sink(state, i, chunk, true));
     }
     return Status::OK();
 }
@@ -119,6 +125,12 @@ Status MultiOlapTableSink::close(RuntimeState* state, const Status& close_status
         RETURN_IF_ERROR(sink->close(state, close_status));
     }
     return Status::OK();
+}
+
+// Broadcast the chunk to sub-sink `index` (double-write writes the same data to every sub-sink).
+Status MultiOlapTableSink::_send_to_sink(RuntimeState* state, size_t index, Chunk* chunk, bool nonblocking) {
+    auto& sink = _sinks[index];
+    return nonblocking ? sink->send_chunk_nonblocking(state, chunk) : sink->send_chunk(state, chunk);
 }
 
 RuntimeProfile* MultiOlapTableSink::profile() {

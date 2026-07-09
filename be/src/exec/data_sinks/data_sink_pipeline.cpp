@@ -22,6 +22,7 @@
 #include "exec/data_sinks/export_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec/data_sinks/multi_olap_table_sink.h"
+#include "exec/data_sinks/multi_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
@@ -71,6 +72,46 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
                                                  const pipeline::UnifiedExecPlanFragmentParams& request,
                                                  const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs) {
     using namespace pipeline;
+    // Option X: the collector fragment's MultiSink is fully decomposed here into N independent
+    // ExchangeSource(dest_node_id_i) -> OlapTableSink_i pipelines (stashed by MultiSinkDispatchNode).
+    // Handle it FIRST: prev_operators is empty (the dispatch node returns no pipeline), so the
+    // source_operator(prev_operators) deref below would crash.
+    if (typeid(*this) == typeid(MultiSink)) {
+        auto* fc = context->fragment_context();
+        // Each branch's OlapTableSink reads its load-channel sender count from
+        // RuntimeState::num_per_fragment_instances() (tablet_sink.cpp: _num_senders = ...). The normal
+        // OlapTableSink decompose sets this from params.num_senders; mirror it here or every branch's
+        // tablet writer rejects sender_id 0 with "invalid sender_id 0 ... limit=0".
+        runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
+        auto stashed = context->take_multi_sink_branches();
+        for (const auto& br : thrift_sink.multi_sink.branches) {
+            OpFactories* branch_ops = nullptr;
+            for (auto& s : stashed) {
+                if (s.first == br.dest_node_id) {
+                    branch_ops = &s.second;
+                    break;
+                }
+            }
+            if (branch_ops == nullptr) {
+                return Status::InternalError("MULTI_SINK: no exchange pipeline for dest_node_id " +
+                                             std::to_string(br.dest_node_id));
+            }
+            TDataSink olap_tsink;
+            olap_tsink.__set_type(TDataSinkType::OLAP_TABLE_SINK);
+            olap_tsink.__set_olap_table_sink(br.olap_table_sink);
+            Status st;
+            auto* olap = runtime_state->obj_pool()->add(
+                    new OlapTableSink(runtime_state->obj_pool(), output_exprs, &st, runtime_state));
+            RETURN_IF_ERROR(st);
+            RETURN_IF_ERROR(olap->init(olap_tsink, runtime_state));
+            std::vector<std::unique_ptr<AsyncDataSink>> tablet_sinks;
+            auto sink_op = std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), olap, fc,
+                                                                          request.sender_id(), tablet_sinks);
+            branch_ops->emplace_back(std::move(sink_op));
+            context->add_pipeline(*branch_ops);
+        }
+        return Status::OK();
+    }
     auto fragment_ctx = context->fragment_context();
     size_t dop = context->source_operator(prev_operators)->degree_of_parallelism();
 

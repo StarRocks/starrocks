@@ -22,6 +22,7 @@
 #include "exec/data_sinks/export_sink.h"
 #include "exec/data_sinks/hive_table_sink.h"
 #include "exec/data_sinks/multi_olap_table_sink.h"
+#include "exec/data_sinks/multi_sink.h"
 #include "exec/data_sinks/tablet_sink.h"
 #include "exec_primitive/data_sink.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -104,6 +105,10 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         DCHECK(thrift_sink.__isset.olap_table_sink);
         *sink = std::make_unique<OlapTableSink>(state->obj_pool(), output_exprs, &status, state);
         RETURN_IF_ERROR(status);
+        break;
+    }
+    case TDataSinkType::MULTI_SINK: {
+        *sink = std::make_unique<MultiSink>();
         break;
     }
     case TDataSinkType::MULTI_OLAP_TABLE_SINK: {

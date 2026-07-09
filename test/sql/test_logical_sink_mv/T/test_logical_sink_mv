@@ -1,0 +1,126 @@
+-- name: test_logical_sink_mv
+-- CK-compatible logical-sink materialized views (CREATE MATERIALIZED VIEW ... TO <target>):
+-- each INSERT into the base table fans out through the Fake-Root collector and atomically writes
+-- the base table plus every MV's target table in one transaction. MVs are insert-triggered
+-- (no backfill of rows that existed before the MV was created).
+
+------------------------------------------------------------------------------------------------
+-- 1. identity: base + identity-projection target both written
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_id (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_id (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_id TO t_id AS SELECT k, v FROM b_id;
+INSERT INTO b_id VALUES (1,10),(2,20),(3,30);
+SELECT * FROM b_id ORDER BY k;
+SELECT * FROM t_id ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 2. per-column transform (v*2) + WHERE filter (rows failing the predicate are not propagated)
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_tw (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_tw (k INT, v2 INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_tw TO t_tw AS SELECT k, v * 2 FROM b_tw WHERE v > 15;
+INSERT INTO b_tw VALUES (1,10),(2,20),(3,100);
+SELECT * FROM t_tw ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 3. JOIN MV: base (leftmost, load-trigger) joined with a dimension table (insert-time snapshot).
+--    INNER JOIN semantics -- base rows with no dimension match land in the base but not the target.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_j (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE dim (id INT, name VARCHAR(32)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_j (k INT, name VARCHAR(32)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO dim VALUES (1,'one'),(2,'two');
+CREATE MATERIALIZED VIEW mv_j TO t_j AS SELECT b.k, d.name FROM b_j b JOIN dim d ON b.k = d.id;
+INSERT INTO b_j VALUES (1,10),(2,20),(9,90);
+SELECT * FROM b_j ORDER BY k;
+SELECT * FROM t_j ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 4. aggregation family (sync-MV parity): sum + count, two MVs on one base, converging in the
+--    target's storage aggregation across multiple inserts.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_agg (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_sum (k INT, s BIGINT SUM) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_cnt (k INT, c BIGINT SUM) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_sum TO t_sum AS SELECT k, sum(v) FROM b_agg GROUP BY k;
+CREATE MATERIALIZED VIEW mv_cnt TO t_cnt AS SELECT k, count(v) FROM b_agg GROUP BY k;
+INSERT INTO b_agg VALUES (1,10),(1,20),(2,5);
+INSERT INTO b_agg VALUES (1,100);
+SELECT * FROM t_sum ORDER BY k;
+SELECT * FROM t_cnt ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 5. bitmap_union (exact distinct-count), merged across inserts in the target BITMAP_UNION column.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_bm (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_bm (k INT, bm BITMAP BITMAP_UNION) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_bm TO t_bm AS SELECT k, bitmap_union(to_bitmap(v)) FROM b_bm GROUP BY k;
+INSERT INTO b_bm VALUES (1,10),(1,20),(1,10),(2,5);
+INSERT INTO b_bm VALUES (1,30);
+SELECT k, bitmap_union_count(bm) FROM t_bm GROUP BY k ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 6. arbitrary aggregate via an agg_state target column (beyond sync MV): avg maintained
+--    incrementally through avg_state/avg_union, read back with avg_merge.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_av (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_av (k INT, av avg(int)) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_av TO t_av AS SELECT k, avg_union(avg_state(v)) FROM b_av GROUP BY k;
+INSERT INTO b_av VALUES (1,10),(1,20),(2,100);
+INSERT INTO b_av VALUES (1,30);
+SELECT k, avg_merge(av) FROM t_av GROUP BY k ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 7. create-time validation: an aggregate that does not match the target column's storage
+--    aggregation is rejected up front (would otherwise break every base insert).
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_bad (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_bad (k INT, s BIGINT SUM) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE MATERIALIZED VIEW mv_bad TO t_bad AS SELECT k, max(v) FROM b_bad GROUP BY k;
+
+------------------------------------------------------------------------------------------------
+-- 8. no backfill: rows that existed in the base BEFORE the MV was created are not propagated.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_bf (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_bf (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO b_bf VALUES (1,1);
+CREATE MATERIALIZED VIEW mv_bf TO t_bf AS SELECT k, v FROM b_bf;
+INSERT INTO b_bf VALUES (2,2);
+SELECT * FROM b_bf ORDER BY k;
+SELECT * FROM t_bf ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 9. DELETE on the base is NOT propagated to the target (insert-only, ClickHouse semantics).
+------------------------------------------------------------------------------------------------
+DELETE FROM b_bf WHERE k = 2;
+SELECT * FROM b_bf ORDER BY k;
+SELECT * FROM t_bf ORDER BY k;
+
+------------------------------------------------------------------------------------------------
+-- 10. the dimension is an insert-time snapshot: changing it does not retro-update already
+--     written target rows; only later base inserts observe the new dimension.
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_snap (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE d_snap (id INT, name VARCHAR(16)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2 PROPERTIES('replication_num'='1');
+CREATE TABLE t_snap (k INT, name VARCHAR(16)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES('replication_num'='1');
+INSERT INTO d_snap VALUES (1,'A');
+CREATE MATERIALIZED VIEW mv_snap TO t_snap AS SELECT b.k, d.name FROM b_snap b JOIN d_snap d ON b.k = d.id;
+INSERT INTO b_snap VALUES (1,10);
+DELETE FROM d_snap WHERE id = 1;
+INSERT INTO d_snap VALUES (1,'B');
+INSERT INTO b_snap VALUES (1,10);
+SELECT * FROM t_snap ORDER BY k, name;
+
+------------------------------------------------------------------------------------------------
+-- 11. INSERT OVERWRITE on a logical-sink-MV base is rejected (would otherwise lose base data).
+------------------------------------------------------------------------------------------------
+INSERT OVERWRITE b_bf VALUES (7,7);
+
+------------------------------------------------------------------------------------------------
+-- 12. create-time validation: an aggregate result into a non-AGGREGATE (DUPLICATE) target is
+--     rejected up front (per-insert partial aggregates would otherwise accumulate as separate rows).
+------------------------------------------------------------------------------------------------
+CREATE TABLE b_ad (k INT, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES("replication_num"="1");
+CREATE TABLE t_ad_dup (k INT, s BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES("replication_num"="1");
+CREATE MATERIALIZED VIEW mv_ad TO t_ad_dup AS SELECT k, sum(v) FROM b_ad GROUP BY k;

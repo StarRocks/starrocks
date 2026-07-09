@@ -66,6 +66,7 @@ import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.LogicalSinkMV;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -439,6 +440,7 @@ public class ShowExecutor {
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
             List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+            List<Pair<OlapTable, LogicalSinkMV>> logicalSinkMVs = Lists.newArrayList();
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
@@ -499,6 +501,13 @@ public class ShowExecutor {
                             }
                             singleTableMVs.add(Pair.create(olapTable, mvMeta));
                         }
+                        // CK-compatible logical-sink MVs registered on this base table
+                        for (LogicalSinkMV lsmv : olapTable.getLogicalSinkMVs().values()) {
+                            if (matcher != null && !matcher.match(lsmv.getMvName())) {
+                                continue;
+                            }
+                            logicalSinkMVs.add(Pair.create(olapTable, lsmv));
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -510,6 +519,9 @@ public class ShowExecutor {
 
             List<ShowMaterializedViewStatus> mvStatusList =
                     ShowMaterializedViewStatus.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
+            for (Pair<OlapTable, LogicalSinkMV> lsmv : logicalSinkMVs) {
+                mvStatusList.add(ShowMaterializedViewStatus.ofLogicalSinkMV(dbName, lsmv.first, lsmv.second));
+            }
             List<List<String>> rowSets = mvStatusList.stream().map(ShowMaterializedViewStatus::toResultSet)
                     .collect(Collectors.toList());
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSets);
