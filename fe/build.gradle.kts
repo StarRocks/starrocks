@@ -121,7 +121,14 @@ subprojects {
             implementation("com.qcloud.cos:hadoop-cos:3.3.0-8.3.2")
             implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
+            // keep on the same train as okhttp (tencentcloud-sdk declares 3.12.x)
+            implementation("com.squareup.okhttp3:logging-interceptor:4.10.0")
             implementation("com.squareup.okio:okio:3.4.0")
+            // okhttp 4.10.0 drags in okio-jvm 3.0.0 (CVE-2023-3635); keep it aligned with okio
+            implementation("com.squareup.okio:okio-jvm:3.4.0")
+            // tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 (via hadoop-cos)
+            implementation("com.tencentcloudapi:tencentcloud-sdk-java-common:3.1.1471")
+            implementation("com.tencentcloudapi:tencentcloud-sdk-java-kms:3.1.1471")
             implementation("com.starrocks:fe-testing:${project.version}")
             implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
@@ -167,7 +174,8 @@ subprojects {
             implementation("org.apache.arrow:flight-sql-jdbc-driver:${project.ext["arrow.version"]}")
             implementation("org.apache.avro:avro:${project.ext["avro.version"]}")
             implementation("org.apache.commons:commons-dbcp2:2.9.0")
-            implementation("org.apache.commons:commons-lang3:3.9")
+            // 3.18.0 fixes CVE-2025-48924
+            implementation("org.apache.commons:commons-lang3:3.18.0")
             implementation("org.apache.commons:commons-pool2:2.3")
             implementation("org.apache.groovy:groovy-groovysh:4.0.9")
             implementation("org.apache.hadoop:hadoop-aliyun:${project.ext["hadoop.version"]}")
@@ -250,6 +258,37 @@ subprojects {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Mirror the Maven-side CVE exclusions/enforcer bans (see fe/pom.xml):
+    // these artifacts must never appear on any FE classpath.
+    configurations.all {
+        // superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs
+        exclude(group = "org.bouncycastle", module = "bcprov-jdk15on")
+        // EOL okhttp 2.x line (okhttp3 lives under com.squareup.okhttp3)
+        exclude(group = "com.squareup.okhttp")
+        // JSP engine, unused by FE; tomcat 9.0.93 carries CVE-2025-55754/CVE-2025-52434
+        exclude(group = "org.apache.tomcat")
+        exclude(group = "org.apache.tomcat.embed")
+    }
+
+    // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
+    configurations.all {
+        resolutionStrategy.capabilitiesResolution {
+            withCapability("org.lz4:lz4-java") {
+                select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+            }
+        }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+            substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
+        }
+    }
+
+>>>>>>> 92d6b85dff ([BugFix][CVE] Remove vulnerable stale transitive dependencies and enforce bans (#76097))
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
     }
