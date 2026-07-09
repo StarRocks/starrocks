@@ -19,7 +19,7 @@
 #include "base/url_coding.h"
 #include "common/config_connector_sink_fwd.h"
 #include "common/logging.h"
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/io/async_flush_stream_poller.h"

@@ -14,11 +14,15 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/scoped_updater.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector_primitive/connector.h"
 #include "connector_primitive/connector_sink_commit.h"
 #include "connector_primitive/data_source_provider.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "formats/file_writer.h"
 #include "formats/utils.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks::connector {
 
@@ -33,6 +37,40 @@ class TestDataSourceProvider final : public DataSourceProvider {
 public:
     DataSourcePtr create_data_source(const TScanRange&) override { return nullptr; }
     const TupleDescriptor* tuple_descriptor(RuntimeState*) const override { return nullptr; }
+};
+
+class TestSinkOperatorMemoryManager final : public SinkOperatorMemoryManager {
+public:
+    bool kill_victim() override {
+        ++kill_victim_calls;
+        if (!kill_victim_result) {
+            return false;
+        }
+        kill_victim_result = false;
+        writer_occupied_memory_value = 0;
+        return true;
+    }
+
+    int64_t update_releasable_memory() override {
+        ++update_releasable_memory_calls;
+        return releasable_memory_value;
+    }
+
+    int64_t update_writer_occupied_memory() override {
+        ++update_writer_occupied_memory_calls;
+        return writer_occupied_memory_value;
+    }
+
+    int64_t releasable_memory() const override { return releasable_memory_value; }
+
+    int64_t writer_occupied_memory() const override { return writer_occupied_memory_value; }
+
+    bool kill_victim_result = true;
+    int64_t releasable_memory_value = 0;
+    int64_t writer_occupied_memory_value = 0;
+    int kill_victim_calls = 0;
+    int update_releasable_memory_calls = 0;
+    int update_writer_occupied_memory_calls = 0;
 };
 
 } // namespace
@@ -90,6 +128,55 @@ TEST(ConnectorPrimitiveTest, DefaultScanRangeConversionBuildsDynamicMorselQueue)
     auto queue = std::move(queue_or).value();
     ASSERT_EQ(pipeline::MorselQueue::Type::DYNAMIC, queue->type());
     ASSERT_EQ(1, queue->num_original_morsels());
+}
+
+TEST(ConnectorPrimitiveTest, SinkMemoryManagerRegistersAbstractOperatorManagers) {
+    SinkMemoryManager manager(nullptr, nullptr);
+
+    auto child = std::make_unique<TestSinkOperatorMemoryManager>();
+    auto* child_ptr = child.get();
+
+    ASSERT_EQ(child_ptr, manager.register_child_manager(std::move(child)));
+}
+
+TEST(ConnectorPrimitiveTest, SinkMemoryManagerUsesAbstractChildrenForBackpressure) {
+    SCOPED_UPDATE(double, config::connector_sink_mem_low_watermark_ratio, 0.1);
+    SCOPED_UPDATE(double, config::connector_sink_mem_urgent_space_ratio, 0.05);
+    MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "connector_primitive_query_pool");
+    query_pool_tracker.consume(950);
+    SinkMemoryManager manager(&query_pool_tracker, nullptr);
+
+    auto child = std::make_unique<TestSinkOperatorMemoryManager>();
+    auto* child_ptr = child.get();
+    child_ptr->writer_occupied_memory_value = 10;
+    ASSERT_EQ(child_ptr, manager.register_child_manager(std::move(child)));
+
+    auto sibling = std::make_unique<TestSinkOperatorMemoryManager>();
+    auto* sibling_ptr = sibling.get();
+    sibling_ptr->writer_occupied_memory_value = 100;
+    ASSERT_EQ(sibling_ptr, manager.register_child_manager(std::move(sibling)));
+
+    EXPECT_TRUE(manager.can_accept_more_input(child_ptr));
+    EXPECT_GE(child_ptr->kill_victim_calls, 1);
+    EXPECT_GE(child_ptr->update_writer_occupied_memory_calls, 1);
+    EXPECT_EQ(0, sibling_ptr->update_writer_occupied_memory_calls);
+}
+
+TEST(ConnectorPrimitiveTest, SinkMemoryManagerRejectsInputWhenReleasableMemoryRemains) {
+    SCOPED_UPDATE(double, config::connector_sink_mem_low_watermark_ratio, 0.1);
+    SCOPED_UPDATE(double, config::connector_sink_mem_urgent_space_ratio, 0.05);
+    MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "connector_primitive_releasable_pool");
+    query_pool_tracker.consume(950);
+    SinkMemoryManager manager(&query_pool_tracker, nullptr);
+
+    auto child = std::make_unique<TestSinkOperatorMemoryManager>();
+    auto* child_ptr = child.get();
+    child_ptr->releasable_memory_value = 64;
+    ASSERT_EQ(child_ptr, manager.register_child_manager(std::move(child)));
+
+    EXPECT_FALSE(manager.can_accept_more_input(child_ptr));
+    EXPECT_GE(child_ptr->update_releasable_memory_calls, 1);
+    EXPECT_EQ(0, child_ptr->kill_victim_calls);
 }
 
 } // namespace starrocks::connector

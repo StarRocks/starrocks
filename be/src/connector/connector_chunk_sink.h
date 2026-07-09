@@ -31,6 +31,7 @@ class AsyncFlushStreamPoller;
 
 namespace starrocks::connector {
 
+class PartitionChunkWriterMemoryManager;
 class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
@@ -77,6 +78,7 @@ protected:
 
     formats::AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
+    PartitionChunkWriterMemoryManager* _partition_writer_mem_mgr = nullptr;
 
     std::vector<std::string> _partition_column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
@@ -86,7 +88,7 @@ protected:
     std::vector<std::function<void()>> _rollback_actions;
 
     std::map<PartitionKey, PartitionChunkWriterPtr> _partition_chunk_writers;
-    // passed to SinkOperatorMemoryManager to check memory usage
+    // passed to PartitionChunkWriterMemoryManager to check memory usage
     std::vector<PartitionChunkWriterPtr> _writers;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
 

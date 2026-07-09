@@ -18,8 +18,8 @@
 
 #include "common/logging.h"
 #include "connector/connector_chunk_sink.h"
-#include "connector/sink_memory_manager.h"
 #include "connector/utils.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "formats/io/async_flush_stream_poller.h"

@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
-#include "connector/sink_memory_manager.h"
+#include "connector/partition_chunk_writer_memory_manager.h"
 #include "formats/file_writer.h"
 #include "runtime/runtime_state.h"
 
@@ -37,11 +37,13 @@ Status ConnectorChunkSink::init(formats::AsyncFlushStreamPoller* poller, Runtime
     _io_poller = poller;
     _profile = profile;
     DCHECK(sink_mem_mgr != nullptr);
-    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::make_unique<SinkOperatorMemoryManager>());
+    auto op_mem_mgr = std::make_unique<PartitionChunkWriterMemoryManager>();
     init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
-    RETURN_IF_ERROR(_op_mem_mgr->init(&_writers, _io_poller));
+    RETURN_IF_ERROR(op_mem_mgr->init(&_writers, _io_poller));
+    _partition_writer_mem_mgr = op_mem_mgr.get();
+    _op_mem_mgr = sink_mem_mgr->register_child_manager(std::move(op_mem_mgr));
     return Status::OK();
 }
 
