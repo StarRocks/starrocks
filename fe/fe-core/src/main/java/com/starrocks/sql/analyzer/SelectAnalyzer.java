@@ -92,6 +92,7 @@ public class SelectAnalyzer {
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        widenGroupingKeyNullability(groupByClause, outputScope, outputExpressions, groupByExpressions);
 
         boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
@@ -633,6 +634,32 @@ public class SelectAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    /**
+     * ROLLUP/CUBE/GROUPING SETS produce super-aggregate rows where grouping-key columns are NULL,
+     * regardless of whether the underlying column is declared NOT NULL. The optimizer's Repeat
+     * operator already accounts for this widening at plan time, but analysis-time output field
+     * nullability (used by views, CTAS, etc.) is otherwise derived solely from the grouping
+     * expression itself, so it must be widened here too.
+     */
+    private void widenGroupingKeyNullability(GroupByClause groupByClause, Scope outputScope,
+                                             List<Expr> outputExpressions, List<Expr> groupByExpressions) {
+        if (groupByClause == null || groupByExpressions.isEmpty()) {
+            return;
+        }
+        GroupByClause.GroupingType groupingType = groupByClause.getGroupingType();
+        if (groupingType != GroupByClause.GroupingType.ROLLUP
+                && groupingType != GroupByClause.GroupingType.CUBE
+                && groupingType != GroupByClause.GroupingType.GROUPING_SETS) {
+            return;
+        }
+        List<Field> outputFields = outputScope.getRelationFields().getAllFields();
+        for (int i = 0; i < outputExpressions.size() && i < outputFields.size(); i++) {
+            if (groupByExpressions.stream().anyMatch(outputExpressions.get(i)::equals)) {
+                outputFields.get(i).setNullable(true);
+            }
+        }
     }
 
     private void addGroupByAllExpression(Expr expression, List<Expr> groupByExpressions,

@@ -62,7 +62,12 @@ public class AnalyzeViewNullabilityTest {
                 .withView("CREATE VIEW `nn_join_view` AS " +
                         "SELECT a.id AS a_id, b.label AS b_label " +
                         "FROM nn_base a LEFT JOIN nn_base2 b ON a.id = b.id")
-                .withView("CREATE VIEW `nn_expr_view` AS SELECT id + 1 AS id_plus, name FROM nn_base");
+                .withView("CREATE VIEW `nn_expr_view` AS SELECT id + 1 AS id_plus, name FROM nn_base")
+                .withView("CREATE VIEW `nn_rollup_view` AS " +
+                        "SELECT id, tenant_id, count(*) AS cnt FROM nn_base GROUP BY ROLLUP(id, tenant_id)")
+                .withView("CREATE VIEW `nn_grouping_sets_view` AS " +
+                        "SELECT id, tenant_id, count(*) AS cnt FROM nn_base " +
+                        "GROUP BY GROUPING SETS ((id, tenant_id), (id), ())");
     }
 
     /** Analysis-time nullability (what buildSchemaFromQuery reads) must match the expected pattern. */
@@ -136,5 +141,23 @@ public class AnalyzeViewNullabilityTest {
     public void testViewWithExpressionColumn() throws Exception {
         assertAnalysisNullability("SELECT id_plus, name FROM nn_expr_view",
                 new boolean[] {false, true});
+    }
+
+    @Test
+    public void testViewOverRollupWidensGroupingKeyNullability() throws Exception {
+        // id and tenant_id are NOT NULL in nn_base, but the ROLLUP super-aggregate rows produce
+        // NULL grouping keys, so the view's output fields must stay nullable despite the base
+        // columns being NOT NULL.
+        // (No exec-plan check: like the outer-join case above, the optimizer conservatively widens
+        // the aggregate output's nullability across the Repeat operator, even though count(*) can
+        // never actually be NULL.)
+        assertAnalysisNullability("SELECT id, tenant_id, cnt FROM nn_rollup_view",
+                new boolean[] {true, true, false});
+    }
+
+    @Test
+    public void testViewOverGroupingSetsWidensGroupingKeyNullability() throws Exception {
+        assertAnalysisNullability("SELECT id, tenant_id, cnt FROM nn_grouping_sets_view",
+                new boolean[] {true, true, false});
     }
 }
