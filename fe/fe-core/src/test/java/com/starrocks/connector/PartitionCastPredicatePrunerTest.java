@@ -127,6 +127,17 @@ public class PartitionCastPredicatePrunerTest {
     }
 
     @Test
+    public void testSplitPartitionColumnsCaseInsensitive() {
+        // The column ref is "c2"; the partition set is passed upper-cased. split() must still classify it as
+        // residual (membership is case-insensitive; callers need not pre-normalize).
+        ScalarOperator conjunct = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
+        PartitionResidual result = PartitionCastPredicatePruner.split(
+                Lists.newArrayList(conjunct), partitionColumns("C2"));
+        Assertions.assertEquals(1, result.residual.size());
+        Assertions.assertTrue(result.pushable.isEmpty());
+    }
+
+    @Test
     public void testPurePartitionOrIsResidual() {
         Set<String> partCols = partitionColumns("c2");
         ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,

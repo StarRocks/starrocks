@@ -21,11 +21,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,15 +102,20 @@ public class PartitionCastPredicatePruner {
      *       domain) and not residual (it cannot be evaluated from partition values alone). Correctness is kept by
      *       the backend filter; only that conjunct's native pruning is given up.</li>
      * </ul>
-     * {@code identityStringPartitionColumns} must be lower-cased column names.
+     * {@code identityStringPartitionColumns} may be passed in any case; membership is case-insensitive.
      */
     public static PartitionResidual split(List<ScalarOperator> conjuncts, Set<String> identityStringPartitionColumns) {
+        // Normalize to lower case here so callers need not pre-normalize the set.
+        Set<String> normalizedPartitionColumns = new HashSet<>();
+        for (String name : identityStringPartitionColumns) {
+            normalizedPartitionColumns.add(name.toLowerCase(Locale.ROOT));
+        }
         List<ScalarOperator> pushable = Lists.newArrayList();
         List<ScalarOperator> residual = Lists.newArrayList();
         for (ScalarOperator conjunct : conjuncts) {
             if (!containsStringToTemporalCast(conjunct)) {
                 pushable.add(conjunct);
-            } else if (allColumnsAreIdentityStringPartition(conjunct, identityStringPartitionColumns)) {
+            } else if (allColumnsAreIdentityStringPartition(conjunct, normalizedPartitionColumns)) {
                 residual.add(conjunct);
             }
             // else: contains a string-to-temporal cast that cannot be evaluated against partition values;
@@ -168,7 +173,7 @@ public class PartitionCastPredicatePruner {
         try {
             ScalarOperator replaced = new ReplaceColumnRefRewriter(replaceMap).rewrite(conjunct);
             ScalarOperator folded = new ScalarOperatorRewriter().rewrite(
-                    replaced, Lists.newArrayList(new FoldConstantsRule()));
+                    replaced, ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
             if (folded instanceof ConstantOperator) {
                 ConstantOperator constant = (ConstantOperator) folded;
                 if (constant.isNull()) {
