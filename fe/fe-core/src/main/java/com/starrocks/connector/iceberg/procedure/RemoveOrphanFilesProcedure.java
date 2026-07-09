@@ -67,6 +67,9 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     private static final String PROCEDURE_NAME = "remove_orphan_files";
 
+    // We only need each content file's path to build the set of reachable file names
+    private static final List<String> MANIFEST_ENTRY_PROJECTION = List.of("file_path");
+
     public static final String OLDER_THAN = "older_than";
     public static final String LOCATION = "location";
 
@@ -229,8 +232,9 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
     private ManifestReader<? extends ContentFile<?>> readerForManifest(Table table, ManifestFile manifest) {
         return switch (manifest.content()) {
-            case DATA -> ManifestFiles.read(manifest, table.io());
-            case DELETES -> ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs());
+            case DATA -> ManifestFiles.read(manifest, table.io()).select(MANIFEST_ENTRY_PROJECTION);
+            case DELETES ->
+                    ManifestFiles.readDeleteManifest(manifest, table.io(), table.specs()).select(MANIFEST_ENTRY_PROJECTION);
         };
     }
 
