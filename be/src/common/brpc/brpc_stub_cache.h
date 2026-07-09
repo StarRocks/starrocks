@@ -125,10 +125,6 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    template <typename CacheT, typename EntryT, typename GetTaskFn, typename SetTaskFn>
-    friend void reschedule_if_ttl_shrunk_locked(CacheT* cache, EntryT& entry, const butil::EndPoint& endpoint,
-                                                GetTaskFn get_task, SetTaskFn set_task);
-
     friend class starrocks::BrpcStubCacheTest;
 
     void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
@@ -174,10 +170,6 @@ private:
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
 
-    template <typename CacheT, typename EntryT, typename GetTaskFn, typename SetTaskFn>
-    friend void reschedule_if_ttl_shrunk_locked(CacheT* cache, EntryT& entry, const butil::EndPoint& endpoint,
-                                                GetTaskFn get_task, SetTaskFn set_task);
-
     friend class starrocks::BrpcStubCacheTest;
 
     void replace_cleanup_task_locked(const butil::EndPoint& endpoint,
@@ -216,10 +208,6 @@ private:
 
     template <typename CacheT>
     friend void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer);
-
-    template <typename CacheT, typename EntryT, typename GetTaskFn, typename SetTaskFn>
-    friend void reschedule_if_ttl_shrunk_locked(CacheT* cache, EntryT& entry, const butil::EndPoint& endpoint,
-                                                GetTaskFn get_task, SetTaskFn set_task);
 
     friend class starrocks::BrpcStubCacheTest;
 

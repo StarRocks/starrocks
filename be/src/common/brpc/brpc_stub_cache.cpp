@@ -67,30 +67,6 @@ void wait_clean_tasks_terminate(CacheT* cache, ExtractFn extract) {
     }
 }
 
-template <typename CacheT, typename EntryT, typename GetTaskFn, typename SetTaskFn>
-void reschedule_if_ttl_shrunk_locked(CacheT* cache, EntryT& entry, const butil::EndPoint& endpoint, GetTaskFn get_task,
-                                     SetTaskFn set_task) {
-    auto& existing_task = get_task(entry);
-    int64_t new_deadline = absolute_deadline_us(config::brpc_stub_expire_s);
-    if (new_deadline >= existing_task->deadline_locked()) {
-        existing_task->renew_deadline_locked(new_deadline);
-        return;
-    }
-    // TTL was shrunk. Build a fresh task; reusing the existing one would re-arm the same
-    // BthreadTimerTask and trip its one-shot std::latch on the next fire. The old task is left
-    // in the timer queue and will fire at its original deadline; when it does, the map entry
-    // already points at the new task, so its erase drops the new entry harmlessly; the next call recreates it.
-    auto new_task = std::make_shared<EndpointCleanupTask<CacheT>>(cache, endpoint, config::brpc_stub_expire_s);
-    new_task->renew_deadline_locked(new_deadline);
-    timespec tm = butil::microseconds_to_timespec(new_deadline);
-    auto status = cache->_timer->schedule(new_task.get(), tm);
-    if (status.ok()) {
-        set_task(entry, std::move(new_task));
-    } else {
-        LOG(WARNING) << "Failed to reschedule brpc cleanup task: " << endpoint;
-    }
-}
-
 template <typename CacheT>
 void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer) {
     DCHECK(timer != nullptr);
@@ -158,14 +134,7 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
         }
     } else {
-        reschedule_if_ttl_shrunk_locked(
-                this, *stub_pool, endpoint,
-                [](std::shared_ptr<StubPool>& pool) -> std::shared_ptr<EndpointCleanupTask<BrpcStubCache>>& {
-                    return pool->_cleanup_task;
-                },
-                [](std::shared_ptr<StubPool>& pool, std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task) {
-                    pool->_cleanup_task = std::move(task);
-                });
+        (*stub_pool)->_cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
     }
 
     return (*stub_pool)->get_or_create(endpoint);
@@ -302,14 +271,7 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
         }
     } else {
-        reschedule_if_ttl_shrunk_locked(
-                this, *stub_pair_ptr, endpoint,
-                [](StubEntry& entry) -> std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>>& {
-                    return entry.cleanup_task;
-                },
-                [](StubEntry& entry, std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task) {
-                    entry.cleanup_task = std::move(task);
-                });
+        stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
     }
 
     return stub_pair_ptr->stub;
@@ -396,14 +358,7 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
         }
     } else {
-        reschedule_if_ttl_shrunk_locked(
-                this, *stub_pair_ptr, endpoint,
-                [](StubEntry& entry) -> std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>>& {
-                    return entry.cleanup_task;
-                },
-                [](StubEntry& entry, std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task) {
-                    entry.cleanup_task = std::move(task);
-                });
+        stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
     }
 
     return stub_pair_ptr->stub;
