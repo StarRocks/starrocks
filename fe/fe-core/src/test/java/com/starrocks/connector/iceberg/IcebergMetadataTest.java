@@ -1503,7 +1503,7 @@ public class IcebergMetadataTest extends TableTestBase {
     private IcebergMetadata newStatsMetadata() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         return new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES,
                 new ConnectorProperties(ConnectorType.ICEBERG,
                         Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
     }
