@@ -677,6 +677,35 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-vulnerable-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <!-- superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs -->
+                                        <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+                                        <!-- junit must never leak into runtime libs (CVE-2020-15250);
+                                             test scope stays allowed -->
+                                        <exclude>junit:junit:*:jar:compile</exclude>
+                                        <exclude>junit:junit:*:jar:runtime</exclude>
+                                        <!-- keep jackson-jaxrs aligned with the managed jackson version -->
+                                        <exclude>com.fasterxml.jackson.jaxrs:*:[,2.15.0)</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${compiler-plugin.version}</version>
                 <configuration>

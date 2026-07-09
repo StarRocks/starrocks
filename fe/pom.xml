@@ -53,7 +53,6 @@ under the License.
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
-        <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.16.0</parquet.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
@@ -1653,6 +1652,43 @@ under the License.
 
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-vulnerable-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <!-- superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs -->
+                                        <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+                                        <!-- EOL okhttp 2.x line -->
+                                        <exclude>com.squareup.okhttp:*</exclude>
+                                        <!-- okio-jvm below 3.4.0 is affected by CVE-2023-3635 -->
+                                        <exclude>com.squareup.okio:okio-jvm:[,3.4.0)</exclude>
+                                        <!-- JSP engine, unused by FE; 9.0.93 carries CVE-2025-55754/CVE-2025-52434 -->
+                                        <exclude>org.apache.tomcat:*</exclude>
+                                        <exclude>org.apache.tomcat.embed:*</exclude>
+                                        <!-- COS SSE-KMS SDK, drags in EOL okhttp 2.7.5 -->
+                                        <exclude>com.tencentcloudapi:*</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
     <reporting>
         <plugins>
