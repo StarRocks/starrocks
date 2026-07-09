@@ -548,6 +548,7 @@ public class StmtExecutorTest {
         UUID queryId = UUIDUtil.genUUID();
         ctx.setQueryId(queryId);
         ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        ctx.setDatabase("test_db");
         InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
                 "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
