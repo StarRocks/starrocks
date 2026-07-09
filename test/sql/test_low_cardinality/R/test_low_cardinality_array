@@ -305,13 +305,7 @@ insert into s2 select * from s2;
 -- result:
 -- !result
 [UC] analyze full table s1;
--- result:
-test_db_6dee41681e184222aa5562c8ae3fad8d.s1	analyze	status	OK
--- !result
 [UC] analyze full table s2;
--- result:
-test_db_6dee41681e184222aa5562c8ae3fad8d.s2	analyze	status	OK
--- !result
 function: wait_global_dict_ready('a1', 's1')
 -- result:
 
@@ -400,6 +394,23 @@ select lower(x1), upper(MIN(HEX(x2))) from (select a1[1] x1, array_max(a2) x2 fr
 -- result:
 anhui	5457
 beijing	5457
+-- !result
+select array_contains(a1, "Hunan"), array_contains_all(a1, ["Henan", "Tibet"]), array_contains_seq(a1, ["Ningxia", "Tibet"]), array_intersect(a1, ["Henan", "Yunnan"]),
+       array_position(a1, "Chongqing"), array_remove(a1, "Henan") from s1 order by v1 limit 2;
+-- result:
+1	0	0	["Henan"]	0	["Hunan"]
+0	1	1	["Yunnan","Henan"]	2	["Chongqing","Ningxia","Tibet","Yunnan"]
+-- !result
+with cte as (select array_slice(array_agg(a1[1] order by v1, v2), 1, 3)  as arr from s1)
+select array_contains(arr, "Hunan"), array_contains_all(arr, ["Henan", "Tibet"]), array_contains_seq(arr, ["Henan", "Hunan"]), array_intersect(arr, ["Henan", "Yunnan"]),
+       array_position(arr, "Macao"), array_remove(arr, "Henan") from cte;
+-- result:
+1	0	1	["Henan"]	3	["Hunan","Macao"]
+-- !result
+select  array_contains(a1, NULL), array_contains_all(a1, array_slice(a1, 1, 2)), array_contains_seq(a1, array_slice(a1, 1, 2)) from s1 order by v1 limit 2;
+-- result:
+0	1	1
+0	1	1
 -- !result
 -- name: test_low_array_with_dict_predicate
 CREATE TABLE `s3` (
@@ -521,13 +532,7 @@ insert into s4 values
 -- result:
 -- !result
 [UC] analyze full table s3;
--- result:
-test_db_71dab433600a49a6acd0a94e9315d982.s3	analyze	status	OK
--- !result
 [UC] analyze full table s4;
--- result:
-test_db_71dab433600a49a6acd0a94e9315d982.s4	analyze	status	OK
--- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
 
