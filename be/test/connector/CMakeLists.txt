@@ -41,6 +41,39 @@ add_executable(connector_common_test
 target_link_libraries(connector_common_test ${CONNECTOR_COMMON_TEST_LINK_LIBS} gtest_main)
 set_target_properties(connector_common_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+set(CONNECTOR_FILE_TEST_LINK_LIBS
+    ConnectorFile
+    ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_file_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
+        file/file_test_main.cpp
+        file/file_chunk_sink_test.cpp
+        file/file_connector_rejected_record_test.cpp
+        file/file_scan_metrics_test.cpp
+        file/file_scan_utils_test.cpp
+        file/scanner/arrow_scanner_test.cpp
+        file/scanner/avro_cpp_scanner_test.cpp
+        file/scanner/avro_scanner_test.cpp
+        file/scanner/csv_scanner_test.cpp
+        file/scanner/file_scanner_test.cpp
+        file/scanner/json_scanner_test.cpp
+        file/scanner/orc_scanner_test.cpp
+        file/scanner/parquet_schema_builder_test.cpp
+        file/scanner/parquet_scanner_test.cpp
+        file/scanner/stream_source_meta_test.cpp
+)
+target_link_libraries(connector_file_test ${CONNECTOR_FILE_TEST_LINK_LIBS})
+set_target_properties(connector_file_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
     ConnectorCacheStats
     ${STARROCKS_DEPENDENCIES}

@@ -6,13 +6,10 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
-        ./connector/file_scan_metrics_test.cpp
-        ./connector/file_connector_rejected_record_test.cpp
         ./connector/hive_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
-        ./connector_sink/file_chunk_sink_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/iceberg_row_delta_sink_test.cpp
@@ -74,12 +71,10 @@ set(EXEC_FILES
         ./exec/connector_scan_node_test.cpp
         ./exec/catalog_scan_metrics_test.cpp
         ./exec/exec_factory_test.cpp
-        ./exec/file_scan_node_rejected_record_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/data_sinks/multi_olap_table_sink_test.cpp
-        ./exec/parquet_schema_builder_test.cpp
         ./exec/query_scan_metrics_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
@@ -89,15 +84,6 @@ set(EXEC_FILES
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/olap_scan_keys_test.cpp
-        ./exec/file_scanner/avro_cpp_scanner_test.cpp
-        ./exec/file_scanner/avro_scanner_test.cpp
-        ./exec/file_scanner/csv_scanner_test.cpp
-        ./exec/file_scanner/file_scanner_test.cpp
-        ./exec/file_scanner/json_scanner_test.cpp
-        ./exec/file_scanner/orc_scanner_test.cpp
-        ./exec/file_scanner/parquet_scanner_test.cpp
-        ./exec/file_scanner/arrow_scanner_test.cpp
-        ./exec/file_scanner/stream_source_meta_test.cpp
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp

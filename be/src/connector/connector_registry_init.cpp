@@ -17,7 +17,7 @@
 
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
-#include "connector/file_connector.h"
+#include "connector/file/file_connector.h"
 #include "connector/hive_connector.h"
 #ifndef __APPLE__
 #include "connector/iceberg_connector.h"

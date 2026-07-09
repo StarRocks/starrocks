@@ -304,8 +304,6 @@ set(EXEC_NON_PIPELINE_FILES
     raw_values_node.cpp
     except_hash_set.cpp
     except_node.cpp
-    parquet_schema_builder.cpp
-    parquet_reader.cpp
     parquet_writer.cpp
     parquet_builder.cpp
     file_scan_node.cpp
@@ -332,15 +330,6 @@ set(EXEC_NON_PIPELINE_FILES
     hdfs_scanner/hdfs_scanner_avro.cpp
     hdfs_scanner/hdfs_scanner.cpp
     hdfs_scanner/jni_scanner.cpp
-    file_scanner/avro_cpp_scanner.cpp
-    file_scanner/avro_scanner.cpp
-    file_scanner/csv_scanner.cpp
-    file_scanner/file_scanner.cpp
-    file_scanner/json_scanner.cpp
-    file_scanner/orc_scanner.cpp
-    file_scanner/parquet_scanner.cpp
-    file_scanner/arrow_scanner.cpp
-    file_scanner/stream_source_meta.cpp
     schema_scanner/schema_analyze_status.cpp
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
@@ -514,4 +503,4 @@ ADD_BE_LIB(Exec
 )
 
 target_link_libraries(Exec PUBLIC ExecRuntime ExecPrimitive ExecSchemaScannerCore ExecSchemaScanners ExecJoinCore Runtime ComputeEnv Cache)
-target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorBuiltinRegistry)
+target_link_libraries(Exec PRIVATE FormatJson FormatCore Platform ConnectorFile ConnectorBuiltinRegistry)
