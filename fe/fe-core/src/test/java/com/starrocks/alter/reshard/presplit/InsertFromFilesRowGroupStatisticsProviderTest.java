@@ -117,14 +117,7 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
 
     @Test
     void compositeSortKeyProjectsAllColumns() throws Exception {
-        Path parquetPath = PresplitTestSupport.writeParquetFixture(
-                tempDirectory,
-                "message schema { required binary tenant (UTF8); required int64 position; }",
-                /*rowCount=*/ 16,
-                (group, rowIndex) -> {
-                    group.append("tenant", String.format("tenant-%02d", rowIndex / 4));
-                    group.append("position", (long) rowIndex);
-                });
+        Path parquetPath = PresplitTestSupport.writeCompositeParquetFixture(tempDirectory, /*rowCount=*/ 16);
         TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),

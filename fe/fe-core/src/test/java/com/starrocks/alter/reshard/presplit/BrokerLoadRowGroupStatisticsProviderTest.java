@@ -57,7 +57,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
 
     @Test
     void compositeSortKeyProjectsAllColumns() throws Exception {
-        Path parquetPath = writeCompositeParquet(/*rowCount=*/ 16);
+        Path parquetPath = PresplitTestSupport.writeCompositeParquetFixture(tempDirectory, /*rowCount=*/ 16);
 
         SampleRequest request = compositeSampleRequest(
                 List.of(parquetFileGroup()),
@@ -211,17 +211,6 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 "message schema { required int64 sort_key; }",
                 rowCount,
                 (group, rowIndex) -> group.append("sort_key", valueOffset + rowIndex));
-    }
-
-    private Path writeCompositeParquet(int rowCount) throws IOException {
-        return PresplitTestSupport.writeParquetFixture(
-                tempDirectory,
-                "message schema { required binary tenant (UTF8); required int64 position; }",
-                rowCount,
-                (group, rowIndex) -> {
-                    group.append("tenant", String.format("tenant-%02d", rowIndex / 4));
-                    group.append("position", (long) rowIndex);
-                });
     }
 
     private Path writeBigintOrc(int rowCount, long valueOffset) throws IOException {

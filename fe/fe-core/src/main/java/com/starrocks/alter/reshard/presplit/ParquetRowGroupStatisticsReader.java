@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.io.ByteStreams;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Tuple;
@@ -137,10 +139,12 @@ public final class ParquetRowGroupStatisticsReader {
                 ParquetMetadata metadata = reader.getFooter();
                 MessageType schema = metadata.getFileMetaData().getSchema();
                 Optional<ZoneOffset> loadOffset = MetaTierTemporalWindow.fixedLoadOffset(loadTimeZone);
-                // Read the raw footer column_orders at most once per file (a leaf that needs the
-                // check indexes into this list). null -> unknown order for every leaf -> those
-                // leaves defer to data tier via declaresTypeDefinedColumnOrder.
-                List<ColumnOrder> columnOrders = readColumnOrders(inputFile);
+                // Read the raw footer column_orders at most once per file, and only if some
+                // sort-key column actually needs it (byte-array DECIMAL / unsigned INT32 -- see
+                // requiresColumnOrderCheck); most keys never trigger it, so the extra footer read
+                // is memoized and stays unpaid for the common case. null -> unknown order for every
+                // leaf -> those leaves defer to data tier via declaresTypeDefinedColumnOrder.
+                Supplier<List<ColumnOrder>> columnOrders = Suppliers.memoize(() -> readColumnOrders(inputFile));
                 List<SortKeyLocation> locations = new ArrayList<>(sortKeyColumns.size());
                 for (Column sortKeyColumn : sortKeyColumns) {
                     locations.add(locateSortKeyColumn(schema, columnOrders, sortKeyColumn, loadOffset));
@@ -159,7 +163,7 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static SortKeyLocation locateSortKeyColumn(MessageType schema, List<ColumnOrder> columnOrders,
+    private static SortKeyLocation locateSortKeyColumn(MessageType schema, Supplier<List<ColumnOrder>> columnOrders,
             Column sortKeyColumn, Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
@@ -197,7 +201,7 @@ public final class ParquetRowGroupStatisticsReader {
         // declaresTypeDefinedColumnOrder). Only those leaves pay the extra raw-footer read.
         boolean typeDefinedColumnOrder = false;
         if (requiresColumnOrderCheck(parquetTypeName, logicalAnnotation)) {
-            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(columnOrders, leafColumnIndex(schema, path));
+            typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(columnOrders.get(), leafColumnIndex(schema, path));
         }
         rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn,
                 loadOffset);
