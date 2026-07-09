@@ -62,13 +62,30 @@ jobs:
             --history-dir "${HIST}" \
             --out "${WORK}/out"
 
-          # Publish (timestamped, so repeated runs don't clobber).
+          # Publish to OSS (timestamped). Do NOT mask a failed upload with a
+          # fake success URL — the report is this workflow's output. The report
+          # dir is also attached as a run artifact (next step, always), so it is
+          # never lost even if OSS is unavailable; only print the OSS URL when
+          # the upload actually succeeded.
           TS=$(date -u +%Y%m%d-%H%M%S)
           OUT_OSS="oss://${bucket}/unstable-case-ai-analysis/${ch_branch}/${TS}/"
-          ${_oss} cp "${WORK}/out/analysis.html" "${OUT_OSS}analysis.html" -f || true
-          ${_oss} cp "${WORK}/out/analysis.json" "${OUT_OSS}analysis.json" -f || true
-          echo "AI analysis report: ${OUT_OSS}analysis.html"
-          echo "AI analysis report: ${OUT_OSS}analysis.html" >> "$GITHUB_STEP_SUMMARY" || true
+          if ${_oss} cp "${WORK}/out/analysis.html" "${OUT_OSS}analysis.html" -f \
+             && ${_oss} cp "${WORK}/out/analysis.json" "${OUT_OSS}analysis.json" -f; then
+            echo "AI analysis report: ${OUT_OSS}analysis.html"
+            echo "AI analysis report (OSS): ${OUT_OSS}analysis.html" >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            echo "::warning::OSS upload failed — report is attached as the 'ai-analysis-report' run artifact instead."
+            echo "OSS upload failed — download the 'ai-analysis-report' run artifact." >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - name: Upload report artifact (fallback, always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis-report
+          path: /tmp/unstable-ai-${{ github.run_id }}/out
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Clean ENV
         if: always()
