@@ -17,6 +17,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include "column/vectorized_fwd.h"
@@ -130,6 +131,14 @@ private:
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
+    // Guards the one-time initialization of `_spiller` (and its serde) in _prepare().
+    // The load spill path is entered concurrently by multiple memtable-flush threads
+    // that share the same LoadChunkSpiller, so this initialization must be serialized.
+    std::mutex _init_lock;
+    // Set to true only after `_spiller` AND its serde (including the encode context) are
+    // fully initialized. Readers gate on this flag rather than on `_spiller != nullptr`,
+    // because the pointer becomes visible before the serde's encode context is created.
+    std::atomic<bool> _prepared{false};
     SchemaPtr _schema;
 };
 
