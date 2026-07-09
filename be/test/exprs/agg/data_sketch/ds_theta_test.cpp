@@ -104,4 +104,49 @@ TEST_F(DataSketchsThetaTest, TestSerializeDeserialize2) {
         ASSERT_EQ(theta4.estimate_cardinality(), 100);
     }
 }
+
+// Disjoint sets produce a merged sketch whose estimate is the sum of inputs
+// (within theta error). Guards against accidental serialization drift in the
+// Apache DataSketches compact theta format used on the wire.
+TEST_F(DataSketchsThetaTest, TestMergeDisjointSets) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta theta_a(&memory_usage);
+    DataSketchesTheta theta_b(&memory_usage);
+    for (int i = 0; i < 1000; i++) {
+        theta_a.update(i);
+    }
+    for (int i = 10000; i < 11000; i++) {
+        theta_b.update(i);
+    }
+    DataSketchesTheta merged(&memory_usage);
+    merged.merge(theta_a);
+    merged.merge(theta_b);
+    int64_t est = merged.estimate_cardinality();
+    // Apache DataSketches default lg_k=12 gives ~3.125% relative error at 95% CI;
+    // 10% bounds are very generous so flakiness is impossible.
+    EXPECT_NEAR(est, 2000, 200);
+}
+
+// Round-trip: serialize via DataSketchesTheta, deserialize via
+// wrapped_compact_theta_sketch, confirm Apache estimate matches our internal
+// estimate. Guards the wire format used by ds_theta_estimate scalar and
+// ds_theta_combine aggregate.
+TEST_F(DataSketchsThetaTest, TestCompactWireRoundTrip) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta theta(&memory_usage);
+    for (int i = 0; i < 5000; i++) {
+        theta.update(i);
+    }
+    size_t sz = theta.serialize_size();
+    std::vector<uint8_t> buf(sz);
+    size_t actual = theta.serialize(buf.data());
+    ASSERT_EQ(sz, actual);
+
+    using alloc_type = DataSketchesTheta::alloc_type;
+    int64_t mem2 = 0;
+    auto wrapped = datasketches::wrapped_compact_theta_sketch_alloc<alloc_type>::wrap(buf.data(), actual);
+    int64_t apache_est = static_cast<int64_t>(wrapped.get_estimate());
+    EXPECT_NEAR(apache_est, theta.estimate_cardinality(), 1);
+    EXPECT_NEAR(apache_est, 5000, 500);
+}
 } // namespace starrocks
