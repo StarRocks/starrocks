@@ -6,6 +6,8 @@ keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snaps
 
 # Iceberg Procedures
 
+import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
+
 StarRocks Iceberg Catalog 支持多种用于管理 Iceberg 表的存储过程，包括快照管理、分支管理、数据维护、元数据管理和表管理。
 
 您必须具有相应的权限才能执行存储过程。有关权限的更多信息，请参见 [Privileges](../../../administration/user_privs/authorization/privilege_item.md) 。
@@ -253,6 +255,8 @@ EXECUTE rewrite_manifests()
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
+
+<AutoMetaMaintenance />
 
 ## 表管理
 
