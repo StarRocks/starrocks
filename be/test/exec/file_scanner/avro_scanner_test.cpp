@@ -1540,6 +1540,69 @@ TEST_F(AvroScannerTest, test_struct_type) {
     }
 }
 
+// Regression for issue #11522: a BOOLEAN element nested inside a native ARRAY target column.
+// BooleanColumn is FixedLengthColumn<uint8_t>, but the nested (non-adaptive) add_nullable_column
+// dispatched TYPE_BOOLEAN through add_nullable_numeric_column<int8_t>, so add_numeric_column's
+// down_cast<FixedLengthColumn<int8_t>*> tripped the dynamic_cast assert (casts.h) under ASAN/DEBUG.
+// STRUCT/MAP/ARRAY all funnel their leaf columns through this same add_nullable_column dispatch, so
+// the ARRAY case exercises (and guards) the one-line fix for every container. ARRAY is used here
+// because it is the path present on all release branches (the STRUCT crash path came from #74901).
+TEST_F(AvroScannerTest, test_array_with_boolean) {
+    // record root { array<boolean> a }
+    std::string schema_json =
+            R"({"type":"record","name":"root","fields":[{"name":"a","type":{"type":"array","items":"boolean"}}]})";
+
+    AvroHelper avro_helper;
+    init_avro_value(schema_json.data(), schema_json.size(), avro_helper);
+    DeferOp avro_helper_deleter([&] {
+        avro_schema_decref(avro_helper.schema);
+        avro_value_iface_decref(avro_helper.iface);
+        avro_value_decref(&avro_helper.avro_val);
+    });
+
+    avro_value_t a_value;
+    ASSERT_EQ(0, avro_value_get_by_name(&avro_helper.avro_val, "a", &a_value, NULL));
+    avro_value_t e0;
+    avro_value_append(&a_value, &e0, NULL);
+    avro_value_set_boolean(&e0, true);
+    avro_value_t e1;
+    avro_value_append(&a_value, &e1, NULL);
+    avro_value_set_boolean(&e1, false);
+    avro_value_t e2;
+    avro_value_append(&a_value, &e2, NULL);
+    avro_value_set_boolean(&e2, true);
+
+    std::string data_path = "./be/test/exec/test_data/avro_scanner/tmp/avro_array_boolean_data.avro";
+    ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
+
+    std::vector<TypeDescriptor> types;
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_BOOLEAN);
+    types.emplace_back(t);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_AVRO;
+    range.__isset.jsonpaths = false;
+    range.__set_path(data_path);
+    ranges.emplace_back(range);
+
+    auto scanner = create_avro_scanner(types, ranges, {"a"}, avro_helper.schema_text);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st;
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok()) << st2.status();
+
+    ChunkPtr chunk = st2.value();
+    EXPECT_EQ(1, chunk->num_columns());
+    EXPECT_EQ(1, chunk->num_rows());
+    auto array = chunk->get(0)[0].get_array();
+    ASSERT_EQ(3, array.size());
+    EXPECT_EQ(1, array[0].get_int8());
+    EXPECT_EQ(0, array[1].get_int8());
+    EXPECT_EQ(1, array[2].get_int8());
+}
+
 TEST_F(AvroScannerTest, test_array_of_nullable_string) {
     // record root { array< union{ null, string } > a }
     // Regression guard for the codex review (PR #74901): an ARRAY<VARCHAR> whose elements are avro
