@@ -35,12 +35,13 @@ namespace starrocks::lake {
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(std::unique_ptr<TabletWriter> writer,
                                                                  std::unique_ptr<LoadSpillMergeInputBatch> task,
                                                                  const Schema* schema, std::atomic<bool>* quit_flag,
-                                                                 RuntimeProfile::Counter* write_io_timer)
+                                                                 RuntimeProfile::Counter* write_io_timer, bool op_aware)
         : _writer(std::move(writer)),
           _task(std::move(task)),
           _schema(schema),
           _quit_flag(quit_flag),
-          _write_io_timer(write_io_timer) {
+          _write_io_timer(write_io_timer),
+          _op_aware(op_aware) {
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(_writer->tablet_id()) + "-" + std::to_string(_writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
@@ -166,8 +167,11 @@ void TabletInternalParallelMergeTask::run() {
     // (-> a del file); see write_one_merged_chunk / finalize_merged_batch. The del file's op_offset is
     // assigned at result consolidation (TabletWriter::merge_other_writer) so it follows this batch's
     // segments and a later batch's re-upsert of the same key correctly wins.
-    const auto& field_names = _schema->field_names();
-    const bool has_op = !field_names.empty() && field_names.back() == "__op";
+    // op_aware is set by the sink only when the memtable actually kept a hidden __op column (PK load with
+    // an op slot + preserve-order feature on). It is NOT inferred from the last column name, so a real user
+    // column happening to be named "__op" (e.g. allow_system_reserved_names) is never mistaken for it.
+    const bool has_op = _op_aware;
+    DCHECK(!has_op || (!_schema->field_names().empty() && _schema->field_names().back() == "__op"));
     // Schema used to write segments (drops the trailing __op when present).
     std::vector<ColumnId> write_cids;
     for (size_t i = 0; i + (has_op ? 1 : 0) < _schema->num_fields(); i++) {

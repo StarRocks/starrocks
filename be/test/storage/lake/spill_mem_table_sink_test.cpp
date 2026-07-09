@@ -516,7 +516,8 @@ TEST_P(SpillMemTableSinkTest, test_merge_task_results_orders_by_slot) {
         auto batch = std::make_unique<LoadSpillMergeInputBatch>();
         batch->slot_idx = slot;
         auto task = std::make_shared<TabletInternalParallelMergeTask>(std::move(writer), std::move(batch),
-                                                                      _schema.get(), nullptr, nullptr);
+                                                                      _schema.get(), nullptr, nullptr,
+                                                                      /*op_aware=*/false);
         context.add_merge_task(task);
     }
 

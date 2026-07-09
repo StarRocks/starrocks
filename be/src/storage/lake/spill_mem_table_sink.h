@@ -82,6 +82,12 @@ private:
     // Per-load snapshot of config::lake_enable_pk_preserve_txn_delete_order (see keep_op_column()).
     const bool _keep_op_column;
 
+    // Set once when flush_chunk_with_op() is first called, i.e. the memtable actually kept a hidden __op
+    // column (PK load with an op slot + _keep_op_column). This is the authoritative op-aware signal
+    // forwarded to the merge tasks -- distinct from _keep_op_column, which is true for any load while the
+    // config is on (including non-PK loads that never produce a hidden __op).
+    bool _op_aware = false;
+
     // Memory tracker for merge operations, parent is compaction tracker.
     // RATIONALE: Merge phase uses separate memory budget from normal load operations
     // to prevent OOM. Parent is compaction tracker since merge is similar to compaction.
