@@ -23,6 +23,8 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.PublishVersionTask;
 import mockit.Expectations;
 import mockit.Mock;
@@ -238,6 +240,18 @@ public class PublishVersionDaemonTest {
             @Mock
             public ThreadPoolExecutor getTaskExecutor() {
                 return new SynchronousExecutor();
+            }
+        };
+
+        // Prevent AgentBatchTask from being dispatched to the shared background agent-task pool.
+        // Otherwise AgentBatchTask.run() would invoke methods on the @Mocked SystemInfoService
+        // (e.g. getBackend) from an uncontrolled daemon thread, racing with JMockit's mock
+        // lifecycle and causing flaky "Missing invocation" failures. This test only verifies
+        // publish bookkeeping, not agent task dispatch.
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+                // no-op
             }
         };
 
