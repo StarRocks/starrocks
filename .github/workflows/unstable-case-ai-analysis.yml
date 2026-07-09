@@ -29,9 +29,10 @@ jobs:
     name: AI ANALYSIS
     runs-on: [self-hosted, ubuntu, ai]
     env:
-      BRANCH:            ${{ inputs.branch || 'main' }}
-      CASE_TYPES:        ${{ inputs.case_types || 'all' }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      BRANCH:     ${{ inputs.branch || 'main' }}
+      CASE_TYPES: ${{ inputs.case_types || 'all' }}
+      # AI uses the `claude` CLI on the runner (already installed + authed);
+      # no ANTHROPIC_API_KEY / anthropic SDK needed.
     steps:
       - name: Analyze unstable cases (history-aware)
         run: |
