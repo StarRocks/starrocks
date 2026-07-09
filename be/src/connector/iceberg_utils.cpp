@@ -20,7 +20,7 @@
 #include "column/chunk_extra_data.h"
 #include "column/column.h"
 #include "column/column_viewer.h"
-#include "connector/hive_utils.h"
+#include "connector/common/hive_partition_utils.h"
 
 namespace starrocks::connector {
 
@@ -115,11 +115,11 @@ StatusOr<std::string> IcebergUtils::iceberg_column_value(const TypeDescriptor& t
         }
         value = std::string(buffer, written);
     } else if (transform_expr.compare(0, 8, "truncate") == 0) {
-        ASSIGN_OR_RETURN(value, HiveUtils::column_value(type_desc, column, idx));
+        ASSIGN_OR_RETURN(value, HivePartitionUtils::column_value(type_desc, column, idx));
     } else if (transform_expr.compare(0, 6, "bucket") == 0) {
-        ASSIGN_OR_RETURN(value, HiveUtils::column_value(type_desc, column, idx));
+        ASSIGN_OR_RETURN(value, HivePartitionUtils::column_value(type_desc, column, idx));
     } else if (transform_expr == "identity") {
-        ASSIGN_OR_RETURN(value, HiveUtils::column_value(type_desc, column, idx));
+        ASSIGN_OR_RETURN(value, HivePartitionUtils::column_value(type_desc, column, idx));
     } else {
         return Status::InternalError("Unsupported type for iceberg partition transform:" + transform_expr);
     }

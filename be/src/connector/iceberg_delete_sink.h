@@ -19,7 +19,7 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/common/partition_chunk_writer.h"
-#include "connector/partitioned_connector_chunk_sink.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 #include "formats/file_writer.h"
 
 namespace starrocks {

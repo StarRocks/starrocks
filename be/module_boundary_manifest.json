@@ -787,7 +787,7 @@
       ],
       "forbidden_include_prefixes": ["connector/", "exec/", "storage/", "service/", "http/", "cache/", "util/"],
       "forbidden_includes": [
-        "connector/partitioned_connector_chunk_sink.h",
+        "connector/common/partitioned_connector_chunk_sink.h",
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],

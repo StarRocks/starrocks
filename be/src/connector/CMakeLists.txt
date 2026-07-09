@@ -17,8 +17,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 ADD_BE_LIB(ConnectorCommon
         common/connector_sink_commit.cpp
         common/connector_sink_executor.cpp
+        common/hive_partition_utils.cpp
         common/partition_chunk_writer.cpp
         common/partition_chunk_writer_memory_manager.cpp
+        common/partitioned_connector_chunk_sink.cpp
         common/spill_partition_chunk_writer.cpp
         common/utils.cpp
 )
@@ -48,11 +50,9 @@ ADD_BE_LIB(Connector
         file_connector.cpp
         file_scan_metrics.cpp
         iceberg_connector.cpp
-        partitioned_connector_chunk_sink.cpp
         file_chunk_sink.cpp
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
-        hive_utils.cpp
         iceberg_utils.cpp
         deletion_vector/deletion_vector.cpp
         iceberg_delete_sink.cpp
