@@ -75,15 +75,18 @@ public:
         Slice* ptr = &slices[0];
         count = page_builder.add(reinterpret_cast<const uint8_t*>(ptr), count);
 
-        OwnedSlice owned_slice = page_builder.finish()->build();
-
         //check first value and last value
+        faststring* page_data = page_builder.finish();
         Slice first_value;
-        page_builder.get_first_value(&first_value);
+        ASSERT_TRUE(page_builder.get_first_value(&first_value).ok());
         ASSERT_EQ(slices[0], first_value);
         Slice last_value;
-        page_builder.get_last_value(&last_value);
+        ASSERT_TRUE(page_builder.get_last_value(&last_value).ok());
         ASSERT_EQ(slices[count - 1], last_value);
+
+        OwnedSlice owned_slice = page_data->build();
+        ASSERT_FALSE(page_builder.get_first_value(&first_value).ok());
+        ASSERT_FALSE(page_builder.get_last_value(&last_value).ok());
 
         PageDecoderType page_decoder(owned_slice.slice());
         Status status = page_decoder.init();
@@ -140,16 +143,19 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
         EXPECT_EQ(slices[i], builder.get_value(i));
     }
 
-    OwnedSlice data_with_head = builder.finish()->build();
-
     Slice slice;
     EXPECT_EQ(5, builder.count());
 
+    faststring* page_data = builder.finish();
     ASSERT_TRUE(builder.get_first_value(&slice).ok());
     EXPECT_EQ(slices[0], slice);
 
     ASSERT_TRUE(builder.get_last_value(&slice).ok());
     EXPECT_EQ(slices[4], slice);
+
+    OwnedSlice data_with_head = page_data->build();
+    ASSERT_FALSE(builder.get_first_value(&slice).ok());
+    ASSERT_FALSE(builder.get_last_value(&slice).ok());
 
     Slice data_without_head = data_with_head.slice();
     data_without_head.remove_prefix(4);
@@ -170,6 +176,35 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
     ASSERT_EQ(column->debug_string(),
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
+}
+
+TEST_F(BinaryPlainPageTest, test_first_last_value_all_empty_strings) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+    Slice slices[] = {"", "", ""};
+
+    ASSERT_EQ(3, builder.add(reinterpret_cast<const uint8_t*>(slices), 3));
+
+    faststring* page_data = builder.finish();
+    Slice slice("non-empty");
+    ASSERT_OK(builder.get_first_value(&slice));
+    EXPECT_EQ(Slice(), slice);
+
+    slice = Slice("non-empty");
+    ASSERT_OK(builder.get_last_value(&slice));
+    EXPECT_EQ(Slice(), slice);
+
+    OwnedSlice page = page_data->build();
+    EXPECT_FALSE(builder.get_first_value(&slice).ok());
+    EXPECT_FALSE(builder.get_last_value(&slice).ok());
+
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+    ASSERT_OK(decoder.init());
+    ASSERT_EQ(3, decoder.count());
+    for (uint32_t i = 0; i < decoder.count(); i++) {
+        EXPECT_EQ(Slice(), decoder.string_at_index(i));
+    }
 }
 
 TEST_F(BinaryPlainPageTest, TestGetOffsetsForZeroCopy) {

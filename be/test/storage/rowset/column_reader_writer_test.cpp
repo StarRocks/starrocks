@@ -51,6 +51,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
@@ -58,6 +59,7 @@
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -70,6 +72,7 @@
 #include "testutil/schema_test_helper.h"
 #include "types/date_value.h"
 #include "types/storage_type_traits.h"
+#include "types/type_descriptor.h"
 
 using std::string;
 
@@ -641,6 +644,117 @@ TEST_F(ColumnReaderWriterTest, test_string_delta_offset_encoding) {
 
     run(false, PLAIN_ENCODING);
     run(true, PLAIN_ENCODING_DELTA_OFFSET);
+}
+
+TEST_F(ColumnReaderWriterTest, test_large_varchar_declared_length_boundary) {
+    const auto saved_dict_chunk_size = config::dictionary_speculate_min_chunk_size;
+    const bool saved_delta_offset = config::enable_binary_plain_delta_offset;
+    const bool saved_check_string_lengths = config::enable_check_string_lengths;
+    DeferOp restore([&]() {
+        config::dictionary_speculate_min_chunk_size = saved_dict_chunk_size;
+        config::enable_binary_plain_delta_offset = saved_delta_offset;
+        config::enable_check_string_lengths = saved_check_string_lengths;
+    });
+
+    config::dictionary_speculate_min_chunk_size = 4096;
+    config::enable_binary_plain_delta_offset = true;
+    config::enable_check_string_lengths = true;
+
+    auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    std::vector<std::string> strings = {"short", "small", "chunk"};
+    std::vector<Slice> slices;
+    for (const auto& s : strings) {
+        slices.emplace_back(s);
+    }
+    col->reserve(slices.size());
+    ASSERT_TRUE(col->append_strings(slices));
+    ASSERT_LT(col->size(), config::dictionary_speculate_min_chunk_size);
+
+    auto run = [&](int storage_length, EncodingTypePB expected_encoding) {
+        const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+        auto segment = create_dummy_segment(fname);
+        ColumnMetaPB meta;
+
+        {
+            ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+            ColumnWriterOptions writer_opts = make_writer_opts<TYPE_VARCHAR, DEFAULT_ENCODING, 2>(&meta);
+            writer_opts.meta->set_length(storage_length);
+
+            TabletColumn column = create_varchar_key(1, true, storage_length);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+
+            ASSERT_OK(writer->append(*col));
+            if (expected_encoding == PLAIN_ENCODING) {
+                EXPECT_EQ(PLAIN_ENCODING, meta.encoding());
+            }
+
+            flush_column_writer(writer.get());
+            ASSERT_OK(wfile->close());
+        }
+
+        EXPECT_EQ(expected_encoding, meta.encoding());
+
+        TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+        auto iter = create_and_init_iterator(meta, segment.get(), fname);
+        ASSERT_OK(iter->seek_to_first());
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+        size_t rows_read = col->size();
+        dst->reserve(rows_read);
+        ASSERT_OK(iter->next_batch(&rows_read, dst.get()));
+        ASSERT_EQ(col->size(), rows_read);
+
+        for (size_t i = 0; i < rows_read; i++) {
+            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i))) << " mismatch at row " << i;
+        }
+    };
+
+    const int binary_length_overhead = static_cast<int>(sizeof(uint32_t));
+    run(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead, DICT_ENCODING);
+    run(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD + binary_length_overhead + 1, PLAIN_ENCODING);
+}
+
+TEST_F(ColumnReaderWriterTest, test_binary_plain_page_first_last_value_lifetime) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+
+    std::vector<std::string> values = {"first-value", "", "last-value"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (const auto& value : values) {
+        slices.emplace_back(value);
+    }
+
+    ASSERT_EQ(values.size(), builder.add(reinterpret_cast<const uint8_t*>(slices.data()), slices.size()));
+
+    faststring* page_data = builder.finish();
+    Slice first_value;
+    ASSERT_OK(builder.get_first_value(&first_value));
+    EXPECT_EQ(slices.front(), first_value);
+
+    Slice last_value;
+    ASSERT_OK(builder.get_last_value(&last_value));
+    EXPECT_EQ(slices.back(), last_value);
+
+    const char* page_begin = reinterpret_cast<const char*>(page_data->data());
+    const char* page_end = page_begin + page_data->size();
+    EXPECT_GE(first_value.data, page_begin);
+    EXPECT_LT(first_value.data, page_end);
+    EXPECT_GE(last_value.data, page_begin);
+    EXPECT_LT(last_value.data, page_end);
+
+    OwnedSlice page = page_data->build();
+    auto st = builder.get_first_value(&first_value);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    st = builder.get_last_value(&last_value);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+    ASSERT_OK(decoder.init());
+    ASSERT_EQ(values.size(), decoder.count());
+    EXPECT_EQ(slices.front(), decoder.string_at_index(0));
+    EXPECT_EQ(slices.back(), decoder.string_at_index(values.size() - 1));
 }
 
 // NOLINTNEXTLINE

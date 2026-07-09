@@ -136,10 +136,6 @@ public:
             }
         }
         put_fixed32_le(&_buffer, _offsets.size());
-        if (!_offsets.empty()) {
-            _copy_value_at(0, &_first_value);
-            _copy_value_at(_offsets.size() - 1, &_last_value);
-        }
         _finished = true;
         return &_buffer;
     }
@@ -155,7 +151,10 @@ public:
         if (_offsets.empty()) {
             return Status::NotFound("page is empty");
         }
-        *reinterpret_cast<Slice*>(value) = Slice(_first_value);
+        if (_buffer.size() == 0) {
+            return Status::InvalidArgument("Internal buffer has been reset as empty");
+        }
+        *reinterpret_cast<Slice*>(value) = get_value(0);
         return Status::OK();
     }
 
@@ -164,12 +163,16 @@ public:
         if (_offsets.empty()) {
             return Status::NotFound("page is empty");
         }
-        *reinterpret_cast<Slice*>(value) = Slice(_last_value);
+        if (_buffer.size() == 0) {
+            return Status::InvalidArgument("Internal buffer has been reset as empty");
+        }
+        *reinterpret_cast<Slice*>(value) = get_value(_offsets.size() - 1);
         return Status::OK();
     }
 
     Slice get_value(size_t idx) const {
-        DCHECK(!_finished);
+        // Safe before and after finish(): finish only appends the offsets trailer and does not
+        // invalidate the value area tracked by _offsets/_next_offset.
         DCHECK_LT(idx, _offsets.size());
         size_t end = (idx + 1) < _offsets.size() ? _offsets[idx + 1] : _next_offset;
         size_t off = _offsets[idx];
@@ -177,11 +180,6 @@ public:
     }
 
 private:
-    void _copy_value_at(size_t idx, faststring* value) const {
-        Slice s = get_value(idx);
-        value->assign_copy((const uint8_t*)s.data, s.size);
-    }
-
     uint8_t _reserved_head_size{0};
     size_t _size_estimate{0};
     size_t _next_offset{0};
@@ -191,8 +189,6 @@ private:
     // When true, the offset trailer is written as per-value deltas instead of absolute offsets.
     bool _delta_offset{false};
     PageBuilderOptions _options;
-    faststring _first_value;
-    faststring _last_value;
     bool _finished{false};
 };
 

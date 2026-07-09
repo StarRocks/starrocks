@@ -101,12 +101,16 @@ public:
     virtual uint64_t size() const = 0;
 
     // Return the first value in this page.
-    // This method could only be called between finish() and reset().
+    // This method could only be called after finish(). The returned value may
+    // become invalid before reset() for builders that transfer or reuse their
+    // internal buffer; check the concrete builder contract case by case.
     // Status::NotFound if no values have been added.
     virtual Status get_first_value(void* value) const = 0;
 
     // Return the last value in this page.
-    // This method could only be called between finish() and reset().
+    // This method could only be called after finish(). The returned value may
+    // become invalid before reset() for builders that transfer or reuse their
+    // internal buffer; check the concrete builder contract case by case.
     // Status::NotFound if no values have been added.
     virtual Status get_last_value(void* value) const = 0;
 

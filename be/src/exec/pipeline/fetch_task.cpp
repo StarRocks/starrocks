@@ -65,7 +65,7 @@ bool FetchTask::_should_use_lookup_http_rpc(
             continue;
         }
         const auto& type = slot->type();
-        if ((type.is_string_type() && type.len >= TypeDescriptor::MAX_VARCHAR_LENGTH)) {
+        if ((type.is_string_type() && type.len >= TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD)) {
             return true;
         }
     }

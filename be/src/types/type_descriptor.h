@@ -39,6 +39,7 @@ struct TypeDescriptor {
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
     static constexpr int DEFAULT_BITMAP_LENGTH = 128;
+    static constexpr int LARGE_VARCHAR_LENGTH_THRESHOLD = 1048576;
 
     /// Only set if type == TYPE_DECIMAL
     int precision{-1};
