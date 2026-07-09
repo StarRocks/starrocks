@@ -106,9 +106,15 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
      *     {@code HINT_JOIN_SKEW}, or {@code HINT_JOIN_BUCKET} disables
      *     colocate. Only {@code null} or {@code HINT_JOIN_COLOCATE} lets
      *     the range fast path proceed.
-     * <li>Join-type allowlist: INNER, LEFT OUTER, LEFT SEMI, LEFT ANTI.
-     *     Right-family and full-outer joins are rejected (NULL-key runtime
-     *     correctness validation deferred past P2).
+     * <li>Join-type allowlist: INNER, LEFT/RIGHT OUTER, LEFT/RIGHT SEMI,
+     *     LEFT/RIGHT ANTI, FULL OUTER. All equi-join families are colocate-safe
+     *     because a colocate range join is bucket-local: rows sharing a colocate
+     *     key (NULL included — NULL sorts into the first ColocateRange on every
+     *     table in the group) always land in the same bucket, so the unmatched
+     *     right rows a right/full-outer join must emit are produced by the right
+     *     scan node in the same fragment. CROSS, NULL-aware anti, and ASOF joins
+     *     stay rejected (no covering equijoin key / cross-bucket NULL semantics /
+     *     inequality match).
      * <li>{@code disable_colocate_join} session kill switch (shared with
      *     hash colocate).
      * <li>Structural {@link RangeDistributionSpec#canColocate}: same group,
@@ -139,10 +145,15 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 || HintNode.HINT_JOIN_BUCKET.equals(hint)) {
             return false;
         }
-        if (joinType != JoinOperator.INNER_JOIN
-                && joinType != JoinOperator.LEFT_OUTER_JOIN
-                && joinType != JoinOperator.LEFT_SEMI_JOIN
-                && joinType != JoinOperator.LEFT_ANTI_JOIN) {
+        boolean supportedJoinType = joinType == JoinOperator.INNER_JOIN
+                || joinType == JoinOperator.LEFT_OUTER_JOIN
+                || joinType == JoinOperator.LEFT_SEMI_JOIN
+                || joinType == JoinOperator.LEFT_ANTI_JOIN
+                || joinType == JoinOperator.RIGHT_OUTER_JOIN
+                || joinType == JoinOperator.RIGHT_SEMI_JOIN
+                || joinType == JoinOperator.RIGHT_ANTI_JOIN
+                || joinType == JoinOperator.FULL_OUTER_JOIN;
+        if (!supportedJoinType) {
             return false;
         }
         if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
