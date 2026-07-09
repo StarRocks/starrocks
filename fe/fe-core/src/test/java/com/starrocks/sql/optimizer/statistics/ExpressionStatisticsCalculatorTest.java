@@ -632,6 +632,204 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCoalesceReturnsCombinedStatisticsWhenBothInputsAreKnown() {
+        // Given COALESCE(left, right)
+        // CASE WHEN both inputs have known stats THEN calculate stats based on inputs END
+
+        final int rowCount = 100;
+        final int leftDistinctValues = 70;
+        final int rightDistinctValues = 20;
+        final double leftNullFraction = 0.2;
+        final double rightNullFraction = 0.5;
+        final int leftMin = -100;
+        final int leftMax = 100;
+        final int rightMin = 100;
+        final double rightMax = 200.5;
+
+        final double expectedDistinctValues = 90;
+        final double expectedNullFraction = 0.1;
+        final double expectedMin = -100;                // min(leftMin, rightMin)
+        final double expectedMax = 200.5;
+
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, IntegerType.INT, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, IntegerType.INT, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(leftInput, new ColumnStatistic(leftMin, leftMax, leftNullFraction, 0, leftDistinctValues))
+                .addColumnStatistic(rightInput,
+                        new ColumnStatistic(rightMin, rightMax, rightNullFraction, 0, rightDistinctValues))
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(leftInput, rightInput));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testCoalesceReturnsUnknownWhenAnyInputIsUnknown() {
+        // Given COALESCE(left, right)
+        // CASE WHEN an input has unknown stats THEN output stats are also unknown END
+
+        final int rowCount = 100;
+        final ColumnRefOperator leftInput = new ColumnRefOperator(2, IntegerType.INT, "left", true);
+        final ColumnRefOperator rightInput = new ColumnRefOperator(3, IntegerType.INT, "right", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(leftInput, new ColumnStatistic(-100, 100, 0.2, 0, 70))
+                .addColumnStatistic(rightInput, ColumnStatistic.unknown())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(leftInput, rightInput));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertTrue(actualStatistic.isUnknown());
+    }
+
+    @Test
+    public void testCoalesceReturnsCombinedStatisticsWhenAllThreeInputsAreKnown() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN more than two inputs where all have known stats THEN output stat is known END
+
+        final int rowCount = 100;
+        final int input1DistinctValues = 30;
+        final int input2DistinctValues = 20;
+        final int input3DistinctValues = 10;
+        final double input1NullFraction = 0.2;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.4;
+        final int input1Min = -100;
+        final int input1Max = 100;
+        final int input2Min = 100;
+        final int input2Max = 200;
+        final int input3Min = 0;
+        final int input3Max = 50;
+
+        final double expectedDistinctValues = 60;
+        final double expectedNullFraction = 0.04;
+        final double expectedMin = -100;
+        final double expectedMax = 200;
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1,
+                        new ColumnStatistic(input1Min, input1Max, input1NullFraction, 0, input1DistinctValues))
+                .addColumnStatistic(input2,
+                        new ColumnStatistic(input2Min, input2Max, input2NullFraction, 0, input2DistinctValues))
+                .addColumnStatistic(input3,
+                        new ColumnStatistic(input3Min, input3Max, input3NullFraction, 0, input3DistinctValues))
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertFalse(actualStatistic.isUnknown());
+        Assertions.assertEquals(expectedNullFraction, actualStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testCalculateMcvForKnownBinaryInputs() {
+        // Given COALESCE(mcvLeft, mcvRight) where both inputs have MCV histograms
+        // CASE WHEN mcvLeft IS NOT NULL THEN mcvLeft ELSE mcvRight END
+
+        final long rowCount = 1000;
+        final double leftNullFraction = 0.3;
+        final double rightNullFraction = 0.5;
+        final Map<String, Long> leftMcv = Map.of("A", 400L, "B", 200L);
+        final Map<String, Long> rightMcv = Map.of("X", 300L, "A", 100L);
+
+        // Left MCVs pass through unscaled; right MCVs are scaled by the left null fraction (0.3) and merged by key.
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 430L,
+                "B", 200L,
+                "X", 90L);
+
+        final ColumnRefOperator mcvLeft = new ColumnRefOperator(4, IntegerType.INT, "mcvLeft", true);
+        final ColumnRefOperator mcvRight = new ColumnRefOperator(5, IntegerType.INT, "mcvRight", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(mcvLeft, ColumnStatistic.builder()
+                        .setNullsFraction(leftNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), leftMcv))
+                        .build())
+                .addColumnStatistic(mcvRight, ColumnStatistic.builder()
+                        .setNullsFraction(rightNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), rightMcv))
+                        .build())
+                .build();
+        final CallOperator coalesce =
+                new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT, Lists.newArrayList(mcvLeft, mcvRight));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvCalculationWithMissingMcv() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN one input has no mcv THEN mcv calculation does not account for the missing input END
+
+        final long rowCount = 1000;
+        final double input1NullFraction = 0.3;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.2;
+        final Map<String, Long> input1Mcv = Map.of("A", 400L, "B", 200L);
+        final Map<String, Long> input3Mcv = Map.of("Y", 50L);
+
+        // input1 passes through unscaled; input2 has no histogram so it adds nothing, but its null fraction
+        // still scales later inputs, so input3 is scaled by 0.3 * 0.5 = 0.15.
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 400L,
+                "B", 200L,
+                "Y", 8L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(5)
+                        .build())
+                .addColumnStatistic(input3, ColumnStatistic.builder()
+                        .setNullsFraction(input3NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
     public void testWeek() {
         ColumnRefOperator left = new ColumnRefOperator(0, DateType.DATETIME, "left", true);
         ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);

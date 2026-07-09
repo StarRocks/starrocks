@@ -967,6 +967,8 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue();
                     maxValue = left.getMaxValue();
                     break;
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(List.of(left, right), callOperator);
                 case FunctionSet.WEEK:
                     minValue = 0;
                     maxValue = 53;
@@ -1019,6 +1021,62 @@ public class ExpressionStatisticCalculator {
             transformHistogramForBinary(callOperator, left, right).ifPresent(builder::setHistogram);
             return builder.build();
 
+        }
+
+        private ColumnStatistic calcCoalesceStats(List<ColumnStatistic> inputs, CallOperator callOperator) {
+            double nullsFraction = inputs.stream()
+                    .mapToDouble(ColumnStatistic::getNullsFraction)
+                    .reduce(1.0, (accumulator, nullFraction) -> accumulator * nullFraction);
+            double distinctValues = Math.min(rowCount,
+                    inputs.stream().mapToDouble(ColumnStatistic::getDistinctValuesCount).sum());
+            double coalesceMin = Double.NEGATIVE_INFINITY;
+            double coalesceMax = Double.POSITIVE_INFINITY;
+            if (callOperator.getChildren().stream().allMatch(c -> c.getType().isNumericType())) {
+                coalesceMin = inputs.stream()
+                        .mapToDouble(ColumnStatistic::getMinValue).min().orElse(Double.NEGATIVE_INFINITY);
+                coalesceMax = inputs.stream()
+                        .mapToDouble(ColumnStatistic::getMaxValue).max().orElse(Double.POSITIVE_INFINITY);
+            }
+            return ColumnStatistic.builder()
+                    .setMinValue(coalesceMin)
+                    .setMaxValue(coalesceMax)
+                    .setNullsFraction(nullsFraction)
+                    .setAverageRowSize(callOperator.getType().getTypeSize())
+                    .setDistinctValuesCount(distinctValues)
+                    .setHistogram(new Histogram(Collections.emptyList(), buildCoalesceMcv(inputs)))
+                    .build();
+        }
+
+        private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
+            Map<String, Long> coalesceMcv = new HashMap<>();
+            long maxRows = Math.round(rowCount);
+            long mcvTotalRowsAccountedFor = 0;
+            double weight = 1.0;
+            for (ColumnStatistic input : inputs) {
+                final double nullsFraction = input.getNullsFraction();
+                final var histogram = input.getHistogram();
+                if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
+                    for (final var entry : histogram.getMCV().entrySet()) {
+                        long scaled = Math.round(entry.getValue() * weight);
+                        if (scaled <= 0) {
+                            continue;
+                        }
+                        if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
+                            coalesceMcv.merge(entry.getKey(), maxRows - mcvTotalRowsAccountedFor, Long::sum);
+                            return coalesceMcv;
+                        }
+                        coalesceMcv.merge(entry.getKey(), scaled, Long::sum);
+                        mcvTotalRowsAccountedFor += scaled;
+                    }
+                }
+                // A never-null column means every later column is unreachable.
+                if (nullsFraction == 0) {
+                    break;
+                }
+                weight *= nullsFraction;
+            }
+
+            return coalesceMcv;
         }
 
         private ColumnStatistic calculateDateTruncStats(CallOperator callOperator, ColumnStatistic dateStatistic) {
@@ -1155,6 +1213,8 @@ public class ExpressionStatisticCalculator {
             double averageRowSize;
             double nullsFraction;
             switch (callOperator.getFnName().toLowerCase()) {
+                case FunctionSet.COALESCE:
+                    return calcCoalesceStats(childColumnStatisticList, callOperator);
                 case FunctionSet.IF:
                     final var condStat = childColumnStatisticList.get(0);
                     final var thenStat = childColumnStatisticList.get(1);
@@ -1684,7 +1744,6 @@ public class ExpressionStatisticCalculator {
 
             return ColumnStatistic.unknown();
         }
-
 
         private static ColumnStatistic getArrayMapLambdaStats(CallOperator callOperator,
                                                               LambdaFunctionOperator lambda,
