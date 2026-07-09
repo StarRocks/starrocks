@@ -232,6 +232,7 @@ import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -9769,6 +9770,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 loadPropertyList.add(importColumnsStmt);
             }
 
+            if (loadPropertiesContext.includeMetadata() != null) {
+                loadPropertyList.add(visit(loadPropertiesContext.includeMetadata()));
+            }
+
             if (loadPropertiesContext.expression() != null) {
                 Expr where = (Expr) visit(loadPropertiesContext.expression());
                 loadPropertyList.add(new ImportWhereStmt(where, where.getPos()));
@@ -9799,6 +9804,27 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             columns.add(columnDesc);
         }
         return new ImportColumnsStmt(columns, createPos(importColumnsContext));
+    }
+
+    @Override
+    public ParseNode visitIncludeMetadata(
+            com.starrocks.sql.parser.StarRocksParser.IncludeMetadataContext context) {
+        List<ImportMetadataStmt.Item> items = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.MetadataItemContext itemContext : context.metadataItem()) {
+            com.starrocks.sql.parser.StarRocksParser.MetaKeyContext metaKeyContext = itemContext.metaKey();
+            // metaKey is KEY | PARTITION | identifier; the KEY/PARTITION tokens are read via getText(),
+            // a free-form key (OFFSET, HEADERS, MESSAGE_ID, ...) via the identifier (strips backquotes).
+            // Case is normalized later, at the META_KEYS lookup in RoutineLoadMetadata.validateIncludeMetadata.
+            String key;
+            if (metaKeyContext.identifier() != null) {
+                key = ((Identifier) visit(metaKeyContext.identifier())).getValue();
+            } else {
+                key = metaKeyContext.getText();
+            }
+            String alias = ((Identifier) visit(itemContext.alias)).getValue();
+            items.add(new ImportMetadataStmt.Item(key, alias, createPos(itemContext)));
+        }
+        return new ImportMetadataStmt(items, createPos(context));
     }
 
     private Map<String, String> getJobProperties(

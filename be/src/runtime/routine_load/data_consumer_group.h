@@ -34,11 +34,63 @@
 
 #pragma once
 
+<<<<<<< HEAD:be/src/runtime/routine_load/data_consumer_group.h
 #include "runtime/routine_load/data_consumer.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
+=======
+#include <cstdint>
+#include <string>
+
+#include "base/concurrency/blocking_queue.hpp"
+#include "common/thread/priority_thread_pool.hpp"
+#include "data_workflows/load/routine_load/data_consumer.h"
+>>>>>>> 0796ea6077 ([Enhancement] Expose Kafka/Pulsar message metadata via an INCLUDE METADATA clause in Routine Load (#73840)):be/src/data_workflows/load/routine_load/data_consumer_group.h
 
 namespace starrocks {
+
+// Recover a Pulsar message's partition index from its topic name. The Pulsar C++ Message API exposes
+// no partition number at all -- only getTopicName() -- so the partition has to be parsed out of the
+// per-partition name Pulsar gives the Nth partition of a partitioned topic: "<topic>-partition-N".
+// (the TOPIC metadata does not go through here; it is taken straight from the job's configured logical
+// topic, so only the index is parsed below.)
+//
+// The "-partition-N" suffix on its own is ambiguous: Pulsar lets you create a standalone
+// non-partitioned topic literally named "<x>-partition-<n>" (it only refuses the name when a
+// partitioned topic <x> with more than n partitions already exists), and that topic's getTopicName()
+// is byte-for-byte identical to partition n of a partitioned topic <x>. The job's configured logical
+// topic is the only thing that tells the two apart, so we anchor on it: a trailing "-partition-N" is a
+// real partition only when stripping it leaves exactly the configured topic.
+//
+// getTopicName() is the fully-qualified canonical name ("persistent://tenant/ns/<local-name>"), while
+// the configured topic may be the short local form ("<local-name>"). Pulsar only prepends the
+// scheme/tenant/namespace defaults and never rewrites the local name, so the configured topic is
+// always a suffix of the canonical name aligned on a "/" -- hence the match accepts either an exact
+// equality or a match at a leading "/" boundary.
+//
+// Returns the partition index, or -1 when message_topic is not a partition of logical_topic (the
+// scanner renders -1 as SQL NULL).
+int32_t parse_pulsar_partition_index(const std::string& logical_topic, const std::string& message_topic);
+
+class StreamMessageMeta;
+
+// Populate a StreamMessageMeta from a Kafka message for the INCLUDE METADATA clause. partition/offset
+// are always set (the scanner stamps them into rejected-row error logs even when the job selects no
+// metadata column); topic/timestamp/key/headers are attached only when need_meta is set, and key/headers
+// are further gated by need_key/need_headers so a job that selects no KEY/HEADERS column never pays to
+// copy them. Extracted from start_all() so the message->meta mapping is unit-testable without a broker.
+void build_kafka_message_meta(RdKafka::Message& msg, const std::string& topic, bool need_meta, bool need_key,
+                              bool need_headers, StreamMessageMeta* meta);
+
+#ifndef __APPLE__
+// Pulsar counterpart of build_kafka_message_meta, called only when the job declares a metadata column
+// (need_meta). topic is the configured logical topic (surfaced as TOPIC); message_topic is the
+// per-message topic name (the caller reads it via msg.getTopicName() -- passed in rather than read here
+// because getTopicName() dereferences a null impl on a locally-built pulsar::Message) and the PARTITION
+// index is parsed out of it. key/headers are gated by need_key/need_headers.
+void build_pulsar_message_meta(const pulsar::Message& msg, const std::string& topic, const std::string& message_topic,
+                               bool need_key, bool need_headers, StreamMessageMeta* meta);
+#endif
 
 // data consumer group saves a group of data consumers.
 // These data consumers share the same stream load pipe.

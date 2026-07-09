@@ -145,6 +145,11 @@ set(EXEC_FILES
         ./exec/file_scanner/json_scanner_test.cpp
         ./exec/file_scanner/orc_scanner_test.cpp
         ./exec/file_scanner/parquet_scanner_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/file_scanner/arrow_scanner_test.cpp
+        ./exec/file_scanner/stream_source_meta_test.cpp
+>>>>>>> 0796ea6077 ([Enhancement] Expose Kafka/Pulsar message metadata via an INCLUDE METADATA clause in Routine Load (#73840))
         ./exec/hdfs_scanner/cache_select_scanner_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_json_test.cpp
         ./exec/hdfs_scanner/hdfs_scanner_test.cpp

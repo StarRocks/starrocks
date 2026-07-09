@@ -807,7 +807,12 @@ public class StreamLoadScanNodeTest {
             Table table = new Table(1L, "table0", TableType.OLAP, columns);
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();
             columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
+<<<<<<< HEAD
             Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList());
+=======
+            Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList(),
+                    false, false, null);
+>>>>>>> 0796ea6077 ([Enhancement] Expose Kafka/Pulsar message metadata via an INCLUDE METADATA clause in Routine Load (#73840))
         });
     }
 }

@@ -24,6 +24,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.persist.ColumnIdExpr;
@@ -35,6 +36,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.ArrayExpr;
@@ -45,8 +47,15 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TOpType;
+import com.starrocks.thrift.TRoutineLoadMetaColumn;
+import com.starrocks.thrift.TStreamSourceMetaKind;
+>>>>>>> 0796ea6077 ([Enhancement] Expose Kafka/Pulsar message metadata via an INCLUDE METADATA clause in Routine Load (#73840))
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BitmapType;
 import com.starrocks.type.DateType;
@@ -139,6 +148,94 @@ public class LoadTest {
         Assertions.assertEquals(2, slotDescByName.size());
         SlotDescriptor c1SlotDesc = slotDescByName.get(c1Name);
         Assertions.assertTrue(c1SlotDesc.getColumn().getType().equals(VarcharType.VARCHAR));
+    }
+
+    // A routine-load INCLUDE METADATA clause appends each alias as a hidden source column, fixed to the
+    // metadata kind's type (VARCHAR/INT/BIGINT/MAP) and emitted into the scan params as a
+    // TRoutineLoadMetaColumn (slot id + kind) for the BE scanner to fill.
+    @Test
+    public void testInitColumnsWithSourceMetadata() throws StarRocksException {
+        columns.add(new Column("id", IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc("id", null));
+        columns.add(new Column("payload", VarcharType.VARCHAR, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc("payload", null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                table.getColumn("id");
+                result = columns.get(0);
+                table.getColumn("payload");
+                result = columns.get(1);
+                // Metadata aliases are not table columns; return null explicitly (a mocked getColumn
+                // otherwise cascades to a non-null stub and trips the alias/table-column collision check).
+                table.getColumn("mt_topic");
+                result = null;
+                table.getColumn("mt_part");
+                result = null;
+                table.getColumn("mt_off");
+                result = null;
+                table.getColumn("mt_hdr");
+                result = null;
+            }
+        };
+
+        // INCLUDE METADATA(TOPIC AS mt_topic, PARTITION AS mt_part, OFFSET AS mt_off, HEADERS AS mt_hdr)
+        List<ImportMetadataStmt.Item> items = Lists.newArrayList(
+                new ImportMetadataStmt.Item("TOPIC", "mt_topic", NodePosition.ZERO),
+                new ImportMetadataStmt.Item("PARTITION", "mt_part", NodePosition.ZERO),
+                new ImportMetadataStmt.Item("OFFSET", "mt_off", NodePosition.ZERO),
+                new ImportMetadataStmt.Item("HEADERS", "mt_hdr", NodePosition.ZERO));
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, true, false, "KAFKA",
+                new ImportMetadataStmt(items));
+
+        // Hidden metadata slots are typed from the kind, before expression analysis.
+        Assertions.assertEquals(VarcharType.VARCHAR, slotDescByName.get("mt_topic").getColumn().getType());
+        Assertions.assertEquals(IntegerType.INT, slotDescByName.get("mt_part").getColumn().getType());
+        Assertions.assertEquals(IntegerType.BIGINT, slotDescByName.get("mt_off").getColumn().getType());
+        Assertions.assertTrue(slotDescByName.get("mt_hdr").getColumn().getType().isMapType());
+
+        // One TRoutineLoadMetaColumn per alias, each with a slot id and its kind.
+        List<TRoutineLoadMetaColumn> metaCols = params.getStream_source_meta_columns();
+        Assertions.assertEquals(4, metaCols.size());
+        List<TStreamSourceMetaKind> kinds = Lists.newArrayList();
+        for (TRoutineLoadMetaColumn metaCol : metaCols) {
+            Assertions.assertTrue(metaCol.isSetSlot_id());
+            kinds.add(metaCol.getKind());
+        }
+        Assertions.assertTrue(kinds.contains(TStreamSourceMetaKind.TOPIC));
+        Assertions.assertTrue(kinds.contains(TStreamSourceMetaKind.PARTITION));
+        Assertions.assertTrue(kinds.contains(TStreamSourceMetaKind.OFFSET));
+        Assertions.assertTrue(kinds.contains(TStreamSourceMetaKind.HEADERS));
+    }
+
+    // A metadata alias equal to a destination-table column is rejected in initColumns, where the table
+    // (unavailable at CREATE-time validation) is present.
+    @Test
+    public void testInitColumnsMetadataAliasCollidesWithTableColumn() {
+        columns.add(new Column("id", IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc("id", null));
+
+        new Expectations() {
+            {
+                table.getColumn("id");
+                result = columns.get(0);
+                table.getName();
+                result = "test";
+                minTimes = 0;
+            }
+        };
+
+        List<ImportMetadataStmt.Item> items = Lists.newArrayList(
+                new ImportMetadataStmt.Item("TOPIC", "id", NodePosition.ZERO));
+
+        Assertions.assertThrows(DdlException.class,
+                () -> Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                        slotDescByName, params, true, true, columnsFromPath, true, false, "KAFKA",
+                        new ImportMetadataStmt(items)));
     }
 
     @Test
@@ -616,6 +713,6 @@ public class LoadTest {
                 "missing dependency column for generated column c3",
                 () -> Load.initColumns(localTable, localColumnExprs, null, localExprsByName, localDescTable,
                         localSrcTupleDesc, localSlotDescByName, new TBrokerScanRangeParams(), true, true,
-                        Lists.newArrayList(), false, true));
+                        Lists.newArrayList(), false, true, null));
     }
 }
