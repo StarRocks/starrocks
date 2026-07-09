@@ -22,7 +22,7 @@ ADD_BE_LIB(Connector
         file_scan_metrics.cpp
         changes_connector.cpp
         iceberg_connector.cpp
-        connector_chunk_sink.cpp
+        partitioned_connector_chunk_sink.cpp
         file_chunk_sink.cpp
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp

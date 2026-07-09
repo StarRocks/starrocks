@@ -55,8 +55,8 @@ DataSourceProviderPtr HiveConnector::create_data_source_provider(ConnectorScanNo
     return std::make_unique<HiveDataSourceProvider>(scan_node, plan_node);
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> HiveConnector::create_sink_provider(
-        ConnectorSinkProviderType type, std::shared_ptr<ConnectorChunkSinkContext> context) const {
+StatusOr<std::unique_ptr<ConnectorSinkProvider>> HiveConnector::create_sink_provider(
+        ConnectorSinkProviderType type, std::shared_ptr<ConnectorSinkContext> context) const {
     if (type != ConnectorSinkProviderType::DATA) {
         return Status::NotSupported("Hive connector only supports data sink provider");
     }
@@ -64,7 +64,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSinkProvider>> HiveConnector::create_sink
     if (ctx == nullptr) {
         return Status::InternalError("Hive connector requires HiveChunkSinkContext");
     }
-    std::unique_ptr<ConnectorChunkSinkProvider> provider = std::make_unique<HiveChunkSinkProvider>(std::move(ctx));
+    std::unique_ptr<ConnectorSinkProvider> provider = std::make_unique<HiveChunkSinkProvider>(std::move(ctx));
     return provider;
 }
 

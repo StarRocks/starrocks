@@ -14,14 +14,17 @@
 
 #pragma once
 
-#include <fmt/format.h>
-
+#include <functional>
 #include <map>
+#include <shared_mutex>
+#include <string>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
+#include "connector_primitive/connector_sink.h"
 #include "connector_primitive/connector_sink_profile.h"
 #include "runtime/runtime_fwd.h"
 
@@ -37,40 +40,38 @@ class SinkOperatorMemoryManager;
 
 using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
 
-class ConnectorChunkSink {
+class PartitionedConnectorChunkSink : public ConnectorSink {
 public:
-    ConnectorChunkSink(std::vector<std::string> partition_columns,
-                       std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
-                       bool support_null_partition);
+    PartitionedConnectorChunkSink(std::vector<std::string> partition_columns,
+                                  std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+                                  std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
+                                  RuntimeState* state, bool support_null_partition);
 
-    SinkOperatorMemoryManager* op_mem_mgr() const { return _op_mem_mgr; }
+    SinkOperatorMemoryManager* op_mem_mgr() const override { return _op_mem_mgr; }
 
-    // Expose the writer list so composite sinks can register it with the
-    // outer SinkOperatorMemoryManager for aggregated memory accounting.
-    std::vector<PartitionChunkWriterPtr>* writers() { return &_writers; }
+    ~PartitionedConnectorChunkSink() override = default;
 
-    virtual ~ConnectorChunkSink() = default;
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                SinkMemoryManager* sink_mem_mgr) override;
 
-    virtual Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
-                        SinkMemoryManager* sink_mem_mgr);
+    Status add(const ChunkPtr& chunk) override;
 
-    virtual Status add(const ChunkPtr& chunk);
+    Status finish() override;
 
-    virtual Status finish();
+    void rollback() override;
 
-    virtual void rollback();
-
-    virtual bool is_finished();
+    bool is_finished() override;
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
     Status write_partition_chunk(const std::string& partition, const std::vector<int8_t>& partition_field_null_list,
                                  const ChunkPtr& chunk);
 
-    Status status();
+    Status status() override;
 
     void set_status(const Status& status);
+
+    void register_memory_candidates(SinkOperatorMemoryManager* op_mem_mgr) override;
 
 protected:
     void push_rollback_action(const std::function<void()>& action);
@@ -97,18 +98,5 @@ protected:
     RuntimeProfile* _profile = nullptr;
     ConnectorSinkProfile* _sink_profile = nullptr;
 };
-
-struct ConnectorChunkSinkContext {
-    virtual ~ConnectorChunkSinkContext() = default;
-};
-
-class ConnectorChunkSinkProvider {
-public:
-    virtual ~ConnectorChunkSinkProvider() = default;
-
-    virtual StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) = 0;
-};
-
-using ConnectorChunkSinkProviderPtr = std::unique_ptr<ConnectorChunkSinkProvider>;
 
 } // namespace starrocks::connector

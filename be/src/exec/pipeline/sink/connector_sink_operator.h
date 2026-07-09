@@ -17,8 +17,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "connector/connector_chunk_sink.h"
-#include "connector/utils.h"
+#include "connector_primitive/connector_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
@@ -30,7 +29,7 @@ namespace starrocks::pipeline {
 class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                          std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
+                          std::unique_ptr<connector::ConnectorSink> connector_sink,
                           std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
                           FragmentContext* fragment_context);
 
@@ -57,7 +56,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
+    std::unique_ptr<connector::ConnectorSink> _connector_sink;
     std::unique_ptr<formats::AsyncFlushStreamPoller> _io_poller;
     std::shared_ptr<connector::SinkMemoryManager> _sink_mem_mgr;
 
@@ -68,7 +67,7 @@ private:
 
 class ConnectorSinkOperatorFactory final : public OperatorFactory {
 public:
-    ConnectorSinkOperatorFactory(int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
+    ConnectorSinkOperatorFactory(int32_t id, std::unique_ptr<connector::ConnectorSinkProvider> data_sink_provider,
                                  FragmentContext* fragment_context);
 
     ~ConnectorSinkOperatorFactory() override = default;
@@ -76,7 +75,7 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    std::unique_ptr<connector::ConnectorChunkSinkProvider> _data_sink_provider;
+    std::unique_ptr<connector::ConnectorSinkProvider> _data_sink_provider;
     std::shared_ptr<connector::SinkMemoryManager> _sink_mem_mgr;
     FragmentContext* _fragment_context;
 };

@@ -37,8 +37,8 @@ FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                              std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                              RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, true) {}
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, true) {}
 
 FileChunkSinkProvider::FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
 
@@ -52,7 +52,7 @@ void FileChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+StatusOr<std::unique_ptr<ConnectorSink>> FileChunkSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =

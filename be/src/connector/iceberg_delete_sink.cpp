@@ -49,8 +49,8 @@ IcebergDeleteSink::IcebergDeleteSink(std::vector<std::string> partition_columns,
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                                      std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                                      RuntimeState* state, std::unordered_map<std::string, TExprNode> column_slot_map)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, true),
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, true),
           _transform_exprs(std::move(transform_exprs)),
           _column_slot_map(std::move(column_slot_map)) {}
 
@@ -217,7 +217,7 @@ bool IcebergDeleteSink::is_finished() {
 //   driver_id - The driver ID for this sink instance
 //
 // Returns the created sink on success, or an error if creation fails.
-StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergDeleteSinkProvider::create_chunk_sink(int32_t driver_id) {
+StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     if (ctx == nullptr) {
         return Status::InternalError("IcebergDeleteSinkProvider: context is not IcebergDeleteSinkContext");

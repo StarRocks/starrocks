@@ -21,7 +21,6 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/integer_util.h"
-#include "connector/connector_chunk_sink.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/partition_chunk_writer_memory_manager.h"
 #include "exec/exec_env.h"
