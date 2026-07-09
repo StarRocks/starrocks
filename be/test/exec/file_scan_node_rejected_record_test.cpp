@@ -96,7 +96,7 @@ TEST(CheckRejectedRecordFormatSupportTest, ErrorMessageMatchesCanonicalString) {
     auto st = check_rejected_record_format_support(true, TFileFormatType::FORMAT_AVRO);
     EXPECT_FALSE(st.ok());
     // Both file_scan_node.cpp and file_connector.cpp use the same message.
-    EXPECT_EQ(std::string("only support csv/json/parquet/orc format to log rejected record"),
+    EXPECT_EQ(std::string("only support csv/json/parquet/orc/arrow format to log rejected record"),
               std::string(st.message()));
 }
 

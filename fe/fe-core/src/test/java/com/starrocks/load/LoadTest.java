@@ -311,6 +311,9 @@ public class LoadTest {
         Assertions.assertEquals(TFileFormatType.FORMAT_CSV_DEFLATE, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.deflate"));
         Assertions.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file.zst"));
         Assertions.assertEquals(TFileFormatType.FORMAT_CSV_PLAIN, Load.getFormatType("csv", "hdfs://127.0.0.1:9000/some_file"));
+        Assertions.assertEquals(TFileFormatType.FORMAT_ARROW, Load.getFormatType("arrow", "hdfs://127.0.0.1:9000/some_file"));
+        Assertions.assertEquals(TFileFormatType.FORMAT_ARROW, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.arrow"));
+        Assertions.assertEquals(TFileFormatType.FORMAT_ARROW, Load.getFormatType("", "hdfs://127.0.0.1:9000/some_file.ipc"));
     }
 
     @Test

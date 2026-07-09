@@ -28,6 +28,7 @@
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "exec/exec_env.h"
+#include "exec/file_scanner/arrow_scanner.h"
 #include "exec/file_scanner/avro_cpp_scanner.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exec/file_scanner/orc_scanner.h"
@@ -311,6 +312,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         }
     } else if (range_desc.format_type == TFileFormatType::FORMAT_AVRO) {
         compression = CompressionTypePB::NO_COMPRESSION;
+    } else if (range_desc.format_type == TFileFormatType::FORMAT_ARROW) {
+        compression = CompressionTypePB::NO_COMPRESSION;
     } else {
         return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(range_desc.format_type));
     }
@@ -503,6 +506,10 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
 
         case TFileFormatType::FORMAT_AVRO:
             p_scanner = std::make_unique<AvroCppScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+        case TFileFormatType::FORMAT_ARROW:
+            p_scanner = std::make_unique<ArrowScanner>(state, &profile, sample_range, &counter, true);
             break;
 
         default:
