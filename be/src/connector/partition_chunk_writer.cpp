@@ -22,7 +22,6 @@
 #include "compute_env/load_spill/load_spill_block_manager.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "connector/connector_sink_executor.h"
-#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"

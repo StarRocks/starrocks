@@ -20,7 +20,6 @@
 #include "connector/connector_chunk_sink.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/iceberg_delete_sink.h"
-#include "connector/sink_memory_manager.h"
 
 namespace starrocks::connector {
 

@@ -26,7 +26,7 @@
 #include "connector/builtin_connector_registry.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
-#include "connector/sink_memory_manager.h"
+#include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
