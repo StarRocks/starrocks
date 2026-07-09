@@ -743,7 +743,7 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testCalculateMcvForKnownBinaryInputs() {
         // Given COALESCE(mcvLeft, mcvRight) where both inputs have MCV histograms
-        // CASE WHEN mcvLeft IS NOT NULL THEN mcvLeft ELSE mcvRight END
+        // CASE WHEN both inputs are NOT NULL THEN scale and weight MCV END
 
         final long rowCount = 1000;
         final double leftNullFraction = 0.3;
@@ -822,6 +822,135 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
         final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
                 Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalingWhenMaxRowCountIsReached() {
+        // Given COALESCE(colA, colB)
+        // CASE WHEN accumulated MCV rows reach the row count THEN scale the remaining input's MCVs to fit END
+
+        final int rowCount = 300;
+        final double colANullFraction = 0.3;
+        final double colBNullFraction = 0.0;
+        final Map<String, Long> colAMcv = Map.of("a", 100L, "b", 100L);
+        final Map<String, Long> colBMcv = Map.of("c", 1000L, "d", 3000L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "a", 100L,
+                "b", 100L,
+                "c", 25L,
+                "d", 75L);
+
+        final ColumnRefOperator colA = new ColumnRefOperator(0, IntegerType.INT, "colA", true);
+        final ColumnRefOperator colB = new ColumnRefOperator(1, IntegerType.INT, "colB", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(colA, ColumnStatistic.builder()
+                        .setNullsFraction(colANullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), colAMcv))
+                        .build())
+                .addColumnStatistic(colB, ColumnStatistic.builder()
+                        .setNullsFraction(colBNullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), colBMcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(colA, colB));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalesRemainingInputsAcrossColumnsWhenRowCountReached() {
+        // Given COALESCE(input1, input2, input3)
+        // CASE WHEN the budget is reached mid-way THEN scale every remaining input's MCVs across columns END
+
+        final int rowCount = 100;
+        final double input1NullFraction = 0.5;
+        final double input2NullFraction = 0.5;
+        final double input3NullFraction = 0.0;
+        final Map<String, Long> input1Mcv = Map.of("P", 40L);
+        final Map<String, Long> input2Mcv = Map.of("B", 160L, "C", 240L);
+        final Map<String, Long> input3Mcv = Map.of("D", 160L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "P", 40L,
+                "B", 20L,
+                "C", 30L,
+                "D", 10L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final ColumnRefOperator input3 = new ColumnRefOperator(2, IntegerType.INT, "input3", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input2Mcv))
+                        .build())
+                .addColumnStatistic(input3, ColumnStatistic.builder()
+                        .setNullsFraction(input3NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input3Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2, input3));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
+
+        Assertions.assertNotNull(actualStatistic.getHistogram());
+        Assertions.assertEquals(expectedMcv, actualStatistic.getHistogram().getMCV());
+    }
+
+    @Test
+    public void testCoalesceMcvScalesDownFirstColumnWhenItAloneExceedsRowCount() {
+        // Given COALESCE(input1, input2) where input1 is never null so input2 is unreachable
+        // CASE WHEN the first input's MCVs alone exceed the row count THEN scale them down to fit END
+
+        final int rowCount = 100;
+        final double input1NullFraction = 0.0;
+        final double input2NullFraction = 0.0;
+        final Map<String, Long> input1Mcv = Map.of("A", 300L, "B", 100L);
+        final Map<String, Long> input2Mcv = Map.of("Z", 9999L);
+
+        final Map<String, Long> expectedMcv = Map.of(
+                "A", 75L,
+                "B", 25L);
+
+        final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
+        final ColumnRefOperator input2 = new ColumnRefOperator(1, IntegerType.INT, "input2", true);
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(input1, ColumnStatistic.builder()
+                        .setNullsFraction(input1NullFraction)
+                        .setDistinctValuesCount(2)
+                        .setHistogram(new Histogram(Collections.emptyList(), input1Mcv))
+                        .build())
+                .addColumnStatistic(input2, ColumnStatistic.builder()
+                        .setNullsFraction(input2NullFraction)
+                        .setDistinctValuesCount(1)
+                        .setHistogram(new Histogram(Collections.emptyList(), input2Mcv))
+                        .build())
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.BIGINT,
+                Lists.newArrayList(input1, input2));
 
         final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(coalesce, statistics);
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
@@ -164,6 +163,7 @@ public class ExpressionStatisticCalculator {
             }
             return builder.build();
         }
+
         @Override
         public ColumnStatistic visitCompoundPredicate(CompoundPredicateOperator operator, Void context) {
             if (inputStatistics == null || Double.isNaN(inputStatistics.getOutputRowCount())) {
@@ -269,14 +269,13 @@ public class ExpressionStatisticCalculator {
             return builder.build();
         }
 
-
-
         private static double clampFraction(double value) {
             if (Double.isNaN(value)) {
                 return 0.0;
             }
             return Math.max(0.0, Math.min(1.0, value));
         }
+
         @Override
         public ColumnStatistic visitBinaryPredicate(BinaryPredicateOperator operator, Void context) {
             // Constant binary predicates can be introduced after the normal scalar constant-folding pass,
@@ -337,7 +336,6 @@ public class ExpressionStatisticCalculator {
                         .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
             }
 
-
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
             }
@@ -382,6 +380,7 @@ public class ExpressionStatisticCalculator {
                     return Optional.empty();
             }
         }
+
         @Override
         public ColumnStatistic visitCaseWhenOperator(CaseWhenOperator caseWhenOperator, Void context) {
             // 1. compute children column statistics
@@ -419,7 +418,6 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
             final var inputStat = operator.getChild(0).accept(this, context);
-
 
             Map<String, Long> mcvs = new HashMap<>();
             if (!inputStat.isUnknown()) {
@@ -1050,23 +1048,35 @@ public class ExpressionStatisticCalculator {
         private Map<String, Long> buildCoalesceMcv(List<ColumnStatistic> inputs) {
             Map<String, Long> coalesceMcv = new HashMap<>();
             long maxRows = Math.round(rowCount);
+            List<Map.Entry<String, Double>> contributions = collectWeightedCoalesceMcv(inputs);
             long mcvTotalRowsAccountedFor = 0;
+            for (int i = 0; i < contributions.size(); i++) {
+                final var contribution = contributions.get(i);
+                long scaled = Math.round(contribution.getValue());
+                if (scaled <= 0) {
+                    continue;
+                }
+                if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
+                    scaleRemainingMcvs(contributions.subList(i, contributions.size()),
+                            maxRows - mcvTotalRowsAccountedFor, coalesceMcv);
+                    return coalesceMcv;
+                }
+                coalesceMcv.merge(contribution.getKey(), scaled, Long::sum);
+                mcvTotalRowsAccountedFor += scaled;
+            }
+
+            return coalesceMcv;
+        }
+
+        private List<Map.Entry<String, Double>> collectWeightedCoalesceMcv(List<ColumnStatistic> inputs) {
+            List<Map.Entry<String, Double>> contributions = new ArrayList<>();
             double weight = 1.0;
             for (ColumnStatistic input : inputs) {
                 final double nullsFraction = input.getNullsFraction();
                 final var histogram = input.getHistogram();
                 if (nullsFraction < 1 && histogram != null && histogram.getMCV() != null) {
                     for (final var entry : histogram.getMCV().entrySet()) {
-                        long scaled = Math.round(entry.getValue() * weight);
-                        if (scaled <= 0) {
-                            continue;
-                        }
-                        if (mcvTotalRowsAccountedFor + scaled >= maxRows) {
-                            coalesceMcv.merge(entry.getKey(), maxRows - mcvTotalRowsAccountedFor, Long::sum);
-                            return coalesceMcv;
-                        }
-                        coalesceMcv.merge(entry.getKey(), scaled, Long::sum);
-                        mcvTotalRowsAccountedFor += scaled;
+                        contributions.add(Map.entry(entry.getKey(), entry.getValue() * weight));
                     }
                 }
                 // A never-null column means every later column is unreachable.
@@ -1075,8 +1085,24 @@ public class ExpressionStatisticCalculator {
                 }
                 weight *= nullsFraction;
             }
+            return contributions;
+        }
 
-            return coalesceMcv;
+        private void scaleRemainingMcvs(List<Map.Entry<String, Double>> remaining, long remainingBudget,
+                                        Map<String, Long> targetMcv) {
+            if (remainingBudget <= 0) {
+                return;
+            }
+            double totalWeighted = remaining.stream().mapToDouble(Map.Entry::getValue).sum();
+            if (totalWeighted <= 0) {
+                return;
+            }
+            for (final var entry : remaining) {
+                long scaled = Math.round(remainingBudget * entry.getValue() / totalWeighted);
+                if (scaled > 0) {
+                    targetMcv.merge(entry.getKey(), scaled, Long::sum);
+                }
+            }
         }
 
         private ColumnStatistic calculateDateTruncStats(CallOperator callOperator, ColumnStatistic dateStatistic) {
@@ -1497,7 +1523,7 @@ public class ExpressionStatisticCalculator {
          * For x +/- const we will:
          * - transform MCV keys by applying the exact operation
          * - shift bucket bounds for x +/- const when the mapping is monotonic (x +/- const)
-         *   (for const - x we transform buckets by reversing order)
+         * (for const - x we transform buckets by reversing order)
          */
         private Optional<Histogram> transformHistogramForBinary(
                 CallOperator callOperator, ColumnStatistic leftStats, ColumnStatistic rightStats) {
@@ -1573,9 +1599,9 @@ public class ExpressionStatisticCalculator {
                             : deltaOpt.getAsDouble();
                     if (baseHist.getBuckets() != null) {
                         newBuckets = baseHist.getBuckets().stream()
-                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
-                                    b.getCount(), b.getUpperRepeats()))
-                            .collect(Collectors.toList());
+                                .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                        b.getCount(), b.getUpperRepeats()))
+                                .collect(Collectors.toList());
                     }
                 }
             } else {
