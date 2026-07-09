@@ -49,17 +49,19 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Direct unit tests for the range-aware branches of {@link OutputPropertyDeriver}:
- * scan rebuild with partitions, Repeat preserve/drop, projection remap.
- * {@code visitPhysicalJoin} range emission is exercised indirectly via
- * {@link ChildOutputPropertyGuarantorRangeTest}; here we keep the tests
- * constructor-driven to avoid a full {@code GroupExpression} fixture.
+ * scan rebuild with partitions, Repeat preserve/drop, projection remap, and the
+ * range-colocate dominated-side output selection in {@code visitPhysicalJoin}
+ * (left / right / full-outer null-relaxed). Tests are constructor-driven to
+ * avoid a full {@code GroupExpression} fixture.
  */
 class OutputPropertyDeriverRangeTest {
 
@@ -238,10 +240,22 @@ class OutputPropertyDeriverRangeTest {
      */
     private static void stubInnerJoinWithEmptyColumns(PhysicalHashJoinOperator node,
                                                       ExpressionContext context) {
+        stubJoinWithEmptyColumns(node, context, JoinOperator.INNER_JOIN);
+    }
+
+    /**
+     * Stubs the join-operator and expression-context methods that
+     * {@code visitPhysicalJoin} touches before it inspects the child
+     * distribution specs, for an arbitrary join type. Empty ON columns keep
+     * {@code updateEquivalentDescriptor} a no-op so a test can assert the
+     * dominated-side spec selection in isolation.
+     */
+    private static void stubJoinWithEmptyColumns(PhysicalHashJoinOperator node,
+                                                 ExpressionContext context, JoinOperator joinType) {
         new Expectations() {
             {
                 node.getJoinType();
-                result = JoinOperator.INNER_JOIN;
+                result = joinType;
                 minTimes = 0;
                 node.getOnPredicate();
                 result = null;
@@ -259,18 +273,89 @@ class OutputPropertyDeriverRangeTest {
         };
     }
 
+    private static Method visitPhysicalJoinMethod() throws NoSuchMethodException {
+        Method method = OutputPropertyDeriver.class.getDeclaredMethod(
+                "visitPhysicalJoin",
+                com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator.class,
+                ExpressionContext.class);
+        method.setAccessible(true);
+        return method;
+    }
+
+    private static PhysicalPropertySet invokeVisitPhysicalJoin(
+            OutputPropertyDeriver deriver, PhysicalHashJoinOperator node, ExpressionContext context)
+            throws Exception {
+        return (PhysicalPropertySet) visitPhysicalJoinMethod().invoke(deriver, node, context);
+    }
+
+    /**
+     * Asserts a range×range join of {@code joinType} derives the left- or
+     * right-side range spec (the non-null-relaxed dominated cases). Full-outer
+     * has distinct null-relaxed assertions and is tested separately.
+     */
+    private void assertRangeJoinEmitsDominatedSide(PhysicalHashJoinOperator node, ExpressionContext context,
+            JoinOperator joinType, boolean expectRightSide) throws Exception {
+        RangeDistributionSpec leftSpec = buildRangeSkeleton(100L, 1, 2);
+        RangeDistributionSpec rightSpec = buildRangeSkeleton(200L, 1, 2);
+        OutputPropertyDeriver deriver = newDeriver(List.of(propertyOf(leftSpec), propertyOf(rightSpec)));
+        stubJoinWithEmptyColumns(node, context, joinType);
+
+        PhysicalPropertySet out = invokeVisitPhysicalJoin(deriver, node, context);
+        assertSame(expectRightSide ? rightSpec : leftSpec, out.getDistributionProperty().getSpec(),
+                joinType + " range-colocate join must output the "
+                        + (expectRightSide ? "right" : "left") + "-side range spec");
+    }
+
+    @Test
+    void visitPhysicalJoinRangeInnerEmitsLeftSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.INNER_JOIN, false);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeRightOuterEmitsRightSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.RIGHT_OUTER_JOIN, true);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeRightSemiEmitsRightSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        assertRangeJoinEmitsDominatedSide(node, context, JoinOperator.RIGHT_SEMI_JOIN, true);
+    }
+
+    @Test
+    void visitPhysicalJoinRangeFullOuterEmitsNullRelaxedLeftSpec(
+            @Mocked PhysicalHashJoinOperator node,
+            @Mocked ExpressionContext context) throws Exception {
+        RangeDistributionSpec leftSpec = buildRangeSkeleton(100L, 1, 2);
+        RangeDistributionSpec rightSpec = buildRangeSkeleton(200L, 1, 2);
+        OutputPropertyDeriver deriver = newDeriver(List.of(propertyOf(leftSpec), propertyOf(rightSpec)));
+        stubJoinWithEmptyColumns(node, context, JoinOperator.FULL_OUTER_JOIN);
+
+        PhysicalPropertySet out = invokeVisitPhysicalJoin(deriver, node, context);
+        DistributionSpec outSpec = out.getDistributionProperty().getSpec();
+        assertInstanceOf(RangeDistributionSpec.class, outSpec);
+        RangeDistributionSpec rangeOut = (RangeDistributionSpec) outSpec;
+        // Full-outer output is a fresh null-relaxed spec derived from the left side.
+        assertNotSame(leftSpec, rangeOut, "full-outer must produce a new null-relaxed range spec");
+        assertEquals(leftSpec.getColocateColumns().size(), rangeOut.getColocateColumns().size());
+        rangeOut.getColocateColumns().forEach(col ->
+                assertFalse(col.isNullStrict(), "full-outer output colocate cols must be null-relaxed"));
+        assertEquals(100L, rangeOut.getEquivalentDescriptor().getTableId(),
+                "null-relaxed spec keeps the left-side table id");
+    }
+
     private static StarRocksPlannerException invokeVisitPhysicalJoinExpectingThrow(
             OutputPropertyDeriver deriver, PhysicalHashJoinOperator node, ExpressionContext context) {
         // visitPhysicalJoin is private; reflect to invoke it.  Wrap the
         // InvocationTargetException so JUnit's assertThrows sees the real cause.
         return assertThrows(StarRocksPlannerException.class, () -> {
             try {
-                Method method = OutputPropertyDeriver.class.getDeclaredMethod(
-                        "visitPhysicalJoin",
-                        com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator.class,
-                        ExpressionContext.class);
-                method.setAccessible(true);
-                method.invoke(deriver, node, context);
+                visitPhysicalJoinMethod().invoke(deriver, node, context);
             } catch (java.lang.reflect.InvocationTargetException e) {
                 if (e.getCause() instanceof RuntimeException) {
                     throw (RuntimeException) e.getCause();
