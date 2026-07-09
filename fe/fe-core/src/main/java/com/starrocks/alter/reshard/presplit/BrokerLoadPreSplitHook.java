@@ -145,8 +145,11 @@ public final class BrokerLoadPreSplitHook {
             PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
             return;
         }
+        // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
+        // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
+        // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
         BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
-                brokerDesc, fileGroups, fileStatuses, computeResource);
+                brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone());
         PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
                 scanContext,
                 MetaUtils.getRangeDistributionColumns(targetTable),

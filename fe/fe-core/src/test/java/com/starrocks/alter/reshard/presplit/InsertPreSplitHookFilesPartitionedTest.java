@@ -248,7 +248,7 @@ public class InsertPreSplitHookFilesPartitionedTest {
      */
     private static PreSplitFlow.Prepared filesPrepared() {
         InsertFromFilesScanContext scanContext =
-                new InsertFromFilesScanContext(mock(TableFunctionTable.class), mock(ComputeResource.class));
+                new InsertFromFilesScanContext(mock(TableFunctionTable.class), mock(ComputeResource.class), "UTC");
         List<Column> sortKey = List.of(bigintColumn("sort_col"));
         List<Column> partitionColumns = List.of(bigintColumn("p_col"));
         return new PreSplitFlow.Prepared(scanContext, sortKey, partitionColumns,
