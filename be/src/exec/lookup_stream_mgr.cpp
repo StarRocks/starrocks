@@ -42,9 +42,17 @@ Status LookUpDispatcher::add_request(const pipeline::LookUpRequestContextPtr& ct
     auto notify = this->defer_notify();
     ctx->receive_ts = MonotonicNanos();
     auto request_tuple_id = ctx->request_tuple_id();
-    auto it = _request_queues.lazy_emplace(
-            request_tuple_id, [&](const auto& ctor) { ctor(request_tuple_id, std::make_shared<RequestsQueue>()); });
-    it->second->enqueue(ctx);
+    // Enqueue under the submap lock. The plain lazy_emplace() returns an iterator whose
+    // slot can be freed by a concurrent lazy_emplace()/resize() on the same submap once
+    // the lock is released, so dereferencing it->second outside the lock is a
+    // heap-use-after-free. lazy_emplace_l runs both callbacks while holding the lock.
+    _request_queues.lazy_emplace_l(
+            request_tuple_id, [&](RequestsQueuePtr& queue) { queue->enqueue(ctx); },
+            [&](const auto& ctor) {
+                auto queue = std::make_shared<RequestsQueue>();
+                queue->enqueue(ctx);
+                ctor(request_tuple_id, std::move(queue));
+            });
     DLOG(INFO) << "[GLM] add request to LookUpDispatcher, "
                << ", query id: " << print_id(_query_id) << ", target node id: " << _lookup_node_id
                << ", tuple id: " << request_tuple_id << ", dispacher: " << (void*)this;
@@ -92,11 +100,22 @@ std::shared_ptr<LookUpDispatcher> LookUpDispatcherMgr::create_dispatcher(const T
                                                                          const std::vector<SlotId>& source_id_slots,
                                                                          int64_t rpc_ref_cnt) {
     DispatcherKey key{query_id, target_node_id};
-    auto [_, created] = _dispatcher_map.try_emplace(
-            key, std::make_shared<LookUpDispatcher>(query_id, target_node_id, source_id_slots, rpc_ref_cnt));
+    // Do the get-or-create and the read entirely under the submap lock. Returning
+    // _dispatcher_map.at() would deref a slot reference after the lock is released,
+    // racing with a concurrent try_emplace()/resize() on the same submap that frees the
+    // slot array -> heap-use-after-free.
+    LookUpDispatcherPtr dispatcher;
+    bool created = false;
+    _dispatcher_map.lazy_emplace_l(
+            key, [&](LookUpDispatcherPtr& value) { dispatcher = value; },
+            [&](const auto& ctor) {
+                dispatcher = std::make_shared<LookUpDispatcher>(query_id, target_node_id, source_id_slots, rpc_ref_cnt);
+                created = true;
+                ctor(key, dispatcher);
+            });
     DLOG_IF(INFO, created) << "[GLM] create LookUpDispatcher for query_id=" << print_id(query_id)
                            << ", target_node_id=" << target_node_id << ", rpc_ref_cnt=" << rpc_ref_cnt;
-    return _dispatcher_map.at(key);
+    return dispatcher;
 }
 
 StatusOr<LookUpDispatcherPtr> LookUpDispatcherMgr::get_dispatcher(const TUniqueId& query_id,
@@ -129,13 +148,16 @@ Status LookUpDispatcherMgr::lookup(const pipeline::RemoteLookUpRequestContextPtr
 
 Status LookUpDispatcherMgr::lookup_close(const TUniqueId& query_id, PlanNodeId target_node_id) {
     DispatcherKey key{query_id, target_node_id};
-    auto it = _dispatcher_map.find(key);
-    if (it == _dispatcher_map.end()) {
+    // Copy the shared_ptr out under the submap lock; find()'s iterator would dangle if a
+    // concurrent try_emplace()/resize() on the same submap freed the slot array after the
+    // lock was released (heap-use-after-free).
+    LookUpDispatcherPtr dispatcher;
+    _dispatcher_map.if_contains(key, [&](LookUpDispatcherPtr& value) { dispatcher = value; });
+    if (dispatcher == nullptr) {
         LOG(WARNING) << "[GLM] lookup_close missing LookUpDispatcher for query_id=" << print_id(query_id)
                      << ", target_node_id=" << target_node_id;
         return Status::OK();
     }
-    auto dispatcher = it->second;
     DLOG(INFO) << "[GLM] lookup_close dec reference LookUpDispatcher for query_id=" << print_id(query_id)
                << ", target_node_id=" << target_node_id << ", current rpc_ref_cnt=" << dispatcher->ref_cnt();
     if (dispatcher->ref_dec()) {
