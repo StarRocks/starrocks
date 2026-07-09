@@ -4999,4 +4999,33 @@ public class Config extends ConfigBase {
             + "request.maxFrontier is clamped to this value at the FE boundary. The product "
             + "of depth and frontier bounds the worst-case IN-list size shipped to BE per hop.")
     public static int context_graph_expand_max_frontier = 1000;
+
+    @ConfField(mutable = true, comment = "Whether context fusion search (CONTEXT_SEARCH) runs its " +
+            "text and vector channels concurrently. The two channels are independent; the graph / " +
+            "reference-expansion path stays after them because it derives seeds from their merged " +
+            "candidates. When false, channels run serially (the pre-optimization behavior).")
+    public static boolean context_search_channel_parallel_enabled = true;
+
+    @ConfField(comment = "Max threads in the context-search channel pool used to run the text/vector " +
+            "channels concurrently. Cached pool (idle threads expire); when saturated the submitting " +
+            "thread runs the task itself (degrades to serial), so it never drops a channel. Read at " +
+            "FE start; restart to change.")
+    public static int context_search_channel_pool_size = 64;
+
+    @ConfField(mutable = true, comment = "Default β (utility bonus) applied by the "
+            + "vector_anchor_greedy rerank strategy when a candidate is FK-linked to an "
+            + "already-selected entity. Tuned to 0.05 in upstream NL→table benchmarks: small "
+            + "enough that obviously more relevant non-FK candidates still beat FK neighbors, "
+            + "only cosine-close ties get flipped. Per-request override via "
+            + "strategy_options.beta on /api/context/search.")
+    public static double context_search_default_graph_beta = 0.05;
+
+    @ConfField(mutable = true, comment = "Default reference-expansion BFS direction for fusion "
+            + "context_search (CONTEXT_SEARCH TVF and /api/context/search). One of FORWARD, BACKWARD, "
+            + "BOTH (case-insensitive). Edges are stored src=document -> dst=referenced entity, so two "
+            + "supporting docs sharing an entity (doc1->entityX<-doc2) are only mutually reachable with "
+            + "BOTH; FORWARD-only strands the second doc and the graph weight contributes ~0. Defaults "
+            + "to BOTH so the graph rerank adds value out-of-box. Per-request override via the search "
+            + "'direction' argument. Invalid values fall back to BOTH with a WARN.")
+    public static String context_search_default_graph_direction = "BOTH";
 }

@@ -277,6 +277,9 @@ public final class MetricRepo {
     public static final LongCounterMetric COUNTER_PUBLISH_VERSION_DAEMON_LOOP =
             new LongCounterMetric("publish_version_daemon_loop_total",
                     MetricUnit.OPERATIONS, "counter of publish version daemon loop runs");
+    public static final LongCounterMetric COUNTER_CONTEXT_SEARCH_TOTAL =
+            new LongCounterMetric("context_search_total",
+                    MetricUnit.REQUESTS, "total number of CONTEXT_SEARCH invocations");
 
     /**
      * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
@@ -876,6 +879,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
         COUNTER_QUERY_ALL = new LongCounterMetric("query_total", MetricUnit.REQUESTS, "total query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ALL);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CONTEXT_SEARCH_TOTAL);
         COUNTER_QUERY_ERR = new LongCounterMetric("query_err", MetricUnit.REQUESTS, "total error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ERR);
         COUNTER_QUERY_TIMEOUT = new LongCounterMetric("query_timeout", MetricUnit.REQUESTS, "total timeout query");

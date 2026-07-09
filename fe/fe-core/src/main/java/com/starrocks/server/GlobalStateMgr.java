@@ -119,6 +119,7 @@ import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.context.ContextMetaManager;
 import com.starrocks.context.ContextMgr;
 import com.starrocks.context.ContextReadExecutor;
+import com.starrocks.context.SnapshotResolver;
 import com.starrocks.context.allocator.ContextSnapshotAllocator;
 import com.starrocks.context.allocator.ContextVersionAllocator;
 import com.starrocks.encryption.KeyMgr;
@@ -548,6 +549,7 @@ public class GlobalStateMgr {
     private final ContextVersionAllocator contextVersionAllocator;
     private final ContextSnapshotAllocator contextSnapshotAllocator;
     private final ContextReadExecutor contextReadExecutor;
+    private final SnapshotResolver contextSnapshotResolver;
 
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
@@ -977,6 +979,7 @@ public class GlobalStateMgr {
         this.contextVersionAllocator = new ContextVersionAllocator();
         this.contextSnapshotAllocator = new ContextSnapshotAllocator();
         this.contextReadExecutor = new ContextReadExecutor();
+        this.contextSnapshotResolver = new SnapshotResolver();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.passwordExpiredChecker = new PasswordExpiredChecker();
         this.queryDeployExecutor =
@@ -1313,6 +1316,10 @@ public class GlobalStateMgr {
 
     public ContextReadExecutor getContextReadExecutor() {
         return contextReadExecutor;
+    }
+
+    public SnapshotResolver getContextSnapshotResolver() {
+        return contextSnapshotResolver;
     }
 
     public PipeManager getPipeManager() {
