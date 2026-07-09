@@ -6,12 +6,12 @@ description: "Analyze complex data with Claude and the StarRocks MCP server on a
 
 # Claude + StarRocks MCP
 
-Stand up a small StarRocks cluster on object storage, load a real public dataset, and ask **Claude** plain-English questions about it through the **StarRocks MCP server**. Claude discovers the schema, writes the SQL (including multi-table joins), and renders charts. All data lives in object storage on **MinIO AIStor**.
+Stand up a small StarRocks cluster on object storage, load a real public dataset, and ask **Claude** plain-English questions about it through the **StarRocks MCP server**. Claude discovers the schema, writes the SQL (including multi-table joins), and renders charts. All data lives in object storage on **MinIO**.
 
 This tutorial covers:
 
-- Running StarRocks in shared-data mode (1 FE + 1 CN) and AIStor in Docker
-- Creating an S3 (AIStor) storage volume for separate storage and compute
+- Running StarRocks in shared-data mode (1 FE + 1 CN) and MinIO in Docker
+- Creating an S3 (MinIO) storage volume for separate storage and compute
 - Loading the Olist Brazilian E-Commerce dataset (8 related tables)
 - Wiring the StarRocks and AIStor MCP servers to Claude
 - Asking Claude plain-English questions and rendering charts
@@ -62,7 +62,7 @@ Apple Silicon: StarRocks leans on AVX2 (x86); use an ARM build or expect slower 
 The Model Context Protocol (MCP) is an open protocol that lets an AI assistant such as Claude discover and call external tools. This tutorial wires up two MCP servers:
 
 - The **StarRocks MCP server** (`mcp-server-starrocks`) exposes tools that let Claude read the schema and run SQL against StarRocks.
-- The **AIStor MCP server** (`aistor`) exposes tools that let Claude work with the MinIO AIStor object storage where the data lives — for example, browsing buckets and inspecting the objects StarRocks writes.
+- The **AIStor MCP server** (`aistor`) exposes tools that let Claude work with the MinIO object storage where the data lives — for example, browsing buckets and inspecting the objects StarRocks writes.
 
 ### FE
 
@@ -127,16 +127,16 @@ This directory contains just enough to get you going. It deliberately contains *
 
 ---
 
-## Bring up StarRocks and AIStor
+## Bring up StarRocks and MinIO
 
 ```bash
 cd demo/documentation-samples/MCP
 docker compose up --detach --wait --wait-timeout 120
 ```
 
-A frontend (FE), a compute node (CN), and AIStor come up locally.
+A frontend (FE), a compute node (CN), and MinIO come up locally.
 
-Check for healthy status on the AIStor, FE, and CN services:
+Check for healthy status on the MinIO, FE, and CN services:
 
 ```bash
 docker compose ps -a --format "table {{.Service}}\t{{.Status}}"
@@ -148,9 +148,9 @@ If the CN is not reporting healthy just wait a few seconds and check again — i
 
 ---
 
-## Create a bucket in AIStor
+## Create a bucket in MinIO
 
-Open the AIStor console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Create Bucket**, and create the bucket `my-starrocks-bucket`.
+Open the MinIO console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Create Bucket**, and create the bucket `my-starrocks-bucket`.
 
 ---
 
@@ -186,7 +186,7 @@ docker compose exec -T starrocks-fe \
 ```
 
 :::tip
-If you see an error `The specified bucket does not exist` you may have skipped part of the previous step. Open the AIStor UI and create the bucket specified above.
+If you see an error `The specified bucket does not exist` you may have skipped part of the previous step. Open the MinIO UI and create the bucket specified above.
 :::
 
 :::tip
@@ -228,7 +228,7 @@ FE_HTTP_PORT=8040 bash load_olist.sh
 cp .env.example .env
 ```
 
-`.mcp.json` defines two MCP servers — `mcp-server-starrocks` (run from GitHub via `uv`, so there's **nothing to install by hand**) and `aistor` (AIStor, run via Docker) — both reading `.env`. Launch Claude Code from this directory (or add the same block to Claude Desktop's config).
+`.mcp.json` defines two MCP servers — `mcp-server-starrocks` (run from GitHub via `uv`, so there's **nothing to install by hand**) and `aistor` (run via Docker) — both reading `.env`. Launch Claude Code from this directory (or add the same block to Claude Desktop's config).
 
 :::note
 **Approve the servers on first launch.** Project-scoped servers from `.mcp.json` are *not* trusted automatically — Claude Code prompts *"New MCP servers found — approve?"* the first time you launch here. Accept it. (The pre-approval lives in `.claude/settings.local.json`, which is gitignored, so it is **absent on a fresh clone** — that's expected; approving via the prompt recreates it.)
@@ -283,8 +283,8 @@ These are the questions asked in the demo video, in order. Each one builds on th
 
 In this tutorial you:
 
-- Deployed StarRocks shared-data (1 FE + 1 CN) and AIStor in Docker
-- Created an S3 (AIStor) storage volume and set it as the default
+- Deployed StarRocks shared-data (1 FE + 1 CN) and MinIO in Docker
+- Created an S3 (MinIO) storage volume and set it as the default
 - Loaded the Olist Brazilian E-Commerce dataset (8 related tables)
 - Wired the StarRocks and AIStor MCP servers to Claude
 - Asked Claude plain-English questions and let it discover the schema, write the SQL, and render charts
@@ -304,8 +304,8 @@ The demo files live in the `documentation-samples/MCP` directory of the [StarRoc
 |---|---|
 | `CLAUDE.md` | Instructions to Claude Code to show its work, rely on the schema and not outside information, etc. You should read this file. |
 | `.claude/settings.json` | Content is `"autoMemoryEnabled": false` to prevent Claude from remembering the questions (and answers) asked in previous sessions. You can remove this if you like; it is in here to prevent the author's questions from biasing your experimentation. |
-| `docker-compose.yml` | StarRocks shared-data quick start (1 FE + 1 CN + MinIO AIStor), patched for laptop/Docker use. |
-| `storage_volume.sql` | Creates the S3 (AIStor) storage volume and sets it as default. |
+| `docker-compose.yml` | StarRocks shared-data quick start (1 FE + 1 CN + MinIO), patched for laptop/Docker use. |
+| `storage_volume.sql` | Creates the S3 (MinIO) storage volume and sets it as default. |
 | `olist_schema.sql` | DDL for the 8 (+1 optional) Olist tables. |
 | `load_olist.sh` | Stream Load for the Olist CSVs + a row-count check. |
 | `.mcp.json` | Wires the StarRocks and AIStor MCP servers to Claude. |
@@ -358,4 +358,4 @@ DESC STORAGE VOLUME s3_volume\G            -- verify: enabled=true, IsDefault=tr
 
 - **Olist Brazilian E-Commerce** dataset via Kaggle, licensed **CC BY-NC-SA 4.0 (non-commercial)** — used here for educational demonstration; credit retained to Olist. Confirm terms before any commercial reuse.
 - StarRocks and the StarRocks MCP server are open source (Apache-2.0 / project license).
-- AIStor and `mcp-server-aistor` © MinIO, Inc.
+- MinIO and `mcp-server-aistor` © MinIO, Inc.
