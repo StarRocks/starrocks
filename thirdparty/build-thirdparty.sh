@@ -1290,10 +1290,12 @@ build_aws_cpp_sdk() {
 build_vpack() {
     check_if_source_exist $VPACK_SOURCE
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    rm -rf build
     mkdir -p build
     cd build
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
