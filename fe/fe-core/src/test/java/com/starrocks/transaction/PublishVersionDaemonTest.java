@@ -19,16 +19,26 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -43,6 +53,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -719,5 +730,83 @@ public class PublishVersionDaemonTest {
                 visibleIndexes, Sets.newHashSet());
         Assertions.assertEquals(Lists.newArrayList(101L, 102L, 201L, 202L),
                 carryAll.stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+    }
+
+    // The touched tablets (this publish's real transactions) and the carry-forward tablets (untouched but
+    // visible indexes) must go into ONE aggregate request; two separate aggregate publishes would each
+    // truncate-write the same meta/0_<version>.meta and drop one set. Because a batch can span several
+    // versions, the carry-forward emits one no-op empty transaction per real transaction so the untouched
+    // tablets advance across every version (the BE requires new_version == base_version + txns.size()).
+    @Test
+    public void testAggregatePublishWithCarryForwardBuildsSingleRequest() throws Exception {
+        List<List<Tablet>> capturedTablets = new ArrayList<>();
+        List<List<TxnInfoPB>> capturedTxnInfos = new ArrayList<>();
+        List<AggregatePublishVersionRequest> capturedRequests = new ArrayList<>();
+        AtomicInteger sendCount = new AtomicInteger(0);
+        List<AggregatePublishVersionRequest> sentRequests = new ArrayList<>();
+
+        new MockUp<Utils>() {
+            @Mock
+            public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                    long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
+                    ComputeResource computeResource, AggregatePublishVersionRequest request) {
+                capturedTablets.add(tablets);
+                capturedTxnInfos.add(txnInfos);
+                capturedRequests.add(request);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource, Map<Long, Double> compactionScores,
+                    Map<Long, TabletRange> tabletRanges, Map<Long, TabletStatPB> tabletStats,
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                sendCount.incrementAndGet();
+                sentRequests.add(request);
+            }
+        };
+
+        List<Tablet> touched = Lists.newArrayList(new LakeTablet(101L), new LakeTablet(102L));
+        List<Tablet> carryForward = Lists.newArrayList(new LakeTablet(201L), new LakeTablet(202L));
+        // A two-transaction batch (versions 5 and 6): base is version 4, new version is 6.
+        TxnInfoPB t1 = new TxnInfoPB();
+        t1.txnId = 1001L;
+        t1.commitTime = 111L;
+        t1.gtid = 9001L;
+        TxnInfoPB t2 = new TxnInfoPB();
+        t2.txnId = 1002L;
+        t2.commitTime = 222L;
+        t2.gtid = 9002L;
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(t1, t2);
+
+        PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
+                4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
+                new java.util.HashMap<>(), new ArrayList<>());
+
+        // Exactly two sub-requests, both attached to the SAME request, sent exactly once.
+        Assertions.assertEquals(2, capturedRequests.size());
+        Assertions.assertSame(capturedRequests.get(0), capturedRequests.get(1));
+        Assertions.assertEquals(1, sendCount.get());
+        Assertions.assertSame(capturedRequests.get(0), sentRequests.get(0));
+
+        // First sub-request: the touched tablets with the real transactions unchanged.
+        Assertions.assertEquals(Lists.newArrayList(101L, 102L),
+                capturedTablets.get(0).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        Assertions.assertSame(txnInfos, capturedTxnInfos.get(0));
+
+        // Second sub-request: the carry-forward tablets with one no-op empty transaction per real transaction.
+        Assertions.assertEquals(Lists.newArrayList(201L, 202L),
+                capturedTablets.get(1).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        List<TxnInfoPB> carryTxnInfos = capturedTxnInfos.get(1);
+        Assertions.assertEquals(txnInfos.size(), carryTxnInfos.size());
+        for (int i = 0; i < carryTxnInfos.size(); i++) {
+            TxnInfoPB empty = carryTxnInfos.get(i);
+            Assertions.assertTrue(empty.noOpPublish, "carry-forward txn must be a no-op publish");
+            Assertions.assertEquals(-1L, empty.txnId, "carry-forward txn must carry the empty txn id");
+            Assertions.assertEquals(TxnTypePB.TXN_EMPTY, empty.txnType);
+            Assertions.assertFalse(empty.combinedTxnLog);
+            // commitTime / gtid are copied from the corresponding real transaction.
+            Assertions.assertEquals(txnInfos.get(i).commitTime, empty.commitTime);
+            Assertions.assertEquals(txnInfos.get(i).gtid, empty.gtid);
+        }
     }
 }

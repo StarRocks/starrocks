@@ -1227,13 +1227,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // version without any data change. The count must match the real transactions because the BE requires
     // new_version == base_version + txns.size() for a multi-transaction batch (a batch of pre-rollup compactions
     // can span several versions).
-    private static void aggregatePublishWithCarryForward(List<Tablet> touchedTablets, List<TxnInfoPB> txnInfos,
-                                                         List<Tablet> carryForwardTablets, long baseVersion,
-                                                         long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
-                                                         ComputeResource computeResource,
-                                                         Map<Long, Double> compactionScores,
-                                                         Map<Long, TabletStatPB> tabletStats,
-                                                         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+    static void aggregatePublishWithCarryForward(List<Tablet> touchedTablets, List<TxnInfoPB> txnInfos,
+                                                 List<Tablet> carryForwardTablets, long baseVersion,
+                                                 long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
+                                                 ComputeResource computeResource,
+                                                 Map<Long, Double> compactionScores,
+                                                 Map<Long, TabletStatPB> tabletStats,
+                                                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
