@@ -176,7 +176,7 @@ class InsertFromTableSampleSubqueryExecutorTest {
                         /*brokerDesc=*/ null,
                         List.of(),
                         List.of(),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(bigintColumn("k")),
                 /*sampleByteLimit=*/ Long.MAX_VALUE,
                 /*seed=*/ 0L);

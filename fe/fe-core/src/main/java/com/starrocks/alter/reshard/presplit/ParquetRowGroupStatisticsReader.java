@@ -55,6 +55,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Reads one Parquet file's footer and emits per-row-group min/max/row-count
@@ -69,9 +70,11 @@ import java.util.Objects;
  *   <li>Unannotated Parquet INT32/INT64 → StarRocks TINYINT/SMALLINT/INT/BIGINT</li>
  *   <li>Unannotated Parquet BOOLEAN → StarRocks BOOLEAN</li>
  *   <li>Parquet INT32 with DATE annotation → StarRocks DATE</li>
- *   <li>Parquet INT64 with TIMESTAMP annotation, {@code isAdjustedToUTC=false}
- *       (MILLIS/MICROS/NANOS) → StarRocks DATETIME. UTC-adjusted timestamps are
- *       deferred (the load applies a session-tz offset this reader cannot reproduce).</li>
+ *   <li>Parquet INT64 with a TIMESTAMP annotation (MILLIS/MICROS/NANOS) -> StarRocks DATETIME.
+ *       A non-UTC-adjusted (local) timestamp is stored verbatim. A UTC-adjusted
+ *       ({@code isAdjustedToUTC=true}) timestamp reaches the meta tier only when the load session
+ *       timezone is a fixed offset: the reader then adds that constant offset (the same one the BE
+ *       load applies) to the decoded UTC value. A DST / named / unknown load timezone -> data tier.</li>
  *   <li>Parquet BINARY with UTF8 (string) annotation -> StarRocks VARCHAR or CHAR
  *       (footer min/max are decoded as UTF-8 and used directly; FE compares them in the
  *       same unsigned-byte order the BE uses to route rows). CHAR is safe even though the BE
@@ -97,7 +100,8 @@ import java.util.Objects;
  * {@code floorDiv}/{@code floorMod} split computes (it borrows a whole second for a negative
  * sub-second remainder), so the boundary is FE/BE-identical down to year 1
  * (see {@link MetaTierTemporalWindow}).
- * Anything else (UINT_64, signed INT_8/16/32 annotations, UTC-adjusted/INT96 timestamps, JSON,
+ * Anything else (UINT_64, signed INT_8/16/32 annotations, INT96 timestamps, UTC-adjusted timestamps
+ * under a non-fixed-offset load timezone, JSON,
  * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
  * raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
@@ -112,7 +116,8 @@ public final class ParquetRowGroupStatisticsReader {
     }
 
     public static List<RowGroupStatistics> read(
-            FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn) throws StarRocksException {
+            FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn, String loadTimeZone)
+            throws StarRocksException {
         Objects.requireNonNull(fileStatus, "fileStatus");
         Objects.requireNonNull(hadoopConfig, "hadoopConfig");
         Objects.requireNonNull(sortKeyColumn, "sortKeyColumn");
@@ -121,8 +126,9 @@ public final class ParquetRowGroupStatisticsReader {
             HadoopInputFile inputFile = HadoopInputFile.fromStatus(fileStatus, hadoopConfig);
             try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
                 ParquetMetadata metadata = reader.getFooter();
+                Optional<ZoneOffset> loadOffset = MetaTierTemporalWindow.fixedLoadOffset(loadTimeZone);
                 SortKeyLocation location = locateSortKeyColumn(
-                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn);
+                        metadata.getFileMetaData().getSchema(), inputFile, sortKeyColumn, loadOffset);
                 List<BlockMetaData> blocks = metadata.getBlocks();
                 List<RowGroupStatistics> rowGroupStatistics = new ArrayList<>(blocks.size());
                 for (BlockMetaData block : blocks) {
@@ -137,8 +143,8 @@ public final class ParquetRowGroupStatisticsReader {
         }
     }
 
-    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn)
-            throws MetaTierUnavailableException {
+    private static SortKeyLocation locateSortKeyColumn(MessageType schema, InputFile inputFile, Column sortKeyColumn,
+            Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         String columnName = sortKeyColumn.getName();
         int fieldIndex = -1;
         for (int i = 0; i < schema.getFieldCount(); i++) {
@@ -178,8 +184,17 @@ public final class ParquetRowGroupStatisticsReader {
             typeDefinedColumnOrder = declaresTypeDefinedColumnOrder(
                     readColumnOrders(inputFile), leafColumnIndex(schema, path));
         }
-        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn);
-        return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn);
+        rejectIncompatibleTypeMapping(parquetTypeName, logicalAnnotation, typeDefinedColumnOrder, sortKeyColumn,
+                loadOffset);
+        // A UTC-adjusted INT64 TIMESTAMP is stored by the BE as a local wall clock = UTC instant + the
+        // fixed session-tz offset. The gate above accepted it only when loadOffset is present, so capture
+        // that constant offset to apply per row group; every other mapping leaves it null (no shift).
+        ZoneOffset utcAdjustedOffset = null;
+        if (logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation
+                && timestampAnnotation.isAdjustedToUTC()) {
+            utcAdjustedOffset = loadOffset.orElse(null);
+        }
+        return new SortKeyLocation(path, parquetTypeName, logicalAnnotation, sortKeyColumn, utcAdjustedOffset);
     }
 
     /**
@@ -199,7 +214,8 @@ public final class ParquetRowGroupStatisticsReader {
             PrimitiveTypeName parquetTypeName,
             LogicalTypeAnnotation logicalAnnotation,
             boolean typeDefinedColumnOrder,
-            Column sortKeyColumn) throws MetaTierUnavailableException {
+            Column sortKeyColumn,
+            Optional<ZoneOffset> loadOffset) throws MetaTierUnavailableException {
         PrimitiveType starRocksPrimitive = sortKeyColumn.getType().getPrimitiveType();
         boolean compatible = switch (parquetTypeName) {
             case INT32 -> {
@@ -232,11 +248,12 @@ public final class ParquetRowGroupStatisticsReader {
                     yield starRocksPrimitive.isIntegerType();
                 }
                 if (logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
-                    // Only local (non-UTC-adjusted) timestamps: the load stores those ticks
-                    // verbatim as the DATETIME wall clock, so the FE-rendered boundary matches.
-                    // UTC-adjusted timestamps get a session-tz offset at load time → data tier.
-                    yield !timestampAnnotation.isAdjustedToUTC()
-                            && starRocksPrimitive == PrimitiveType.DATETIME;
+                    // Local (non-UTC-adjusted) timestamps store their ticks verbatim as the DATETIME
+                    // wall clock. UTC-adjusted timestamps get a session-tz offset at load time; the meta
+                    // tier can match that boundary only for a fixed-offset load timezone (loadOffset
+                    // present) -- otherwise data tier.
+                    yield starRocksPrimitive == PrimitiveType.DATETIME
+                            && (!timestampAnnotation.isAdjustedToUTC() || loadOffset.isPresent());
                 }
                 // INT64-backed DECIMAL: same signed-order safety as INT32. Exact precision/scale.
                 yield logicalAnnotation instanceof DecimalLogicalTypeAnnotation decimalAnnotation
@@ -325,7 +342,13 @@ public final class ParquetRowGroupStatisticsReader {
         if (location.logicalAnnotation instanceof TimestampLogicalTypeAnnotation timestampAnnotation) {
             long ticks = ((Number) parquetValue).longValue();
             LocalDateTime dateTime = epochTicksToUtcDateTime(ticks, timestampAnnotation.getUnit());
-            // A pre-1970 (negative) tick is now in window: epochTicksToUtcDateTime's floorDiv/floorMod
+            if (timestampAnnotation.isAdjustedToUTC()) {
+                // UTC-adjusted ticks are a UTC instant; add the fixed session-tz offset (captured on the
+                // location, guaranteed present for an accepted UTC-adjusted timestamp) to get the stored
+                // local wall clock -- matching the BE load. A non-UTC-adjusted tick is already local.
+                dateTime = dateTime.plusSeconds(location.utcAdjustedOffset.getTotalSeconds());
+            }
+            // A pre-1970 (negative) tick is in window too: epochTicksToUtcDateTime's floorDiv/floorMod
             // split matches the BE timestamp load, so the boundary equals the loaded value
             // (see MetaTierTemporalWindow).
             MetaTierTemporalWindow.rejectOutsideWindow(dateTime.toLocalDate());
@@ -519,6 +542,6 @@ public final class ParquetRowGroupStatisticsReader {
 
     private record SortKeyLocation(
             ColumnPath path, PrimitiveTypeName parquetTypeName,
-            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn) {
+            LogicalTypeAnnotation logicalAnnotation, Column starRocksColumn, ZoneOffset utcAdjustedOffset) {
     }
 }
