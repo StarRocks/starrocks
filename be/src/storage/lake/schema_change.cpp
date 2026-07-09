@@ -693,28 +693,37 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
         if (!tix.__isset.index_type) {
             return Status::InvalidArgument("TOlapTableIndex has no index_type");
         }
-        TabletIndexPB pb;
-        if (tix.__isset.index_id) pb.set_index_id(tix.index_id);
-        if (tix.__isset.index_name) pb.set_index_name(tix.index_name);
-        auto converted = TabletIndex::convert_index_type_from_thrift(tix.index_type);
-        if (!converted.ok()) return converted.status();
-        pb.set_index_type(*converted);
         if (!tix.__isset.columns || tix.columns.empty()) {
-            return Status::InvalidArgument(strings::Substitute("index $0 has no columns", pb.index_name()));
+            return Status::InvalidArgument(
+                    strings::Substitute("index $0 has no columns", tix.__isset.index_name ? tix.index_name : ""));
         }
+        // Validate every indexed column exists in new_schema *before* delegating to
+        // TabletIndex::init_from_thrift, whose field_index() lookup is unchecked and
+        // would read out of bounds on a missing column. A missing column must fail
+        // fast here rather than fall back to do_process_alter_tablet — the fast-path
+        // request shape (same tablet for base/new) would make the legacy rewrite
+        // re-process the tablet against itself and duplicate rows.
         for (const auto& col_name : tix.columns) {
             auto ordinal = new_schema->field_index(col_name);
             if (ordinal >= new_schema->num_columns()) {
-                // See note above: do not fall back to do_process_alter_tablet
-                // — the request shape would cause the legacy path to
-                // re-write the tablet against itself and duplicate rows.
                 StorageMetrics::instance()->lake_add_index_requests_failed.increment(1);
                 return Status::InternalError(
                         strings::Substitute("ADD INDEX fast path: column $0 not found in new schema. tablet=$1",
                                             col_name, request.new_tablet_id));
             }
-            pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
         }
+        // Build TabletIndexPB via TabletIndex so every field is populated exactly like
+        // the standard (segment-rewrite) write path: index id/name/type, the
+        // schema-resolved column unique ids, AND the serialized common/index/search
+        // property maps. The previous manual construction copied only
+        // id/name/type/col_unique_id and dropped index_properties, so NGRAMBF lost
+        // gram_num/case_sensitive (and plain bloom lost bloom_filter_fpp); the fast
+        // path then built the index with wrong defaults (e.g. gram_num=4) that never
+        // matched the query-side predicate ngrams, yielding empty/incorrect results.
+        TabletIndex tablet_index;
+        RETURN_IF_ERROR(tablet_index.init_from_thrift(tix, *new_schema));
+        TabletIndexPB pb;
+        tablet_index.to_schema_pb(&pb);
         indexes_to_build.push_back(std::move(pb));
     }
 
