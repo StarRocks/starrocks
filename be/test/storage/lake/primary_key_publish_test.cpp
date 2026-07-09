@@ -772,6 +772,61 @@ TEST_P(LakePrimaryKeyPublishTest, test_spill_delete_only_removes_keys) {
     ASSERT_EQ(0, read_rows(tablet_id, 3));
 }
 
+// Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one
+// upsert chunk (merged upsert rows > config::vector_chunk_size), write_one_merged_chunk must not corrupt
+// the reused merge chunk's schema. The old clone_empty_with_schema + remove_column_by_index shared then
+// shrank the SchemaPtr, so the second chunk cloned a K-column chunk against a now K-1-field schema and
+// tripped Schema::remove's bounds (DCHECK in debug, out-of-range erase / UB in release). Load more than
+// vector_chunk_size distinct upsert keys through the op-aware spill merge and assert they all read back.
+TEST_P(LakePrimaryKeyPublishTest, test_spill_upsert_spanning_multiple_merge_chunks) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    // Exceed the merge get_next chunk size so run() calls write_one_merged_chunk for more than one chunk.
+    const int n = config::vector_chunk_size + 128;
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+    const int64_t old_size = config::write_buffer_size;
+    const bool old_spill = config::enable_load_spill;
+    const bool old_parallel = config::enable_load_spill_parallel_merge;
+    const bool old_preserve = config::lake_enable_pk_preserve_txn_delete_order;
+    // write_buffer_size=1 forces spilling (blocks flushed before eos, skipping the single-flush shortcut);
+    // serial merge then consolidates them in one task whose merged stream exceeds vector_chunk_size.
+    config::write_buffer_size = 1;
+    config::enable_load_spill = true;
+    config::enable_load_spill_parallel_merge = false;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp reset_cfg([&]() {
+        config::write_buffer_size = old_size;
+        config::enable_load_spill = old_spill;
+        config::enable_load_spill_parallel_merge = old_parallel;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve;
+    });
+    int64_t txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*make_op_chunk(n, /*value_shift=*/0, /*upsert=*/true, _slot_cid_map),
+                                      indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();

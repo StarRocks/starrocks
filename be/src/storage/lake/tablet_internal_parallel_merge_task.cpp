@@ -84,11 +84,16 @@ Status write_one_merged_chunk(TabletWriter* writer, Chunk* chunk, bool has_op, c
         PrimaryKeyEncoder::encode_selective(merge_schema, *chunk, del_idx.data(), del_idx.size(), deletes->get(),
                                             pk_enc);
     }
-    // Write upsert rows as a chunk without __op.
+    // Write upsert rows as a chunk without __op. Copy the upsert rows into a temp chunk (Chunk-level
+    // append_selective handles the immutable columns), then repackage its leading data columns into a
+    // segment chunk backed by a FRESH copy of write_schema. Do NOT clone-then-remove_column_by_index:
+    // clone_empty_with_schema shares the SchemaPtr and remove_column_by_index mutates it in place, which
+    // would shrink the reused loop chunk's shared schema and corrupt the next iteration's op split.
     if (!up_idx.empty()) {
-        auto up_chunk = chunk->clone_empty_with_schema(up_idx.size());
-        up_chunk->append_selective(*chunk, up_idx.data(), 0, up_idx.size());
-        up_chunk->remove_column_by_index(up_chunk->num_columns() - 1); // drop __op
+        auto tmp = chunk->clone_empty_with_schema(up_idx.size());
+        tmp->append_selective(*chunk, up_idx.data(), 0, up_idx.size());
+        Columns up_cols(tmp->columns().begin(), tmp->columns().begin() + write_schema.num_fields()); // drop __op
+        auto up_chunk = std::make_shared<Chunk>(std::move(up_cols), std::make_shared<Schema>(write_schema));
         ChunkHelper::padding_char_columns(char_field_indexes, write_schema, writer->tablet_schema(), up_chunk.get());
         RETURN_IF_ERROR(writer->write(*up_chunk, nullptr));
         *wrote_upsert = true;
