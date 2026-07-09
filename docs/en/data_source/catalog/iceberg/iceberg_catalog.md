@@ -116,19 +116,6 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 <EditionSpecificIcebergCatalogSyntax />
 
-```SQL
-CREATE EXTERNAL CATALOG <catalog_name>
-[COMMENT <comment>]
-PROPERTIES
-(
-    "type" = "iceberg",
-    [SecurityParams],
-    MetastoreParams,
-    StorageCredentialParams,
-    MetadataRelatedParams
-)
-```
-
 ---
 
 ### Parameters
