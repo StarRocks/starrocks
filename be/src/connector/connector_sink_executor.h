@@ -22,11 +22,11 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "common/thread/threadpool.h"
-#include "connector/utils.h"
 
 namespace starrocks {
 class LoadChunkSpiller;
-}
+class MemTracker;
+} // namespace starrocks
 
 namespace starrocks::connector {
 

@@ -24,8 +24,8 @@
 #include "common/status.h"
 #include "connector/common/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
-#include "connector/utils.h"
 #include "connector_primitive/connector_sink.h"
+#include "formats/column_evaluator.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks::formats {

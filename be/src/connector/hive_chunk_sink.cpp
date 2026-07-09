@@ -18,6 +18,7 @@
 
 #include "base/url_coding.h"
 #include "common/logging.h"
+#include "connector/common/utils.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -28,7 +29,6 @@
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 

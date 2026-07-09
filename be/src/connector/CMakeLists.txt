@@ -16,6 +16,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
 ADD_BE_LIB(ConnectorCommon
         common/connector_sink_commit.cpp
+        common/utils.cpp
 )
 
 target_link_libraries(ConnectorCommon PUBLIC
@@ -37,7 +38,8 @@ ADD_BE_LIB(Connector
         file_chunk_sink.cpp
         hive_chunk_sink.cpp
         iceberg_chunk_sink.cpp
-        utils.cpp
+        hive_utils.cpp
+        iceberg_utils.cpp
         partition_chunk_writer.cpp
         partition_chunk_writer_memory_manager.cpp
         connector_sink_executor.cpp

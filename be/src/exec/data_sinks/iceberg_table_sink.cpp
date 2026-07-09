@@ -20,6 +20,7 @@
 #include "common/runtime_profile.h"
 #include "connector/connector_registry.h"
 #include "connector/iceberg_row_delta_sink.h"
+#include "connector/iceberg_utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"

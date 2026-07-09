@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
 
 #include "connector/common/connector_sink_commit.h"
+#include "connector/common/utils.h"
 #include "formats/utils.h"
 
 namespace starrocks::connector {
@@ -45,6 +47,70 @@ TEST(ConnectorCommonTest, CommitResultWrapsFileResultWithConnectorMetadata) {
     ASSERT_EQ(128, result.file_result.file_statistics.file_size);
     ASSERT_EQ("01", result.partition_null_fingerprint);
     ASSERT_EQ("s3://bucket/table/original.parquet", result.referenced_data_file);
+}
+
+struct FileSuffixTestCase {
+    std::string format;
+    TCompressionType::type compression;
+    std::string expected_suffix;
+};
+
+class FileSuffixBuilderTest : public ::testing::TestWithParam<FileSuffixTestCase> {};
+
+TEST_P(FileSuffixBuilderTest, BuildCanonicalFileSuffix) {
+    auto test_case = GetParam();
+    auto normalized = normalize_format_name(test_case.format);
+    auto suffix = build_canonical_file_suffix(normalized, test_case.compression);
+    ASSERT_TRUE(suffix.ok()) << suffix.status();
+    ASSERT_EQ(test_case.expected_suffix, suffix.value());
+    ASSERT_EQ(std::string::npos, suffix.value().find(".csv.csv"));
+}
+
+INSTANTIATE_TEST_SUITE_P(ConnectorCommonSuffix, FileSuffixBuilderTest,
+                         ::testing::Values(FileSuffixTestCase{formats::CSV, TCompressionType::NO_COMPRESSION, "csv"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::GZIP, "csv.gz"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::ZSTD, "csv.zst"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::LZ4, "csv.lz4"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::LZ4_FRAME, "csv.lz4"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::SNAPPY, "csv.snappy"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::DEFLATE, "csv.deflate"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::ZLIB, "csv.zlib"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::BZIP2, "csv.bz2"},
+                                           FileSuffixTestCase{formats::CSV, TCompressionType::DEFAULT_COMPRESSION,
+                                                              "csv"},
+                                           FileSuffixTestCase{formats::PARQUET, TCompressionType::GZIP, "parquet"},
+                                           FileSuffixTestCase{formats::ORC, TCompressionType::ZSTD, "orc"},
+                                           FileSuffixTestCase{"csv.gz.csv", TCompressionType::GZIP, "csv.gz"},
+                                           FileSuffixTestCase{"CSV.LZ4.CSV", TCompressionType::LZ4, "csv.lz4"},
+                                           FileSuffixTestCase{"  .Csv.zst.csv  ", TCompressionType::ZSTD, "csv.zst"}));
+
+TEST(ConnectorCommonTest, RejectsEmptyFileSuffixFormat) {
+    auto normalized = normalize_format_name("   ");
+    auto suffix = build_canonical_file_suffix(normalized, TCompressionType::GZIP);
+    ASSERT_FALSE(suffix.ok());
+}
+
+TEST(ConnectorCommonTest, PathUtilsSplitsPathsAndRemovesTrailingSlash) {
+    ASSERT_EQ("s3://bucket/table/part=1", PathUtils::get_parent_path("s3://bucket/table/part=1/data.parquet"));
+    ASSERT_EQ("data.parquet", PathUtils::get_filename("s3://bucket/table/part=1/data.parquet"));
+    ASSERT_EQ("s3://bucket/table", PathUtils::remove_trailing_slash("s3://bucket/table/"));
+    ASSERT_EQ("s3://bucket/table", PathUtils::remove_trailing_slash("s3://bucket/table"));
+}
+
+TEST(ConnectorCommonTest, LocationProviderBuildsStablePaths) {
+    LocationProvider provider("s3://bucket/table/", "query", 2, 3, "parquet");
+
+    ASSERT_EQ("s3://bucket/table", provider.root_location());
+    ASSERT_EQ("s3://bucket/table/dt=2026", provider.root_location("dt=2026/"));
+    ASSERT_EQ("s3://bucket/table/query_2_3_0.parquet", provider.get());
+    ASSERT_EQ("s3://bucket/table/dt=2026/query_2_3_0.parquet", provider.get("dt=2026/"));
+    ASSERT_EQ("s3://bucket/table/dt=2026/query_2_3_1.parquet", provider.get("dt=2026/"));
+}
+
+TEST(ConnectorCommonTest, LocationProviderIncludesWriterTag) {
+    LocationProvider provider("s3://bucket/table", "query", 2, 3, "parquet", "data");
+
+    ASSERT_EQ("s3://bucket/table/query_2_data_3_0.parquet", provider.get());
 }
 
 } // namespace starrocks::connector
