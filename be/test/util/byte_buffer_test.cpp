@@ -67,27 +67,50 @@ TEST_F(ByteBufferTest, test_meta) {
 
     auto kafka_meta_st = ByteBufferMeta::create(ByteBufferMetaType::KAFKA);
     ASSERT_OK(kafka_meta_st.status());
-    KafkaByteBufferMeta* kafka_meta = dynamic_cast<KafkaByteBufferMeta*>(kafka_meta_st.value());
+    StreamMessageMeta* kafka_meta = dynamic_cast<StreamMessageMeta*>(kafka_meta_st.value());
     DeferOp defer([&] { delete kafka_meta; });
     ASSERT_TRUE(kafka_meta != nullptr);
     ASSERT_EQ(ByteBufferMetaType::KAFKA, kafka_meta->type());
     ASSERT_EQ(-1, kafka_meta->partition());
     ASSERT_EQ(-1, kafka_meta->offset());
+    kafka_meta->set_topic("t");
     kafka_meta->set_partition(1);
     kafka_meta->set_offset(2);
+    kafka_meta->set_timestamp(123);
+    kafka_meta->set_key("k");
+    kafka_meta->add_header("h1", "v1");
     ASSERT_EQ(1, kafka_meta->partition());
     ASSERT_EQ(2, kafka_meta->offset());
-    ASSERT_EQ("kafka partition: 1, offset: 2", kafka_meta->to_string());
+    ASSERT_EQ(123, kafka_meta->timestamp());
+    ASSERT_TRUE(kafka_meta->has_key());
+    ASSERT_EQ("k", kafka_meta->key());
+    ASSERT_EQ(1, kafka_meta->headers().size());
+    ASSERT_EQ("kafka topic: t, partition: 1, offset: 2", kafka_meta->to_string());
+
+    // Without a topic (the job references no metadata column) only partition/offset are rendered.
+    StreamMessageMeta bare_kafka_meta(ByteBufferMetaType::KAFKA);
+    bare_kafka_meta.set_partition(4);
+    bare_kafka_meta.set_offset(5);
+    ASSERT_EQ("kafka partition: 4, offset: 5", bare_kafka_meta.to_string());
 
     ASSERT_TRUE(none_meta->copy_from(kafka_meta).is_not_supported());
     ASSERT_TRUE(kafka_meta->copy_from(none_meta).is_not_supported());
 
-    KafkaByteBufferMeta kafka_meta1;
+    // A Pulsar-typed meta is incompatible with a Kafka-typed one.
+    StreamMessageMeta pulsar_meta(ByteBufferMetaType::PULSAR);
+    ASSERT_TRUE(kafka_meta->copy_from(&pulsar_meta).is_not_supported());
+
+    // copy_from fully overwrites and clears absent fields (no stale key/headers leak).
+    StreamMessageMeta kafka_meta1(ByteBufferMetaType::KAFKA);
+    kafka_meta1.set_topic("t2");
     kafka_meta1.set_partition(2);
     kafka_meta1.set_offset(3);
     ASSERT_OK(kafka_meta->copy_from(&kafka_meta1));
     ASSERT_EQ(2, kafka_meta->partition());
     ASSERT_EQ(3, kafka_meta->offset());
+    ASSERT_FALSE(kafka_meta->has_key());
+    ASSERT_TRUE(kafka_meta->key().empty());
+    ASSERT_TRUE(kafka_meta->headers().empty());
 }
 
 TEST_F(ByteBufferTest, test_allocate_with_meta) {
@@ -95,21 +118,24 @@ TEST_F(ByteBufferTest, test_allocate_with_meta) {
     ASSERT_EQ(NoneByteBufferMeta::instance(), buf1->meta());
 
     auto buf2 = ByteBuffer::allocate_with_tracker(4, 0, ByteBufferMetaType::KAFKA).value();
-    KafkaByteBufferMeta* meta2 = dynamic_cast<KafkaByteBufferMeta*>(buf2->meta());
+    StreamMessageMeta* meta2 = dynamic_cast<StreamMessageMeta*>(buf2->meta());
     ASSERT_TRUE(meta2 != nullptr);
     ASSERT_EQ(-1, meta2->partition());
     ASSERT_EQ(-1, meta2->offset());
     meta2->set_partition(2);
     meta2->set_offset(4);
+    meta2->add_header("h", "v");
     ASSERT_EQ(2, meta2->partition());
     ASSERT_EQ(4, meta2->offset());
 
+    // reallocate copies the meta forward, including headers.
     auto buf3 = ByteBuffer::reallocate_with_tracker(buf2, 8).value();
-    KafkaByteBufferMeta* meta3 = dynamic_cast<KafkaByteBufferMeta*>(buf3->meta());
+    StreamMessageMeta* meta3 = dynamic_cast<StreamMessageMeta*>(buf3->meta());
     ASSERT_TRUE(meta3 != nullptr);
     ASSERT_TRUE(meta2 != meta3);
     ASSERT_EQ(2, meta3->partition());
     ASSERT_EQ(4, meta3->offset());
+    ASSERT_EQ(1, meta3->headers().size());
 }
 
 TEST_F(ByteBufferTest, test_flip_to_write_partial_read) {
