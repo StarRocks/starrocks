@@ -292,7 +292,6 @@ In this tutorial you:
 The build/setup material — narrated walkthrough and the video script — is maintained separately so this environment stays free of canned answers:
 
 - **StarRocks MCP server:** [https://github.com/StarRocks/mcp-server-starrocks](https://github.com/StarRocks/mcp-server-starrocks)
-- **Setup kit:** *(add the StarRocks-org setup repo URL here once published)*
 
 ---
 
