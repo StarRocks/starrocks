@@ -14,6 +14,8 @@
 
 #include "compute_env/global_dict/parser.h"
 
+#include <limits>
+
 #include "base/simd/gather.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -539,6 +541,25 @@ Status rewrite_global_dict_mapping_expr(RuntimeState* state, ExprContext* contex
         return Status::InternalError("fragment dict state is not set");
     }
     return fragment_dict_state->mutable_dict_optimize_parser()->rewrite_expr(state, context, expr, output_id);
+}
+
+StatusOr<DictId> DictOptimizeParser::lookup_dict_code(RuntimeState* runtime_state, SlotId slot_id, const Slice& value) {
+    std::lock_guard<std::recursive_mutex> guard(_dict_maps_mutex);
+
+    auto it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    if (it == _mutable_dict_maps->end()) {
+        RETURN_IF_ERROR(eval_dict_expr(runtime_state, slot_id));
+        it = _mutable_dict_maps->find(static_cast<uint32_t>(slot_id));
+    }
+    if (it == _mutable_dict_maps->end()) {
+        return Status::InternalError(fmt::format("dict_encode: global dictionary not found for slot {}", slot_id));
+    }
+
+    const GlobalDictMap& forward = it->second.first;
+    if (auto f = forward.find(value); f != forward.end()) {
+        return f->second;
+    }
+    return std::numeric_limits<DictId>::max();
 }
 
 } // namespace starrocks
