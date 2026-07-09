@@ -84,9 +84,11 @@ public class PrivilegeType {
     public static final PrivilegeType SECURITY = new PrivilegeType(20005, "SECURITY");
     // Semantic-context module: system-level privilege to create top-level contextbases. Per-base
     // access is then granted with the generic verbs on ObjectType.CONTEXTBASE:
-    //   GRANT USAGE ON CONTEXTBASE <name> ...   -- read + write data in the base
-    //   GRANT ALTER ON CONTEXTBASE <name> ...   -- ALTER CONTEXTBASE / collection lifecycle
+    //   GRANT USAGE ON CONTEXTBASE <name> ...   -- read + write data, plus collection / workspace ops
+    //   GRANT ALTER ON CONTEXTBASE <name> ...   -- ALTER CONTEXTBASE (base-level property changes)
     //   GRANT DROP  ON CONTEXTBASE <name> ...   -- DROP CONTEXTBASE
+    // (This mirrors the enforcement contract in ContextVisibility.checkOnContextBase: collection and
+    // workspace operations are data-plane and require USAGE, not ALTER.)
     //
     // NOTE: ids 20001-20003 and 20006 are reserved by the enterprise PrivilegeTypeEPack
     // (CREATE MASKING/ROW ACCESS POLICY, APPLY, CREATE FAILOVER GROUP). PrivilegeType.equals/hashCode

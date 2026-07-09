@@ -3302,6 +3302,257 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
         return null;
     }
 
+    // ------------------------------ Semantic-Context Statement -------------------------------- //
+    // Module-create gate: bound to SYSTEM CREATE_CONTEXTBASE. Required for CREATE CONTEXTBASE
+    // and CREATE RETRIEVAL PROFILE — the self-service "I may create new top-level objects"
+    // privilege. Notably this is NOT a full-visibility / admin override; the per-base ownership
+    // helper below intentionally does not fall back to CREATE_CONTEXTBASE.
+    private void checkContextSystemAction(ConnectContext context, String stmtName) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.CREATE_CONTEXTBASE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.CREATE_CONTEXTBASE.name(),
+                    ObjectType.SYSTEM.name(), stmtName);
+        }
+    }
+
+    // Hard admin gate for cluster-wide observability (SHOW CONTEXT STATUS / TASKS / PROFILE).
+    // OPERATE or SECURITY at SYSTEM level. The previous code used CREATE_CONTEXTBASE here too,
+    // which conflated module-create with read-everything; closing that path here.
+    private void checkContextAdminAction(ConnectContext context, String stmtName) {
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            return;
+        } catch (AccessDeniedException ignored) {
+            // fall through
+        }
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.SECURITY);
+            return;
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name() + "/" + PrivilegeType.SECURITY.name(),
+                    ObjectType.SYSTEM.name(), stmtName);
+        }
+    }
+
+    // Authorize an operation on an already-existing contextbase. Three paths in order:
+    //   1. Admin override (SYSTEM OPERATE / SECURITY).
+    //   2. Per-base GRANT for the required action (USAGE for content/collection/workspace ops,
+    //      ALTER for ALTER CONTEXTBASE, DROP for DROP CONTEXTBASE).
+    //   3. Owner match: caller's principal (UserIdentity.getUser()) equals the stored
+    //      _owner_user. The owner check uses the bare principal so ephemeral Bearer/JWT
+    //      identities authenticate stably across requests from different remote IPs;
+    //      toString() would embed the host and silently fail to match.
+    // The previous code permitted a fourth fallback ("system CREATE_CONTEXTBASE plus matching
+    // owner OR null owner") that conflated module-create with read-anywhere; that path is
+    // intentionally removed here. Delegates to ContextVisibility so the REST surface and the
+    // SQL surface evaluate the exact same predicate.
+    private void checkContextBaseOwnership(ConnectContext context, String contextBaseName,
+                                           String stmtName) {
+        com.starrocks.context.ContextVisibility.BaseAction action;
+        String upper = stmtName == null ? "" : stmtName.toUpperCase();
+        if (upper.startsWith("ALTER")) {
+            action = com.starrocks.context.ContextVisibility.BaseAction.ALTER;
+        } else if (upper.startsWith("DROP")) {
+            action = com.starrocks.context.ContextVisibility.BaseAction.DROP;
+        } else {
+            action = com.starrocks.context.ContextVisibility.BaseAction.USAGE;
+        }
+        try {
+            com.starrocks.context.ContextVisibility.checkOnContextBase(context, contextBaseName, action);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    action.name(), ObjectType.SYSTEM.name(),
+                    contextBaseName == null
+                            ? stmtName + " (contextbase name required)"
+                            : "contextbase '" + contextBaseName + "'");
+        }
+    }
+
+    @Override
+    public Void visitCreateContextBaseStatement(
+            com.starrocks.sql.ast.context.CreateContextBaseStmt statement, ConnectContext context) {
+        checkContextSystemAction(context, "CREATE CONTEXTBASE");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterContextBaseStatement(
+            com.starrocks.sql.ast.context.AlterContextBaseStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getName(), "ALTER CONTEXTBASE");
+        return null;
+    }
+
+    @Override
+    public Void visitAlterContextBaseRenameStatement(
+            com.starrocks.sql.ast.context.AlterContextBaseRenameStmt statement, ConnectContext context) {
+        // Rename requires ALTER authority on the source contextbase, same as ALTER ... SET. The
+        // renamed base keeps its id (and thus its owner / grants), so no target-side check applies.
+        checkContextBaseOwnership(context, statement.getName().getName(), "ALTER CONTEXTBASE");
+        return null;
+    }
+
+    @Override
+    public Void visitDropContextBaseStatement(
+            com.starrocks.sql.ast.context.DropContextBaseStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getName(), "DROP CONTEXTBASE");
+        return null;
+    }
+
+    @Override
+    public Void visitCreateContextCollectionStatement(
+            com.starrocks.sql.ast.context.CreateContextCollectionStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getContextBase(),
+                "CREATE CONTEXT COLLECTION");
+        return null;
+    }
+
+    @Override
+    public Void visitDropContextCollectionStatement(
+            com.starrocks.sql.ast.context.DropContextCollectionStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getContextBase(),
+                "DROP CONTEXT COLLECTION");
+        return null;
+    }
+
+    @Override
+    public Void visitCreateContextWorkspaceStatement(
+            com.starrocks.sql.ast.context.CreateWorkspaceStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getContextBase(),
+                "CREATE WORKSPACE");
+        return null;
+    }
+
+    @Override
+    public Void visitDropContextWorkspaceStatement(
+            com.starrocks.sql.ast.context.DropWorkspaceStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getName().getContextBase(),
+                "DROP WORKSPACE");
+        return null;
+    }
+
+    @Override
+    public Void visitCreateRetrievalProfileStatement(
+            com.starrocks.sql.ast.context.CreateRetrievalProfileStmt statement, ConnectContext context) {
+        // Retrieval profiles are global (not contextbase-scoped); creating one is a self-service
+        // "add a new top-level object" action, gated on SYSTEM CREATE_CONTEXTBASE.
+        checkContextSystemAction(context, "CREATE RETRIEVAL PROFILE");
+        return null;
+    }
+
+    @Override
+    public Void visitDropRetrievalProfileStatement(
+            com.starrocks.sql.ast.context.DropRetrievalProfileStmt statement, ConnectContext context) {
+        // Retrieval profiles are global cluster-shared config with no per-object owner. Dropping one
+        // affects every tenant, so it needs the admin gate (OPERATE/SECURITY) — the same level that
+        // guards SHOW CONTEXT PROFILE — not the self-service CREATE_CONTEXTBASE create gate, which
+        // would otherwise let a non-admin delete profiles it cannot even list.
+        checkContextAdminAction(context, "DROP RETRIEVAL PROFILE");
+        return null;
+    }
+
+    @Override
+    public Void visitContextUpsertStatement(
+            com.starrocks.sql.ast.context.ContextUpsertStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getCollection().getContextBase(),
+                "CONTEXT UPSERT");
+        return null;
+    }
+
+    @Override
+    public Void visitContextDeleteStatement(
+            com.starrocks.sql.ast.context.ContextDeleteStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getCollection().getContextBase(),
+                "CONTEXT DELETE");
+        return null;
+    }
+
+    @Override
+    public Void visitWorkspaceUpsertStatement(
+            com.starrocks.sql.ast.context.WorkspaceUpsertStmt statement, ConnectContext context) {
+        checkContextBaseOwnership(context, statement.getWorkspace().getContextBase(),
+                "WORKSPACE UPSERT");
+        return null;
+    }
+
+    // --------- SHOW CONTEXT * authorization ---------
+    //
+    // The default visitor for these statements (AstVisitorExtendInterface.visitShowStatement)
+    // performs no privilege check, which means any authenticated user could enumerate the full
+    // semantic-context topology (contextbases, collections, workspaces, tasks, vector lag,
+    // health). That is a topology / metadata disclosure for an otherwise scoped feature, so we
+    // gate the global lists behind the same system privilege as creation, and gate the scoped
+    // lists behind the same per-base check the write path uses.
+
+    @Override
+    public Void visitShowContextBasesStatement(
+            com.starrocks.sql.ast.context.ShowContextBasesStmt statement, ConnectContext context) {
+        // No analyzer-side gate. The executor filters the result set through
+        // ContextVisibility.filterVisibleBases so a non-admin caller sees the subset of bases
+        // they hold USAGE on or own (and admin paths see all). Previously this required
+        // SYSTEM CREATE_CONTEXTBASE which both 401-ed legitimate owners with no create privilege
+        // AND let any self-service creator enumerate every other tenant's base.
+        return null;
+    }
+
+    @Override
+    public Void visitShowContextCollectionsStatement(
+            com.starrocks.sql.ast.context.ShowContextCollectionsStmt statement, ConnectContext context) {
+        String cb = statement.getContextBase();
+        if (cb == null || cb.isEmpty()) {
+            // Unscoped — executor filters via ContextVisibility.filterVisibleCollections.
+            return null;
+        }
+        checkContextBaseOwnership(context, cb, "SHOW CONTEXT COLLECTIONS");
+        return null;
+    }
+
+    @Override
+    public Void visitShowContextWorkspacesStatement(
+            com.starrocks.sql.ast.context.ShowContextWorkspacesStmt statement, ConnectContext context) {
+        String cb = statement.getContextBase();
+        if (cb == null || cb.isEmpty()) {
+            // Unscoped — executor filters via ContextVisibility.filterVisibleWorkspaces.
+            return null;
+        }
+        checkContextBaseOwnership(context, cb, "SHOW CONTEXT WORKSPACES");
+        return null;
+    }
+
+    @Override
+    public Void visitShowContextStatusStatement(
+            com.starrocks.sql.ast.context.ShowContextStatusStmt statement, ConnectContext context) {
+        // Cluster-wide operational counters; payload aggregates across every base and has no
+        // per-base scope to narrow to. Gate behind a true admin override (OPERATE / SECURITY).
+        checkContextAdminAction(context, "SHOW CONTEXT STATUS");
+        return null;
+    }
+
+    @Override
+    public Void visitShowContextTasksStatement(
+            com.starrocks.sql.ast.context.ShowContextTasksStmt statement, ConnectContext context) {
+        // Task table exposes payload_json and timing for every contextbase; admin only.
+        checkContextAdminAction(context, "SHOW CONTEXT TASKS");
+        return null;
+    }
+
+    @Override
+    public Void visitShowContextProfileStatement(
+            com.starrocks.sql.ast.context.ShowContextProfileStmt statement, ConnectContext context) {
+        // Retrieval profiles are cluster-shared (single global pool), so listing is
+        // operator-level visibility into module-wide configuration.
+        checkContextAdminAction(context, "SHOW CONTEXT PROFILE");
+        return null;
+    }
+
     // --------------------------------- Compaction Statement ---------------------------------
 
     @Override
