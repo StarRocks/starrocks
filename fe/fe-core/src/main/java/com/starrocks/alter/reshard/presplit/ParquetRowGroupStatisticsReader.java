@@ -333,11 +333,13 @@ public final class ParquetRowGroupStatisticsReader {
                         location.starRocksColumn.getName(), conversionFailure.getMessage()));
             }
         }
-        // Parquet chunk stats are never truncated (see the class javadoc). Absent nulls the
-        // box tuple is a valid loose lexicographic bound of the row group; a null (which sorts
-        // below every value) can fall under minTuple, but data safety does not rely on the
-        // bound -- the BE routes every row by its true value, so a null-leading row lands in
-        // the leftmost tablet (see the class javadoc / the single-column meta tier).
+        // Parquet chunk stats are never truncated (parquet-mr defaults truncate.length to
+        // Integer.MAX_VALUE and parquet-cpp drops oversized stats, which the isEmpty() guard
+        // above already routes to data tier). Absent nulls the box tuple is a valid loose
+        // lexicographic bound of the row group; a null (which sorts below every value) can fall
+        // under minTuple, but data safety does not rely on the bound -- the BE routes every row
+        // by its true value, so a null-leading row lands in the leftmost tablet (as in the
+        // single-column meta tier).
         return new RowGroupStatistics(new Tuple(minValues), new Tuple(maxValues), rowCount, /*truncated=*/ false);
     }
 
