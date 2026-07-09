@@ -245,6 +245,7 @@ TEST_F(JniScannerTest, test_create_fluss_jni_scanner) {
             {"time_zone", "Asia/Shanghai"},
     };
     check_jni_scanner_params(scanner->_jni_scanner_params, expected);
+    ASSERT_EQ(1, scanner->_skipped_log_jni_scanner_params.count("runtime_conf"));
 }
 
 TEST_F(JniScannerTest, test_create_hudi_jni_scanner) {
