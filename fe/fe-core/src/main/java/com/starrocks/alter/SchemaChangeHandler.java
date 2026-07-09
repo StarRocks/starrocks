@@ -2374,6 +2374,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (bfDelta != null) {
                 AlterJobV2 fastPathJob = null;
                 if (bfDelta.isPureAdd()) {
+                    // A column may carry at most one of {plain bloom filter, ngram
+                    // bloom filter}. The regular schema-change path enforces this
+                    // via IndexAnalyzer.analyseBfWithNgramBf; the fast path must
+                    // too, otherwise SET ("bloom_filter_columns"=...) on a column
+                    // that already has an NGRAMBF index is silently accepted.
+                    Set<ColumnId> addedBfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    for (String columnName : bfDelta.added) {
+                        Column bfColumn = olapTable.getColumn(columnName);
+                        if (bfColumn != null) {
+                            addedBfColumnIds.add(bfColumn.getColumnId());
+                        }
+                    }
+                    IndexAnalyzer.analyseBfWithNgramBf(olapTable, new HashSet<>(olapTable.getIndexes()),
+                            addedBfColumnIds);
                     fastPathJob = tryBuildLakeAddBloomFilterJob(db, olapTable, bfDelta.added);
                 } else if (bfDelta.isPureDrop()) {
                     fastPathJob = tryBuildLakeDropBloomFilterJob(db, olapTable, bfDelta.dropped);
