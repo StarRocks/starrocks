@@ -773,9 +773,6 @@ public class OpTest {
                 fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator countDistinctCallOp = new CallOperator(
                 FunctionSet.COUNT, IntegerType.BIGINT, Arrays.asList(colRef), fn, true);
-        com.starrocks.catalog.Function searchDesc2 =
-                new com.starrocks.catalog.Function(new FunctionName(FunctionSet.ARRAY_AGG),
-                        new Type[] {type}, ArrayType.ARRAY_INT, false);
         com.starrocks.catalog.Function
                 arrayAggDistinctFn =
                 GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
@@ -804,7 +801,6 @@ public class OpTest {
     @Test
     public void testRewriteBitmap() {
         ColumnRefOperator colRef = columnRefs.get(3);
-        Type type = colRef.getType();
         CallOperator bitmapUnionIntAggCall = new CallOperator(
                 FunctionSet.BITMAP_UNION_INT, IntegerType.BIGINT, Arrays.asList(colRef));
         CallOperator bitmapUnionCountAggCall = new CallOperator(

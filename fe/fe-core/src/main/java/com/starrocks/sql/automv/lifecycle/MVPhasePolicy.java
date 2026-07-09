@@ -122,10 +122,6 @@ public class MVPhasePolicy {
 
         Predicate<MVLifecycle> reachPerfEvalTimeDictator = mvLifecycle -> mvLifecycle.elapsedSeconds() >
                 options.getPerformanceEvaluationInterval();
-        BiFunction<MVLifecycle, Function<String, Double>, Boolean> excellentPerfDictator =
-                getMVPerformanceDictator(reachPerfEvalTimeDictator, goodMVDictator);
-        BiFunction<MVLifecycle, Function<String, Double>, Boolean> unsatisfactoryPerfDictator =
-                getMVPerformanceDictator(reachPerfEvalTimeDictator, badMVDictator);
         return new Builder()
                 .setInfantAbortionDictator(mvLifecycle ->
                         mvLifecycle.elapsedSeconds() > options.getInfantAbortionMaxTime())

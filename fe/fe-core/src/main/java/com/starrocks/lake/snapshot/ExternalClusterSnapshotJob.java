@@ -547,7 +547,6 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                             List<Long> tabletIds = Lists.newArrayList();
                             for (Map.Entry<Long, MaterializedIndexSnapshotInfo> indexEntry : physicalPartInfo.indexInfos
                                     .entrySet()) {
-                                long indexId = indexEntry.getKey();
                                 MaterializedIndexSnapshotInfo indexInfo = indexEntry.getValue();
                                 if (indexInfo == null || indexInfo.tabletIds == null) {
                                     continue;

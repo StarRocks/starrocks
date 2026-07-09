@@ -174,8 +174,6 @@ public class PlanPieceNormalizer extends PlanPieceVisitor<PlanPiece, ColumnUnfol
                         .sorted(Comparator.comparing(p -> p.second.getResult()))
                         .collect(Collectors.toList());
 
-        List<StarJoinPiece.StarCorner> normalizedCorners =
-                normalizedCornersAndNorms.stream().map(p -> p.first).collect(Collectors.toList());
         List<PrettyPrinter> cornerNorms =
                 normalizedCornersAndNorms.stream().map(p -> p.second).collect(Collectors.toList());
 

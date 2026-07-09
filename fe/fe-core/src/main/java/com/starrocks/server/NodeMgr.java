@@ -83,7 +83,6 @@ import com.starrocks.thrift.TGetWarehousesRequest;
 import com.starrocks.thrift.TGetWarehousesResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshRoleMappingRequest;
-import com.starrocks.thrift.TRefreshRoleMappingResponse;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.WarehouseInfo;
 import org.apache.logging.log4j.LogManager;
@@ -1233,7 +1232,7 @@ public class NodeMgr {
             TRefreshRoleMappingRequest request = new TRefreshRoleMappingRequest();
             try {
                 // Currently, the responded status is always OK.
-                TRefreshRoleMappingResponse response = ThriftRPCRequestExecutor.call(
+                ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                         timeout,

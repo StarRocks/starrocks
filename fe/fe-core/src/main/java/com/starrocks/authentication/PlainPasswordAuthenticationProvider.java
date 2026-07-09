@@ -25,7 +25,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUserSecurityPolicyRequest;
-import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
@@ -66,7 +65,7 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                         Pair<String, Integer> ipAndPort =
                                 GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
                         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
-                        TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftRPCRequestExecutor.call(
                                 ThriftConnectionPool.frontendPool,
                                 thriftAddress,
                                 client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));

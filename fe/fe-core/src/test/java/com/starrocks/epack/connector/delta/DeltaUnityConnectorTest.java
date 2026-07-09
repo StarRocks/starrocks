@@ -80,7 +80,7 @@ public class DeltaUnityConnectorTest {
             }
         };
 
-        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
+        new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
         ConnectorMetadata metadata = deltaUnityConnector.getMetadata();
         Assert.assertTrue(metadata instanceof DeltaLakeMetadata);
@@ -98,13 +98,13 @@ public class DeltaUnityConnectorTest {
 
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
-        DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
+        new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", workspaceClient, null,
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks catalog name must be set");
-        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
+        new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
     }
 
@@ -118,14 +118,14 @@ public class DeltaUnityConnectorTest {
 
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
-        DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
+        new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", workspaceClient, null,
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
                 "databricks.client.id and databricks.client.secret");
-        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
+        new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
     }
 
@@ -140,14 +140,14 @@ public class DeltaUnityConnectorTest {
 
         WorkspaceClient workspaceClient = new WorkspaceClient(new DatabricksConfig().
                 setHost("https://xxxx.cloud.databricks.com").setToken("xxxx"));
-        DatabricksUnityMetastore databricksUnityMetastore = new DatabricksUnityMetastore("databricks0",
+        new DatabricksUnityMetastore("databricks0",
                 "databricks_catalog", workspaceClient, null,
                 new DeltaLakeCatalogProperties(Maps.newHashMap()));
 
         expectedEx.expect(IllegalArgumentException.class);
         expectedEx.expectMessage("Databricks Catalog need to set databricks.token or " +
                 "databricks.client.id and databricks.client.secret");
-        DeltaLakeConnector deltaUnityConnector = new DeltaLakeConnector(new ConnectorContext("databricks0",
+        new DeltaLakeConnector(new ConnectorContext("databricks0",
                 "deltalake", properties));
     }
 }

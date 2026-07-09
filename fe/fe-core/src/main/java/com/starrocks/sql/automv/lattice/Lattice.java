@@ -742,7 +742,6 @@ public class Lattice {
         // high-cardinality MV is pruned here
         // TODO(by satanson): in future, a bundle of high-cardinality MVs should merge into
         //  a flat table MV that based on cardinality-preserving join.
-        List<LatticeNode> nodesWithHighCard = nodeGroups.getOrDefault(2, Collections.emptyList());
 
         List<MVRecommendation> candidateMVs =
                 nodesWithLowCard.stream().map(MVRecommendation::new).collect(Collectors.toList());

@@ -15,7 +15,6 @@
 package com.starrocks.sql.automv.generator;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -222,6 +221,6 @@ public class PartitionPolicy {
     }
 
     public static void getPartitionInfo(Table table) {
-        List<Column> pColumns = PartitionUtil.getPartitionColumns(table);
+        PartitionUtil.getPartitionColumns(table);
     }
 }

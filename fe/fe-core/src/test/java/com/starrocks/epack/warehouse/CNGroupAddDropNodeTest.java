@@ -199,7 +199,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             String cnGroupName2 = randomCNGroupName();
             Warehouse wh = ensureWarehouseCreated(warehouseName);
             Cluster cluster = ensureCnGroupCreated(warehouseName, cnGroupName);
-            Cluster cluster2 = ensureCnGroupCreated(warehouseName, cnGroupName2);
+            ensureCnGroupCreated(warehouseName, cnGroupName2);
             { // add a node
                 String sql = addNodeSql(nodeAddress, warehouseName, cnGroupName, isCnNode);
                 ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.ddl(sql));
@@ -293,7 +293,7 @@ public class CNGroupAddDropNodeTest extends LocalWarehouseTestBase {
             { // 2 cngroups, cngroup[0] == DEFAULT_CLUSTER_NAME
                 String nodeAddress = randomNodeAddress();
                 String cngroupName = randomCNGroupName();
-                Cluster cluster = ensureCnGroupCreated(warehouseName, cngroupName);
+                ensureCnGroupCreated(warehouseName, cngroupName);
                 Assertions.assertEquals(2L, wh.getClusters().size());
                 cngroupNames.add(cngroupName);
 

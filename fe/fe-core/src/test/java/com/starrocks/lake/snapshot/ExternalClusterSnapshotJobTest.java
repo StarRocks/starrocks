@@ -462,8 +462,6 @@ public class ExternalClusterSnapshotJobTest {
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-
         new MockUp<AgentBatchTask>() {
             @Mock
             public boolean isFinished() {
@@ -847,7 +845,6 @@ public class ExternalClusterSnapshotJobTest {
 
         List<Long> tabletIds = Lists.newArrayList(1001L, 1002L, 1003L);
         List<TComputeNodeTablets> computeNodes = Lists.newArrayList();
-        long aggregatorNodeId = 0L;
 
         mockWarehouseAssign();
 

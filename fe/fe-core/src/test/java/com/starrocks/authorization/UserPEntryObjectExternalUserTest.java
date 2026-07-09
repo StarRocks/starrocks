@@ -215,7 +215,7 @@ public class UserPEntryObjectExternalUserTest {
 
         // For null user identity, we just test that the method doesn't throw exception
         // The actual behavior depends on the implementation
-        boolean isValid = userPEntryObject.validate();
+        userPEntryObject.validate();
         
         // We don't make assertions about the return value since the behavior
         // with null userIdentity may vary based on implementation

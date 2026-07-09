@@ -273,7 +273,6 @@ public class OpUtil {
         }
         List<Op> args = distinctOp.arg(0).getArgs();
         Preconditions.checkArgument(!args.isEmpty());
-        Type argType = args.get(0).getType();
 
         Op hllHashOp = Apply.apply(HLLType.HLL, FunctionSet.HLL_HASH, true, args);
         Op hllAggOp = Apply.apply(HLLType.HLL, FunctionSet.HLL_UNION, true, hllHashOp);

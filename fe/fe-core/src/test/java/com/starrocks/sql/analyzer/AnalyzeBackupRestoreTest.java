@@ -281,7 +281,7 @@ public class AnalyzeBackupRestoreTest {
 
     @Test
     public void testRestoreTableFromSnapshotSuccess() {
-        MockUp<RunMode> mock = new MockUp<RunMode>() {
+        new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;

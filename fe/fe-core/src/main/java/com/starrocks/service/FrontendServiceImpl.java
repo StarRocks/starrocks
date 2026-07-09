@@ -1987,11 +1987,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // 1. check user and password
         ConnectContext context = new ConnectContext();
-        UserIdentity userIdentity;
         try {
             BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
                     authParams.getUser(), authParams.getPasswd(), authParams.getHost());
-            userIdentity = BaseAction.checkPassword(context, authInfo);
+            BaseAction.checkPassword(context, authInfo);
         } catch (Exception e) {
             LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
                     authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);

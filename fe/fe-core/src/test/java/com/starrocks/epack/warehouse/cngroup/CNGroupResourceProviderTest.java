@@ -79,7 +79,6 @@ public class CNGroupResourceProviderTest extends WarehouseTestBase {
 
     @Test
     public void testAcquireResourceWithNullWarehouse() {
-        WarehouseManager warehouseManager = GlobalStateMgr.getServingState().getWarehouseMgr();
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         ErrorReportException e = assertThrows(ErrorReportException.class, () -> {
             provider.acquireComputeResource(null, cnAcquireContext);

@@ -172,9 +172,7 @@ public class PlanPiecePatternTest {
             ConnectContext ctx = getStarRocksAssert().getCtx();
             List<OptExpression> subPlans = RboOptimizer.getSubPlans(sql, ctx, PlanPiecePatterns.getSPJG()).second;
             Assert.assertTrue(nextResult.hasNext());
-            Object[] result = nextResult.next();
-            String expectName = (String) result[0];
-            Integer expectSize = (Integer) result[1];
+            nextResult.next();
             System.out.printf("{\"%s\", %d},\n", name, subPlans.size());
             /*
             Assert.assertEquals(expectName, name);

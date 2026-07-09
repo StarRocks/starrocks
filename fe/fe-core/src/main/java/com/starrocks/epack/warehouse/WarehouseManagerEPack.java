@@ -679,7 +679,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     @Override
     public void recordWarehouseInfoForTable(long tableId, ComputeResource computeResource) {
-        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.compute(tableId, (k, v) -> {
+        tableLastTransactionWarehouseInfo.compute(tableId, (k, v) -> {
             if (v == null) {
                 v = new TransactionWarehouseInfo();
             }

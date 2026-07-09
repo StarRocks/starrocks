@@ -9,19 +9,19 @@ import org.junit.Test;
 public class ReplicationScheduleTest {
     @Test
     public void testParseSchedule() throws DdlException {
-        ReplicationSchedule schedule1 = new ReplicationSchedule("1s");
-        ReplicationSchedule schedule2 = new ReplicationSchedule("1 s");
-        ReplicationSchedule schedule3 = new ReplicationSchedule("0.1s");
-        ReplicationSchedule schedule4 = new ReplicationSchedule("1seconds");
-        ReplicationSchedule schedule5 = new ReplicationSchedule("1M");
-        ReplicationSchedule schedule6 = new ReplicationSchedule("1minutes");
-        ReplicationSchedule schedule7 = new ReplicationSchedule("1h");
-        ReplicationSchedule schedule8 = new ReplicationSchedule("1Hours");
-        ReplicationSchedule schedule9 = new ReplicationSchedule("1d");
-        ReplicationSchedule schedule10 = new ReplicationSchedule("1days");
+        new ReplicationSchedule("1s");
+        new ReplicationSchedule("1 s");
+        new ReplicationSchedule("0.1s");
+        new ReplicationSchedule("1seconds");
+        new ReplicationSchedule("1M");
+        new ReplicationSchedule("1minutes");
+        new ReplicationSchedule("1h");
+        new ReplicationSchedule("1Hours");
+        new ReplicationSchedule("1d");
+        new ReplicationSchedule("1days");
 
         try {
-            ReplicationSchedule schedule11 = new ReplicationSchedule("1a");
+            new ReplicationSchedule("1a");
         } catch (Exception e) {
             Assert.assertEquals("Invalid parameter 1a", e.getMessage());
         }

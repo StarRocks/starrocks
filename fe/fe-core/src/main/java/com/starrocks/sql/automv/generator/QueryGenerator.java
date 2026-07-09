@@ -255,7 +255,6 @@ public class QueryGenerator {
                 QueryGenerateContext context) {
             TieredMap<Integer, ColumnAlias> columnAliases = inputResult.getColumnAliases();
             Function<Op, String> opToSql = OpUtil.toOpToSqlConverter(columnAliases);
-            TieredMap.Builder<Integer, ColumnAlias> newColumnAliasesBuilder = TieredMap.newGenesisTier();
             List<String> selectItems = Lists.newArrayList();
 
             List<Pair<Integer, GenericColumn>> outputColumns = context.getOutputColumns();

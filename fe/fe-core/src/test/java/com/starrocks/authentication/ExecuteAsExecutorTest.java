@@ -152,7 +152,6 @@ public class ExecuteAsExecutorTest {
 
         long roleId1 = authorizationMgr.getRoleIdByNameAllowNull("r1");
         long roleId2 = authorizationMgr.getRoleIdByNameAllowNull("r2");
-        long roleId3 = authorizationMgr.getRoleIdByNameAllowNull("r3");
 
         authorizationMgr.grantRole(new GrantRoleStmt(List.of("r1"), "group1", GrantType.GROUP, NodePosition.ZERO));
         authorizationMgr.grantRole(new GrantRoleStmt(List.of("r2"), "group2", GrantType.GROUP, NodePosition.ZERO));

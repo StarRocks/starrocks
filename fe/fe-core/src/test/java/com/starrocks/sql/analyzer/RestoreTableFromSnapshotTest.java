@@ -58,7 +58,7 @@ public class RestoreTableFromSnapshotTest {
 
     @Test
     public void testRestoreTableFromSnapshotSuccess() {
-        MockUp<RunMode> mock = new MockUp<RunMode>() {
+        new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
@@ -89,7 +89,7 @@ public class RestoreTableFromSnapshotTest {
 
     @Test
     public void testRestoreTableFromSnapshotMissingSnapshot() {
-        MockUp<RunMode> mock = new MockUp<RunMode>() {
+        new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
@@ -138,7 +138,7 @@ public class RestoreTableFromSnapshotTest {
         job.setState(ClusterSnapshotJobState.FINISHED);
         mgr.addManualClusterSnapshotJob(job);
 
-        MockUp<RunMode> runModeMock = new MockUp<RunMode>() {
+        new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
                 return RunMode.SHARED_DATA;
@@ -156,7 +156,7 @@ public class RestoreTableFromSnapshotTest {
         Assertions.assertTrue(parsed instanceof RestoreTableFromSnapshotStmt);
 
         AtomicBoolean invoked = new AtomicBoolean(false);
-        MockUp<ClusterSnapshotMgrEPack> submitMock = new MockUp<ClusterSnapshotMgrEPack>() {
+        new MockUp<ClusterSnapshotMgrEPack>() {
             @Mock
             public void submitTableSnapshotRestore(RestoreTableFromSnapshotStmt stmt, ConnectContext context)
                     throws StarRocksException {

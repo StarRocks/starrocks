@@ -633,10 +633,6 @@ public class LatticeNode {
                 .sorted(LatticeNode.getComparator())
                 .map(childNode -> idMap.get(childNode.getId().toString()))
                 .collect(Collectors.toList());
-        List<String> dimensions = this.getId().getColumnOrdinals()
-                .stream()
-                .map(i -> lattice.getColumnNorms().get(i))
-                .collect(Collectors.toList());
 
         Supplier<String> cidGen = Util.nextStringGenerator("C.", "");
         TieredList<PrettyPrinter> coverablePieces = getCoverablePieces()
