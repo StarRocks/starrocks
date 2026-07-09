@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/scoped_updater.h"
+#include "common/config_connector_sink_fwd.h"
 #include "connector_primitive/connector.h"
 #include "connector_primitive/connector_sink_commit.h"
 #include "connector_primitive/data_source_provider.h"
@@ -138,6 +140,8 @@ TEST(ConnectorPrimitiveTest, SinkMemoryManagerRegistersAbstractOperatorManagers)
 }
 
 TEST(ConnectorPrimitiveTest, SinkMemoryManagerUsesAbstractChildrenForBackpressure) {
+    SCOPED_UPDATE(double, config::connector_sink_mem_low_watermark_ratio, 0.1);
+    SCOPED_UPDATE(double, config::connector_sink_mem_urgent_space_ratio, 0.05);
     MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "connector_primitive_query_pool");
     query_pool_tracker.consume(950);
     SinkMemoryManager manager(&query_pool_tracker, nullptr);
@@ -159,6 +163,8 @@ TEST(ConnectorPrimitiveTest, SinkMemoryManagerUsesAbstractChildrenForBackpressur
 }
 
 TEST(ConnectorPrimitiveTest, SinkMemoryManagerRejectsInputWhenReleasableMemoryRemains) {
+    SCOPED_UPDATE(double, config::connector_sink_mem_low_watermark_ratio, 0.1);
+    SCOPED_UPDATE(double, config::connector_sink_mem_urgent_space_ratio, 0.05);
     MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "connector_primitive_releasable_pool");
     query_pool_tracker.consume(950);
     SinkMemoryManager manager(&query_pool_tracker, nullptr);
