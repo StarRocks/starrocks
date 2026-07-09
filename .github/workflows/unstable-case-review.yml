@@ -233,13 +233,12 @@ jobs:
     needs: [prepare, fe-ut-review, be-ut-review, sql-tester-review]
     if: always() && needs.prepare.result == 'success'
     runs-on: [self-hosted, ubuntu, ai]
-    outputs:
-      REPORT_OSS: ${{ steps.upload.outputs.REPORT_OSS }}
     env:
       BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
-      # AI analysis is decoupled into the ai-analysis job below; this job no
-      # longer needs ANTHROPIC_API_KEY.
+      # AI analysis is fully decoupled into a separate workflow
+      # (unstable-case-ai-analysis.yml); this job no longer needs
+      # ANTHROPIC_API_KEY.
     steps:
       - name: Generate report & update unstable_case.json
         id: gen
@@ -282,12 +281,9 @@ jobs:
           owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
           REPORT_OSS="oss://${bucket}/unstable-case-review/${BRANCH}/${COMMIT_SHA:0:8}/"
-          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
-          ${_oss} cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
-          # failing.json is the decoupled AI analyzer's input (ai-analysis job).
-          [[ -f "${WORK_DIR}/failing.json" ]] && ${_oss} cp "${WORK_DIR}/failing.json" "${REPORT_OSS}failing.json" -f || true
+          /var/local/env/ossutil64 --config-file /root/.ossutilconfig \
+            cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
-          echo "REPORT_OSS=${REPORT_OSS}" >> $GITHUB_OUTPUT
 
       - name: Open PR with updated unstable_case.json
         # Temporarily disabled: secrets.SYNC_PAT is not configured on
@@ -377,59 +373,3 @@ jobs:
         run: |
           rm -rf "${{ steps.gen.outputs.WORK_DIR }}" || true
           rm -rf ${{ github.workspace }}/*
-
-  # ─── AI analysis (decoupled consumer) ────────────────────────────────────
-  # Reads the report job's failing.json + the accumulated case_history (<CH>/)
-  # and runs the history-aware analyzer out-of-band. Best-effort: a Claude
-  # hiccup here never affects the review result. See ci-tool
-  # bin/analyze_unstable_cases.py (StarRocks/ci-tool#4676).
-  ai-analysis:
-    name: AI ANALYSIS
-    needs: [prepare, report]
-    if: always() && needs.report.result == 'success'
-    runs-on: [self-hosted, ubuntu, ai]
-    env:
-      BRANCH:             ${{ needs.prepare.outputs.BRANCH }}
-      ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
-      REPORT_OSS:         ${{ needs.report.outputs.REPORT_OSS }}
-    steps:
-      - name: Analyze still-failing cases (history-aware)
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null && source lib/init.sh
-
-          if [[ -z "${REPORT_OSS}" ]]; then
-            echo "No REPORT_OSS from report job — nothing to analyze."; exit 0
-          fi
-          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          [[ "$owner" == "starrocks" ]] && bucket="starrocks-ci-release" || bucket="${owner}-ci-release"
-          _oss="/var/local/env/ossutil64 --config-file /root/.ossutilconfig"
-
-          WORK="/tmp/unstable-ai-${GITHUB_RUN_ID}"
-          HIST="${WORK}/history"
-          mkdir -p "${WORK}" "${HIST}"
-
-          # 1. failing.json produced by the report job
-          if ! ${_oss} cp "${REPORT_OSS}failing.json" "${WORK}/failing.json" -f; then
-            echo "No failing.json at ${REPORT_OSS} — nothing to analyze."; exit 0
-          fi
-
-          # 2. accumulated case_history for this branch (the <CH>/ trails)
-          ch_branch="${BRANCH//\//_}"
-          CH="oss://${bucket}/unstable_case_report/ci-case-history"
-          ${_oss} cp -r "${CH}/inspection/${ch_branch}/" "${HIST}/inspection/" >/dev/null 2>&1 || true
-          ${_oss} cp -r "${CH}/pr/${ch_branch}/"         "${HIST}/pr/"         >/dev/null 2>&1 || true
-
-          # 3. history-aware AI analysis (best-effort; no key -> summary only)
-          python3 bin/analyze_unstable_cases.py \
-            --failing "${WORK}/failing.json" \
-            --history-dir "${HIST}" \
-            --out "${WORK}/out"
-
-          # 4. publish alongside the report
-          ${_oss} cp "${WORK}/out/analysis.html" "${REPORT_OSS}analysis.html" -f || true
-          ${_oss} cp "${WORK}/out/analysis.json" "${REPORT_OSS}analysis.json" -f || true
-          echo "AI analysis: ${REPORT_OSS}analysis.html"
-
-      - name: Clean ENV
-        if: always()
-        run: rm -rf /tmp/unstable-ai-${GITHUB_RUN_ID} ${{ github.workspace }}/* || true
