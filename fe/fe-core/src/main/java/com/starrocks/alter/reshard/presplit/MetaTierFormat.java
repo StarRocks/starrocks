@@ -66,7 +66,7 @@ enum MetaTierFormat {
         return switch (this) {
             case PARQUET -> ParquetRowGroupStatisticsReader.read(
                     fileStatus, hadoopConfig, List.of(sortKeyColumn), loadTimeZone);
-            case ORC -> OrcStripeStatisticsReader.read(fileStatus, hadoopConfig, sortKeyColumn, loadTimeZone);
+            case ORC -> OrcStripeStatisticsReader.read(fileStatus, hadoopConfig, List.of(sortKeyColumn), loadTimeZone);
         };
     }
 }
