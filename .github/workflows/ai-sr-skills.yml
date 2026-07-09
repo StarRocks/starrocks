@@ -337,6 +337,21 @@ jobs:
             echo "no high-confidence, diff-aligned module risk — not commenting"
             exit 0
           fi
+          # Defense-in-depth against an "assessment could not run" body. The skill's --comment
+          # contract makes an access/environment failure (no code_kb context-base MCP connection, or
+          # USAGE denied) emit the markerless `MODULE-RISK: unavailable` sentinel, so it normally
+          # arrives here empty and is dropped above. But the model is non-deterministic — if it
+          # regresses and emits a marker'd "cannot assess" body, that failure recurs identically on
+          # every PR, so posting it per-PR is pure noise. Drop it here too. We KEEP a real briefing
+          # (carries the fixed "High-confidence risks" section) and the genuine per-PR "coverage
+          # incomplete" caveat (PR-too-large); we drop only a body that is neither AND carries a
+          # context-base/code_kb access-failure signature (tool names / contextbase name never
+          # appear in a real StarRocks bug briefing).
+          if ! printf '%s' "$body" | grep -qiE 'High-confidence risks|coverage incomplete' \
+             && printf '%s' "$body" | grep -qiE 'context-base MCP|list_collections|context_get|code_kb|MODULE-RISK: unavailable'; then
+            echo "module-risk not assessed — no code_kb MCP connection / access; environment failure, not commenting"
+            exit 0
+          fi
           # Stamp the PR head SHA as line 2 (right after the marker, which the brief job's sed
           # guaranteed is line 1) so reviewers can detect a briefing that predates the latest push.
           # awk avoids sed escaping pitfalls; the SHA is hex so it is injection-safe.
