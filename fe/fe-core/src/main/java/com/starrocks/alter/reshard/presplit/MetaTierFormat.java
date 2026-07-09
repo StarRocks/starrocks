@@ -64,7 +64,8 @@ enum MetaTierFormat {
     List<RowGroupStatistics> read(FileStatus fileStatus, Configuration hadoopConfig, Column sortKeyColumn,
             String loadTimeZone) throws StarRocksException {
         return switch (this) {
-            case PARQUET -> ParquetRowGroupStatisticsReader.read(fileStatus, hadoopConfig, sortKeyColumn, loadTimeZone);
+            case PARQUET -> ParquetRowGroupStatisticsReader.read(
+                    fileStatus, hadoopConfig, List.of(sortKeyColumn), loadTimeZone);
             case ORC -> OrcStripeStatisticsReader.read(fileStatus, hadoopConfig, sortKeyColumn, loadTimeZone);
         };
     }
