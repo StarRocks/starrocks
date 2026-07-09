@@ -1,0 +1,13 @@
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams,
+    MaintenanceParams
+)
+```

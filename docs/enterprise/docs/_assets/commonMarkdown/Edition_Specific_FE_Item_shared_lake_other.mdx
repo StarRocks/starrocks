@@ -1,3 +1,39 @@
+### `iceberg_background_check_maintenance_interval_seconds`
+
+- Default: 1800
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Iceberg auto maintenance daemon checks each registered Iceberg catalog and runs the maintenance tasks (`expire_snapshots`, `remove_orphan_files`, and `rewrite_manifests`) that are due. This item only controls how often the daemon wakes up; whether a task actually runs for a catalog is determined by the catalog properties `iceberg_auto_cleanup_interval_hours` and `iceberg_auto_optimize_interval_hours`. Auto maintenance runs only on the leader FE.
+- Introduced in: v4.2.0
+
+### `iceberg_background_maintenance_pool_size`
+
+- Default: 4
+- Type: Int
+- Unit: Count
+- Is mutable: No
+- Description: The size of the shared thread pool used by the Iceberg auto maintenance daemon. Each table's maintenance is submitted to this pool as a task and tables are processed concurrently, so this value bounds how many tables are maintained in parallel. The effective size is `max(1, min(iceberg_background_maintenance_pool_size, CPU core count))`. Requires FE restart to take effect.
+- Introduced in: v4.2.0
+
+### `iceberg_background_check_maintenance_interval_seconds`
+
+- Default: 1800
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Iceberg auto maintenance daemon checks each registered Iceberg catalog and runs the maintenance tasks (`expire_snapshots`, `remove_orphan_files`, and `rewrite_manifests`) that are due. This item only controls how often the daemon wakes up; whether a task actually runs for a catalog is determined by the catalog properties `iceberg_auto_cleanup_interval_hours` and `iceberg_auto_optimize_interval_hours`. Auto maintenance runs only on the leader FE.
+- Introduced in: v4.2.0
+
+### `iceberg_background_maintenance_pool_size`
+
+- Default: 4
+- Type: Int
+- Unit: Count
+- Is mutable: No
+- Description: The size of the shared thread pool used by the Iceberg auto maintenance daemon. Each table's maintenance is submitted to this pool as a task and tables are processed concurrently, so this value bounds how many tables are maintained in parallel. The effective size is `max(1, min(iceberg_background_maintenance_pool_size, CPU core count))`. Requires FE restart to take effect.
+- Introduced in: v4.2.0
+
 ### `iceberg_maintenance_task_history_ttl_second`
 
 - Default: 604800

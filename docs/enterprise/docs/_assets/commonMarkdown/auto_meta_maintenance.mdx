@@ -1,0 +1,30 @@
+## Automatic metadata maintenance
+
+From v4.2 onwards, the system can automatically run the metadata maintenance procedures `expire_snapshots`, `remove_orphan_files`, and `rewrite_manifests` on the tables of an Iceberg catalog, so that you do not have to trigger them manually. This keeps the metadata of frequently written tables compact and preserves stable query planning performance without adding operational overhead. Automatic maintenance reuses the same procedure implementations as the manual `ALTER TABLE ... EXECUTE` statements, so its behavior is identical to running the procedures by hand.
+
+Automatic maintenance is disabled by default. To enable it, set the catalog property `enable_iceberg_auto_maintenance` to `true` when you create the Iceberg catalog. For all related catalog properties and their defaults, see [MaintenanceParams](./iceberg_catalog.md#maintenanceparams).
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+    "enable_iceberg_auto_maintenance" = "true"
+);
+```
+
+### How it works
+
+- Automatic maintenance runs only on the **Leader FE**.
+- A background daemon wakes up every `iceberg_background_check_maintenance_interval_seconds` (default 1800, that is, 30 minutes) and checks each catalog that has automatic maintenance enabled. Only tables whose latest write occurred within the last 24 hours are considered for maintenance.
+- **Cleanup** (`expire_snapshots` and `remove_orphan_files`) runs when `iceberg_auto_cleanup_interval_hours` (default 24 hours) has elapsed since the previous cleanup. `expire_snapshots` follows the retention properties `history.expire.min-snapshots-to-keep` and `history.expire.max-snapshot-age-ms`; `remove_orphan_files` removes orphan files older than 7 days.
+- **Optimization** (`rewrite_manifests`) runs when `iceberg_auto_optimize_interval_hours` (default 3 hours) has elapsed since the previous optimization. It rewrites manifests toward the target size set by `commit.manifest.target-size-bytes`.
+- Tables in a catalog are maintained concurrently through a shared thread pool whose size is controlled by the FE configuration `iceberg_background_maintenance_pool_size`.
+
+The retention and target-size properties above are standard Iceberg table properties and can be configured at both the catalog and table levels. See [MaintenanceParams](./iceberg_catalog.md#maintenanceparams) for details, and see [Shared-data FE configuration](../../../administration/management/FE_parameters/shared_lake_other.md) for the FE configuration items that govern the maintenance daemon.
+
+### Observe maintenance tasks
+
+Both automatically triggered tasks and tasks executed manually via `ALTER TABLE ... EXECUTE` are recorded, so you can trace their outcomes. Query the system view `information_schema.iceberg_maintenance_tasks` for per-task details (action, trigger reason, duration, status, and execution details), and monitor the `iceberg_amm_*` FE metrics for the overall effect and resource cost of automatic maintenance.

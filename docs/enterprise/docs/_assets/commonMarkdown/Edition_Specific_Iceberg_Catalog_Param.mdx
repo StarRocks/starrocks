@@ -1,0 +1,27 @@
+#### MaintenanceParams
+
+A set of parameters related to Iceberg metadata maintenance for the catalog. This parameter set is optional and supported from v4.2 onwards.
+
+The following three parameters enable and schedule automatic metadata maintenance, in which the system periodically runs the maintenance procedures (`expire_snapshots`, `remove_orphan_files`, and `rewrite_manifests`) on recently written tables in the catalog. These parameters can only be set at the catalog level. For details, see [Automatic metadata maintenance](./procedures.md#automatic-metadata-maintenance).
+
+| **Parameter**                        | **Default** | **Description**                                              |
+| :----------------------------------- | :---------- | :----------------------------------------------------------- |
+| enable_iceberg_auto_maintenance      | false       | Whether to enable automatic metadata maintenance for the catalog. When set to `false`, no automatic maintenance is performed. |
+| iceberg_auto_cleanup_interval_hours  | 24          | The interval, in hours, at which automatic cleanup (`expire_snapshots` and `remove_orphan_files`) runs. Set to `0` or a negative value to disable the cleanup actions. |
+| iceberg_auto_optimize_interval_hours | 3           | The interval, in hours, at which automatic optimization (`rewrite_manifests`) runs. Set to `0` or a negative value to disable the optimize action. |
+
+The following are standard Iceberg table properties that govern the behavior of `expire_snapshots` and `rewrite_manifests` for both **manual and automatic** maintenance. They can be set here at the catalog level and also at the table level. When you create a table through the system, it inherits the catalog-level value if the property is not set explicitly on the table. Changing a catalog property only affects tables created afterwards.
+
+| **Parameter**                        | **Iceberg default**   | **Description**                                              |
+| :----------------------------------- | :-------------------- | :----------------------------------------------------------- |
+| history.expire.max-snapshot-age-ms   | 432000000 (5 days)    | The maximum age of snapshots that a table and its branches retain when `expire_snapshots` runs. |
+| history.expire.min-snapshots-to-keep | 1                     | The minimum number of snapshots that a table and its branches retain when `expire_snapshots` runs. |
+| commit.manifest.target-size-bytes    | 8388608 (8 MB)        | The target size of the manifest files produced by `rewrite_manifests`. |
+
+When automatic maintenance is enabled (`enable_iceberg_auto_maintenance = true`), the system injects default values for the three Iceberg properties above into the catalog properties even if you do not set them, so that tables created afterwards inherit sensible maintenance defaults. The injected defaults are `history.expire.max-snapshot-age-ms` = `432000000` (5 days), `history.expire.min-snapshots-to-keep` = `10` (instead of Iceberg's default of `1`), and `commit.manifest.target-size-bytes` = `8388608` (8 MB).
+
+:::note
+`remove_orphan_files` has no dedicated property. By default it only removes files older than 7 days.
+
+Setting `enable_iceberg_auto_maintenance` back to `false` does not reset the other catalog properties, nor does it revert table properties that have already been set on existing tables.
+:::
