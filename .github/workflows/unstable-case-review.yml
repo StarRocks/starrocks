@@ -1,12 +1,13 @@
-name: WEEKLY UNSTABLE CASE REVIEW
+name: UNSTABLE CASE REVIEW
 
-# Runs every Monday to re-execute blacklisted unstable cases.
+# Re-executes blacklisted unstable cases in isolation, on demand.
 # Cases that now pass are auto-removed from unstable_case.json.
 # Still-failing cases get AI analysis in an HTML report uploaded to OSS.
+# Runs on the native ubuntu server ([self-hosted, ubuntu, ai]).
+# Manual-only for now (schedule removed): once validated on CelerData and
+# runners are also registered on StarRocks, a schedule can be re-added.
 
 on:
-  schedule:
-    - cron: '0 2 * * 1'     # Every Monday 02:00 UTC
   workflow_dispatch:
     inputs:
       case_types:
@@ -36,7 +37,7 @@ jobs:
   # ─── Info / gate ─────────────────────────────────────────────────────────
   prepare:
     name: PREPARE
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     outputs:
       BRANCH:          ${{ steps.info.outputs.BRANCH }}
       COMMIT_SHA:      ${{ steps.info.outputs.COMMIT_SHA }}
@@ -73,7 +74,7 @@ jobs:
     name: FE-UT REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_FE_UT == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -109,7 +110,7 @@ jobs:
     name: BE-UT REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_BE_UT == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:      ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:  ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -144,7 +145,7 @@ jobs:
     name: SQL-TESTER REVIEW
     needs: prepare
     if: ${{ needs.prepare.outputs.RUN_SQL_TESTER == 'true' }}
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:        ${{ needs.prepare.outputs.BRANCH }}
       PR_NUMBER:     ${{ needs.prepare.outputs.COMMIT_SHA }}
@@ -231,11 +232,13 @@ jobs:
     name: REPORT
     needs: [prepare, fe-ut-review, be-ut-review, sql-tester-review]
     if: always() && needs.prepare.result == 'success'
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, ubuntu, ai]
     env:
       BRANCH:              ${{ needs.prepare.outputs.BRANCH }}
       COMMIT_SHA:          ${{ needs.prepare.outputs.COMMIT_SHA }}
-      ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+      # AI analysis is fully decoupled into a separate workflow
+      # (unstable-case-ai-analysis.yml); this job no longer needs
+      # ANTHROPIC_API_KEY.
     steps:
       - name: Generate report & update unstable_case.json
         id: gen
@@ -256,7 +259,9 @@ jobs:
             --fe-oss-path  "${FE_OSS}"  \
             --be-oss-path  "${BE_OSS}"  \
             --sql-oss-path "${SQL_OSS}" \
-            --output-dir "${WORK_DIR}"
+            --output-dir "${WORK_DIR}" \
+            --probation files/unstable_case_probation.json \
+            --batch 30
 
           echo "WORK_DIR=${WORK_DIR}" >> $GITHUB_OUTPUT
 
@@ -282,7 +287,18 @@ jobs:
             cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
 
-      - name: Open PR with updated unstable_case.json
+      - name: Upload report artifact (fallback, always)
+        # So an OSS outage doesn't lose the report — same fallback as
+        # unstable-case-ai-analysis.yml.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unstable-case-review-report
+          path: ${{ steps.gen.outputs.WORK_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Open PR granting probation eligibility
         # Temporarily disabled: secrets.SYNC_PAT is not configured on
         # this repo (the `SYNC_PAT` name lives in celerdata-enterprise),
         # so `gh pr create` runs with an empty GH_TOKEN and fails. Also
@@ -298,38 +314,39 @@ jobs:
           git config user.name  "wanpengfei-git"
           git config user.email "wanpengfei91@163.com"
 
-          # Skip if review didn't touch the file (no stable cases this run)
-          if git diff --quiet files/unstable_case.json; then
-            echo "No changes to unstable_case.json — skipping PR"
+          # Grant-eligibility touches these three files; skip if none changed.
+          if git diff --quiet files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json; then
+            echo "No probation-eligibility changes this run — skipping PR"
             echo "pr_url=" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Include GITHUB_RUN_ID so reruns of the same workflow (same date,
-          # same commit) get a fresh head branch instead of colliding with a
-          # previous attempt's branch / PR.
-          BR="auto/weekly-review-cleanup-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}"
+          # Per-attempt branch: GITHUB_RUN_ID is stable across re-runs (only
+          # RUN_ATTEMPT increments), so include RUN_ATTEMPT or a retry after a
+          # partial failure reuses the branch and the push is rejected
+          # non-fast-forward.
+          BR="auto/probation-eligibility-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
-          git add files/unstable_case.json
-          git commit -m "[Tool] weekly review cleanup ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
+          git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json
+          git commit -m "[Tool] grant probation eligibility ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
           git push origin "$BR"
 
           # YAML's run: | block strips the common indent, so the heredoc body and EOF
           # end up at column 0 from bash's perspective — no further sed/dedent needed.
           BODY_FILE=$(mktemp)
           cat > "$BODY_FILE" <<EOF
-          Auto-generated by [weekly review run #${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+          Auto-generated by [unstable-case-review run #${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
 
-          This PR removes cases that passed all 3 rounds of the weekly review and are now considered stable.
+          Cases that passed all 3 isolation rounds are **moved into probation** (not removed): they leave \`unstable_case.json\`, enter \`unstable_case_probation.json\` (stamped \`probation_since\`), and must now earn promotion from real PR-concurrency evidence. An isolated green is not PR-concurrency stable, so this only grants a trial — promotion/demotion is decided by the promote-demote workflow.
 
-          Please sanity-check the diff before merging — pay attention to any cases with a high \`add_count\` (yo-yo counter) that might be temporarily passing.
+          Please sanity-check the diff — cases with a high \`add_count\` (yo-yo counter) are riskier.
           EOF
 
           PR_URL=$(gh pr create \
             --repo StarRocks/ci-tool \
             --base main \
             --head "$BR" \
-            --title "[Tool] weekly review cleanup $(date +%Y-%m-%d) (auto)" \
+            --title "[Tool] grant probation eligibility $(date +%Y-%m-%d) (auto)" \
             --body-file "$BODY_FILE")
           rm -f "$BODY_FILE"
           echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
