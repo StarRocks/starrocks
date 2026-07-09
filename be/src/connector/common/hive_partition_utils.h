@@ -24,7 +24,7 @@
 
 namespace starrocks::connector {
 
-class HiveUtils {
+class HivePartitionUtils {
 public:
     static StatusOr<std::string> make_partition_name(
             const std::vector<std::string>& column_names,

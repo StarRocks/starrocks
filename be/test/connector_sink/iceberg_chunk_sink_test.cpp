@@ -27,10 +27,9 @@
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
+#include "connector/common/partitioned_connector_chunk_sink.h"
 #include "connector/common/utils.h"
-#include "connector/hive_utils.h"
 #include "connector/iceberg_utils.h"
-#include "connector/partitioned_connector_chunk_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
@@ -216,12 +215,6 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
     EXPECT_EQ("123", str128);
     str128 = integer_to_string(-val);
     EXPECT_EQ("-123", str128);
-
-    auto format_dec = HiveUtils::format_decimal_value<int32_t>(123, 2);
-    EXPECT_EQ("1.23", format_dec.value());
-    format_dec = HiveUtils::format_decimal_value<int32_t>(123, 4);
-    EXPECT_EQ("0.0123", format_dec.value());
-    EXPECT_ERROR(HiveUtils::format_decimal_value<int32_t>(123, -1));
 
     {
         Columns partition_key_columns;

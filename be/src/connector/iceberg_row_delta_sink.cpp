@@ -17,7 +17,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
-#include "connector/partition_chunk_writer_memory_manager.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 
 namespace starrocks::connector {

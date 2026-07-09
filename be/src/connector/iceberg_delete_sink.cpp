@@ -24,9 +24,9 @@
 #include "column/column_helper.h"
 #include "column/sorting/sorting.h"
 #include "common/config_exec_fwd.h"
+#include "connector/common/partition_chunk_writer.h"
 #include "connector/common/utils.h"
 #include "connector/iceberg_utils.h"
-#include "connector/partition_chunk_writer.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
@@ -331,7 +331,7 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergDeleteSinkProvider::create_sink(
     auto writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
             {file_writer_factory, location_provider, ctx->max_file_size, ctx->partition_column_names.empty()},
             fs,
-            ctx->fragment_context,
+            runtime_state,
             query_execution_services->runtime->connector_sink_spill_executor,
             delete_tuple_desc,
             column_evaluators,

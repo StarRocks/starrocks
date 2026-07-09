@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/partition_chunk_writer_memory_manager.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 
 #include "common/logging.h"
 

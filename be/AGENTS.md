@@ -280,7 +280,7 @@ Connector contracts, DataSource, DataSourceProvider default mechanics, and gener
 Reusable connector sink/file-writer helpers above connector contracts, including sink commit/profile types and shared writer-side utilities, without concrete connector registry composition, service, HTTP, or full Exec coupling.
 - Targets: `ConnectorCommon`
 - Allowed internal include prefixes: `connector/common/`, `connector_primitive/`, `compute_env/`, `cache/`, `storage_primitive/`, `exec_primitive/`, `exprs/`, `runtime/`, `platform/`, `formats/`, `fs/`, `io/`, `column/`, `types/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `ConnectorPrimitive`, `ComputeEnv`, `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FormatCore`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed target deps: `ComputeEnv`, `ConnectorPrimitive`, `Cache`, `StoragePrimitive`, `ExecPrimitive`, `Expr`, `Runtime`, `Platform`, `FormatCore`, `FileSystem`, `IO`, `ColumnSortCore`, `ChunkCore`, `ColumnCore`, `Types`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `connector_common_test`
 - Remediation: Keep ConnectorCommon limited to reusable connector sink/file-writer helpers expressed through connector contracts and compute/runtime lower layers; move concrete connectors, registry wiring, service, HTTP, storage-engine-specific behavior, and full Exec integration upward.
 

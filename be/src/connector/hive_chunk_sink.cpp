@@ -98,7 +98,7 @@ StatusOr<std::unique_ptr<ConnectorSink>> HiveChunkSinkProvider::create_sink(int3
                 SpillPartitionChunkWriterContext{{file_writer_factory, location_provider, ctx->max_file_size,
                                                   ctx->partition_column_names.empty()},
                                                  fs,
-                                                 ctx->fragment_context,
+                                                 runtime_state,
                                                  query_execution_services->runtime->connector_sink_spill_executor,
                                                  nullptr,
                                                  nullptr});
