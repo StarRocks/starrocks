@@ -472,6 +472,63 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
+<<<<<<< HEAD
+=======
+    private static Stream<Arguments> partitionPruneWithLastDay() {
+        List<Arguments> arguments = Lists.newArrayList();
+        arguments.add(Arguments.of("select * from less_than_tbl where date_trunc('year', k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from less_than_tbl where last_day(k1) is null",
+                "partitions=1/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as datetime)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(cast(d2 as date)) = '2020-04-30'",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as date)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = cast('2020-04-30' as datetime)",
+                "partitions=2/4"));
+        arguments.add(Arguments.of("select * from ptest where last_day(d2) = date_trunc('day', d2)",
+                "partitions=4/4"));
+        return arguments.stream();
+    }
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("partitionPruneWithLastDay")
+    @Order(6)
+    void canPrunePredicateSqls2(String sql, String expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, expect);
+    }
+
+    private static Stream<Arguments> nonMonotonicExprNoPruneSqls() {
+        List<Arguments> arguments = Lists.newArrayList();
+        // month()/day()/dayofyear()/dayofweek() wrap around inside a partition's span, so mapping a
+        // partition's two boundary values through them says nothing about the values inside: ptest's
+        // p202001 [1000-01-01, 2020-01-01) maps to month [1, 1] yet contains rows of every month.
+        // These predicates must not prune any partition.
+        arguments.add(Arguments.of("select * from ptest where month(d2) = 5", "partitions=4/4"));
+        arguments.add(Arguments.of("select * from ptest where day(d2) = 15", "partitions=4/4"));
+        arguments.add(Arguments.of("select * from ptest where dayofyear(d2) = 135", "partitions=4/4"));
+        arguments.add(Arguments.of("select * from ptest where month(d2) = 5 or month(d2) = 6", "partitions=4/4"));
+        arguments.add(Arguments.of("select * from less_than_tbl where dayofweek(k1) = 3", "partitions=4/4"));
+        // a monotonic predicate in the same conjunction still prunes; the non-monotonic one only
+        // stops contributing
+        arguments.add(Arguments.of("select * from ptest where month(d2) = 5 and d2 < '2020-01-01'",
+                "partitions=1/4"));
+        return arguments.stream();
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("nonMonotonicExprNoPruneSqls")
+    @Order(9)
+    void testNonMonotonicExprNoPrune(String sql, String expect) throws Exception {
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, expect);
+    }
+
+>>>>>>> cf38ca9367 ([BugFix] Guard expression partition prune with monotonic function check (#76046))
     private static Stream<Arguments> exprPrunePartitionSqls() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) is null");
