@@ -343,6 +343,32 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
             }
         }
     }
+
+    // 4. Stamp the FE-allocated new schema id/version onto the tablet metadata
+    //    schema. The fast path changed the schema content above (table_indices +
+    //    per-column flags) but reused the old schema_id; every lake by-id schema
+    //    cache (GS{id} metacache, GlobalTabletSchemaMap dedup, SCHEMA_{id} file)
+    //    keys on id and would keep returning the stale pre-index schema — so data
+    //    loaded after the index, and compaction output, would build no index.
+    //    A new id forces every cache to miss and pick up this indexed schema.
+    //    Existing rowsets carry no rowset_to_schema pin, so they also resolve to
+    //    metadata->schema(); their segments' missing footer index is served by
+    //    the .idx sidecar until compaction rebuilds it inline.
+    if (op.has_new_schema_id() && op.new_schema_id() > 0) {
+        schema->set_id(op.new_schema_id());
+        if (op.has_new_schema_version()) {
+            schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
+        }
+        // Best-effort persist the new schema as a standalone SCHEMA_{id} file so
+        // any by-id cold reader (get_tablet_schema_by_id) resolves the indexed
+        // schema. Non-fatal on failure: loads/compaction resolve via
+        // metadata->schema() whose id now equals new_schema_id.
+        if (auto* mgr = _tablet.tablet_mgr(); mgr != nullptr) {
+            auto st = mgr->create_schema_file(_tablet_meta->id(), *schema);
+            LOG_IF(WARNING, !st.ok()) << "apply_add_index: create_schema_file failed for tablet "
+                                      << _tablet_meta->id() << " schema_id " << schema->id() << ": " << st;
+        }
+    }
 }
 
 void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {

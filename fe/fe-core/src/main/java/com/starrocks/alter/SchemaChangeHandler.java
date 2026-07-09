@@ -3429,6 +3429,11 @@ public class SchemaChangeHandler extends AlterHandler {
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
             LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), timeoutMs, newIndexes, thriftIndexes);
+            // Allocate a new schema id/version so subsequent loads and compaction
+            // pick up the indexed schema (the fast path reuses the base schema_id
+            // but changes its content; every by-id schema cache would go stale).
+            job.setNewSchema(GlobalStateMgr.getCurrentState().getNextId(),
+                    olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaVersion() + 1);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             // Move table to SCHEMA_CHANGE so concurrent alters are blocked.
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -3551,6 +3556,10 @@ public class SchemaChangeHandler extends AlterHandler {
             long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
             LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), timeoutMs, new ArrayList<>(), thriftIndexes, addBfColumnNames);
+            // Allocate a new schema id/version so subsequent loads and compaction
+            // pick up the schema with the new bloom-filter column (see above).
+            job.setNewSchema(GlobalStateMgr.getCurrentState().getNextId(),
+                    olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaVersion() + 1);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
             olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             stateSet = true;

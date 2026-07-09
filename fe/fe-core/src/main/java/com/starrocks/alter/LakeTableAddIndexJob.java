@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.task.AlterReplicaTask;
@@ -67,9 +68,30 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     @SerializedName(value = "addBfColumns")
     private List<String> addBfColumns = new ArrayList<>();
 
+    /**
+     * New schema id/version allocated once at job build time (see
+     * SchemaChangeHandler.tryBuildLakeAddIndexJob). The fast path reuses the
+     * base index meta's schema_id but changes its content (adds the index), and
+     * every lake by-id schema cache assumes id==content — so without a new id,
+     * data loaded after the index and compaction output keep using the cached
+     * pre-index schema and build no index. Bumping the id (persisted here so
+     * replay is idempotent) forces every cache to miss and pick up the indexed
+     * schema. 0 = not set (older job / not applicable).
+     */
+    @SerializedName(value = "newSchemaId")
+    private long newSchemaId = 0;
+    @SerializedName(value = "newSchemaVersion")
+    private long newSchemaVersion = 0;
+
     /** For deserialization / GSON. */
     public LakeTableAddIndexJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    /** Set the FE-allocated new schema id/version for this add-index. */
+    public void setNewSchema(long schemaId, long schemaVersion) {
+        this.newSchemaId = schemaId;
+        this.newSchemaVersion = schemaVersion;
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -91,11 +113,16 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         this.newIndexes = other.newIndexes == null ? null : new ArrayList<>(other.newIndexes);
         this.indexesToAdd = other.indexesToAdd == null ? null : new ArrayList<>(other.indexesToAdd);
         this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
+        this.newSchemaId = other.newSchemaId;
+        this.newSchemaVersion = other.newSchemaVersion;
     }
 
     @Override
     protected void populateAlterRequest(AlterReplicaTask task) {
         task.setOnlyAddIndex(indexesToAdd);
+        if (newSchemaId > 0) {
+            task.setNewIndexSchema(newSchemaId, newSchemaVersion);
+        }
     }
 
     @Override
@@ -146,6 +173,24 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             }
             table.setBloomFilterInfo(merged, fpp);
         }
+
+        // Bump the base index meta's schema id/version so subsequent loads and
+        // compaction resolve the now-indexed schema instead of the cached
+        // pre-index one (the fast path reuses the same schema_id but changed its
+        // content; every lake by-id schema cache would otherwise return stale).
+        // Idempotent on replay: the persisted newSchemaId/version are set
+        // verbatim. Mirrors LakeTableAsyncFastSchemaChangeJob's meta update.
+        if (newSchemaId > 0) {
+            long baseMetaId = table.getBaseIndexMetaId();
+            MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseMetaId);
+            if (baseMeta != null) {
+                MaterializedIndexMeta copy = baseMeta.shallowCopy();
+                copy.setSchemaId(newSchemaId);
+                copy.setSchemaVersion((int) newSchemaVersion);
+                table.getIndexMetaIdToMeta().put(baseMetaId, copy);
+                table.rebuildFullSchema();
+            }
+        }
     }
 
     private static boolean sameIndex(Index a, Index b) {
@@ -173,6 +218,8 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         c.newIndexes = this.newIndexes == null ? null : new ArrayList<>(this.newIndexes);
         c.indexesToAdd = this.indexesToAdd == null ? null : new ArrayList<>(this.indexesToAdd);
         c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
+        c.newSchemaId = this.newSchemaId;
+        c.newSchemaVersion = this.newSchemaVersion;
     }
 
     // Accessors for tests / tooling.

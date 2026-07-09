@@ -503,6 +503,14 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
+        // New schema id/version allocated by FE for this fast-path ADD INDEX.
+        // apply_add_index stamps these onto the tablet metadata schema so every
+        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
+        // an id change, data loaded after the index — and compaction output —
+        // would keep reusing the cached pre-index schema and build no index.
+        optional int64 new_schema_id = 4;
+        optional int64 new_schema_version = 5;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

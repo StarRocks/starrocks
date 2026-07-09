@@ -732,6 +732,16 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     txn_log->set_tablet_id(request.new_tablet_id);
     txn_log->set_txn_id(request.txn_id);
     auto* op_add_index = txn_log->mutable_op_add_index();
+    // Carry the FE-allocated new schema id/version so apply_add_index stamps them
+    // onto the tablet metadata schema — this invalidates every by-id schema cache
+    // so data loaded after the index (and compaction output) build the new index
+    // instead of reusing the cached pre-index schema.
+    if (request.__isset.new_index_schema_id) {
+        op_add_index->set_new_schema_id(request.new_index_schema_id);
+    }
+    if (request.__isset.new_index_schema_version) {
+        op_add_index->set_new_schema_version(request.new_index_schema_version);
+    }
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
                             alter_version, _lake_schema_change_pool);
