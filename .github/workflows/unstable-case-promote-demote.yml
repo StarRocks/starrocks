@@ -91,7 +91,11 @@ jobs:
           fi
           git config user.name  "wanpengfei-git"
           git config user.email "wanpengfei91@163.com"
-          BR="auto/probation-promote-demote-$(date +%Y-%m-%d)-${ch_branch}-r${GITHUB_RUN_ID}"
+          # Include RUN_ATTEMPT: GITHUB_RUN_ID is stable across re-runs (only
+          # RUN_ATTEMPT increments), so without it a retry after a partial
+          # failure (push ok, pr create failed) reuses the branch name and the
+          # push is rejected non-fast-forward — making the workflow un-retriable.
+          BR="auto/probation-promote-demote-$(date +%Y-%m-%d)-${ch_branch}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
           git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json files/unstable_case_resolve_record.json
           git commit -m "[Tool] probation promote/demote ${BRANCH} (auto)"

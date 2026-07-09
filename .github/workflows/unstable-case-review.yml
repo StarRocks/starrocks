@@ -310,10 +310,11 @@ jobs:
             exit 0
           fi
 
-          # Include GITHUB_RUN_ID so reruns of the same workflow (same date,
-          # same commit) get a fresh head branch instead of colliding with a
-          # previous attempt's branch / PR.
-          BR="auto/probation-eligibility-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}"
+          # Per-attempt branch: GITHUB_RUN_ID is stable across re-runs (only
+          # RUN_ATTEMPT increments), so include RUN_ATTEMPT or a retry after a
+          # partial failure reuses the branch and the push is rejected
+          # non-fast-forward.
+          BR="auto/probation-eligibility-$(date +%Y-%m-%d)-${COMMIT_SHA:0:8}-r${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT:-1}"
           git checkout -b "$BR"
           git add files/unstable_case.json files/unstable_case_probation.json files/unstable_case_details.json
           git commit -m "[Tool] grant probation eligibility ${BRANCH} ${COMMIT_SHA:0:8} (auto)"
