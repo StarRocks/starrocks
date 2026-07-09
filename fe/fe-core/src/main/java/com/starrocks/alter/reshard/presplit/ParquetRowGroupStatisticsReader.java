@@ -331,7 +331,7 @@ public final class ParquetRowGroupStatisticsReader {
                 // than aborting the load. NOTE: toVariant's date/datetime path also throws the
                 // checked MetaTierUnavailableException (out-of-window rejection); that is not a
                 // RuntimeException and intentionally propagates past this catch with its own
-                // message — do not widen this to catch (Exception).
+                // message -- do not widen this to catch (Exception).
                 throw new MetaTierUnavailableException(String.format(
                         "Parquet stats value not representable for sort-key column \"%s\": %s",
                         location.starRocksColumn.getName(), conversionFailure.getMessage()));

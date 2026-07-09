@@ -37,8 +37,10 @@ import java.util.Objects;
  * absent nulls, this is a valid loose lexicographic bound; a NULL sorts below every
  * value and can fall under minTuple, but the BE routes every row by its true value
  * so data is never mis-split, only the meta-tier boundary is looser. A row group
- * whose leading-column range overlaps another's is caught by the existing overlap
- * check and falls back to the data tier. Throws {@link MetaTierUnavailableException}
+ * whose box overlaps another's (full-tuple lexicographic comparison) is caught by
+ * the existing overlap check and falls back to the data tier -- composite boxes are
+ * disjoint exactly when the row groups separate on a leading sort-key column. Throws
+ * {@link MetaTierUnavailableException}
  * when statistics are missing/all-null/truncated or row-group ranges overlap above
  * {@code overlapThreshold}; the caller then retries with data tier.
  */

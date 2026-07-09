@@ -330,7 +330,7 @@ public final class OrcStripeStatisticsReader {
             // rejectOutsideWindow throws a checked MetaTierUnavailableException (not a
             // RuntimeException), so a window rejection propagates past the catch below keeping its
             // own message. ofEpochDay and Variant.of RuntimeExceptions are wrapped as a meta-tier
-            // fallback signal — mirroring convertIntegerColumn — so any unrepresentable value falls
+            // fallback signal -- mirroring convertIntegerColumn -- so any unrepresentable value falls
             // back to data tier instead of escaping read() (which only catches IOException) as an
             // uncaught exception that would skip pre-split entirely.
             MetaTierTemporalWindow.rejectOutsideWindow(minDate);
@@ -354,7 +354,7 @@ public final class OrcStripeStatisticsReader {
             // (no Parquet-style unsigned-byte trap), and the exact precision/scale gate
             // guarantees the source scale equals the StarRocks column scale. Variant.of
             // RuntimeExceptions are wrapped as a meta-tier fallback signal — mirroring
-            // convertIntegerColumn/convertDateColumn — so an unrepresentable value falls back
+            // convertIntegerColumn/convertDateColumn -- so an unrepresentable value falls back
             // to data tier instead of escaping read() (which only catches IOException).
             // Render via toPlainString() (not toString()) so large-exponent values never
             // surface in scientific notation, which the BE datum_from_string would reject.
@@ -416,7 +416,7 @@ public final class OrcStripeStatisticsReader {
             // Modern writers (StarRocks unload, Spark, Hive, ORC >= 1.5) emit minimumUtc and are unaffected.
             // rejectOutsideWindow throws a CHECKED MetaTierUnavailableException that propagates past the
             // catch(RuntimeException) below (keeping its own message); getMinimumUTC/Variant.of
-            // RuntimeExceptions are wrapped as the data-tier fallback signal — mirroring convertDateColumn.
+            // RuntimeExceptions are wrapped as the data-tier fallback signal -- mirroring convertDateColumn.
             LocalDateTime minDateTime = utcTimestampToDateTime(timestampStatistics.getMinimumUTC());
             LocalDateTime maxDateTime = utcTimestampToDateTime(timestampStatistics.getMaximumUTC());
             if (location.instantOffset != null) {

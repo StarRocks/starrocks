@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
 
 /**
  * Runtime collaborators the coordinator needs to actually run pre-split: a
- * sampler-and-planner (tier routing lives here — meta tier first for any
+ * sampler-and-planner (tier routing lives here -- meta tier first for any
  * sort-key arity, data tier on {@link MetaTierUnavailableException}), the job
  * factory + admission step, and the post-submit FINISHED wait.
  *
