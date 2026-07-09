@@ -83,15 +83,25 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     @SerializedName(value = "newSchemaVersion")
     private long newSchemaVersion = 0;
 
+    /**
+     * Base index meta id captured at build time. Only tablets belonging to the
+     * base index may carry {@link #newSchemaId}: applyCatalogMutation bumps only
+     * the base index meta, so stamping a rollup/MV-index tablet would push its BE
+     * schema id ahead of its (unchanged) FE meta. -1 = not set.
+     */
+    @SerializedName(value = "baseIndexMetaId")
+    private long baseIndexMetaId = -1;
+
     /** For deserialization / GSON. */
     public LakeTableAddIndexJob() {
         super(JobType.SCHEMA_CHANGE);
     }
 
-    /** Set the FE-allocated new schema id/version for this add-index. */
-    public void setNewSchema(long schemaId, long schemaVersion) {
+    /** Set the FE-allocated new schema id/version and the base index meta id. */
+    public void setNewSchema(long schemaId, long schemaVersion, long baseIndexMetaId) {
         this.newSchemaId = schemaId;
         this.newSchemaVersion = schemaVersion;
+        this.baseIndexMetaId = baseIndexMetaId;
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -115,12 +125,18 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
         this.newSchemaId = other.newSchemaId;
         this.newSchemaVersion = other.newSchemaVersion;
+        this.baseIndexMetaId = other.baseIndexMetaId;
     }
 
     @Override
-    protected void populateAlterRequest(AlterReplicaTask task) {
+    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId) {
         task.setOnlyAddIndex(indexesToAdd);
-        if (newSchemaId > 0) {
+        // Only the base index meta has its schema id/version bumped
+        // (applyCatalogMutation), so only base-index tablets may carry the new
+        // schema id. Stamping a rollup/MV-index tablet would push its BE schema
+        // id ahead of the unchanged FE meta; those tablets keep their existing
+        // schema id (pre-fix behavior).
+        if (newSchemaId > 0 && indexMetaId == baseIndexMetaId) {
             task.setNewIndexSchema(newSchemaId, newSchemaVersion);
         }
     }
@@ -220,6 +236,7 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
         c.newSchemaId = this.newSchemaId;
         c.newSchemaVersion = this.newSchemaVersion;
+        c.baseIndexMetaId = this.baseIndexMetaId;
     }
 
     // Accessors for tests / tooling.
