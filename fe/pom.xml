@@ -1675,6 +1675,8 @@ under the License.
                                         <exclude>com.squareup.okhttp:*</exclude>
                                         <!-- okio-jvm below 3.4.0 is affected by CVE-2023-3635 -->
                                         <exclude>com.squareup.okio:okio-jvm:[,3.4.0)</exclude>
+                                        <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
+                                        <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
                                         <!-- JSP engine, unused by FE; 9.0.93 carries CVE-2025-55754/CVE-2025-52434 -->
                                         <exclude>org.apache.tomcat:*</exclude>
                                         <exclude>org.apache.tomcat.embed:*</exclude>
