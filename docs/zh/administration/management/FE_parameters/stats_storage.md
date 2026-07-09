@@ -79,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+### `enable_external_predicate_columns_collection`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在查询优化过程中记录外部表（非原生表）的谓词列使用情况（WHERE/JOIN/GROUP BY 中用到的列）。StarRocks 利用这些使用信息缩小宽外部表 ANALYZE 时需要收集统计信息的列范围。禁用后不再记录外部表的谓词列，ANALYZE 会回退为收集所有列的统计信息。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- 默认值: 168
+- 类型: Long
+- 单位: 小时
+- 是否可变: Yes
+- 描述: 记录的外部表谓词列使用信息的存活时间（TTL）。`last_used` 时间早于该值的记录会被周期性的 vacuum 任务清除。设置为负值（例如 -1）可禁用 vacuum。默认值为一周，因为外部表 ANALYZE 的执行频率远低于内表，如果 TTL 太短（如内表默认的 24 小时），会导致两次收集之间使用信息被提前清除。
+- 引入版本: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- 默认值: 300
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
+- 引入版本: v4.2.0
+
 ## 存储
 
 ### `alter_table_timeout_second`

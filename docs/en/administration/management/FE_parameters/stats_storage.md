@@ -79,6 +79,33 @@ This topic introduces the following types of FE configurations:
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
 - Introduced in: v3.2.12
 
+### `enable_external_predicate_columns_collection`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to record predicate column usage (columns used in WHERE/JOIN/GROUP BY) for external (non-native) tables during query optimization. StarRocks uses this usage information to narrow down which columns ANALYZE collects statistics for on wide external tables. When disabled, external table predicate columns are not recorded, and ANALYZE falls back to collecting statistics for all columns.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- Default: 168
+- Type: Long
+- Unit: Hours
+- Is mutable: Yes
+- Description: The time-to-live (TTL) of recorded external table predicate column usage. Entries whose `last_used` timestamp is older than this value are removed by the periodic vacuum job. Set to a negative value (e.g. -1) to disable vacuum. Defaults to a week because external table ANALYZE runs far less frequently than for internal tables, so a short TTL (matching the internal table's 24-hour default) would evict usage information between two collections.
+- Introduced in: v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The TTL of the in-memory cache that serves external table predicate column queries (for example, during automatic ANALYZE column selection). A shorter value makes newly recorded usage visible sooner but increases the query load on the underlying storage table; a longer value reduces that load at the cost of staleness.
+- Introduced in: v4.2.0
+
 ## Storage
 
 ### `alter_table_timeout_second`

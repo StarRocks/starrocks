@@ -79,6 +79,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：単一プロセスプロファイル収集の期間 (秒単位)。`proc_profile_cpu_enable` または `proc_profile_mem_enable` が `true` に設定されている場合、AsyncProfiler が起動し、コレクタースレッドはこの期間だけスリープし、その後プロファイラーが停止してプロファイルが書き込まれます。値が大きいほどサンプルカバレッジとファイルサイズは増加しますが、プロファイラーの実行時間が長くなり、その後の収集が遅れます。値が小さいほどオーバーヘッドは減少しますが、不十分なサンプルが生成される可能性があります。`proc_profile_file_retained_days` や `proc_profile_file_retained_size_bytes` などの保持設定とこの値が一致していることを確認してください。
 - 導入時期：v3.2.12
 
+### `enable_external_predicate_columns_collection`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：クエリ最適化時に外部（非ネイティブ）テーブルの述語列使用状況（WHERE/JOIN/GROUP BY で使用される列）を記録するかどうかを指定します。StarRocks はこの使用状況情報を利用して、幅の広い外部テーブルで ANALYZE が統計情報を収集する列の範囲を絞り込みます。無効にすると外部テーブルの述語列は記録されなくなり、ANALYZE はすべての列の統計情報を収集するようフォールバックします。
+- 導入時期：v4.2.0
+
+### `statistic_external_predicate_columns_ttl_hours`
+
+- デフォルト：168
+- タイプ：Long
+- 単位：Hours
+- 変更可能：Yes
+- 説明：記録された外部テーブルの述語列使用状況の有効期限 (TTL) です。`last_used` がこの値より古いエントリは、定期的な vacuum ジョブによって削除されます。vacuum を無効にするには負の値 (例: -1) を設定します。外部テーブルの ANALYZE は内部テーブルよりもはるかに低い頻度で実行されるため、デフォルトは 1 週間になっています。内部テーブルのデフォルトである 24 時間のような短い TTL では、2 回の収集の間に使用状況情報が削除されてしまいます。
+- 導入時期：v4.2.0
+
+### `statistic_external_predicate_columns_cache_ttl_sec`
+
+- デフォルト：300
+- タイプ：Long
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：外部テーブルの述語列クエリ (自動 ANALYZE の列選択時など) に応答するためのインメモリキャッシュの TTL です。値を小さくすると新しく記録された使用状況がより早く反映されますが、基盤となるストレージテーブルへのクエリ負荷が増加します。値を大きくするとその負荷は減りますが、データが古くなります。
+- 導入時期：v4.2.0
+
 ## ストレージ
 
 ### `alter_table_timeout_second`
