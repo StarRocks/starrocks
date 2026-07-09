@@ -139,7 +139,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(
                         Mockito.mock(com.starrocks.catalog.TableFunctionTable.class),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -163,7 +163,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         brokerBackedDesc,
                         List.of(parquetFileGroup()),
                         List.of(List.of(brokerFileStatus(parquetPath))),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -178,7 +178,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         /*brokerDesc=*/ null,
                         List.of(parquetFileGroup()),
                         List.of(List.<TBrokerFileStatus>of()),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -216,7 +216,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
         return new SampleRequest(
                 new BrokerLoadScanContext(
-                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class)),
+                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
