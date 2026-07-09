@@ -348,6 +348,7 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         segment_file_info.num_rows = _seg_writer->num_rows();
         record_segment_vector_index_ids(segment_file_info, _seg_writer.get());
         _data_size += segment_size;
+        _stats.bytes_written += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
         _stats.segment_count++;
         if (segment) {
@@ -508,6 +509,7 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
             segment_file_info.segment_vector_index_uid = _tablet_id;
         }
         _data_size += segment_size;
+        _stats.bytes_written += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
         _stats.segment_count++;
         segment_writer.reset();

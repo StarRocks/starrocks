@@ -40,7 +40,11 @@ void CompactionTaskStats::collect(const OlapReaderStatistics& reader_stats) {
 
 void CompactionTaskStats::collect(const OlapWriterStatistics& writer_stats) {
     write_segment_count = writer_stats.segment_count;
-    write_segment_bytes = writer_stats.bytes_write_remote;
+    // Prefer the actual finalized segment bytes (ground truth from SegmentWriter::finalize()). The
+    // underlying stream's bytes_write_remote counter is not populated on every write path (it stays
+    // 0 e.g. for shared-data segment writes), which made the profile report 0 bytes written despite
+    // writing real segments. Fall back to the stream counter if the segment size is unavailable.
+    write_segment_bytes = writer_stats.bytes_written > 0 ? writer_stats.bytes_written : writer_stats.bytes_write_remote;
     io_ns_write_remote = writer_stats.write_remote_ns;
 }
 
