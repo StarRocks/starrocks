@@ -23,8 +23,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
+#include "connector/common/partition_chunk_writer_memory_manager.h"
 #include "connector/hive_chunk_sink.h"
-#include "connector/partition_chunk_writer_memory_manager.h"
 #include "connector/partitioned_connector_chunk_sink.h"
 #include "exec/exec_env.h"
 #include "formats/io/async_flush_output_stream.h"

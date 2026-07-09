@@ -121,7 +121,7 @@ StatusOr<std::unique_ptr<ConnectorSink>> IcebergChunkSinkProvider::create_sink(i
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
-                        ctx->fragment_context,
+                        runtime_state,
                         query_execution_services->runtime->connector_sink_spill_executor,
                         ctx->override_tuple_desc != nullptr
                                 ? ctx->override_tuple_desc

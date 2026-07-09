@@ -25,6 +25,10 @@
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 
+namespace starrocks::pipeline {
+class FragmentContext;
+} // namespace starrocks::pipeline
+
 namespace starrocks::connector {
 
 class FileChunkSink : public PartitionedConnectorChunkSink {

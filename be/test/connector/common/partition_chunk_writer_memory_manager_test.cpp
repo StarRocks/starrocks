@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "connector/common/partition_chunk_writer_memory_manager.h"
+
 #include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
@@ -21,14 +23,15 @@
 
 #include "base/testutil/assert.h"
 #include "base/utility/integer_util.h"
-#include "connector/partition_chunk_writer.h"
-#include "connector/partition_chunk_writer_memory_manager.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
+#include "common/config_connector_sink_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/system/cpu_info.h"
+#include "connector/common/partition_chunk_writer.h"
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 namespace {
@@ -37,20 +40,19 @@ using Stream = formats::AsyncFlushOutputStream;
 
 class SinkMemoryManagerTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        _fragment_context = std::make_shared<pipeline::FragmentContext>();
-        _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
-        _runtime_state = _fragment_context->runtime_state();
-        auto* exec_env = ExecEnv::GetInstance();
-        _runtime_state->set_exec_env(exec_env);
-        _runtime_state->set_query_execution_services(&exec_env->query_execution_services());
+    static void SetUpTestSuite() {
+        CpuInfo::init();
+        config::vector_chunk_size = 4096;
+        config::connector_sink_mem_low_watermark_ratio = 0.1;
+        config::connector_sink_mem_urgent_space_ratio = 0.05;
     }
+
+    void SetUp() override { _runtime_state = std::make_unique<RuntimeState>(); }
 
     void TearDown() override {}
 
     ObjectPool _pool;
-    std::shared_ptr<pipeline::FragmentContext> _fragment_context;
-    RuntimeState* _runtime_state;
+    std::unique_ptr<RuntimeState> _runtime_state;
 };
 
 class MockPartitionChunkWriter : public PartitionChunkWriter {
@@ -106,12 +108,11 @@ private:
 
 TEST_F(SinkMemoryManagerTest, kill_victim) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
@@ -152,12 +153,11 @@ TEST_F(SinkMemoryManagerTest, kill_victim) {
 
 TEST_F(SinkMemoryManagerTest, init_with_vector) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
@@ -180,12 +180,11 @@ TEST_F(SinkMemoryManagerTest, init_with_vector) {
 
 TEST_F(SinkMemoryManagerTest, kill_victim_selects_max_flushable_bytes) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
@@ -217,12 +216,11 @@ TEST_F(SinkMemoryManagerTest, kill_victim_selects_max_flushable_bytes) {
 
 TEST_F(SinkMemoryManagerTest, update_writer_occupied_memory) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;
@@ -248,12 +246,11 @@ TEST_F(SinkMemoryManagerTest, update_writer_occupied_memory) {
 
 TEST_F(SinkMemoryManagerTest, registered_children_participate_in_total_occupied_memory) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     MemTracker query_pool_tracker(MemTrackerType::QUERY_POOL, 1000, "registered_children_pool");
     MemTracker query_tracker(MemTrackerType::QUERY, -1, "registered_children_query");
@@ -295,12 +292,11 @@ TEST_F(SinkMemoryManagerTest, registered_children_participate_in_total_occupied_
 
 TEST_F(SinkMemoryManagerTest, iceberg_delete_sink_scenario) {
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {"c2", TYPE_VARCHAR_DESC}, {""}};
-    TupleDescriptor* tuple_desc =
-            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+    TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state.get(), &_pool, slot_descs);
 
     auto partition_chunk_writer_ctx =
             std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
-                    {nullptr, nullptr, 1024, false}, nullptr, _fragment_context.get(), nullptr, tuple_desc, nullptr});
+                    {nullptr, nullptr, 1024, false}, nullptr, _runtime_state.get(), nullptr, tuple_desc, nullptr});
 
     auto sink_mem_mgr = std::make_shared<PartitionChunkWriterMemoryManager>();
     std::vector<PartitionChunkWriterPtr> writers;

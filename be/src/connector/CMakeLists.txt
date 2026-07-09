@@ -16,11 +16,25 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
 ADD_BE_LIB(ConnectorCommon
         common/connector_sink_commit.cpp
+        common/connector_sink_executor.cpp
+        common/partition_chunk_writer.cpp
+        common/partition_chunk_writer_memory_manager.cpp
+        common/spill_partition_chunk_writer.cpp
         common/utils.cpp
 )
 
 target_link_libraries(ConnectorCommon PUBLIC
+        ComputeEnv
+        ConnectorPrimitive
+        Runtime
+        Platform
         FormatCore
+        FileSystem
+        IO
+        ColumnSortCore
+        ChunkCore
+        ColumnCore
+        Types
         Common
         Base
         Gutil
@@ -40,9 +54,6 @@ ADD_BE_LIB(Connector
         iceberg_chunk_sink.cpp
         hive_utils.cpp
         iceberg_utils.cpp
-        partition_chunk_writer.cpp
-        partition_chunk_writer_memory_manager.cpp
-        connector_sink_executor.cpp
         deletion_vector/deletion_vector.cpp
         iceberg_delete_sink.cpp
         iceberg_row_delta_sink.cpp

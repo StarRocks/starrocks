@@ -26,6 +26,10 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 
+namespace starrocks::pipeline {
+class FragmentContext;
+} // namespace starrocks::pipeline
+
 namespace starrocks::connector {
 
 class IcebergChunkSink : public PartitionedConnectorChunkSink {

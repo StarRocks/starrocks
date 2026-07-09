@@ -26,6 +26,10 @@
 #include "formats/file_writer.h"
 #include "formats/io/async_flush_stream_poller.h"
 
+namespace starrocks::pipeline {
+class FragmentContext;
+} // namespace starrocks::pipeline
+
 namespace starrocks::connector {
 
 class HiveChunkSink : public PartitionedConnectorChunkSink {
