@@ -47,8 +47,13 @@ under the License.
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
+<<<<<<< HEAD
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.15.2</parquet.version>
+=======
+        <parquet.version>1.16.0</parquet.version>
+        <orc.version>1.9.1</orc.version>
+>>>>>>> 92d6b85dff ([BugFix][CVE] Remove vulnerable stale transitive dependencies and enforce bans (#76097))
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
@@ -225,10 +230,11 @@ under the License.
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
+            <!-- 3.18.0 fixes CVE-2025-48924 (ClassUtils.getClass StackOverflow) -->
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-lang3</artifactId>
-                <version>3.9</version>
+                <version>3.18.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-pool2 -->
@@ -550,10 +556,25 @@ under the License.
                 <version>4.10.0</version>
             </dependency>
 
+            <!-- keep on the same train as okhttp (tencentcloud-sdk declares 3.12.x) -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>logging-interceptor</artifactId>
+                <version>4.10.0</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio -->
             <dependency>
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
+                <version>3.4.0</version>
+            </dependency>
+
+            <!-- pin okio-jvm to the same version as okio; okhttp 4.10.0 drags in
+                 okio-jvm 3.0.0 which is affected by CVE-2023-3635 -->
+            <dependency>
+                <groupId>com.squareup.okio</groupId>
+                <artifactId>okio-jvm</artifactId>
                 <version>3.4.0</version>
             </dependency>
 
@@ -1005,6 +1026,19 @@ under the License.
                 <version>3.3.0-8.3.2</version>
             </dependency>
 
+            <!-- hadoop-cos pulls tencentcloud-sdk 3.1.213 whose okhttp 2.7.5 is EOL;
+                 3.1.1471+ ships okhttp3, keeping COS client-side encryption usable -->
+            <dependency>
+                <groupId>com.tencentcloudapi</groupId>
+                <artifactId>tencentcloud-sdk-java-kms</artifactId>
+                <version>3.1.1471</version>
+            </dependency>
+            <dependency>
+                <groupId>com.tencentcloudapi</groupId>
+                <artifactId>tencentcloud-sdk-java-common</artifactId>
+                <version>3.1.1471</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.qcloud/chdfs_hadoop_plugin_network -->
             <dependency>
                 <groupId>com.qcloud</groupId>
@@ -1094,6 +1128,11 @@ under the License.
                     <exclusion>
                         <groupId>org.apache.hbase.thirdparty</groupId>
                         <artifactId>hbase-shaded-netty</artifactId>
+                    </exclusion>
+                    <!-- JSP engine, unused here; tomcat-jasper 9.0.93 carries open CVEs -->
+                    <exclusion>
+                        <groupId>org.apache.tomcat</groupId>
+                        <artifactId>*</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1252,6 +1291,12 @@ under the License.
                     <exclusion>
                         <groupId>org.lz4</groupId>
                         <artifactId>lz4-pure-java</artifactId>
+                    </exclusion>
+                    <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
+                         bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                    <exclusion>
+                        <groupId>org.bouncycastle</groupId>
+                        <artifactId>bcprov-jdk15on</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -1575,6 +1620,45 @@ under the License.
 
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>ban-vulnerable-dependencies</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <!-- superseded by bcprov-jdk18on; 1.70 carries multiple open CVEs -->
+                                        <exclude>org.bouncycastle:bcprov-jdk15on</exclude>
+                                        <!-- EOL okhttp 2.x line -->
+                                        <exclude>com.squareup.okhttp:*</exclude>
+                                        <!-- okio-jvm below 3.4.0 is affected by CVE-2023-3635 -->
+                                        <exclude>com.squareup.okio:okio-jvm:[,3.4.0)</exclude>
+                                        <!-- commons-lang3 below 3.18.0 is affected by CVE-2025-48924 -->
+                                        <exclude>org.apache.commons:commons-lang3:[,3.18.0)</exclude>
+                                        <!-- JSP engine, unused by FE; 9.0.93 carries CVE-2025-55754/CVE-2025-52434 -->
+                                        <exclude>org.apache.tomcat:*</exclude>
+                                        <exclude>org.apache.tomcat.embed:*</exclude>
+                                        <!-- tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 -->
+                                        <exclude>com.tencentcloudapi:*:[,3.1.1471)</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
     <reporting>
         <plugins>
