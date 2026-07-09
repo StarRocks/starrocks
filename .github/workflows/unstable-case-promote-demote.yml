@@ -80,11 +80,14 @@ jobs:
             exit 0
           fi
 
-          # Apply mode: open a review PR against ci-tool.
+          # Apply mode: open a review PR against ci-tool. Fail loudly if we
+          # cannot — a green run that silently did NOT open the requested PR is
+          # exactly the "success with no output" trap. Print the diff for
+          # debugging, then exit non-zero so the operator knows to wire SYNC_PAT.
           if [[ -z "${GH_TOKEN}" ]]; then
-            echo "::warning::dry_run=false but no SYNC_PAT token — showing diff, not opening PR."
+            echo "::error::dry_run=false but no SYNC_PAT token — cannot open the PR. (diff below)"
             git --no-pager diff -- files/ || true
-            exit 0
+            exit 1
           fi
           if git diff --quiet files/; then
             echo "No promote/demote changes — skipping PR."; exit 0

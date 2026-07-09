@@ -51,6 +51,12 @@ jobs:
           CH="oss://${bucket}/unstable_case_report/ci-case-history"
           ${_oss} cp -r "${CH}/inspection/${ch_branch}/" "${HIST}/inspection/" >/dev/null 2>&1 || true
           ${_oss} cp -r "${CH}/pr/${ch_branch}/"         "${HIST}/pr/"         >/dev/null 2>&1 || true
+          # Distinguish "legitimately empty" from "OSS unreachable": if nothing
+          # landed, the analysis has no history to reason over — say so loudly
+          # rather than emit a confident "no failure history" report.
+          if ! find "${HIST}" -name '*.jsonl' -print -quit | grep -q .; then
+            echo "::warning::No case_history downloaded from ${CH}/{inspection,pr}/${ch_branch}/ — analysis will have NO history (OSS empty or unreachable)."
+          fi
 
           # Analyze the currently-blacklisted cases (those with failure history)
           # for the branch — no dependency on any review run.

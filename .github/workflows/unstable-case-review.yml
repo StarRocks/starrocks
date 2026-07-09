@@ -287,6 +287,17 @@ jobs:
             cp "${WORK_DIR}/report.html" "${REPORT_OSS}report.html" -f
           echo "REPORT_URL=${REPORT_OSS}report.html" >> $GITHUB_OUTPUT
 
+      - name: Upload report artifact (fallback, always)
+        # So an OSS outage doesn't lose the report — same fallback as
+        # unstable-case-ai-analysis.yml.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unstable-case-review-report
+          path: ${{ steps.gen.outputs.WORK_DIR }}
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Open PR granting probation eligibility
         # Temporarily disabled: secrets.SYNC_PAT is not configured on
         # this repo (the `SYNC_PAT` name lives in celerdata-enterprise),
