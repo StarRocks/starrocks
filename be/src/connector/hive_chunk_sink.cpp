@@ -36,8 +36,8 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                              std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                              RuntimeState* state)
-        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(partition_chunk_writer_factory), state, false) {}
+        : PartitionedConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                                        std::move(partition_chunk_writer_factory), state, false) {}
 
 HiveChunkSinkProvider::HiveChunkSinkProvider(std::shared_ptr<HiveChunkSinkContext> ctx) : _ctx(std::move(ctx)) {}
 
@@ -59,7 +59,7 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
     }
 }
 
-StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(int32_t driver_id) {
+StatusOr<std::unique_ptr<ConnectorSink>> HiveChunkSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =

@@ -21,14 +21,14 @@
 
 #include "common/status.h"
 #include "common/thread/priority_thread_pool.hpp"
-#include "connector/connector_chunk_sink.h"
+#include "connector/partitioned_connector_chunk_sink.h"
 #include "connector/utils.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 
 namespace starrocks::connector {
 
-class FileChunkSink : public ConnectorChunkSink {
+class FileChunkSink : public PartitionedConnectorChunkSink {
 public:
     FileChunkSink(std::vector<std::string> partition_columns,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
@@ -39,7 +39,7 @@ public:
     void callback_on_commit(const CommitResult& result) override;
 };
 
-struct FileChunkSinkContext : public ConnectorChunkSinkContext {
+struct FileChunkSinkContext : public ConnectorSinkContext {
     ~FileChunkSinkContext() override = default;
 
     std::string path;
@@ -55,12 +55,12 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
     pipeline::FragmentContext* fragment_context = nullptr;
 };
 
-class FileChunkSinkProvider : public ConnectorChunkSinkProvider {
+class FileChunkSinkProvider : public ConnectorSinkProvider {
 public:
     explicit FileChunkSinkProvider(std::shared_ptr<FileChunkSinkContext> ctx);
     ~FileChunkSinkProvider() override = default;
 
-    StatusOr<std::unique_ptr<ConnectorChunkSink>> create_chunk_sink(int32_t driver_id) override;
+    StatusOr<std::unique_ptr<ConnectorSink>> create_sink(int32_t driver_id) override;
 
 private:
     std::shared_ptr<FileChunkSinkContext> _ctx;
