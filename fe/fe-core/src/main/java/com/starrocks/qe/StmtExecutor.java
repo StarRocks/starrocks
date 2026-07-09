@@ -3658,8 +3658,11 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
-                } else if (targetTable.isBlackHoleTable()) {
-                    // black hole table does not need txn
+                } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+                    // INSERT INTO FILES(...) (table function) and black hole tables begin no FE txn
+                    // (see the transaction-begin skip and the commit path), so there is nothing to
+                    // abort here. `database` is null for a table function table, so calling
+                    // abortTransaction(database.getId(), ...) would throw an NPE.
                 } else {
                     transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
                             Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
