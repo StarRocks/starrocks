@@ -21,7 +21,8 @@
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
-#include "connector/utils.h"
+#include "connector/hive_utils.h"
+#include "connector/iceberg_utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -382,7 +383,7 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
             std::string partition_value;
 
             if (_transform_exprs.size() > 0) {
-                ASSIGN_OR_RETURN(partition_value, connector::HiveUtils::iceberg_column_value(
+                ASSIGN_OR_RETURN(partition_value, connector::IcebergUtils::iceberg_column_value(
                                                           type, partition_columns[j], i, _transform_exprs[j], is_null));
             } else {
                 ASSIGN_OR_RETURN(partition_value, connector::HiveUtils::column_value(type, partition_columns[j], i));

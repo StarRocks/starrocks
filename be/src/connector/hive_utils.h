@@ -12,20 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector_primitive/connector_sink_commit.h"
+#pragma once
 
-#include <utility>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "common/statusor.h"
+#include "formats/column_evaluator.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::connector {
 
-CommitResult& CommitResult::set_partition_null_fingerprint(std::string fingerprint) {
-    partition_null_fingerprint = std::move(fingerprint);
-    return *this;
-}
+class HiveUtils {
+public:
+    static StatusOr<std::string> make_partition_name(
+            const std::vector<std::string>& column_names,
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
+            bool support_null_partition);
 
-CommitResult& CommitResult::set_referenced_data_file(std::string referenced_file) {
-    referenced_data_file = std::move(referenced_file);
-    return *this;
-}
+    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
+
+    template <typename T>
+    static StatusOr<std::string> format_decimal_value(T value, int scale);
+};
 
 } // namespace starrocks::connector

@@ -27,6 +27,7 @@
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/csv_file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"

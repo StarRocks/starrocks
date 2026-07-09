@@ -23,6 +23,7 @@
 #include "formats/file_writer.h"
 
 namespace starrocks {
+class PriorityThreadPool;
 class RuntimeState;
 
 namespace connector {

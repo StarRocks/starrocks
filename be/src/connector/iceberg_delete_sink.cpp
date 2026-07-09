@@ -24,6 +24,8 @@
 #include "column/column_helper.h"
 #include "column/sorting/sorting.h"
 #include "common/config_exec_fwd.h"
+#include "connector/common/utils.h"
+#include "connector/iceberg_utils.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
@@ -39,7 +41,6 @@
 #include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 #include "types/datum.h"
-#include "utils.h"
 
 namespace starrocks::connector {
 
@@ -150,7 +151,7 @@ Status IcebergDeleteSink::add(const ChunkPtr& chunk) {
 
     // Compute partition name if table is partitioned
     if (is_partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::iceberg_make_partition_name(
+        ASSIGN_OR_RETURN(partition, IcebergUtils::iceberg_make_partition_name(
                                             _partition_column_names, _partition_column_evaluators, _transform_exprs,
                                             chunk.get(), _support_null_partition, partition_field_null_list));
     }

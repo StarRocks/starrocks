@@ -17,6 +17,28 @@ if (APPLE)
     list(APPEND BE_TEST_MACOS_LINK_STUBS ../base/macos_link_stubs.cpp)
 endif()
 
+set(CONNECTOR_COMMON_TEST_DEPENDENCIES ${STARROCKS_DEPENDENCIES})
+list(REMOVE_ITEM CONNECTOR_COMMON_TEST_DEPENDENCIES arrow_testing)
+
+set(CONNECTOR_COMMON_TEST_LINK_LIBS
+    ConnectorCommon
+    ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+    ${STARROCKS_STATIC_LINK_LIBS}
+    ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+    ${WL_START_GROUP}
+    gmock
+    gtest
+    ${WL_END_GROUP}
+)
+
+add_executable(connector_common_test
+        ${BE_TEST_MACOS_LINK_STUBS}
+        ${BE_TEST_JNI_ENV_STUB}
+        common/connector_common_test.cpp
+)
+target_link_libraries(connector_common_test ${CONNECTOR_COMMON_TEST_LINK_LIBS} gtest_main)
+set_target_properties(connector_common_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(CONNECTOR_CACHE_STATS_TEST_LINK_LIBS
     ConnectorCacheStats
     ${STARROCKS_DEPENDENCIES}

@@ -27,6 +27,9 @@
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
 #include "common/config_connector_sink_fwd.h"
+#include "connector/common/utils.h"
+#include "connector/hive_utils.h"
+#include "connector/iceberg_utils.h"
 #include "connector/partitioned_connector_chunk_sink.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exec/exec_env.h"
@@ -249,12 +252,12 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"day", "hour"},
-                                                          chunk.get(), true, field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"day", "hour"},
+                                                             chunk.get(), true, field_is_null);
 
         EXPECT_EQ("k1=1970-01-24/k2=1970-01-02-16/", ret.value());
-        ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"year", "month"},
-                                                     chunk.get(), true, field_is_null);
+        ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators, {"year", "month"},
+                                                        chunk.get(), true, field_is_null);
         EXPECT_EQ("k1=1993/k2=1973-05/", ret.value());
     }
 
@@ -290,8 +293,8 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         // Unlock during merging partition chunks into a full chunk.
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2"}, partition_column_evaluators,
-                                                          {"identity", "truncate"}, chunk.get(), true, field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name(
+                {"k1", "k2"}, partition_column_evaluators, {"identity", "truncate"}, chunk.get(), true, field_is_null);
         EXPECT_EQ("k1=abc/k2=1999-12-31/", ret.value());
     }
 
@@ -384,7 +387,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
                 {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TypeDescriptor::from_logical_type(TYPE_CHAR),
                  TypeDescriptor::from_logical_type(TYPE_DATETIME), TypeDescriptor::from_logical_type(TYPE_TINYINT),
                  TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT)});
-        auto ret = HiveUtils::iceberg_make_partition_name(
+        auto ret = IcebergUtils::iceberg_make_partition_name(
                 {"k1", "k2", "k3", "k4", "k5", "k6", "k7"}, partition_column_evaluators,
                 {"bucket", "identity", "truncate", "truncate", "truncate", "truncate", "truncate"}, chunk.get(), true,
                 field_is_null);
@@ -436,9 +439,9 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
                  TypeDescriptor::from_logical_type(TYPE_DECIMAL128)});
         chunk->set_extra_data(chunk_extra_data);
         std::vector<int8_t> field_is_null;
-        auto ret = HiveUtils::iceberg_make_partition_name({"k1", "k2", "k3"}, partition_column_evaluators,
-                                                          {"identity", "truncate", "bucket"}, chunk.get(), true,
-                                                          field_is_null);
+        auto ret = IcebergUtils::iceberg_make_partition_name({"k1", "k2", "k3"}, partition_column_evaluators,
+                                                             {"identity", "truncate", "bucket"}, chunk.get(), true,
+                                                             field_is_null);
         EXPECT_EQ("k1=12.34/k2=33.44/k3=78.93/", ret.value());
     }
 }

@@ -15,7 +15,6 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector_primitive")
 
 set(CONNECTOR_PRIMITIVE_FILES
-        connector_sink_commit.cpp
         connector.cpp
         data_source.cpp
         data_source_provider.cpp
@@ -27,7 +26,6 @@ ADD_BE_LIB(ConnectorPrimitive
 )
 
 target_link_libraries(ConnectorPrimitive PUBLIC
-        FormatCore
         ExecPrimitive
         Expr
         Runtime
